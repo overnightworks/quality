@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 
-from quality.ratchet import BASELINE_PATH
+from quality.baseline_file import BASELINE_PATH
 
 GIT_IDENTITY = ["-c", "user.name=t", "-c", "user.email=t@example.invalid"]
 

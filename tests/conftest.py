@@ -13,7 +13,7 @@ import pytest
 
 from quality import advisories, checkout, cli
 from quality import fleet as fleet_module
-from quality.ratchet import BASELINE_PATH
+from quality.baseline_file import BASELINE_PATH
 
 pytest.register_assert_rewrite("tests.support")  # before the first import of a support module, so its asserts are rewritten
 

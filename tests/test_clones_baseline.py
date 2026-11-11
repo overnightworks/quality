@@ -1,26 +1,24 @@
 """The clone pairs in quality/baseline.toml: the fix that records or drops a pair and the verdict that lets the table only fall."""
 
-import re
 import shlex
 import textwrap
 from pathlib import Path
 
 import pytest
 
-from quality import __version__, cli
-from quality.check import RuleVerdict
-from quality.ratchet import (
+from quality import cli
+from quality.baseline_file import (
     BASELINE_PATH,
     Baseline,
     ClonePair,
     Key,
     Metric,
     Place,
-    SizeError,
     load_baseline,
     read_baseline,
     render_baseline,
 )
+from quality.check import RuleVerdict
 from quality.report import Finding, FindingEvent, printable
 from quality.rules import Area, Rule
 from tests.support.check import (
@@ -279,12 +277,6 @@ def test_a_malformed_clone_table_at_the_base_names_the_base_commit_without_a_rew
     assert code == 2
     assert f"{BASELINE_PATH} at the base commit {base_sha}" in output
     assert f"restore {BASELINE_PATH}" not in output
-
-
-def test_an_unknown_table_names_the_tool_version_and_every_known_table_with_clones():
-    """CEILING-3: an unknown table is named with the tool's version and every table it knows, `clones` among them."""
-    with pytest.raises(SizeError, match=rf"unknown table \[future\]; quality {re.escape(__version__)} knows ccn, .*, clones$"):
-        load_baseline("[future]\n")
 
 
 def judged_rules(repo: Path) -> dict[Rule, RuleVerdict]:

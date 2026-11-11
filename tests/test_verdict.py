@@ -10,8 +10,9 @@ from pathlib import Path
 import pytest
 
 from quality import __version__, cli, verdict
+from quality.baseline_file import BASELINE_PATH
 from quality.config import CONFIG_PATH, LOOSENED_EXAMPLE, LegacyMode
-from quality.ratchet import BASELINE_PATH, NO_RENAMES
+from quality.ratchet import NO_RENAMES
 from quality.report import CannotJudge, Instruction, printable
 from quality.sides import NO_BASE_SETTINGS, Side, read_base
 from quality.verdict import GateSettings, JobEvent, JobKind, JobOutcome, judge, read_jobs

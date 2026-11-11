@@ -1,6 +1,5 @@
 """The `size` rule: lines per file of every tracked file in a table language, and lines and CCN per function of
-every tracked Python file, held by a baseline; `ratchet` also owns that baseline file, `quality/baseline.toml`,
-which holds the clone pairs next to the size entries.
+every tracked Python file, held by a baseline; the baseline file itself, `quality/baseline.toml`, is `baseline_file`'s.
 
 lizard measures; Python's own `ast` only names each function by its qualified symbol (`Class.method`), which
 lizard leaves unqualified. Both read the same text, decoded from the file's bytes the way Python reads source.
@@ -9,8 +8,6 @@ The other languages are counted by lines only: lizard misplaces their function b
 
 import ast
 import io
-import json
-import re
 import tokenize
 from collections import Counter
 from collections.abc import Collection, Iterator, Mapping
@@ -18,18 +15,27 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from operator import attrgetter
 from pathlib import Path, PurePosixPath
-from typing import NamedTuple, Self
 
 import lizard
 
-from quality import __version__, checkout, repository
+from quality import checkout, repository
+from quality.baseline_file import (
+    BASELINE_PATH,
+    FIX_COMMAND,
+    Baseline,
+    ClonePair,
+    Key,
+    Metric,
+    SizeEntries,
+    SizeError,
+    UnknownTable,
+    key_order,
+)
 from quality.config import CONFIG_PATH, GENERATED_FILE_HEADING, GeneratedFile
 from quality.output import SEPARATOR, counted
 from quality.report import CannotJudge, Finding, FindingEvent, Instruction, Note, NoteEvent, RuleResult, Unparsable
 from quality.rules import Rule
 
-BASELINE_PATH = "quality/baseline.toml"
-FIX_COMMAND = "quality check --fix"
 RESTORE_STEP = Instruction(f"restore {BASELINE_PATH} from git, or repair it by hand")
 UNKNOWN_TABLE_HINT = "run the quality release your gate pins"
 RAISE_IS_BY_HAND = "a raise is a hand edit and a declared loosening"
@@ -38,41 +44,34 @@ PARSE_ERRORS = (SyntaxError, ValueError, LookupError)
 TEST_DIRECTORIES = frozenset({"test", "tests"})
 RUNNER_TEST_DIRECTORIES = TEST_DIRECTORIES | {"__tests__"}
 RUNNER_TEST_WORDS = frozenset({"test", "spec", "test-d", "spec-d"})
-CLONES = "clones"
-BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
-BASELINE_HEADER = f"# Measured by `{FIX_COMMAND}`. Entries only ever go down.\n"
 
 FILE_LINES_FROM = 800
 FUNCTION_LINES_FROM = 60
 CCN_ABOVE = 15
 
 
-class Metric(Enum):
-    CCN = "ccn"
-    FILE_LINES = "file_lines"
-    FUNCTION_LINES = "function_lines"
+def debt_from(metric: Metric) -> int:
+    return {
+        Metric.CCN: CCN_ABOVE + 1,
+        Metric.FILE_LINES: FILE_LINES_FROM,
+        Metric.FUNCTION_LINES: FUNCTION_LINES_FROM,
+    }[metric]
 
-    @property
-    def debt_from(self) -> int:
-        return {
-            Metric.CCN: CCN_ABOVE + 1,
-            Metric.FILE_LINES: FILE_LINES_FROM,
-            Metric.FUNCTION_LINES: FUNCTION_LINES_FROM,
-        }[self]
 
-    def is_debt(self, value: int) -> bool:
-        return value >= self.debt_from
+def is_debt(metric: Metric, value: int) -> bool:
+    return value >= debt_from(metric)
 
-    def describe(self, value: int) -> str:
-        return f"CCN {value}" if self is Metric.CCN else f"{value} lines"
 
-    @property
-    def fix(self) -> str:
-        return {
-            Metric.CCN: f"split its branches until its CCN is {CCN_ABOVE} or less",
-            Metric.FILE_LINES: f"split the file below {FILE_LINES_FROM} lines",
-            Metric.FUNCTION_LINES: f"split the function below {FUNCTION_LINES_FROM} lines",
-        }[self]
+def describe_value(metric: Metric, value: int) -> str:
+    return f"CCN {value}" if metric is Metric.CCN else f"{value} lines"
+
+
+def fix_for(metric: Metric) -> str:
+    return {
+        Metric.CCN: f"split its branches until its CCN is {CCN_ABOVE} or less",
+        Metric.FILE_LINES: f"split the file below {FILE_LINES_FROM} lines",
+        Metric.FUNCTION_LINES: f"split the function below {FUNCTION_LINES_FROM} lines",
+    }[metric]
 
 
 class Language(Enum):
@@ -119,19 +118,6 @@ class Area(Enum):
     TESTS = "tests"
 
 
-class Key(NamedTuple):
-    """One baseline entry: a file's lines have no symbol, a function's metrics carry its qualified symbol."""
-
-    metric: Metric
-    path: str
-    symbol: str = ""
-
-    @property
-    def label(self) -> str:
-        """The entry as a person reads it: metric, path and, for a function, its symbol."""
-        return " ".join(part for part in (self.metric.value, self.path, self.symbol) if part)
-
-
 @dataclass(frozen=True)
 class Measured:
     value: int
@@ -139,47 +125,6 @@ class Measured:
 
 
 Measurements = dict[Key, Measured]
-SizeEntries = dict[Key, int]
-
-
-class Place(NamedTuple):
-    """A function as the baseline names it: its file and its qualified symbol."""
-
-    path: str
-    symbol: str
-
-
-@dataclass(frozen=True, order=True)
-class ClonePair:
-    """Two near-identical functions in two files; `first` sorts before `second`, so a pair has one spelling."""
-
-    first: Place
-    second: Place
-
-    @classmethod
-    def of(cls, one: Place, other: Place) -> Self:
-        return cls(*sorted((one, other)))
-
-    @property
-    def label(self) -> str:
-        """The pair as a person reads it, one wording for the fix and the verdict."""
-        return f"{self.first.path} {self.first.symbol} <-> {self.second.path} {self.second.symbol}"
-
-
-@dataclass(frozen=True)
-class Baseline:
-    """What `quality/baseline.toml` holds; `clones` is None when the file has no `[clones]` table, so no pair is held."""
-
-    size: SizeEntries
-    clones: frozenset[ClonePair] | None
-
-
-class SizeError(Exception):
-    """The tree or the baseline cannot be measured; the message carries the reason."""
-
-
-class UnknownTable(SizeError):
-    """The baseline has a table this quality does not know: a newer quality may have written it, or a hand edit."""
 
 
 class UnparsableSource(SizeError):
@@ -281,7 +226,7 @@ def qualified_symbols(tree: ast.Module) -> dict[int, str]:
 
 
 def debt(measurements: Measurements) -> SizeEntries:
-    return {key: measured.value for key, measured in measurements.items() if key.metric.is_debt(measured.value)}
+    return {key: measured.value for key, measured in measurements.items() if is_debt(key.metric, measured.value)}
 
 
 @dataclass(frozen=True)
@@ -299,7 +244,7 @@ def summarise(tree: TreeMeasurement) -> dict[Area, AreaSummary]:
         area = area_of(key.path)
         if key.metric is Metric.FILE_LINES:
             lines[area] += measured.value
-        if key.metric.is_debt(measured.value):
+        if is_debt(key.metric, measured.value):
             debts[area, key.metric] += 1
     return {area: AreaSummary(lines[area], {metric: debts[area, metric] for metric in Metric}) for area in Area}
 
@@ -332,18 +277,18 @@ def gone_entries(
 def compare(measurements: Measurements, baseline: SizeEntries, gone: Mapping[Key, str]) -> list[Finding]:
     """The tree on disk against the baseline; after the measured findings, each entry `gone` names can fall."""
     findings = []
-    for key in sorted(measurements, key=_order):
+    for key in sorted(measurements, key=key_order):
         measured, held = measurements[key], baseline.get(key)
-        if held is None and key.metric.is_debt(measured.value):
-            limit = f"debt from {key.metric.describe(key.metric.debt_from)}"
-            findings.append(_finding(key, measured, FindingEvent.NEW_DEBT, limit, key.metric.fix))
+        if held is None and is_debt(key.metric, measured.value):
+            limit = f"debt from {describe_value(key.metric, debt_from(key.metric))}"
+            findings.append(_finding(key, measured, FindingEvent.NEW_DEBT, limit, fix_for(key.metric)))
         elif held is not None and measured.value > held:
-            fix = f"bring it back to {key.metric.describe(held)} or below"
+            fix = f"bring it back to {describe_value(key.metric, held)} or below"
             findings.append(_finding(key, measured, FindingEvent.GREW, f"ceiling {held}", fix))
         elif held is not None and measured.value < held:
             findings.append(_finding(key, measured, FindingEvent.CAN_FALL, f"ceiling {held}", FIX_COMMAND))
-    for key in sorted(gone, key=_order):
-        fact = SEPARATOR.join((gone[key], f"ceiling {key.metric.describe(baseline[key])}"))
+    for key in sorted(gone, key=key_order):
+        fact = SEPARATOR.join((gone[key], f"ceiling {describe_value(key.metric, baseline[key])}"))
         findings.append(Finding(Rule.SIZE, key.path, None, fact, FIX_COMMAND, event=FindingEvent.CAN_FALL))
     return findings
 
@@ -453,7 +398,7 @@ def raised_entries(base: SizeEntries, head: SizeEntries) -> list[RaisedEntry]:
     """One baseline against another: an entry may fall or go, never rise or appear; a renamed symbol is a new one."""
     return [
         RaisedEntry(key, base.get(key), head[key])
-        for key in sorted(head, key=_order)
+        for key in sorted(head, key=key_order)
         if key not in base or head[key] > base[key]
     ]
 
@@ -464,12 +409,8 @@ def added_pairs(base: frozenset[ClonePair], head: frozenset[ClonePair]) -> list[
 
 
 def _finding(key: Key, measured: Measured, event: FindingEvent, limit: str, fix: str) -> Finding:
-    fact = SEPARATOR.join((f"{_subject(key)} has {key.metric.describe(measured.value)}", limit))
+    fact = SEPARATOR.join((f"{_subject(key)} has {describe_value(key.metric, measured.value)}", limit))
     return Finding(Rule.SIZE, key.path, measured.line, fact, fix, event=event)
-
-
-def _order(key: Key) -> tuple[str, str, str]:
-    return key.metric.value, key.path, key.symbol
 
 
 def _subject(key: Key) -> str:
@@ -518,19 +459,19 @@ def lower_ceiling(
     no measurement stands, and nothing rises or enters. A held pair the tree lost goes. A file without `[clones]`
     records its pairs: the caller has seen that git never held the table."""
     size, changes = {key: value for key, value in held.size.items() if key not in gone}, []
-    for key in sorted(held.size, key=_order):
+    for key in sorted(held.size, key=key_order):
         ceiling, measured = held.size[key], measurements.get(key)
         if measured is None or measured.value >= ceiling:
             continue
         fall = _fall(key, ceiling, measured.value)
-        if key.metric.is_debt(measured.value):
+        if is_debt(key.metric, measured.value):
             size[key] = measured.value
             changes.append(Note(key.path, NoteEvent.LOWERED, fall, measured.line))
         else:
             del size[key]
-            limit = f"debt from {key.metric.describe(key.metric.debt_from)}"
+            limit = f"debt from {describe_value(key.metric, debt_from(key.metric))}"
             changes.append(Note(key.path, NoteEvent.DROPPED, SEPARATOR.join((fall, limit)), measured.line))
-    changes += [Note(key.path, NoteEvent.DROPPED, gone[key]) for key in sorted(gone, key=_order)]
+    changes += [Note(key.path, NoteEvent.DROPPED, gone[key]) for key in sorted(gone, key=key_order)]
     if held.clones is None:
         recorded = Note(BASELINE_PATH, NoteEvent.RECORDED, counted(len(pairs), "clone pair"))
         return CeilingFix(Baseline(size, pairs), (*changes, recorded))
@@ -539,7 +480,7 @@ def lower_ceiling(
 
 
 def _followed_note(key: Key, value: int, source: str | None, target: str) -> Note:
-    held = f"{_subject(key)} {key.metric.describe(value)}"
+    held = f"{_subject(key)} {describe_value(key.metric, value)}"
     if key.path == source:
         return Note(target, NoteEvent.MOVED, f"{held} from {source}")
     return Note(target, NoteEvent.DROPPED, SEPARATOR.join((held, LEFT_BEHIND)))
@@ -550,7 +491,7 @@ def _unexplained(path: str) -> CannotJudge:
 
 
 def _source_first(entries: SizeEntries, source: str | None) -> list[Key]:
-    return sorted(entries, key=lambda key: (key.path != source, _order(key)))
+    return sorted(entries, key=lambda key: (key.path != source, key_order(key)))
 
 
 def _require_placed(size: SizeEntries, committed: SizeEntries, tracked: frozenset[str]) -> None:
@@ -619,129 +560,9 @@ def after_fix(result: RuleResult, fix: CeilingFix) -> RuleResult:
     return RuleResult(findings, result.extent, result.measured_only, (*result.notes, *fix.changes))
 
 
-def render_baseline(baseline: Baseline) -> str:
-    entries = baseline.size
-    sections: dict[str, list[str]] = {}
-    for key in sorted(entries, key=_order):
-        if key.metric is Metric.FILE_LINES:
-            header, name = f"[{key.metric.value}]", key.path
-        else:
-            header, name = f"[{key.metric.value}.{_toml_string(key.path)}]", key.symbol
-        sections.setdefault(header, []).append(f"{_toml_string(name)} = {entries[key]}")
-    if baseline.clones is not None:
-        sections.update(_clone_sections(baseline.clones))
-    return BASELINE_HEADER + "".join(f"\n{header}\n" + "".join(f"{line}\n" for line in lines) for header, lines in sections.items())
-
-
-def _clone_sections(pairs: frozenset[ClonePair]) -> dict[str, list[str]]:
-    """Each pair stands once, under its first side: a table per file, a key per function, a list of the other sides."""
-    if not pairs:
-        return {f"[{CLONES}]": []}
-    others: dict[Place, list[Place]] = {}
-    for pair in sorted(pairs):
-        others.setdefault(pair.first, []).append(pair.second)
-    sections: dict[str, list[str]] = {}
-    for first, seconds in others.items():
-        listed = ", ".join(f"[{_toml_string(second.path)}, {_toml_string(second.symbol)}]" for second in seconds)
-        sections.setdefault(f"[{CLONES}.{_toml_string(first.path)}]", []).append(f"{_toml_key(first.symbol)} = [{listed}]")
-    return sections
-
-
-def _toml_key(name: str) -> str:
-    """A key as TOML allows it bare, else quoted."""
-    return name if BARE_KEY.fullmatch(name) else _toml_string(name)
-
-
-def _toml_string(name: str) -> str:
-    """JSON's string escapes are TOML's, except that TOML has no surrogate pairs and escapes DEL as well."""
-    try:
-        name.encode("utf-8")
-    except UnicodeEncodeError:
-        raise SizeError(f"{name} is not valid UTF-8, so {BASELINE_PATH} cannot hold it") from None
-    return json.dumps(name, ensure_ascii=False).replace("\x7f", "\\u007f")
-
-
-def load_baseline(text: str) -> Baseline:
-    try:
-        document = repository.parse_toml(text)
-    except repository.TomlError as error:
-        raise SizeError(f"{BASELINE_PATH} is not valid TOML ({error})") from error
-    size: SizeEntries = {}
-    clones = None
-    for table_name, table in document.items():
-        if table_name == CLONES:
-            clones = _clone_pairs(table)
-            continue
-        metric = _metric_named(table_name)
-        for path, entry in _table(table_name, table).items():
-            if metric is Metric.FILE_LINES:
-                size[Key(metric, path)] = _count(f"{table_name}.{path}", entry)
-            else:
-                for symbol, value in _table(f"{table_name}.{path}", entry).items():
-                    size[Key(metric, path, symbol)] = _count(f"{table_name}.{path}.{symbol}", value)
-    return Baseline(size, clones)
-
-
-def read_baseline(root: Path) -> Baseline | None:
-    """The repository's baseline on disk, None when it has none.
-
-    A file that cannot be read cannot be judged; a malformed one raises SizeError.
-    """
-    content = checkout.judged(repository.read_bytes, root, BASELINE_PATH)
-    if content is None:
-        return None
-    try:
-        return load_baseline(content.decode("utf-8"))
-    except UnicodeDecodeError as error:
-        raise SizeError(f"{BASELINE_PATH} is not valid UTF-8 ({error})") from error
-
-
-def _clone_pairs(table: object) -> frozenset[ClonePair]:
-    """Every pair rebuilt through `ClonePair.of`, so a reversed or repeated entry is its one identity."""
-    pairs = set()
-    for path, entry in _table(CLONES, table).items():
-        for symbol, others in _table(f"{CLONES}.{path}", entry).items():
-            where = f"{CLONES}.{path}.{symbol}"
-            if not isinstance(others, list):
-                raise SizeError(f"{BASELINE_PATH} needs {where} as a list of [path, symbol] pairs")
-            for other in others:
-                if not (isinstance(other, list) and len(other) == 2 and all(isinstance(part, str) for part in other)):
-                    raise SizeError(f"{BASELINE_PATH} needs {where} as a list of [path, symbol] pairs of two strings, not {other!r}")
-                pairs.add(ClonePair.of(Place(path, symbol), Place(*other)))
-    return frozenset(pairs)
-
-
-def _metric_named(name: str) -> Metric:
-    try:
-        return Metric(name)
-    except ValueError:
-        known = ", ".join([*(metric.value for metric in Metric), CLONES])
-        raise UnknownTable(f"{BASELINE_PATH} has an unknown table [{name}]; quality {__version__} knows {known}") from None
-
-
 def head_step(error: SizeError) -> Instruction:
     """What the head can do about its own unreadable baseline; the base is not the pull request's to rewrite."""
     return Instruction(UNKNOWN_TABLE_HINT) if isinstance(error, UnknownTable) else RESTORE_STEP
-
-
-def holds_clones_table(version: bytes) -> bool:
-    """Whether a version has a top-level `clones` key; text no parser reads proves nothing."""
-    try:
-        return CLONES in repository.parse_toml(version.decode("utf-8"))
-    except (UnicodeDecodeError, repository.TomlError) as error:
-        raise SizeError(f"a version of {BASELINE_PATH} in git cannot be read") from error
-
-
-def _table(where: str, value: object) -> dict:
-    if not isinstance(value, dict):
-        raise SizeError(f"{BASELINE_PATH} needs {where} as a table")
-    return value
-
-
-def _count(where: str, value: object) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        raise SizeError(f"{BASELINE_PATH} needs {where} as a positive count, not {value!r}")
-    return value
 
 
 def complete(tree: TreeMeasurement) -> Measurements:

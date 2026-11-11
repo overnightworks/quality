@@ -15,6 +15,7 @@ from typing import NoReturn, TextIO
 
 from quality import (
     __version__,
+    baseline_file,
     fleet,
     installation,
     pin,
@@ -240,7 +241,7 @@ Areas (default: all):
 Options:
   --staged      secrets in exactly what the next commit records; the commit
                 hook runs: quality check secrets --staged
-  --fix         lower the debt ceiling ({ratchet.BASELINE_PATH}) where code
+  --fix         lower the debt ceiling ({baseline_file.BASELINE_PATH}) where code
                 shrank, or record it the first time; never raises it
   --dry-run     with --fix: show what would change, write nothing
   -v            show the raw scanner output, never a secret
@@ -541,7 +542,7 @@ REFUSED_AREAS_NEXT = refused_next(CHECK_COMMAND)
 
 
 def _in_file(fact: str) -> str:
-    return SEPARATOR.join((fact, ratchet.BASELINE_PATH))
+    return SEPARATOR.join((fact, baseline_file.BASELINE_PATH))
 
 
 def _made(ceiling: ratchet.CeilingFix | DryRun) -> tuple[ratchet.CeilingFix, bool]:
@@ -568,12 +569,12 @@ def _planned_row(area: Area, fix: ratchet.CeilingFix) -> Row | None:
     """A dry run's debt row: what would fall, counted, else what would move, else the recording it would write."""
     for count, event in ((fix.fell, AreaEvent.TO_LOWER), (fix.moved, AreaEvent.TO_MOVE)):
         if count:
-            return Row(Glyph.WILL_CHANGE, area, event, ratchet.BASELINE_PATH, count=count, counts_plural=False)
+            return Row(Glyph.WILL_CHANGE, area, event, baseline_file.BASELINE_PATH, count=count, counts_plural=False)
     if fix.first:
-        new = SEPARATOR.join((_recorded_extent(fix), f"{ratchet.BASELINE_PATH} would be new"))
+        new = SEPARATOR.join((_recorded_extent(fix), f"{baseline_file.BASELINE_PATH} would be new"))
         return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_RECORD, new)
     if fix.text_differs:
-        return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_REWRITE, SEPARATOR.join(("text differs", ratchet.BASELINE_PATH)))
+        return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_REWRITE, SEPARATOR.join(("text differs", baseline_file.BASELINE_PATH)))
     pairs = _in_file(counted(len(fix.ceiling.clones), CLONE_PAIR))
     return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_RECORD, pairs) if fix.recorded else None
 
@@ -582,16 +583,15 @@ def _ceiling_row(area: Area, ceiling: ratchet.CeilingFix | DryRun) -> Row | None
     fix, planned = _made(ceiling)
     if planned:
         return _planned_row(area, fix)
-    pairs = counted(len(fix.ceiling.clones), CLONE_PAIR)
     if fix.first:
-        return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, SEPARATOR.join((_recorded_extent(fix), f"{ratchet.BASELINE_PATH} is new")))
+        return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, SEPARATOR.join((_recorded_extent(fix), f"{baseline_file.BASELINE_PATH} is new")))
     if fix.fell:
         return Row(Glyph.CLEAN, area, AreaEvent.LOWERED, _in_file(counted(fix.fell, "entry", "entries")))
     if fix.moved:
         return Row(Glyph.CLEAN, area, AreaEvent.MOVED, _in_file(counted(fix.moved, "entry", "entries")))
     if fix.text_differs:
-        return Row(Glyph.CLEAN, area, AreaEvent.REWRITTEN, ratchet.BASELINE_PATH)
-    return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, _in_file(pairs)) if fix.recorded else None
+        return Row(Glyph.CLEAN, area, AreaEvent.REWRITTEN, baseline_file.BASELINE_PATH)
+    return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, _in_file(counted(len(fix.ceiling.clones), CLONE_PAIR))) if fix.recorded else None
 
 
 def _ceiling_words(ceiling: ratchet.CeilingFix | DryRun | None, findings: int) -> str:
@@ -638,7 +638,7 @@ def area_row(verdict: AreaVerdict, extent: str) -> Row:
             return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_SET_UP, extent)
         partly = "" if verdict.measurement is Measurement.MEASURED_ONLY else "partly "
         mode = f"{partly}{Outcome.MEASURED_ONLY.value}"
-        return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_RECORDED, SEPARATOR.join(filter(None, (extent, mode))), fix=ratchet.FIX_COMMAND)
+        return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_RECORDED, SEPARATOR.join(filter(None, (extent, mode))), fix=baseline_file.FIX_COMMAND)
     allowed = sum(note.event is NoteEvent.ALLOWED for note in verdict.notes)
     facts = [extent, f"{allowed} {NoteEvent.ALLOWED}" if allowed else ""]
     return Row(Glyph.CLEAN, verdict.area, AreaEvent.CLEAN, SEPARATOR.join(fact for fact in facts if fact))

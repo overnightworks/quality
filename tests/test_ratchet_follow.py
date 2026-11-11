@@ -2,19 +2,8 @@
 
 import pytest
 
-from quality.ratchet import (
-    RESTORE_STEP,
-    Baseline,
-    ClonePair,
-    Key,
-    Metric,
-    Place,
-    Renames,
-    carried_base,
-    follow_renames,
-    named_paths,
-    raised_entries,
-)
+from quality.baseline_file import Baseline, ClonePair, Key, Metric, Place
+from quality.ratchet import RESTORE_STEP, Renames, carried_base, follow_renames, named_paths, raised_entries
 from quality.report import CannotJudge, NoteEvent
 
 

@@ -9,7 +9,8 @@ import time
 import pytest
 
 from quality import sides
-from quality.ratchet import BASELINE_PATH, Baseline, Key, Metric, Renames, renames_of, render_baseline
+from quality.baseline_file import BASELINE_PATH, Baseline, Key, Metric, render_baseline
+from quality.ratchet import Renames, renames_of
 from quality.report import CannotJudge
 from tests.support.door import RELEASE_ROW
 from tests.support.git_repositories import head_commit, put

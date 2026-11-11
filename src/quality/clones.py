@@ -12,8 +12,9 @@ from collections import Counter, defaultdict
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 
-from quality import ratchet
-from quality.ratchet import Area, ClonePair, Place
+from quality import baseline_file, ratchet
+from quality.baseline_file import ClonePair, Place
+from quality.ratchet import Area
 from quality.report import Finding, FindingEvent, RuleResult
 from quality.rules import Rule
 
@@ -170,10 +171,10 @@ def _new_pair_finding(pair: ClonePair, line: int) -> Finding:
 
 def _stale_pair_finding(pair: ClonePair) -> Finding:
     fact = f"pair {pair.label} is gone"
-    return Finding(Rule.CLONE, pair.first.path, None, fact, ratchet.FIX_COMMAND, event=FindingEvent.CAN_FALL)
+    return Finding(Rule.CLONE, pair.first.path, None, fact, baseline_file.FIX_COMMAND, event=FindingEvent.CAN_FALL)
 
 
-def check_clones(tree: ratchet.TreeMeasurement, sources: dict[str, bytes], baseline: ratchet.Baseline | None) -> RuleResult:
+def check_clones(tree: ratchet.TreeMeasurement, sources: dict[str, bytes], baseline: baseline_file.Baseline | None) -> RuleResult:
     """Report-only without a `[clones]` table, even in a baseline of size tables; with one, every new pair and every
     held pair the tree lost is a finding. A pair can hide in a file the detector cannot read, so then it cannot judge."""
     pairs = find_pairs(sources)

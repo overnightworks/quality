@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 
 from quality import DISTRIBUTION, check, cli, deadline, env_file, output, report
+from quality.baseline_file import BASELINE_PATH, load_baseline
 from quality.output import Glyph
-from quality.ratchet import BASELINE_PATH, load_baseline
 from quality.report import Example, Finding, FindingEvent, Note, NoteEvent, printable
 from quality.rules import Rule
 from tests.support.door import FIX_WORDS, PinnedJudging, check_door, door_in

@@ -10,6 +10,7 @@ from functools import partial
 from urllib.parse import quote
 
 from quality import architecture, checkout
+from quality.baseline_file import BASELINE_PATH
 from quality.config import CONFIG_PATH, Declaration, GateSettings, LegacyMode
 from quality.gh import GhFailed, GhRunner, file_at, workflow_texts_at
 from quality.landing import Landing, LandingKind, LandingRefused, landing_of
@@ -26,7 +27,7 @@ from quality.output import (
     write_pair,
 )
 from quality.pin import JudgingRelease
-from quality.ratchet import BASELINE_PATH, Renames
+from quality.ratchet import Renames
 from quality.report import CannotJudge, Command, Instruction, Reason, Step, config_refusal, printable
 from quality.sides import (
     Side,

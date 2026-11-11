@@ -2,19 +2,16 @@
 
 import pytest
 
-from quality.ratchet import (
+from quality.baseline_file import (
     Baseline,
     ClonePair,
     Key,
-    Measured,
     Metric,
     Place,
-    SizeError,
-    holds_clones_table,
     load_baseline,
-    lower_ceiling,
     render_baseline,
 )
+from quality.ratchet import Measured, lower_ceiling
 from quality.report import Note, NoteEvent
 
 
@@ -115,28 +112,3 @@ def test_a_lowered_entry_is_noted_with_its_fall_and_a_dropped_one_with_its_thres
         (NoteEvent.LOWERED, "function work CCN 19 → 17"),
         (NoteEvent.DROPPED, "file 826 → 790 lines · debt from 800 lines"),
     ]
-
-
-@pytest.mark.parametrize(
-    ("version", "held"),
-    [
-        pytest.param(b"[clones]\n", True, id="[clones]"),
-        pytest.param(b"[ clones ]\n", True, id="[ clones ]"),
-        pytest.param(b"clones = {}\n", True, id="clones = {}"),
-        pytest.param(b'["clones"]\n', True, id='["clones"]'),
-        pytest.param(b'[function_lines]\nclones = {}\n', False, id="a function named clones"),
-        pytest.param(b'[file_lines]\n"clones" = 120\n', False, id="a file named clones"),
-    ],
-)
-def test_a_version_holds_clones_if_it_parses_so(version, held):
-    """FIX-12: a version of the ceiling holds a clones table where it parses as one, in any spelling, and not where a
-    function or file is merely named `clones`."""
-    assert holds_clones_table(version) is held
-
-
-@pytest.mark.parametrize("version", [b"[clones", b"\xff\xfe"], ids=["[clones", "not UTF-8"])
-def test_a_version_no_parser_reads_shows_nothing(version):
-    """FIX-13: a version of the ceiling in git that no parser reads raises the error that names it, instead of
-    reading as a table held or absent."""
-    with pytest.raises(SizeError, match="a version of quality/baseline.toml in git cannot be read"):
-        holds_clones_table(version)

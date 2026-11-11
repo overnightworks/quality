@@ -11,6 +11,7 @@ from quality import (
     advisories,
     agent_guidance,
     architecture,
+    baseline_file,
     checkout,
     clones,
     compose,
@@ -70,11 +71,11 @@ def _required[T](read: T | CannotJudge) -> T:
     return read
 
 
-def judged_baseline(root: Path) -> ratchet.Baseline | None:
+def judged_baseline(root: Path) -> baseline_file.Baseline | None:
     """The baseline both baseline rules judge by, read once; a file that cannot be read cannot be judged."""
     try:
-        return ratchet.read_baseline(root)
-    except ratchet.SizeError as error:
+        return baseline_file.read_baseline(root)
+    except baseline_file.SizeError as error:
         raise CannotJudge(str(error), (ratchet.head_step(error),)) from error
 
 
@@ -172,8 +173,8 @@ class Fix(Enum):
 
 
 DRY_RUN_WORD = "--dry-run"
-DRY_RUN_COMMAND = f"{ratchet.FIX_COMMAND} {DRY_RUN_WORD}"
-FIX_RUN_COMMAND = {Fix.WRITE: ratchet.FIX_COMMAND, Fix.DRY_RUN: DRY_RUN_COMMAND}
+DRY_RUN_COMMAND = f"{baseline_file.FIX_COMMAND} {DRY_RUN_WORD}"
+FIX_RUN_COMMAND = {Fix.WRITE: baseline_file.FIX_COMMAND, Fix.DRY_RUN: DRY_RUN_COMMAND}
 
 
 PLANNED_EVENT = {
@@ -339,7 +340,7 @@ def _run_log(verbose: bool) -> tuple[list[ScannerRun], scanners.ScannerLog]:
 
 def _judge_baseline_rules(
     sources: dict[str, bytes] | CannotJudge,
-    baseline: ratchet.Baseline | None | CannotJudge,
+    baseline: baseline_file.Baseline | None | CannotJudge,
     allow_lists: AllowLists | CannotJudge,
     tracked: frozenset[str],
 ) -> tuple[RuleResult | CannotJudge, RuleResult | CannotJudge]:
@@ -426,18 +427,18 @@ def _require_whole_history(inputs: RunInputs) -> None:
 
 
 def _require_no_ceiling_in_git(inputs: RunInputs) -> None:
-    if ratchet.BASELINE_PATH in inputs.tracked or checkout.blobs_of(inputs.root, ratchet.BASELINE_PATH):
-        raise CannotJudge(f"{ratchet.BASELINE_PATH} is gone from the tree but git holds it", (ratchet.RESTORE_STEP,))
+    if baseline_file.BASELINE_PATH in inputs.tracked or checkout.blobs_of(inputs.root, baseline_file.BASELINE_PATH):
+        raise CannotJudge(f"{baseline_file.BASELINE_PATH} is gone from the tree but git holds it", (ratchet.RESTORE_STEP,))
     _require_whole_history(inputs)
 
 
 def _require_no_clones_table_in_git(inputs: RunInputs) -> None:
-    name = ratchet.BASELINE_PATH
+    name = baseline_file.BASELINE_PATH
     revisions = [f":{name}"] if name in inputs.tracked else []
     revisions += checkout.blobs_of(inputs.root, name)
     try:
-        held = any(ratchet.holds_clones_table(checkout.blob(inputs.root, revision)) for revision in revisions)
-    except ratchet.SizeError as error:
+        held = any(baseline_file.holds_clones_table(checkout.blob(inputs.root, revision)) for revision in revisions)
+    except baseline_file.SizeError as error:
         raise CannotJudge(str(error), (ratchet.RESTORE_STEP,)) from error
     if held:
         raise CannotJudge(f"{name} lost its [clones] table, which git holds", (ratchet.RESTORE_STEP,))
@@ -448,53 +449,53 @@ def _written(inputs: RunInputs, fix: ratchet.CeilingFix) -> ratchet.CeilingFix |
     """The ceiling rendered, so one no file can hold refuses a dry run too; written, when it changed or its text
     is not the file's, only by the fix."""
     try:
-        text = ratchet.render_baseline(fix.ceiling)
+        text = baseline_file.render_baseline(fix.ceiling)
         if not fix.changed:
-            fix = replace(fix, text_differs=repository.read_text(inputs.root, ratchet.BASELINE_PATH) != text)
+            fix = replace(fix, text_differs=repository.read_text(inputs.root, baseline_file.BASELINE_PATH) != text)
         if fix.changed and inputs.fix is Fix.WRITE:
-            repository.write_text(inputs.root, ratchet.BASELINE_PATH, text)
-    except (repository.RepositoryFileError, ratchet.SizeError) as error:
+            repository.write_text(inputs.root, baseline_file.BASELINE_PATH, text)
+    except (repository.RepositoryFileError, baseline_file.SizeError) as error:
         raise CannotJudge(str(error)) from error
     return DryRun(fix) if inputs.fix is Fix.DRY_RUN else fix
 
 
-def _with_what_they_held(gone: dict[ratchet.Key, str], held: ratchet.SizeEntries) -> dict[ratchet.Key, str]:
+def _with_what_they_held(gone: dict[baseline_file.Key, str], held: baseline_file.SizeEntries) -> dict[baseline_file.Key, str]:
     """Each gone entry's reason, then the value the ceiling held."""
-    return {key: SEPARATOR.join((why, f"was {key.metric.describe(held[key])}")) for key, why in gone.items()}
+    return {key: SEPARATOR.join((why, f"was {ratchet.describe_value(key.metric, held[key])}")) for key, why in gone.items()}
 
 
 def _commit_repair_step(fix: Fix | None) -> Instruction:
-    return Instruction(f"commit the repaired {ratchet.BASELINE_PATH}, then run {FIX_RUN_COMMAND.get(fix, ratchet.FIX_COMMAND)} again")
+    return Instruction(f"commit the repaired {baseline_file.BASELINE_PATH}, then run {FIX_RUN_COMMAND.get(fix, baseline_file.FIX_COMMAND)} again")
 
 
-def _ceiling_lineage(inputs: RunInputs) -> tuple[ratchet.Baseline, ratchet.Renames] | None:
+def _ceiling_lineage(inputs: RunInputs) -> tuple[baseline_file.Baseline, ratchet.Renames] | None:
     """The ceiling at its last commit and what git renamed from there to the index; None where no commit holds it."""
-    change = checkout.last_change(inputs.root, ratchet.BASELINE_PATH)
+    change = checkout.last_change(inputs.root, baseline_file.BASELINE_PATH)
     if change is None:
         return None
     if not change.has_parent and checkout.is_shallow(inputs.root):
-        fact = f"this clone is shallow, so git cannot show where {ratchet.BASELINE_PATH} last changed"
+        fact = f"this clone is shallow, so git cannot show where {baseline_file.BASELINE_PATH} last changed"
         raise CannotJudge(fact, (checkout.UNSHALLOW_STEP,))
-    where = f"{ratchet.BASELINE_PATH} at its last commit {change.commit}"
+    where = f"{baseline_file.BASELINE_PATH} at its last commit {change.commit}"
     try:
-        text = process.read_blob(inputs.root, change.commit, ratchet.BASELINE_PATH, f"cannot read {where}", f"cannot read {where}")
+        text = process.read_blob(inputs.root, change.commit, baseline_file.BASELINE_PATH, f"cannot read {where}", f"cannot read {where}")
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
     if text is None:
         return None
     try:
-        committed = ratchet.load_baseline(text)
-    except ratchet.SizeError as error:
+        committed = baseline_file.load_baseline(text)
+    except baseline_file.SizeError as error:
         raise CannotJudge(f"the ceiling at its last commit {change.commit}: {error}", (_commit_repair_step(inputs.fix),)) from error
     return committed, ratchet.renames_of(checkout.renamed_since(inputs.root, change.commit))
 
 
-def _followed(inputs: RunInputs, held: ratchet.Baseline) -> ratchet.CeilingFix:
+def _followed(inputs: RunInputs, held: baseline_file.Baseline) -> ratchet.CeilingFix:
     lineage = _ceiling_lineage(inputs)
     return ratchet.CeilingFix(held, ()) if lineage is None else ratchet.follow_renames(held, *lineage, frozenset(inputs.tracked))
 
 
-def _fix_ceiling(inputs: RunInputs, sources: dict[str, bytes], held: ratchet.Baseline | None) -> ratchet.CeilingFix:
+def _fix_ceiling(inputs: RunInputs, sources: dict[str, bytes], held: baseline_file.Baseline | None) -> ratchet.CeilingFix:
     """The ceiling lowered, or recorded where git never held one; the caller writes it."""
     tree = ratchet.measure(sources)
     ratchet.complete(tree)
@@ -503,7 +504,7 @@ def _fix_ceiling(inputs: RunInputs, sources: dict[str, bytes], held: ratchet.Bas
     pairs = clones.find_pairs(sources).pairs
     if held is None:
         _require_no_ceiling_in_git(inputs)
-        return ratchet.CeilingFix(ratchet.Baseline(ratchet.debt(measurements), pairs), (), first=True)
+        return ratchet.CeilingFix(baseline_file.Baseline(ratchet.debt(measurements), pairs), (), first=True)
     if held.clones is None:
         _require_no_clones_table_in_git(inputs)
     followed = _followed(inputs, held)  # renames first, so a renamed file's entries move instead of falling as gone

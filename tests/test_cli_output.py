@@ -13,9 +13,9 @@ from typing import NoReturn
 
 import pytest
 
-from quality import architecture, check, cli, config, pin, ratchet, report, scanners
+from quality import architecture, baseline_file, check, cli, config, pin, report, scanners
+from quality.baseline_file import BASELINE_PATH
 from quality.output import SEPARATOR, Glyph
-from quality.ratchet import BASELINE_PATH
 from quality.report import FindingEvent, NoteEvent, printable
 from quality.rules import Area, Rule
 from tests.support.architecture import FORBIDDEN, KEPT_CONTRACT, SHOP_DB_IMPORTS_WEB, toml
@@ -422,7 +422,7 @@ def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_re
     code, out, err = frame_run(capsys, repo)
     files_row = headers(out)[0]
     extent = [int(part.split()[0]) for part in files_row.partition(cli.AreaEvent.CLEAN)[2].split(SEPARATOR)]
-    held = ratchet.read_baseline(repo)
+    held = baseline_file.read_baseline(repo)
     contracts = architecture.contracts_of({".importlinter": tracked[".importlinter"]}).contracts
     assert [line.split()[1] for line in headers(out)] == list(Area)
     assert (code, out[0], out[-1], err) == (0, headers(out)[0], f"✓ clean · 7 areas · {ZERO_SECONDS}", [])
@@ -459,7 +459,7 @@ def test_a_baseline_without_clones_is_partly_measured_only(build_repo, capsys):
     assert mode.endswith(check.Outcome.MEASURED_ONLY.value)
     assert mode != check.Outcome.MEASURED_ONLY.value
     assert door_in(repo, *FIX_WORDS) == 0
-    assert leading_count(fact) == len(ratchet.read_baseline(repo).clones) == 1
+    assert leading_count(fact) == len(baseline_file.read_baseline(repo).clones) == 1
     assert out[-1] == f"✓ clean · 7 areas · debt partly measured, not enforced · {ZERO_SECONDS}"
 
 

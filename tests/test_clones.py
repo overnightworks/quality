@@ -3,7 +3,8 @@ from pathlib import Path
 import pytest
 
 from quality import clones
-from quality.ratchet import Area, ClonePair, Place, read_baseline
+from quality.baseline_file import ClonePair, Place, read_baseline
+from quality.ratchet import Area
 from quality.rules import Rule
 from tests.support.check import area_fact, check_result, extent_counts, refusal_row, refusals
 from tests.support.check import check_output as run

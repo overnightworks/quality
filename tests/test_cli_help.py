@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 import quality
-from quality import checkout, cli, ratchet, staged
+from quality import baseline_file, checkout, cli, staged
 from quality.output import SEPARATOR
 from quality.rules import Area
 from tests.support.door import CHECK_WORD, DRY_RUN_WORDS, FIX_WORDS, MODULE_DOOR, STAGED_WORDS, door_environment
@@ -705,7 +705,7 @@ def test_the_dry_run_words_are_the_commands_words():
 
 def test_the_fix_words_are_the_commands_words():
     """HELP-25: the fix's command in the pair is the command's own words."""
-    assert ratchet.FIX_COMMAND.replace(CHECK_WORD, " ".join(FIX_WORDS[:2])) == f"quality {' '.join(FIX_WORDS)}"
+    assert baseline_file.FIX_COMMAND.replace(CHECK_WORD, " ".join(FIX_WORDS[:2])) == f"quality {' '.join(FIX_WORDS)}"
 
 
 def test_the_staged_words_are_the_commands_words():

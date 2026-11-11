@@ -81,6 +81,7 @@ layers = [
     "python_lint",
     "agent_guidance | architecture | clones | compose | env_file | layout | pip_requirements | python_floor | root_layout | scanners | workflow_rules",
     "ratchet",
+    "baseline_file",
     "checkout",
     "output",
     "web",

@@ -1,7 +1,7 @@
 import pytest
 
+from quality.baseline_file import BASELINE_PATH
 from quality.config import CONFIG_PATH
-from quality.ratchet import BASELINE_PATH
 from tests.support.architecture import FORBIDDEN, GUARDED_CHANGES, contracts_toml
 from tests.support.git_repositories import put
 from tests.support.merge import (

@@ -25,6 +25,7 @@ from pathlib import Path
 from quality import (
     __version__,
     architecture,
+    baseline_file,
     checkout,
     clones,
     config,
@@ -88,7 +89,7 @@ COLUMNS = (
     "Note",
 )
 FIXED_MATRIX_COLUMNS = ("Repo", "Gate", "CodeQL", "Mandatory jobs", "Sonar legacy")
-DEBT_COLUMNS = (ratchet.Metric.FILE_LINES, ratchet.Metric.FUNCTION_LINES, ratchet.Metric.CCN)
+DEBT_COLUMNS = (baseline_file.Metric.FILE_LINES, baseline_file.Metric.FUNCTION_LINES, baseline_file.Metric.CCN)
 
 ENFORCED = "enforced"
 REPORT_ONLY = "report-only"
@@ -416,11 +417,11 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
     except config.ConfigError:
         unreadable.add(config.CONFIG_PATH)
     try:
-        baseline = ratchet.read_baseline(clone)
+        baseline = baseline_file.read_baseline(clone)
         has_baseline = baseline is not None
         has_clone_table = baseline is not None and baseline.clones is not None
-    except (report.CannotJudge, ratchet.SizeError):
-        unreadable.add(ratchet.BASELINE_PATH)
+    except (report.CannotJudge, baseline_file.SizeError):
+        unreadable.add(baseline_file.BASELINE_PATH)
     try:
         has_import_config = find_import_config(clone, tracked)
     except (repository.RepositoryFileError, architecture.ContractError):
@@ -632,8 +633,8 @@ def switch_words(switch: Switch, declared: Declared) -> Cell:
     if switch is Switch.JUDGED_PROJECT:
         return ENFORCED if declared.has_judged_project else NO_JUDGED_PROJECT
     file, present = {
-        Switch.SIZE_BASELINE: (ratchet.BASELINE_PATH, declared.has_baseline),
-        Switch.CLONE_TABLE: (ratchet.BASELINE_PATH, declared.has_clone_table),
+        Switch.SIZE_BASELINE: (baseline_file.BASELINE_PATH, declared.has_baseline),
+        Switch.CLONE_TABLE: (baseline_file.BASELINE_PATH, declared.has_clone_table),
         Switch.IMPORT_LINTER_CONFIG: (IMPORT_LINTER_CONFIG, declared.has_import_config),
     }[switch]
     if file in declared.unreadable:

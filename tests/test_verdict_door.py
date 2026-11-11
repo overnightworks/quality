@@ -7,8 +7,8 @@ import sys
 import pytest
 
 from quality import cli
+from quality.baseline_file import BASELINE_PATH
 from quality.config import CONFIG_PATH
-from quality.ratchet import BASELINE_PATH
 from tests.support.git_repositories import head_commit
 from tests.support.verdict import CHECKS_GREEN, without_release_row
 
