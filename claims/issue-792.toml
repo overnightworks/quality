@@ -1,7 +1,0 @@
-claim_id = "a628b34d50464440bdd7dad6a497824c"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "a5fb2e95977487f83654dba83c0fd91dc168d53f"
-branch = "claude/issue-792-until-mark"
-scope = ["docs/rules.md"]
-opened_commit = "f22c2750fdea2754d04477894015da685d61e73f"
