@@ -27,6 +27,8 @@ from quality.scanners import ScannerError
 PYTHON_ECOSYSTEM = "PyPI"
 DATABASE_ROOT = "https://osv-vulnerabilities.storage.googleapis.com"  # read at call time; tests point it at a file:// root
 DATABASE_ARCHIVE = "all.zip"
+CACHE_DIRECTORY = "advisories"
+CACHE_TEMPORARY_PREFIX = f"{DATABASE_ARCHIVE}.tmp-"
 DOWNLOAD_TIMEOUT_SECONDS = 30
 # connect, headers and body of all downloads together, enforced from outside the HTTP machinery;
 # DOWNLOAD_TIMEOUT_SECONDS bounds each socket wait and the run's end caps the deadline
@@ -350,6 +352,11 @@ def _download_once(url: str, ecosystem: str, ends_at: float, monotonic: Callable
     if not download.done():
         raise ScannerError(f"the {ecosystem} advisory database download stopped on an unexpected error")
     return download.result()
+
+
+def cached_archive(cache: Path, ecosystem: str) -> Path:
+    """Where the copy of `ecosystem`'s archive lives below quality's user cache directory `cache`."""
+    return cache / CACHE_DIRECTORY / ecosystem / DATABASE_ARCHIVE
 
 
 def md5_digest(data: bytes) -> str:
