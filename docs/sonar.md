@@ -135,8 +135,10 @@ check over and leaves the key servers out of the trust path (SONAR-121):
   alone decides nothing, because `gpg` exits `0` for a signature by an expired key. A `KEYEXPIRED` line alone refuses
   nothing: `gpg` prints it for any expired subkey in the file, also one that did not sign. Otherwise the line names the
   key file and what to do, exit `2`, and nothing is installed (SONAR-117). When the signing subkey has expired
-  (`EXPKEYSIG`), replacing the file does not help: the line says to set `SCANNER_VERSION` to a release signed by a
-  subkey that has not expired and to re-export the key file.
+  (`EXPKEYSIG`) or revoked (`REVKEYSIG`), replacing the file does not help: the line says to set `SCANNER_VERSION` to
+  a release signed by a subkey that has neither expired nor been revoked and to re-export the key file; for a zip that
+  does not match (`BADSIG`) it says to re-run and, when the same line returns, to set `SCANNER_VERSION` to another
+  release.
 - The scanner is unpacked beside its place in the runner tool cache and moved there whole; the `.complete` marker the
   action looks for is written last (SONAR-118). The action finds the directory and the marker, prints
   `Using cached Sonar Scanner CLI`, and downloads and verifies nothing.

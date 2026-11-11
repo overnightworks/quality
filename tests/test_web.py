@@ -76,7 +76,7 @@ def test_a_server_that_drips_ends_at_the_deadline_though_every_socket_operation_
             web.fetch_within(f"{origin}/zip", lambda error: CannotJudge(str(error)), started + DEADLINE_SECONDS, time.monotonic, timeout=15)
     finally:
         release.set()
-    assert time.monotonic() - started < DEADLINE_SECONDS + 0.4
+    assert time.monotonic() - started < DEADLINE_SECONDS + MARGIN_SECONDS
 
 
 def test_a_body_that_arrives_whole_within_the_deadline_is_returned_as_sent(stub_server):

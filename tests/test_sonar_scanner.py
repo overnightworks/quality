@@ -180,15 +180,13 @@ def test_a_present_marker_downloads_nothing_and_leaves_the_install_alone(scene, 
 @pytest.mark.parametrize(
     "status",
     [
-        status_lines("GOODSIG", "VALIDSIG", "REVKEYSIG"),
-        status_lines("BADSIG"),
         status_lines("ERRSIG"),
         status_lines("GOODSIG", "VALIDSIG", primary=OTHER_FINGERPRINT),
         status_lines("GOODSIG"),
         status_lines("VALIDSIG"),
         "",
     ],
-    ids=["revoked key", "bad signature", "key not in the file", "signature of another primary key", "no VALIDSIG", "no GOODSIG", "no status at all"],
+    ids=["key not in the file", "signature of another primary key", "no VALIDSIG", "no GOODSIG", "no status at all"],
 )
 def test_a_signature_that_does_not_verify_names_the_key_file_and_installs_nothing(scene, drive, status):
     """SONAR-117: each failed verification is one line naming the key file and what to replace, exit 2, nothing in the cache"""
@@ -212,6 +210,23 @@ def test_a_signature_by_an_expired_subkey_says_to_name_a_release_signed_by_a_val
     code, out, err = drive()
     assert (code, out) == (2, "")
     assert (KEY_FILE_NAME in err, sonar_scanner.VERSION_VARIABLE in err, "re-export" in err, FIX_ADVICE in err) == (True, True, True, False)
+    assert not scene.tool_cache.exists()
+
+
+@pytest.mark.parametrize(
+    ("status", "steps"),
+    [
+        (status_lines("GOODSIG", "VALIDSIG", "REVKEYSIG"), (f"set {sonar_scanner.VERSION_VARIABLE}", "re-export")),
+        (status_lines("BADSIG"), (RERUN_ADVICE, f"set {sonar_scanner.VERSION_VARIABLE}")),
+    ],
+    ids=["revoked subkey", "bad signature"],
+)
+def test_a_signature_that_a_new_key_file_cannot_mend_names_the_steps_that_can(scene, drive, status, steps):
+    """SONAR-117: a revoked signing subkey and a zip whose bytes do not match are not cured by replacing the key file alone"""
+    scene.status = status
+    code, out, err = drive()
+    assert (code, out, FIX_ADVICE in err) == (2, "", False)
+    assert all(step in err for step in steps)
     assert not scene.tool_cache.exists()
 
 

@@ -40,20 +40,23 @@ CACHE_DIRECTORY = "sonar-scanner-cli"
 PLATFORM = "linux-x64"
 COMPLETE_SUFFIX = ".complete"
 STATUS_PREFIX = "[GNUPG:] "
-# gpg prints VALIDSIG and exits 0 for a signature by an expired key too, so the exit status never decides. It prints
-# KEYEXPIRED for any expired subkey in the file, also one that did not sign, so only the signature's own status counts.
-REFUSED_STATUSES = {
-    "REVKEYSIG": "the signing key has been revoked",
-    "BADSIG": "the signature does not match the zip",
-    "ERRSIG": "the signature is by a key the file does not hold",
-}
-EXPIRED_SIGNING_KEY = "EXPKEYSIG"
-REPLACE_THE_KEY = Instruction(f"replace src/quality/{KEY_FILE_NAME} with SonarSource's current public key")
+ANOTHER_RELEASE = Instruction(f"set {VERSION_VARIABLE} in gate.yml to another release of the scanner")
+RERUN_THEN_ANOTHER_RELEASE = Instruction(f"{RERUN}; when the same line comes again, {ANOTHER_RELEASE}")
 RELEASE_OF_A_VALID_SUBKEY = Instruction(
-    f"set {VERSION_VARIABLE} in gate.yml to a release signed by a subkey that has not expired, "
+    f"set {VERSION_VARIABLE} in gate.yml to a release signed by a subkey that has neither expired nor been revoked, "
     f"then re-export src/quality/{KEY_FILE_NAME}"
 )
-ANOTHER_RELEASE = Instruction(f"set {VERSION_VARIABLE} in gate.yml to another release of the scanner")
+REPLACE_THE_KEY = Instruction(f"replace src/quality/{KEY_FILE_NAME} with SonarSource's current public key")
+# gpg prints VALIDSIG and exits 0 for a signature by an expired key too, so the exit status never decides. It prints
+# KEYEXPIRED for any expired subkey in the file, also one that did not sign, so only the signature's own status counts.
+# Replacing the key file cannot mend a signature a revoked subkey made or one the zip's bytes broke, so those two name the
+# step that can.
+REFUSED_STATUSES = {
+    "REVKEYSIG": ("the signing key has been revoked", RELEASE_OF_A_VALID_SUBKEY),
+    "BADSIG": ("the signature does not match the zip", RERUN_THEN_ANOTHER_RELEASE),
+    "ERRSIG": ("the signature is by a key the file does not hold", REPLACE_THE_KEY),
+}
+EXPIRED_SIGNING_KEY = "EXPKEYSIG"
 Fetch = Callable[[str, Callable[[Exception], CannotJudge], float, Callable[[], float], float], bytes]
 
 
@@ -126,9 +129,9 @@ def _signature_fault(status: str, fingerprint: str) -> tuple[str, Instruction] |
     names = {word[0] for word in words if word}
     if EXPIRED_SIGNING_KEY in names:
         return f"gpg reports {EXPIRED_SIGNING_KEY}: the subkey that signed it has expired", RELEASE_OF_A_VALID_SUBKEY
-    for refused_status, reason in REFUSED_STATUSES.items():
+    for refused_status, (reason, remedy) in REFUSED_STATUSES.items():
         if refused_status in names:
-            return f"gpg reports {refused_status}: {reason}", REPLACE_THE_KEY
+            return f"gpg reports {refused_status}: {reason}", remedy
     if "GOODSIG" not in names:
         return "gpg does not report a good signature", REPLACE_THE_KEY
     # The first field of VALIDSIG is the signing subkey; the last is the primary key, which is the one pinned.
