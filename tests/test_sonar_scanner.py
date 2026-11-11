@@ -194,13 +194,12 @@ def test_a_present_marker_downloads_nothing_and_leaves_the_install_alone(scene, 
 @pytest.mark.parametrize(
     "status",
     [
-        status_lines("ERRSIG"),
         status_lines("GOODSIG", "VALIDSIG", primary=OTHER_FINGERPRINT),
         status_lines("GOODSIG"),
         status_lines("VALIDSIG"),
         "",
     ],
-    ids=["key not in the file", "signature of another primary key", "no VALIDSIG", "no GOODSIG", "no status at all"],
+    ids=["signature of another primary key", "no VALIDSIG", "no GOODSIG", "no status at all"],
 )
 def test_a_signature_that_does_not_verify_names_the_key_file_and_installs_nothing(scene, drive, status):
     """SONAR-117: each failed verification is one line naming the key file and what to replace, exit 2, nothing in the cache"""
@@ -232,8 +231,9 @@ def test_a_signature_by_an_expired_subkey_says_to_name_a_release_signed_by_a_val
     [
         (status_lines("GOODSIG", "VALIDSIG", "REVKEYSIG"), (f"set {sonar_scanner.VERSION_VARIABLE}", "re-export")),
         (status_lines("BADSIG"), (RERUN_ADVICE, f"set {sonar_scanner.VERSION_VARIABLE}")),
+        (status_lines("ERRSIG"), (f"set {sonar_scanner.VERSION_VARIABLE}", "re-export")),
     ],
-    ids=["revoked subkey", "bad signature"],
+    ids=["revoked subkey", "bad signature", "signing key not in the file"],
 )
 def test_a_signature_that_a_new_key_file_cannot_mend_names_the_steps_that_can(scene, drive, status, steps):
     """SONAR-117: a revoked signing subkey and a zip whose bytes do not match are not cured by replacing the key file alone"""
@@ -254,12 +254,11 @@ def test_a_signature_by_a_signing_subkey_of_the_pinned_primary_key_installs(scen
     "listing",
     [
         key_listing(FINGERPRINT, OTHER_FINGERPRINT),
-        key_listing(OTHER_FINGERPRINT),
         key_listing(FINGERPRINT, validity="e"),
         key_listing(FINGERPRINT, validity="r"),
         "",
     ],
-    ids=["two primary keys", "another fingerprint", "expired key", "revoked key", "no key"],
+    ids=["two primary keys", "expired key", "revoked key", "no key"],
 )
 def test_a_key_file_that_is_not_exactly_the_pinned_key_is_refused_before_any_download(scene, drive, listing):
     """SONAR-116: one line names the key file and says to replace it, exit 2, and no request goes out"""
@@ -267,6 +266,15 @@ def test_a_key_file_that_is_not_exactly_the_pinned_key_is_refused_before_any_dow
     code, out, err = drive()
     assert (code, out, scene.requested) == (2, "", [])
     assert (KEY_FILE_NAME in err, FIX_ADVICE in err) == (True, True)
+
+
+def test_a_key_file_of_another_primary_key_names_both_ways_out_before_any_download(scene, drive):
+    """SONAR-116: restoring the file mends an accident, a rotation needs the fingerprint changed with the file"""
+    scene.listing = key_listing(OTHER_FINGERPRINT)
+    code, out, err = drive()
+    assert (code, out, scene.requested) == (2, "", [])
+    assert (OTHER_FINGERPRINT in err, sonar_scanner.FINGERPRINT_VARIABLE in err, FIX_ADVICE in err) == (True, True, False)
+    assert all(step in err for step in ("restore", KEY_FILE_NAME, "rotated", sonar_scanner.INSTALL_STEP))
 
 
 @pytest.mark.parametrize(

@@ -50,6 +50,15 @@ RELEASE_OF_A_VALID_SUBKEY = Instruction(
     f"then re-export src/quality/{KEY_FILE_NAME}"
 )
 REPLACE_THE_KEY = Instruction(f"replace src/quality/{KEY_FILE_NAME} with SonarSource's current public key")
+RESTORE_OR_ROTATE_THE_KEY = Instruction(
+    f"restore src/quality/{KEY_FILE_NAME} to the file that holds the fingerprint the step names; when SonarSource "
+    f'rotated its primary key, change the file and {FINGERPRINT_VARIABLE} in the step "{INSTALL_STEP}" together after '
+    "checking the new fingerprint against an independent source (docs/sonar.md says how)"
+)
+RELEASE_OF_A_HELD_SUBKEY = Instruction(
+    f"set {VERSION_VARIABLE} in gate.yml's job \"{SCANNER_JOB}\" env to a release that a subkey in src/quality/{KEY_FILE_NAME} "
+    f"signs, or re-export src/quality/{KEY_FILE_NAME} for the pinned release"
+)
 # gpg prints VALIDSIG and exits 0 for a signature by an expired key too, so the exit status never decides. It prints
 # KEYEXPIRED for any expired subkey in the file, also one that did not sign, so only the signature's own status counts.
 # Replacing the key file cannot mend a signature a revoked subkey made or one the zip's bytes broke, so those two name the
@@ -57,7 +66,7 @@ REPLACE_THE_KEY = Instruction(f"replace src/quality/{KEY_FILE_NAME} with SonarSo
 REFUSED_STATUSES = {
     "REVKEYSIG": ("the signing key has been revoked", RELEASE_OF_A_VALID_SUBKEY),
     "BADSIG": ("the signature does not match the zip", RERUN_THEN_ANOTHER_RELEASE),
-    "ERRSIG": ("the signature is by a key the file does not hold", REPLACE_THE_KEY),
+    "ERRSIG": ("the signature is by a key the file does not hold", RELEASE_OF_A_HELD_SUBKEY),
 }
 EXPIRED_SIGNING_KEY = "EXPKEYSIG"
 TOO_MANY_REQUESTS = 429
@@ -111,8 +120,8 @@ def _program(run: process.Run, budget: Budget, command: list[str], own_limit: fl
         raise CannotJudge(str(error), (RERUN,)) from error
 
 
-def _key_file_fault(listing: str, fingerprint: str) -> str | None:
-    """Why the key file is not exactly the pinned key, from `gpg --with-colons --show-keys`; None when it is."""
+def _key_file_fault(listing: str, fingerprint: str) -> tuple[str, Instruction] | None:
+    """Why the key file is not exactly the pinned key and what to do about it, from `gpg --with-colons --show-keys`; None when it is."""
     records = [line.split(":") for line in listing.splitlines()]
     primaries = [
         (record[1], following[9].upper())
@@ -120,12 +129,13 @@ def _key_file_fault(listing: str, fingerprint: str) -> str | None:
         if record[0] == "pub" and following[0] == "fpr" and len(following) > 9
     ]
     if len(primaries) != 1:
-        return f"{KEY_FILE_NAME} holds {len(primaries)} primary keys, not one"
+        return f"{KEY_FILE_NAME} holds {len(primaries)} primary keys, not one", REPLACE_THE_KEY
     validity, actual = primaries[0]
     if actual != fingerprint:
-        return f"{KEY_FILE_NAME} holds the primary key {actual}, not the {fingerprint} that {FINGERPRINT_VARIABLE} names"
+        reason = f"{KEY_FILE_NAME} holds the primary key {actual}, not the {fingerprint} that {FINGERPRINT_VARIABLE} names"
+        return reason, RESTORE_OR_ROTATE_THE_KEY
     if validity in ("e", "r"):
-        return f"the primary key in {KEY_FILE_NAME} has {'expired' if validity == 'e' else 'been revoked'}"
+        return f"the primary key in {KEY_FILE_NAME} has {'expired' if validity == 'e' else 'been revoked'}", REPLACE_THE_KEY
     return None
 
 
@@ -298,7 +308,8 @@ def _install(
         gpg = ["gpg", "--homedir", str(home), "--batch"]
         listing = _program(run, budget, [*gpg, "--with-colons", "--show-keys", str(key_file)], GPG_TIMEOUT_SECONDS).stdout
         if fault := _key_file_fault(listing, fingerprint):
-            raise CannotJudge(fault, (REPLACE_THE_KEY,))
+            reason, remedy = fault
+            raise CannotJudge(reason, (remedy,))
         url = f"{base_url}/sonar-scanner-cli-{version}-{PLATFORM}.zip"
         archive, signature = scratch / "scanner.zip", scratch / "scanner.zip.asc"
         archive.write_bytes(_download(url, fetch, budget, sleep))
