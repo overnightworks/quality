@@ -4,7 +4,7 @@ legacy = "fail"
 
 [secrets]
 allow = [
-  { rule = "aws-access-token", file = "tests/test_engines.py", secret_sha256 = "612440a4a059819028f05e7bec70787de73a7ae11d2b872cd9212d180ecfdccf", reason = "fake test key committed literally in 76e3e7d (#24), replaced by a runtime-assembled one in ae15eec" },
+  { rule = "aws-access-token", file = "tests/test_engines.py", secret_sha256 = "612440a4a059819028f05e7bec70787de73a7ae11d2b872cd9212d180ecfdccf", reason = "fake test key whose literal form stays in git history; the test assembles it at run time" },
 ]
 
 [[gate.loosened]]

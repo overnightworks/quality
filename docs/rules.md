@@ -806,9 +806,9 @@ key's line) or `cancels main` (the `cancel-in-progress` is not a listed form), e
 block as its fix (CONCURRENCY-5). A workflow whose YAML or file cannot be read, a `group` or `cancel-in-progress` that
 is no string, and an alias or a merge key where it can hide the top mapping, `on:`, the `concurrency` or either value
 are exit `2` naming the file (CONCURRENCY-6). The clean row of `workflows` keeps its words (CONCURRENCY-7).
-quality's own checkout carries the block in `ci.yml` and `code-scanning.yml` (CONCURRENCY-8). No configuration
+quality's own checkout carries the block in `ci.yml` and `code-scanning.yml`. No configuration
 switches the rule off.
-It first ships in v0.11.0, so a dependent meets it at its first bump to that release (CONCURRENCY-9).
+It first ships in v0.11.0, so a dependent meets it at its first bump to that release.
 
 The `pytest-workers` rule judges every pytest call in a `run:` step of every tracked workflow, whether or not a pull
 request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a composite
@@ -861,8 +861,8 @@ or explain on the line above: # pytest-workers: <reason>` (PYTEST-8). A workflow
 `run:` that is no string, and an alias or a merge key where it can hide `jobs`, a job, `steps`, a step or a `run:` are
 exit `2` naming the file; a step with no `run:` is skipped (PYTEST-9). The clean row of `workflows` keeps its words, and
 the rule's extent is the count of workflows it read (PYTEST-10). quality's own checkout needs no workflow edit
-(PYTEST-11). No configuration switches the rule off. It first ships in v0.11.0, so a dependent meets it at its first
-bump to that release (PYTEST-12).
+(PYTEST-11). No configuration switches the rule off. It first ships in v0.11.0, so a dependent meets it
+at its first bump to that release.
 
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
@@ -995,8 +995,8 @@ changed, and trusts no file in the cache directory, its name, its time stamp or 
 - A cache directory quality cannot create, write or read is a run without a copy: it judges from the verified download
   and prints nothing (ADVISORY-46).
 - A local green means the server's state at run time. `gate.yml` and `ci.yml` restore no copy, a hosted runner starts
-  without one, and a self-hosted runner keeps a verified copy under its user's cache directory, which `XDG_CACHE_HOME`
-  moves (ADVISORY-47).
+  without one, and a self-hosted runner keeps a verified copy under its user's cache directory, which
+  `XDG_CACHE_HOME` moves.
 
 A doctored or rolled-back copy is caught by its md5: the server answers a request that names it with the genuine
 archive. md5 is an integrity check against the server's own statement and no signature; the server states no other hash
