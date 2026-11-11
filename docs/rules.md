@@ -834,7 +834,10 @@ The last of `-n N`, `-nN`, `-n=N`, `--numprocesses N` and `--numprocesses=N` cou
 `N` is `auto`, `logical` or a whole number above zero: the call passes. No such flag, `-n 0` (`00` too), an abbreviated
 flag (`--numproc 4`) or one glued to other short flags (`-qn4`) is `serial`; any other `N`, a missing one or a dynamic
 one (`$WORKERS`, `$(nproc)`, `${{ matrix.n }}`) is `invalid`. The words after the first `--` are paths for pytest, not
-its flags, so `pytest tests -- -n auto` is `serial` (PYTEST-5). `PYTEST_ADDOPTS` and a `-n` in `pyproject.toml` are not
+its flags, so `pytest tests -- -n auto` is `serial` (PYTEST-5). A quoted lone `--` (`pytest -k "--" -n 4`) reads as that
+same word, because the reader does not keep the quote, so it is a false `serial` that the marker clears. Escaped
+backticks in a double-quoted message (an `echo` with Markdown-style code that holds the word `pytest`) read as a
+substitution, so it is a false alarm that the marker clears. `PYTEST_ADDOPTS` and a `-n` in `pyproject.toml` are not
 read. A line `shlex` refuses that holds the word `pytest`, and a command word built at run time (`eval`, or a word
 starting with `$`) in a `run:` that holds the word `pytest` outside comments, are `invalid`, because the rule sees a
 call it cannot read; without the word `pytest` in the `run:` they are no call. A command word that is a substitution
