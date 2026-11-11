@@ -23,6 +23,7 @@ from quality import (
     scanners,
     sonar,
     sonar_properties,
+    sonar_scanner,
     staged,
     web,
 )
@@ -50,6 +51,7 @@ from quality.cli_help import (
     SONAR_FINDINGS_HELP,
     SONAR_HELP,
     SONAR_PROPERTIES_HELP,
+    SONAR_SCANNER_HELP,
     VERDICT_HELP,
 )
 from quality.config import REPOSITORY_NAME
@@ -175,6 +177,8 @@ def main(
     if arguments.command == "sonar":
         if arguments.sonar_command == "properties":
             return sonar_properties.run_properties(environment, clock, channels)
+        if arguments.sonar_command == "scanner":
+            return sonar_scanner.run_scanner(environment, clock, channels)
         return sonar.run_findings(environment, transport, sleep, clock, channels)
     return _run_check_door(arguments, ports, reexecute, environment, clock, channels)
 
@@ -351,7 +355,7 @@ def build_parser() -> DoorParser:
     sonar_parser = commands.add_parser("sonar", allow_abbrev=False)
     sonar_parser.ruled_help = SONAR_HELP
     sonar_commands = sonar_parser.add_subparsers(dest="sonar_command")
-    for word, ruled_help in (("properties", SONAR_PROPERTIES_HELP), ("findings", SONAR_FINDINGS_HELP)):
+    for word, ruled_help in (("properties", SONAR_PROPERTIES_HELP), ("scanner", SONAR_SCANNER_HELP), ("findings", SONAR_FINDINGS_HELP)):
         step_parser = sonar_commands.add_parser(word, allow_abbrev=False)
         step_parser.ruled_help = ruled_help
         step_parser.add_argument("-v", dest="verbose", action="store_true")

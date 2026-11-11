@@ -83,6 +83,9 @@ def test_the_help_stands_in_its_frame(capsys):
         "  sonar properties\n"
         "      Refuse a properties file, token or coverage report the scan must not\n"
         "      start with.\n"
+        "  sonar scanner\n"
+        "      Install the pinned scanner once its signature checks against the key\n"
+        "      file quality ships.\n"
         "  sonar findings\n"
         "      Wait for this run's analysis, then count its open findings.\n"
         "\n"
@@ -219,12 +222,15 @@ def test_the_verdict_help_stands_in_its_frame(capsys):
             ["sonar"],
             "usage: quality sonar COMMAND [-v]\n"
             "\n"
-            "Run by the gate, not by people: the two steps of gate.yml's sonar job.\n"
+            "Run by the gate, not by people: the three steps of gate.yml's sonar job.\n"
             "\n"
             "Commands:\n"
             "  properties\n"
             "      Refuse a properties file, token or coverage report the scan must not\n"
             "      start with, then hand the scan its arguments.\n"
+            "  scanner\n"
+            "      Install the pinned scanner where the scan finds it, once its signature\n"
+            "      checks against the key file quality ships.\n"
             "  findings\n"
             "      Wait for this run's analysis, then judge its open findings and its\n"
             "      quality gate.\n"
@@ -250,6 +256,24 @@ def test_the_verdict_help_stands_in_its_frame(capsys):
             "\n"
             "Exit codes: 0 clean, 2 could not judge, 130 interrupted.\n",
             id="sonar properties",
+        ),
+        pytest.param(
+            ["sonar", "scanner"],
+            "usage: quality sonar scanner [-v]\n"
+            "\n"
+            "Run by the gate before the scan: download the pinned scanner and its\n"
+            "signature, check the signature against the key file quality ships, and\n"
+            "install the scanner into the runner tool cache, where the scan action finds\n"
+            "it. No key server is asked. The step names the version and the key's\n"
+            "fingerprint in SCANNER_VERSION and SCANNER_SIGNER_FINGERPRINT.\n"
+            "\n"
+            "Options:\n"
+            "  -v          show the raw scanner output; the step runs no scanner\n"
+            "  -h, --help  show this help\n"
+            "\n"
+            "Exit codes: 0 installed or already there, 2 could not install,\n"
+            "130 interrupted.\n",
+            id="sonar scanner",
         ),
         pytest.param(
             ["sonar", "findings"],
@@ -302,6 +326,7 @@ def test_verdict_and_sonar_stand_apart_under_run_by_the_gate(capsys):
         pytest.param(["verdict"], id="verdict"),
         pytest.param(["sonar"], id="sonar"),
         pytest.param(["sonar", "properties"], id="sonar properties"),
+        pytest.param(["sonar", "scanner"], id="sonar scanner"),
         pytest.param(["sonar", "findings"], id="sonar findings"),
         pytest.param(["merge"], id="merge"),
         pytest.param(["report"], id="report"),

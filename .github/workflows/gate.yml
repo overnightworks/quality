@@ -2,8 +2,13 @@
 # `[gate] mandatory_jobs`, `if: always()`, `permissions: contents: read, actions: read` (without `actions: read` the run
 # fails at startup and no verdict exists) and, unless `quality/config.toml` sets `[gate] sonar = false`,
 # `secrets: SONAR_TOKEN`. See docs/gate.md.
-# SonarCloud scan transport (SonarSource/sonarqube-scan-action v8.2.1 with sonar-scanner-cli 8.1.0.6389, which
+# SonarCloud scan transport (SonarSource/sonarqube-scan-action v8.4.0 with sonar-scanner-cli 8.1.0.6389, which
 # bundles sonar-scanner-java-library 4.1.1.1633). What is verified and what is trusted:
+#  - The scanner CLI is installed by `quality sonar scanner` before the scan: it downloads the zip and its signature from
+#    binaries.sonarsource.com and installs the zip only when the signature, checked by gpg against the key file
+#    src/quality/sonarsource-scanner-key.asc, is by the primary key whose fingerprint the install step names. The action
+#    then finds the scanner in the runner tool cache and fetches no key; its own download address is unreachable, so a
+#    changed cache layout fails the scan at the download instead of falling back to a key server.
 #  - The bootstrap's authenticated requests reach only sonarcloud.io and api.sonarcloud.io. That holds only with the
 #    pinned -Dsonar.host.url=https://sonarcloud.io below and a sonar-project.properties that `quality sonar properties`
 #    accepted: its allowlist keeps endpoint, region and proxy keys out, and refuses any ${...} substitution.
@@ -11,7 +16,8 @@
 #    SonarCloud itself would carry the token to the host it names. SonarCloud already receives the token.
 #  - The scanner engine is downloaded from SonarCloud and is not pinned by the CLI pin. SonarSource's server-side
 #    code is an accepted trust boundary: the token's only purpose is to authenticate to SonarCloud.
-#  - Re-verify all of this on any bump of the scan action or of scannerVersion. Sources at 4.1.1.1633:
+#  - Re-verify all of this on any bump of the scan action or of SCANNER_VERSION; the scan's log must say
+#    `Using cached Sonar Scanner CLI`. Sources at 4.1.1.1633:
 #      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/HttpClientFactory.java#L72
 #      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L162-L170
 #      https://github.com/SonarSource/sonar-scanner-java-library/blob/4.1.1.1633/lib/src/main/java/org/sonarsource/scanner/lib/internal/http/ScannerHttpClient.java#L231-L233
@@ -90,6 +96,7 @@ jobs:
       contents: read
     env:
       TOOL_DIR: ${{ github.repository == 'overnightworks/quality' && '.' || '.gate-tool' }}
+      SCANNER_VERSION: 8.1.0.6389
     steps:
       - name: Check out the caller with its full history for the scan
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -124,14 +131,22 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: uv run --locked --project "$TOOL_DIR" quality sonar properties
 
+      - name: Install the pinned scanner
+        timeout-minutes: 2
+        if: steps.preflight.outputs.sonar != 'off'
+        env:
+          SCANNER_SIGNER_FINGERPRINT: 679F1EE92B19609DE816FDE81DB198F93525EC1A
+        run: uv run --locked --project "$TOOL_DIR" quality sonar scanner
+
       - name: Scan
-        timeout-minutes: 5
+        timeout-minutes: 3
         if: steps.preflight.outputs.sonar != 'off'
         uses: SonarSource/sonarqube-scan-action@4d1dc0c91ee400dcf8a6dddf2f705ac36542e304 # v8.4.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          scannerVersion: 8.1.0.6389
+          scannerVersion: ${{ env.SCANNER_VERSION }}
+          scannerBinariesUrl: https://scanner-binaries.invalid
           args: -Dsonar.host.url=https://sonarcloud.io -Dsonar.qualitygate.wait=false ${{ steps.preflight.outputs.scanner-arguments }}
 
       - name: Findings of this run's own analysis

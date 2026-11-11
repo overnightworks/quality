@@ -24,6 +24,9 @@ Run by the gate, not by people:
   sonar properties
       Refuse a properties file, token or coverage report the scan must not
       start with.
+  sonar scanner
+      Install the pinned scanner once its signature checks against the key
+      file quality ships.
   sonar findings
       Wait for this run's analysis, then count its open findings.
 
@@ -113,12 +116,15 @@ Exit codes: 0 green, 1 red, 2 could not judge, 130 interrupted.
 SONAR_HELP = """\
 usage: quality sonar COMMAND [-v]
 
-Run by the gate, not by people: the two steps of gate.yml's sonar job.
+Run by the gate, not by people: the three steps of gate.yml's sonar job.
 
 Commands:
   properties
       Refuse a properties file, token or coverage report the scan must not
       start with, then hand the scan its arguments.
+  scanner
+      Install the pinned scanner where the scan finds it, once its signature
+      checks against the key file quality ships.
   findings
       Wait for this run's analysis, then judge its open findings and its
       quality gate.
@@ -142,6 +148,23 @@ Options:
   -h, --help  show this help
 
 Exit codes: 0 clean, 2 could not judge, 130 interrupted.
+"""
+
+SONAR_SCANNER_HELP = """\
+usage: quality sonar scanner [-v]
+
+Run by the gate before the scan: download the pinned scanner and its
+signature, check the signature against the key file quality ships, and
+install the scanner into the runner tool cache, where the scan action finds
+it. No key server is asked. The step names the version and the key's
+fingerprint in SCANNER_VERSION and SCANNER_SIGNER_FINGERPRINT.
+
+Options:
+  -v          show the raw scanner output; the step runs no scanner
+  -h, --help  show this help
+
+Exit codes: 0 installed or already there, 2 could not install,
+130 interrupted.
 """
 
 SONAR_FINDINGS_HELP = f"""\

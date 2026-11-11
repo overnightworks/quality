@@ -71,7 +71,7 @@ TOKEN_REFUSALS = frozenset({401, 403})
 
 
 class SonarEvent(StrEnum):
-    """What a row of the two Sonar steps says."""
+    """What a row of the three Sonar steps says."""
 
     CLEAN = "clean"
     EXCLUDES = "excludes"
@@ -82,6 +82,8 @@ class SonarEvent(StrEnum):
     UNKNOWN = "unknown"
     PASSED = "passed"
     FAILED = "failed"
+    INSTALLED = "installed"
+    CACHED = "cached"
 
 
 class SonarHttpError(CannotJudge):
