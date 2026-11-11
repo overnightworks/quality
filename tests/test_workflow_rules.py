@@ -1,9 +1,10 @@
+import json
 import os
 from pathlib import Path
 
 import pytest
 
-from quality.report import Example, FindingEvent
+from quality.report import FindingEvent
 from quality.rules import Rule
 from tests.support.check import check_output as run
 from tests.support.check import env_row_stands, is_clean, refusal_row, refusals, rule_findings
@@ -14,7 +15,7 @@ GROUP = "${{ github.workflow }}-${{ github.event.pull_request.number || github.r
 GROUP_BY_EVENT = "${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}"
 FLAG = "${{ github.event.pull_request.number != null }}"
 FLAG_BY_EVENT_NAME = "${{ github.event_name == 'pull_request' }}"
-FIX_LABEL = "add this at the top level of the workflow, beside on:"
+NO_GROUP = "no group"
 NO_CONCURRENCY = "no concurrency"
 NO_FLAG = "no cancel-in-progress"
 NOT_LISTED_GROUP = "group is not a listed form"
@@ -225,16 +226,27 @@ def test_a_job_level_concurrency_does_not_count(build_repo):
         ("on: pull_request_target\n", "", GROUP),
         ("on: pull_request_review\n", "", GROUP),
         (ON_COMBINED, "", GROUP_BY_EVENT),
+        ("on: [pull_request_target, pull_request_review]\n", "", GROUP_BY_EVENT),
         ("on: [pull_request, pull_request_target]\n", block("fixed", "true"), GROUP_BY_EVENT),
         (ON_PULL_REQUEST, block("fixed", "true"), GROUP),
     ],
-    ids=["pull request", "target", "review", "combined", "combined with findings", "findings"],
+    ids=["pull request", "target", "review", "combined", "target and review", "combined with findings", "findings"],
 )
 def test_every_finding_shows_the_canonical_block_with_the_group_of_the_triggers_as_its_fix(build_repo, on, concurrency, group):
-    """CONCURRENCY-4, CONCURRENCY-5: the group by event name for a workflow that combines pull-request triggers."""
+    """CONCURRENCY-4, CONCURRENCY-5: the group by event name for a workflow that names more than one pull-request trigger."""
     findings = judged(build_repo, workflow(on, concurrency))
     assert findings
-    assert [finding.fix for finding in findings] == [Example(FIX_LABEL, fix_lines(group))] * len(findings)
+    assert [finding.fix.lines for finding in findings] == [fix_lines(group)] * len(findings)
+
+
+def test_the_printed_fix_label_ends_in_exactly_one_colon(build_repo, capsys):
+    """CONCURRENCY-5: the label carries no colon of its own, because the printer adds one."""
+    repo = build_repo({WORKFLOW: workflow()})
+    [finding] = rule_findings(repo, Rule.PR_CONCURRENCY)
+    _, output = run(capsys, repo)
+    printed = [line.strip() for line in output.splitlines() if finding.fix.label in line]
+    assert not finding.fix.label.endswith(":")
+    assert (printed, "::" in output) == ([f"fix: {finding.fix.label}:"], False)
 
 
 def test_only_the_workflows_a_pull_request_triggers_are_found_and_each_is_named(build_repo):
@@ -327,3 +339,52 @@ def test_a_tracked_workflow_gone_from_the_tree_is_skipped(build_repo):
     repo = build_repo({WORKFLOW: workflow()})
     (repo / WORKFLOW).unlink()
     assert (rule_findings(repo, Rule.PR_CONCURRENCY), Rule.PR_CONCURRENCY in refusals(repo)) == ([], False)
+
+
+def quoted(text: str) -> str:
+    """A YAML double-quoted scalar that spells every non-ASCII character as an escape."""
+    return json.dumps(text)
+
+
+@pytest.mark.parametrize("space", ["\u00a0", "\u2003", "\u0085", "\u3000"], ids=["no-break", "em space", "next line", "ideographic"])
+def test_whitespace_that_is_not_ascii_inside_an_expression_keeps_a_form_outside_the_list(build_repo, space):
+    """CONCURRENCY-3: only space, tab, carriage return and line feed fold."""
+    group = GROUP.replace("{{ github.workflow }}", f"{{{{{space}github.workflow{space}}}}}")
+    flag = FLAG.replace("{{ ", f"{{{{{space}")
+    assert shape(judged(build_repo, workflow(ON_PULL_REQUEST, block(quoted(group), FLAG)))) == [(SHARED_GROUP, 4, NOT_LISTED_GROUP)]
+    assert shape(judged(build_repo, workflow(ON_PULL_REQUEST, block(GROUP, quoted(flag))))) == [(CANCELS_MAIN, 5, NOT_LISTED_FLAG)]
+
+
+@pytest.mark.parametrize("header", ["|", ">", "|+", ">+", "|-", ">-"])
+def test_a_block_scalar_is_read_by_its_content_whatever_its_final_line_breaks(build_repo, header):
+    """CONCURRENCY-3."""
+    group = f"{header}\n    {GROUP}\n\n"
+    flag = f"{header}\n    {FLAG}\n\n"
+    assert judged(build_repo, workflow(ON_PULL_REQUEST, block(group, FLAG))) == []
+    assert judged(build_repo, workflow(ON_PULL_REQUEST, block(GROUP, flag))) == []
+
+
+@pytest.mark.parametrize("header", ["|", ">", "|+", ">-"])
+def test_a_block_scalar_with_an_unlisted_text_is_still_found(build_repo, header):
+    """CONCURRENCY-3."""
+    assert shape(judged(build_repo, workflow(ON_PULL_REQUEST, block(f"{header}\n    fixed\n", FLAG)))) == [(SHARED_GROUP, 4, NOT_LISTED_GROUP)]
+    assert shape(judged(build_repo, workflow(ON_PULL_REQUEST, block(GROUP, f"{header}\n    true\n")))) == [(CANCELS_MAIN, 5, NOT_LISTED_FLAG)]
+
+
+def test_a_quoted_scalar_with_an_escaped_line_break_stays_outside_the_list(build_repo):
+    """CONCURRENCY-3: only a block scalar's own final line break is dropped."""
+    assert shape(judged(build_repo, workflow(ON_PULL_REQUEST, block(f'"{GROUP}\\n"', FLAG)))) == [(SHARED_GROUP, 4, NOT_LISTED_GROUP)]
+    assert shape(judged(build_repo, workflow(ON_PULL_REQUEST, block(GROUP, f'"{FLAG}\\n"')))) == [(CANCELS_MAIN, 5, NOT_LISTED_FLAG)]
+
+
+@pytest.mark.parametrize(
+    ("concurrency", "expected"),
+    [
+        (f"concurrency:\n  cancel-in-progress: {FLAG}\n", [(SHARED_GROUP, 3, NO_GROUP)]),
+        ("concurrency: {}\n", [(SHARED_GROUP, 3, NO_GROUP), (MISSING, None, NO_FLAG)]),
+    ],
+    ids=["flag only", "empty mapping"],
+)
+def test_a_concurrency_mapping_without_a_group_is_a_shared_group_at_the_concurrency_key(build_repo, concurrency, expected):
+    """CONCURRENCY-5."""
+    assert shape(judged(build_repo, workflow(ON_PULL_REQUEST, concurrency))) == expected
