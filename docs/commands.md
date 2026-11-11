@@ -7,7 +7,7 @@ runs `quality merge`, or reads `quality --help` or a wrong invocation's pair.
 
 `quality --help` shows the command tree wrapped at 80 columns (HELP-1), with `verdict` and `sonar` apart under "run by
 the gate" (HELP-2), and `quality check --help` explains each area in one entry and says which rules an area holds
-(HELP-3); every other command's help, `quality sonar --help` and its two commands' included, stands in a frame of its
+(HELP-3); every other command's help, `quality sonar --help` and its three commands' included, stands in a frame of its
 own (HELP-4); `quality --version` prints the installed version and what this repository's gate pins: its release, read
 from the tag comment of the pin (`@<commit sha> # v<tag>`), or why none is known (HELP-5); exit `0` (HELP-6). A call of
 a repository's own `gate.yml` counts only in quality's checkout, told by a git remote that names
