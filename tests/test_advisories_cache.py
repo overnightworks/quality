@@ -1,9 +1,10 @@
+import datetime
 import os
 from pathlib import Path
 
 import pytest
 
-from quality import advisories, process
+from quality import advisories, deadline, process
 from tests.support.advisories import OSV, advisory, reporting, tracked_lock_repo, uv_lock, zipped
 from tests.support.check import is_clean
 from tests.support.door import check_door
@@ -232,3 +233,31 @@ def test_no_run_leaves_a_temporary_file_and_a_failed_replacement_keeps_no_copy(r
     code, _ = run()
     assert code == 0
     assert (len(names) == 1 and names[0].startswith(advisories.CACHE_TEMPORARY_PREFIX), list(copy_of().parent.iterdir())) == (True, [])
+
+
+def test_reading_the_copy_does_not_spend_the_time_of_the_requests(
+    build_repo, served_scanners, published_databases, database_root, tmp_path, monkeypatch
+):
+    """ADVISORY-9: a copy that takes the whole budget to read and hash still gets its conditional request, because
+    that time belongs to the run alone."""
+    cache = tmp_path / "cache"
+    advisories.cached_archive(cache, "PyPI").parent.mkdir(parents=True)
+    advisories.cached_archive(cache, "PyPI").write_bytes(published_bytes(database_root))
+    now = 0.0
+    digest = advisories.md5_digest
+    hashed = []
+
+    def slow_digest(data: bytes) -> str:
+        nonlocal now
+        if not hashed:
+            now = advisories.DATABASE_DOWNLOAD_DEADLINE_SECONDS
+        hashed.append(data)
+        return digest(data)
+
+    monkeypatch.setattr(advisories, "md5_digest", slow_digest)
+    repo = tracked_lock_repo(build_repo)
+    advisories.scan(
+        {"uv.lock": repo / "uv.lock"}, repo, [], datetime.date(2026, 10, 21), deadline.RunDeadline.starting(lambda: now),
+        cache=cache,
+    )
+    assert statuses(published_databases) == [304]

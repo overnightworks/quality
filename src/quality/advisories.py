@@ -257,22 +257,25 @@ def _names_by_path(locks: Mapping[str, Path]) -> dict[str, list[str]]:
 def _place_databases(
     scratch: Path, ecosystems: Sequence[str], cache: Path | None, deadline: RunDeadline, sleep: Callable[[float], None]
 ) -> None:
-    """Each ecosystem's advisory database where osv-scanner looks for it with --local-db-path; one deadline spans them
-    all, and the run's end cuts it short."""
+    """Each ecosystem's advisory database where osv-scanner looks for it with --local-db-path; one deadline spans their
+    requests, and the run's end cuts it short. Reading and hashing a copy spends only the run's time, never the
+    requests' own."""
     ends_at = min(deadline.monotonic() + DATABASE_DOWNLOAD_DEADLINE_SECONDS, deadline.ends_at)
     for ecosystem in ecosystems:
-        _place_database(scratch, ecosystem, cache, ends_at, deadline, sleep)
+        copy_path = None if cache is None else cached_archive(cache, ecosystem)
+        reading_started = deadline.monotonic()
+        copy = None if copy_path is None else _read_copy(copy_path)
+        ends_at = min(ends_at + deadline.monotonic() - reading_started, deadline.ends_at)
+        _place_database(scratch, ecosystem, copy_path, copy, ends_at, deadline, sleep)
 
 
 def _place_database(
-    scratch: Path, ecosystem: str, cache: Path | None, ends_at: float, deadline: RunDeadline,
+    scratch: Path, ecosystem: str, copy_path: Path | None, copy: _Copy | None, ends_at: float, deadline: RunDeadline,
     sleep: Callable[[float], None],
 ) -> None:
     """The archive is the server's, whole: either a download whose md5 is the one the server states, or the copy the
     server confirmed. Only the bytes checked here reach the scratch directory, never the cache file itself."""
     url = f"{DATABASE_ROOT}/{ecosystem}/{DATABASE_ARCHIVE}"
-    copy_path = None if cache is None else cached_archive(cache, ecosystem)
-    copy = None if copy_path is None else _read_copy(copy_path)
     fetched = _fetch_database(url, ecosystem, copy, ends_at, deadline, sleep)
     archive = fetched.archive
     try:

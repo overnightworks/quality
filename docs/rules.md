@@ -959,10 +959,11 @@ its own (ADVISORY-8). A request that fails transiently (HTTP 500 to 599 or 429, 
 reset connection, a timeout, a DNS failure, an unreachable network or host, a body cut short) is tried again after 3,
 9 and 27 seconds, each wait cut to the time left. A request that waits 30 seconds without a byte is cut and tried
 again (ADVISORY-42). A database that cannot be fetched within 300 seconds in total for all databases together
-(the retries and their waits included; connect, headers and body, however the server drags them out; the run's end
-caps the 300 seconds), or still not after the fourth attempt (`cannot download the <ecosystem> advisory
-database from <url>: <error> after 4 attempts`) (ADVISORY-9), cannot be placed in
-the scratch directory (ADVISORY-10), is not a valid zip (ADVISORY-11), or holds no advisory (ADVISORY-12) is exit `2`,
+(the retries and their waits included; connect, headers and body, however the server drags them out; reading and
+hashing a local copy not included; the run's end caps the 300 seconds), or still not after the fourth attempt
+(`cannot download the <ecosystem> advisory database from <url>: <error> after 4 attempts`)
+(ADVISORY-9), cannot be placed in the scratch directory (ADVISORY-10), is not a valid zip (ADVISORY-11), or holds no
+advisory (ADVISORY-12) is exit `2`,
 never clean, naming the database; so are an osv-scanner [that is missing, at another version](commands.md#scanners),
 exits other than `0` or `1` (ADVISORY-13), runs past the run's deadline (ADVISORY-14), or writes a report that is
 not the expected JSON (ADVISORY-15), disagrees with its exit (ADVISORY-16), or names a lock file quality did not pass
