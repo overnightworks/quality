@@ -10,6 +10,7 @@ import tempfile
 import time
 import urllib.error
 import zipfile
+from collections import Counter
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from itertools import pairwise
@@ -211,8 +212,9 @@ def _leaves_through_links(path: str, links: Mapping[str, str], folder: str) -> b
 
 
 def _escaping_entry(archive: Path, folder: str) -> str | None:
-    """The first entry of the zip that would land outside `folder`, a symbolic link whose target does included; None when
-    every entry stays inside."""
+    """What the zip holds that would land outside `folder`, as the refusal words it (the first entry that does, a symbolic
+    link whose target does included, or a name that two entries share, since `unzip` keeps one of them and no one can say
+    which); None when every entry stays inside."""
     try:
         with zipfile.ZipFile(archive) as opened:
             entries = opened.infolist()
@@ -223,14 +225,17 @@ def _escaping_entry(archive: Path, folder: str) -> str | None:
             }
     except zipfile.BadZipFile as error:
         raise CannotJudge(f"the scanner zip is not a readable zip: {error}", (ANOTHER_RELEASE,)) from error
+    names = Counter(posixpath.normpath(entry.filename) for entry in entries)
     for entry in entries:
         if not _stays_inside(entry.filename, folder):
-            return entry.filename
+            return f"{entry.filename}, which leaves its folder {folder}"
         name = posixpath.normpath(entry.filename)
+        if names[name] > 1:
+            return f"{name} more than once, so `unzip` may keep an entry that leaves its folder {folder}"
         if (target := links.get(name)) is not None and (
             target.startswith("/") or _leaves_through_links(posixpath.join(posixpath.dirname(name), target), links, folder)
         ):
-            return f"{entry.filename} -> {target}"
+            return f"{entry.filename} -> {target}, which leaves its folder {folder}"
     return None
 
 
@@ -238,7 +243,7 @@ def _unpacked_into_place(run: process.Run, budget: Budget, archive: Path, folder
     """The scanner appears at `target` whole: an archive whose entries stay in `folder` is unpacked into a directory beside
     it, then moved."""
     if escaping := _escaping_entry(archive, folder):
-        raise CannotJudge(f"the scanner zip holds {escaping}, which leaves its folder {folder}", (ANOTHER_RELEASE,))
+        raise CannotJudge(f"the scanner zip holds {escaping}", (ANOTHER_RELEASE,))
     target.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=target.parent) as unpacked:
         unzipped = _program(run, budget, ["unzip", "-q", str(archive), "-d", unpacked], UNZIP_TIMEOUT_SECONDS)

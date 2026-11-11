@@ -4,6 +4,7 @@ import subprocess
 import threading
 import time
 import urllib.error
+import warnings
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -49,7 +50,7 @@ def status_lines(*words: str, primary: str = FINGERPRINT, signer: str = SIGNING_
 def scanner_zip(*entries: tuple[str, str], links: tuple[tuple[str, str], ...] = ()) -> bytes:
     """A zip holding the scanner's launcher and `entries` (name, content); each of `links` is a symbolic link (name, target)."""
     buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w") as archive:
+    with zipfile.ZipFile(buffer, "w") as archive, warnings.catch_warnings(action="ignore", category=UserWarning):
         archive.writestr(f"{FOLDER}/bin/sonar-scanner", "#!/bin/sh\n")
         for name, content in entries:
             archive.writestr(name, content)
@@ -397,8 +398,11 @@ def test_a_failed_unzip_leaves_neither_the_scanner_nor_the_marker(scene, drive):
         (((f"/{FOLDER}/absolute", "x"),), ()),
         ((("other-folder/file", "x"),), ()),
         (((f"{FOLDER}\\..\\outside", "x"),), ()),
+        ((), ((f"{FOLDER}/l", "../../outside"), (f"{FOLDER}/l", "x"))),
+        ((), ((f"{FOLDER}/l", "x"), (f"{FOLDER}/l", "../../outside"))),
+        (((f"{FOLDER}/bin/sonar-scanner", "x"),), ()),
     ],
-    ids=["symlink out of the folder", "symlink out through a link to the parent", "symlink out through two links", "symlink under a linked folder", "links that loop", "link to itself", "chain of two links", "entry through a link to the parent", "entry with a dot component", "absolute symlink", "absolute symlink that starts with the folder name", "entry with a parent component", "absolute entry", "entry beside the folder", "entry with a backslash"],
+    ids=["symlink out of the folder", "symlink out through a link to the parent", "symlink out through two links", "symlink under a linked folder", "links that loop", "link to itself", "chain of two links", "entry through a link to the parent", "entry with a dot component", "absolute symlink", "absolute symlink that starts with the folder name", "entry with a parent component", "absolute entry", "entry beside the folder", "entry with a backslash", "link name twice, the first target outside", "link name twice, the last target outside", "file name twice"],
 )
 def test_an_archive_with_an_entry_that_leaves_its_folder_is_refused_before_unzip_runs(scene, drive, entries, links):
     """SONAR-118: a signed zip may still hold a path or a symbolic link that reaches outside the scanner's folder; nothing is unpacked or installed"""

@@ -143,7 +143,7 @@ check over and leaves the key servers out of the trust path (SONAR-121):
 - The scanner is unpacked beside its place in the runner tool cache and moved there whole; the `.complete` marker the
   action looks for is written last (SONAR-118). The action finds the directory and the marker, prints
   `Using cached Sonar Scanner CLI`, and downloads and verifies nothing; a marker without its directory is no install
-  and is removed. Before `unzip` runs, every entry name must be its own normal form inside the scanner's folder and
+  and is removed. Before `unzip` runs, every entry name must be unique and its own normal form inside the scanner's folder and
   every link's target, followed through the links the zip declares, must stay inside it, so no entry reaches outside
   whatever `unzip` does.
 - The scan sets `scannerBinariesUrl` to a host under `.invalid`, which a cache hit never reads: a later action version
