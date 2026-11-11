@@ -7,6 +7,7 @@ import pytest
 
 from quality.report import FindingEvent
 from quality.rules import Rule
+from quality.workflow_rules import check_pytest_workers
 from tests.support.check import check_output as run
 from tests.support.check import env_row_stands, finding_rows, is_clean, refusal_row, refusals, rule_findings
 
@@ -83,6 +84,16 @@ GREEN = [
     "poetry run pytest -n auto",
     "uvx pytest -n auto",
     "pytest -n " + "9" * 5000,
+    'x="$(pytest -n auto)"',
+    'echo "$(pytest -n auto)"',
+    'x="`pytest -n auto`"',
+    "$(pytest -n auto)",
+    "env -u NAME pytest -n auto",
+    "env -S 'pytest -n auto'",
+    "python -X dev -m pytest -n auto",
+    "python3.14t -m pytest -n auto",
+    "sudo -E pytest -n auto",
+    "pytest -n auto -- tests",
 ]
 
 
@@ -111,6 +122,12 @@ NO_CALL = [
     "xvfb-run pytest",
     "docker run img pytest",
     "pytest-cov",
+    'echo "pytest -q"',
+    "echo $(which pytest)",
+    "sudo apt-get install pytest",
+    "python -X dev tests/run.py",
+    "env -u NAME ruff check",
+    "python3.14tx -m pytest -q",
 ]
 
 
@@ -154,6 +171,34 @@ SERIAL_WITHOUT_N = [
     "coverage run -m pytest -q",
     "uvx pytest -q",
     "env -i A=b pytest -q",
+    'x="$(pytest -q)"',
+    'echo "result: $(pytest -q) done"',
+    'x="`pytest -q`"',
+    "echo '$(pytest -q)'",
+    "$(pytest -q)",
+    "env -u NAME pytest -q",
+    "env -C dir pytest -q",
+    "env --unset NAME pytest -q",
+    "env --chdir dir pytest -q",
+    "env -i -u NAME A=b pytest -q",
+    "env -S 'pytest -q'",
+    'env -S "A=1 uv run pytest -q"',
+    "env -S'pytest -q'",
+    "env --split-string='pytest -q'",
+    "python -X dev -m pytest -q",
+    "python -W error -m pytest -q",
+    "uv run python -W error -m pytest -q",
+    "python3.14t -m pytest -q",
+    "pypy3.10 -m pytest -q",
+    "sudo pytest -q",
+    "sudo -E pytest -q",
+    "sudo -u runner pytest -q",
+    "sudo -u runner -E uv run pytest -q",
+    "sudo --user=runner pytest -q",
+    "sudo -n pytest -q",
+    "pytest tests -- -n auto",
+    "pytest -- -n auto",
+    "python -m pytest tests -- -n auto",
 ]
 
 
@@ -166,7 +211,15 @@ def test_a_pytest_call_without_a_readable_flag_is_serial(build_repo, scalar, com
 
 @pytest.mark.parametrize(
     "command",
-    ["pytest -n 0", "pytest -n=0", "pytest --numprocesses 0", "pytest -n auto -n 0", "pytest -n 00", "pytest -n0"],
+    [
+        "pytest -n 0",
+        "pytest -n=0",
+        "pytest --numprocesses 0",
+        "pytest -n auto -n 0",
+        "pytest -n 00",
+        "pytest -n0",
+        "pytest -n 0 -- -n auto",
+    ],
 )
 def test_a_pytest_call_with_zero_workers_is_serial(build_repo, scalar, command):
     """PYTEST-5: the last of the flags counts."""
@@ -285,10 +338,31 @@ def test_a_command_built_at_run_time_with_pytest_only_in_a_comment_is_no_finding
     assert judged(build_repo, block_run("# pytest", "$TOOL -n auto")) == []
 
 
-@pytest.mark.parametrize("script", [("$TOOL -n auto",), ('eval "$CMD"',)])
+@pytest.mark.parametrize("script", [("$TOOL -n auto",), ('eval "$CMD"',), ("$(date) -q",)])
 def test_a_command_built_at_run_time_in_a_run_without_pytest_is_no_finding(build_repo, script):
     """PYTEST-6: the named gap."""
     assert judged(build_repo, block_run(*script)) == []
+
+
+@pytest.mark.parametrize(
+    ("script", "fact"),
+    [
+        ("$(which pytest) -q", BUILT_AT_RUN_TIME),
+        ('"$(which pytest)" -q', BUILT_AT_RUN_TIME),
+        ("if $(which pytest) -q; then", BUILT_AT_RUN_TIME),
+        ("$(cd x && which pytest) -q", BUILT_AT_RUN_TIME),
+        ("env -S 'pytest -k \"x'", UNREADABLE),
+    ],
+    ids=["command substitution", "quoted substitution", "after if", "after a separator", "unreadable env -S value"],
+)
+def test_a_command_the_reader_cannot_follow_in_a_run_holding_pytest_is_invalid(build_repo, script, fact):
+    """PYTEST-6."""
+    assert shape(judged(build_repo, block_run(script))) == [(INVALID, BLOCK_LINE, fact)]
+
+
+def test_a_run_time_command_before_a_pytest_call_is_invalid_and_the_call_is_judged_alone(build_repo):
+    """PYTEST-6."""
+    assert shape(judged(build_repo, block_run("$(date) -q", "pytest -n auto"))) == [(INVALID, BLOCK_LINE, BUILT_AT_RUN_TIME)]
 
 
 @pytest.mark.parametrize(
@@ -351,6 +425,47 @@ def test_a_marker_does_not_clear_the_call_of_the_logical_line_below_its_own(buil
     """PYTEST-7: a marker covers the lines it stands on or above, not the next logical line."""
     findings = judged(build_repo, block_run(f"pytest {MARKER}", "echo a", "pytest"))
     assert shape(findings) == [(SERIAL, BLOCK_LINE + 2, WITHOUT_N)]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            head() + f"      {MARKER}\n      - name: t\n        run: |\n          pytest -q\n",
+            [(SERIAL, BLOCK_LINE + 1, WITHOUT_N)],
+        ),
+        (
+            head() + f"      - name: t\n        run: | {MARKER}\n          pytest -q\n          pytest -n 0\n",
+            [(SERIAL, BLOCK_LINE + 1, WITH_ZERO)],
+        ),
+    ],
+    ids=["comment above the key clears nothing", "marker on the run line covers the first line only"],
+)
+def test_a_marker_for_a_block_scalar_covers_its_run_line_and_the_block_only(build_repo, text, expected):
+    """PYTEST-7."""
+    assert shape(judged(build_repo, text)) == expected
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        (["pytest -q"], [(SERIAL, BLOCK_LINE + 1, WITHOUT_N)]),
+        (["pytest -n auto"], []),
+        ([MARKER, "pytest -q"], []),
+    ],
+    ids=["serial", "with workers", "marker above"],
+)
+def test_a_pytest_line_in_a_heredoc_body_is_read_as_a_shell_line(build_repo, body, expected):
+    """PYTEST-13: the reader does not parse heredocs, so a call in the text is judged; a marker above it clears it."""
+    assert shape(judged(build_repo, block_run("cat <<'EOF' > run.sh", *body, "EOF"))) == expected
+
+
+def test_the_extent_is_the_number_of_workflows_read(build_repo):
+    """PYTEST-10: a tracked name gone from the tree is not read."""
+    other = ".github/workflows/other.yaml"
+    repo = build_repo({WORKFLOW: block_run("pytest -n auto"), other: block_run("pytest -n auto")})
+    result = check_pytest_workers(repo, [WORKFLOW, other, ".github/workflows/gone.yml"])
+    assert result.extent == 2
 
 
 @pytest.mark.parametrize("on", ["push", "schedule", "workflow_call", "pull_request"])

@@ -213,9 +213,17 @@ WHOLE_NUMBER = re.compile(r"\d+", re.ASCII)
 SEPARATOR_CHARACTERS = frozenset("();|&`")
 PREFIX_WORDS = frozenset({"time", "exec", "command", "nohup", "if", "then", "elif", "else", "do", "while", "until", "!", "{"})
 PYTEST_COMMANDS = frozenset({"pytest", "py.test"})
-INTERPRETER = re.compile(r"python(?:3(?:\.\d+)?)?|pypy3")
+INTERPRETER = re.compile(r"python(?:3(?:\.\d+t?)?)?|pypy(?:3(?:\.\d+)?)?")
+INTERPRETER_VALUE_FLAGS = frozenset({"-W", "-X", "--check-hash-based-pycs"})
 RUNNERS = frozenset({("uv", "run"), ("poetry", "run"), ("pipenv", "run"), ("pdm", "run"), ("hatch", "run"), ("coverage", "run")})
 AUTOMATIC_COUNTS = frozenset({"auto", "logical"})
+ENV_VALUE_FLAGS = frozenset({"-u", "--unset", "-C", "--chdir", "-a", "--argv0"})
+ENV_SPLIT_FLAGS = frozenset({"-S", "--split-string"})
+ENV_SPLIT_PREFIXES = ("-S", "--split-string=")
+SUDO_VALUE_FLAGS = frozenset({"-u", "-g", "-D", "-C", "-h", "-p", "-r", "-t", "-T", "-U", "-R"})
+WRAPPER_VALUE_FLAGS = {"env": ENV_VALUE_FLAGS, "sudo": SUDO_VALUE_FLAGS}
+SUBSTITUTION = re.compile(r"\$\(|`")
+LONE_DOLLAR = ["$"]
 
 Problem = tuple[FindingEvent, str]
 
@@ -323,19 +331,28 @@ def _script_findings(name: str, lines: list[ScriptLine], marked: frozenset[int])
 
 def _line_problems(text: str, script_holds_pytest: bool) -> Iterator[Problem]:
     try:
-        segments = _segments(text)
+        segments = [_with_env_strings_split(words) for words in _segments(text)]
     except ValueError:
         if PYTEST_WORD.search(text):
             yield FindingEvent.INVALID, UNREADABLE_FACT
         return
-    for words in segments:
-        problem = _segment_problem(words[_command_start(words) :], script_holds_pytest)
+    for index, words in enumerate(segments):
+        command = words[_command_start(words) :]
+        if command == LONE_DOLLAR:
+            if script_holds_pytest and not (index + 1 < len(segments) and _starts_pytest_call(segments[index + 1])):
+                yield FindingEvent.INVALID, RUN_TIME_FACT
+            continue
+        problem = _segment_problem(command, script_holds_pytest)
         if problem is not None:
             yield problem
 
 
 def _segments(text: str) -> list[list[str]]:
-    """The words of a line, split at `&&`, `||`, `;`, `|`, `&`, `(`, `)` and a backtick."""
+    """The words of a line, split at `&&`, `||`, `;`, `|`, `&`, `(`, `)` and a backtick; a word that holds a substitution is split again."""
+    return [words for words in _split(text) if words]
+
+
+def _split(text: str) -> list[list[str]]:
     lexer = shlex.shlex(text, posix=True, punctuation_chars="();<>|&`")
     lexer.whitespace_split = True
     lexer.commenters = ""
@@ -343,23 +360,76 @@ def _segments(text: str) -> list[list[str]]:
     for word in lexer:
         if word and set(word) <= SEPARATOR_CHARACTERS:
             segments.append([])
+        elif SUBSTITUTION.search(word):
+            inner = _split(word)
+            segments[-1].extend(inner[0])
+            segments.extend(inner[1:])
         else:
             segments[-1].append(word)
-    return [words for words in segments if words]
+    return segments
+
+
+def _starts_pytest_call(words: list[str]) -> bool:
+    command = words[_command_start(words) :]
+    return bool(command) and _pytest_arguments(command) is not None
+
+
+def _with_env_strings_split(words: list[str]) -> list[str]:
+    """The words with the value of each `env -S` replaced by the words it splits into, placed where the value stood."""
+    result: list[str] = []
+    index = 0
+    while index < len(words):
+        result.append(words[index])
+        index += 1
+        if words[index - 1] == "env":
+            index = _copy_env_flags(words, index, result)
+    return result
+
+
+def _copy_env_flags(words: list[str], index: int, result: list[str]) -> int:
+    """Copies the flags of an `env` from `index` on, splitting the value of each `-S`; returns the index of its first operand."""
+    while index < len(words) and words[index].startswith("-"):
+        word = words[index]
+        index += 1
+        if word in ENV_SPLIT_FLAGS:
+            if index < len(words):
+                result.extend(shlex.split(words[index]))
+            index += 1
+        elif (glued := _glued_split_value(word)) is not None:
+            result.extend(shlex.split(glued))
+        else:
+            result.append(word)
+            if word in ENV_VALUE_FLAGS and index < len(words):
+                result.append(words[index])
+                index += 1
+    return index
+
+
+def _glued_split_value(word: str) -> str | None:
+    """The value of `-S'…'` or `--split-string=…`, None for any other word."""
+    for prefix in ENV_SPLIT_PREFIXES:
+        if word.startswith(prefix):
+            return word[len(prefix) :]
+    return None
 
 
 def _command_start(words: list[str]) -> int:
-    """The index of the command word, after assignments, `env` with its flags and the prefix words."""
+    """The index of the command word, after assignments, `env` and `sudo` with their flags and the prefix words."""
     index = 0
     while index < len(words):
-        if words[index] == "env":
-            index += 1
-            while index < len(words) and words[index].startswith("-"):
-                index += 1
+        if words[index] in WRAPPER_VALUE_FLAGS:
+            index = _after_flags(words, index + 1, WRAPPER_VALUE_FLAGS[words[index]])
         elif words[index] in PREFIX_WORDS or ASSIGNMENT.match(words[index]):
             index += 1
         else:
             break
+    return index
+
+
+def _after_flags(words: list[str], index: int, value_flags: frozenset[str]) -> int:
+    """The index past the flags from `index` on, each flag in `value_flags` taking the word after it as its value."""
+    while index < len(words) and words[index].startswith("-"):
+        index += 2 if words[index] in value_flags else 1
     return index
 
 
@@ -389,12 +459,15 @@ def _pytest_arguments(words: list[str]) -> list[str] | None:
 
 
 def _module_arguments(words: list[str]) -> list[str] | None:
-    """The words after `-m pytest`, when only flags stand before the `-m`."""
-    for index, word in enumerate(words):
+    """The words after `-m pytest`, when only flags stand before the `-m`; a flag of `INTERPRETER_VALUE_FLAGS` takes a value."""
+    index = 0
+    while index < len(words):
+        word = words[index]
         if word == "-m":
             return words[index + 2 :] if words[index + 1 : index + 2] == ["pytest"] else None
         if not word.startswith("-"):
             return None
+        index += 2 if word in INTERPRETER_VALUE_FLAGS else 1
     return None
 
 
@@ -426,7 +499,9 @@ def _workers_problem(arguments: list[str]) -> Problem | None:
 
 
 def _worker_counts(arguments: list[str]) -> list[str | None]:
-    """The value of each readable workers flag, None for one with no value; an abbreviated or glued flag is not read."""
+    """The value of each readable workers flag before the first `--`, None for one with no value; an abbreviated or glued flag is not read."""
+    if "--" in arguments:
+        arguments = arguments[: arguments.index("--")]
     counts: list[str | None] = []
     index = 0
     while index < len(arguments):
