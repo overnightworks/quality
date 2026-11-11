@@ -373,6 +373,14 @@ def test_a_scanner_directory_that_cannot_be_moved_into_place_leaves_no_marker(sc
     assert str(scene.installed) in err
 
 
+def test_a_tool_cache_that_cannot_be_written_is_one_named_line_and_exit_2(scene, drive):
+    """SONAR-118: a filesystem error (here a file where the tool cache's directory belongs) ends in a line naming the re-run, not a traceback"""
+    scene.tool_cache.write_text("a file, not a directory")
+    code, out, err = drive()
+    assert (code, out) == (2, "")
+    assert (RERUN_ADVICE in err, len(err.strip().splitlines())) == (True, 2)
+
+
 def test_the_scanner_is_unpacked_beside_its_target_and_nothing_else_is_left_in_the_cache(scene, drive):
     """SONAR-118: the temporary directory shares the cache's file system and is gone after the move"""
     drive()

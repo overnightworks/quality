@@ -15,7 +15,7 @@ from pathlib import Path
 from subprocess import CompletedProcess
 
 from quality import output, process, web
-from quality.report import PUSH_THE_FIX, RERUN, CannotJudge, Instruction
+from quality.report import PUSH_THE_FIX, RERUN, CannotJudge, Instruction, Reason
 from quality.sonar import EXIT_CLEAN, SonarEvent, refused
 
 # One deadline for the whole command; the install step's limit in gate.yml covers it and the start-up of uv and Python.
@@ -177,10 +177,7 @@ def _unpacked_into_place(run: process.Run, budget: Budget, archive: Path, folder
         unzipped = _program(run, budget, ["unzip", "-q", str(archive), "-d", unpacked], UNZIP_TIMEOUT_SECONDS)
         if unzipped.returncode != 0:
             raise CannotJudge(f"unzip stopped with exit {unzipped.returncode} before it unpacked the scanner whole", (RERUN,))
-        try:
-            (Path(unpacked) / folder).replace(target)
-        except OSError as error:
-            raise CannotJudge(f"could not move the unpacked scanner to {target}: {error}", (RERUN,)) from error
+        (Path(unpacked) / folder).replace(target)
 
 
 def _install(
@@ -227,6 +224,8 @@ def run_scanner(
         row = _install(environment, budget, fetch, run, sleep, base_url, key_file)
     except CannotJudge as refusal:
         return refused(refusal.reason, PUSH_THE_FIX, channels)
+    except OSError as error:  # a full or unwritable disk while the scanner is written
+        return refused(Reason(f"could not write the scanner: {error}", (RERUN,)), PUSH_THE_FIX, channels)
     output.write_rows((row,), channels.out)
     output.write_closing_line(output.Glyph.CLEAN, ("clean", output.format_duration(clock() - started)), channels.out)
     return EXIT_CLEAN
