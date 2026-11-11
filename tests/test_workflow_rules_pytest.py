@@ -183,6 +183,7 @@ def test_a_pytest_call_with_zero_workers_is_serial(build_repo, scalar, command):
         "pytest -n",
         "pytest -n -1",
         "pytest -n 2.5",
+        "pytest -n \u0662",
         "pytest -n many",
         "pytest -nmany",
         "pytest --numprocesses=",
