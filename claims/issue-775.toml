@@ -1,0 +1,7 @@
+claim_id = "6508d5c488214b91ac0a5a81671c55f5"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "9ed42164b8ff0275f265ac161b8bf0abac19ac3e"
+branch = "claude/issue-775-run-script-move"
+scope = ["pyproject.toml", "src/quality/run_script.py", "src/quality/workflow_rules.py"]
+opened_commit = "f52ff02536aae90d8bd418162338434dd7b9ad1d"
