@@ -39,6 +39,7 @@ def test_a_redirect_is_refused_and_its_target_hears_nothing(stub_server):
 
 
 DEADLINE_SECONDS = 1.0
+MARGIN_SECONDS = 0.7  # what scheduling of the worker threads may add to a deadline
 DRIP_SECONDS = 0.9  # shorter than the deadline, so no single socket operation of `timeout` runs out
 
 
@@ -100,3 +101,43 @@ def test_an_error_answer_ends_the_read_with_the_callers_refusal(stub_server):
     with pytest.raises(CannotJudge) as raised:
         web.fetch_within(f"{origin}/zip", lambda error: refusal, expires_at, time.monotonic)
     assert raised.value is refusal
+
+
+def drips_forever(handler, release, client_gone) -> None:
+    handler.send_response(200)
+    handler.send_header("Content-Length", "100000")
+    handler.end_headers()
+    try:
+        while not release.wait(0.05):
+            handler.wfile.write(b"x")
+            handler.wfile.flush()
+    except OSError:
+        client_gone.set()
+
+
+def test_the_thread_of_a_read_that_ran_past_the_deadline_closes_its_connection_by_itself(stub_server):
+    """SONAR-115: every read of the thread is bounded by the time left, so the abandoned thread ends without the caller's help"""
+    release, client_gone = threading.Event(), threading.Event()
+    origin, _ = stub_server(lambda handler: drips_forever(handler, release, client_gone))
+    expires_at = time.monotonic() + DEADLINE_SECONDS
+    try:
+        with pytest.raises(CannotJudge):
+            web.fetch_within(f"{origin}/zip", lambda error: CannotJudge(str(error)), expires_at, time.monotonic, timeout=15)
+        ended_by_itself = client_gone.wait(MARGIN_SECONDS)
+    finally:
+        release.set()
+    assert ended_by_itself
+
+
+def test_a_body_that_ends_short_of_its_length_is_refused(stub_server):
+    """SONAR-115: a truncated body is the caller's refusal, never a shorter body returned as whole"""
+
+    def answer(handler):
+        handler.send_response(200)
+        handler.send_header("Content-Length", "100")
+        handler.end_headers()
+        handler.wfile.write(b"x" * 10)
+
+    origin, _ = stub_server(answer)
+    with pytest.raises(CannotJudge):
+        web.fetch_within(f"{origin}/zip", lambda error: CannotJudge(str(error)), time.monotonic() + 30, time.monotonic)
