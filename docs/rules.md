@@ -772,20 +772,23 @@ a key; the mapping's values are not read (CONCURRENCY-1). A workflow with none o
 caller's `concurrency` governs. Only the top-level `concurrency` counts, never a job's (CONCURRENCY-2). The rule reads
 no expression: after trimming and collapsing the whitespace inside each `${{ }}` and setting `||`, `==` and `!=` off by
 one space, the `group` and `cancel-in-progress` values are compared with a closed list; a form outside it is a finding,
-however equivalent (CONCURRENCY-3):
+however equivalent (CONCURRENCY-3). Only space, tab, carriage return and line feed fold inside an expression, so a
+no-break space keeps a form outside the list, as actionlint refuses such an expression. A block scalar (`|`, `>`, any
+chomping) is read by its content, its final line breaks dropped; a quoted scalar with an escaped line break stays
+outside the list:
 
-| | Form | Passes |
-|---|---|---|
-| G1 | `${{ github.workflow }}-${{ github.event.pull_request.number \|\| github.run_id }}` | always |
-| G2 | `${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number \|\| github.run_id }}` | always |
-| F1 | `${{ github.event.pull_request.number != null }}` | always |
-| F2 | `${{ github.event_name == 'pull_request' }}` | only without a target or review trigger |
+- G1: `${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}`, always
+- G2: `${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}`, always
+- F1: `${{ github.event.pull_request.number != null }}`, always
+- F2: `${{ github.event_name == 'pull_request' }}`, only without a target or review trigger; with one, those runs stay
+  uncancelled
 
 A pull-request run is grouped by its number and cancels; any other run gets its run id and does not, so a run on main
 always finishes. A group that falls back to the ref or the commit is shared by runs on main, and GitHub drops a pending
-run when a newer one queues in the same group, whatever `cancel-in-progress` says. G1 puts the runs of a workflow that
-combines `pull_request` with another pull-request trigger in one group, so one can cancel the other; G1 passes there
-and the fix names G2. The block every finding shows as its fix, and a repository copies (CONCURRENCY-4):
+run when a newer one queues in the same group, whatever `cancel-in-progress` says. G1 puts the runs of one pull request
+under two events of a workflow that names more than one pull-request trigger in one group, whichever two events they
+are, so one can cancel the other; G1 passes there and the fix names G2. The block every finding shows as its fix, and
+a repository copies (CONCURRENCY-4):
 
 ```yaml
 concurrency:
@@ -795,7 +798,8 @@ concurrency:
 
 A finding is `missing` (no `concurrency`, or none with a `cancel-in-progress`; a group alone, a string included),
 `shared group` (the `group` is not a listed form, naming `github.sha`, `github.ref`, `github.head_ref` or
-`github.ref_name` where it holds one) or `cancels main` (the `cancel-in-progress` is not a listed form), each with the
+`github.ref_name` where it holds one; a `concurrency` mapping without a `group` is `no group`, at the `concurrency`
+key's line) or `cancels main` (the `cancel-in-progress` is not a listed form), each with the
 block as its fix (CONCURRENCY-5). A workflow whose YAML or file cannot be read, a `group` or `cancel-in-progress` that
 is no string, and an alias or a merge key where it can hide the top mapping, `on:`, the `concurrency` or either value
 are exit `2` naming the file (CONCURRENCY-6). The clean row of `workflows` keeps its words (CONCURRENCY-7).
@@ -803,6 +807,44 @@ quality's own checkout carries the block in `ci.yml` and `code-scanning.yml` (CO
 switches the rule off.
 It is on `main` only until the release that carries it, so a dependent meets it at its first bump to that release
 (CONCURRENCY-9).
+
+The `pytest-workers` rule judges every pytest call in a `run:` step of every tracked workflow, whether or not a pull
+request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a composite
+action is not (PYTEST-1). The script is never run. The value is read line by line, as the shell reads it: a literal
+block scalar at each file line, a folded or quoted one with each line break kept at the scalar's first line; each
+`${{ }}` on a line becomes one dynamic word; a line ending in a backslash joins the next; a `#` that starts a word
+outside quotes ends the command text; the words are split by Python's `shlex`, and `&&`, `||`, `;`, `|`, `&`, `(`, `)`
+and a backtick end a segment (PYTEST-2).
+
+A segment is a pytest call when its command word, after assignments (`VAR=value`), `env` with its flags, `time`,
+`exec`, `command`, `nohup` and the shell keywords `if`, `then`, `elif`, `else`, `do`, `while`, `until`, `!` and `{`, is
+`pytest` or `py.test`; a Python interpreter (`python`, `python3`, `python3.<n>`, `pypy3`) with only flags before
+`-m pytest`; or a runner (`uv run`, `uvx`, `poetry run`, `pipenv run`, `pdm run`, `hatch run`, `coverage run`) that
+starts either, past its flags and their values (PYTEST-3). The word `pytest` anywhere else is no call: `pip install
+pytest`, `echo "run pytest"`, a path, a comment. A script, `make`, `tox`, `nox`, `timeout`, `xvfb-run` or `docker run`
+starting pytest is the rule's named gap and reads as no call (PYTEST-4).
+
+The last of `-n N`, `-nN`, `-n=N`, `--numprocesses N` and `--numprocesses=N` counts, as argparse reads repeated
+flags. `N` is `auto`, `logical` or a whole number above zero: the call passes. No such flag, `-n 0` (`00` too), an
+abbreviated flag (`--numproc 4`) or one glued to other short flags (`-qn4`) is `serial`; any other `N`, a missing one
+or a dynamic one (`$WORKERS`, `$(nproc)`, `${{ matrix.n }}`) is `invalid` (PYTEST-5). `PYTEST_ADDOPTS` and a `-n` in
+`pyproject.toml` are not read. A line `shlex` refuses that holds the word `pytest`, and a command word built at run
+time (`eval`, or a word starting with `$`) in a `run:` that holds the word `pytest` outside comments, are `invalid`,
+because the rule sees a call it cannot read; without the word `pytest` in the `run:` they are no call (PYTEST-6).
+
+A comment `# pytest-workers: <reason>`, with a reason that holds a letter, clears every call of the logical line it
+stands on or directly above: a YAML comment above `run:` or after its value, or a comment above a line of a block
+scalar; for a command joined by backslashes, above its first line or on any of its lines. Without the id, without a
+reason, with a reason of no letter, or two lines above, it clears nothing; a marker that clears no call is not reported
+(PYTEST-7). A finding is at the call's first line, `serial` with the fact `pytest runs without -n` or
+`pytest runs with -n 0`, or `invalid` with the fact `-n count is not a number above zero or auto`, `command cannot be
+read to its end` or `command is built at run time, pytest -n cannot be read`, its fix `pass -n auto, or explain on the
+line above: # pytest-workers: <reason>` (PYTEST-8). A workflow whose YAML or file cannot be read, a `run:` that is no
+string, and an alias or a merge key where it can hide `jobs`, a job, `steps`, a step or a `run:` are exit `2` naming the
+file; a step with no `run:` is skipped (PYTEST-9). The clean row of `workflows` keeps its words, and the rule's extent
+is the count of workflows it read (PYTEST-10). quality's own checkout needs no workflow edit (PYTEST-11). No
+configuration switches the rule off. It is on `main` only until the release that carries it, so a dependent meets it at
+its first bump to that release (PYTEST-12).
 
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
