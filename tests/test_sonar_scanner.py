@@ -202,7 +202,7 @@ def test_a_present_marker_downloads_nothing_and_leaves_the_install_alone(scene, 
     ids=["signature of another primary key", "no VALIDSIG", "no GOODSIG", "no status at all"],
 )
 def test_a_signature_that_does_not_verify_names_the_key_file_and_installs_nothing(scene, drive, status):
-    """SONAR-117: each failed verification is one line naming the key file and what to replace, exit 2, nothing in the cache"""
+    """SONAR-117, SONAR-126: each failed verification is one line naming the key file and what to replace, exit 2, nothing in the cache"""
     scene.status = status
     code, out, err = drive()
     assert (code, out) == (2, "")
@@ -211,14 +211,14 @@ def test_a_signature_that_does_not_verify_names_the_key_file_and_installs_nothin
 
 
 def test_a_key_file_with_an_expired_subkey_that_did_not_sign_installs(scene, drive):
-    """SONAR-117: gpg prints KEYEXPIRED for any expired subkey in the file; only the signature's own status decides"""
+    """SONAR-117, SONAR-126: gpg prints KEYEXPIRED for any expired subkey in the file; only the signature's own status decides"""
     scene.status = status_lines("KEYEXPIRED", "GOODSIG", "VALIDSIG")
     code, _, err = drive()
     assert (code, err, scene.marker.is_file()) == (0, "", True)
 
 
 def test_a_signature_by_an_expired_subkey_says_to_name_a_release_signed_by_a_valid_one(scene, drive):
-    """SONAR-117: replacing the key file alone cannot help; the line says to set the version and re-export the file"""
+    """SONAR-117, SONAR-126: replacing the key file alone cannot help; the line says to set the version and re-export the file"""
     scene.status = status_lines("KEYEXPIRED", "EXPKEYSIG", "GOODSIG", "VALIDSIG")
     code, out, err = drive()
     assert (code, out) == (2, "")
@@ -236,7 +236,8 @@ def test_a_signature_by_an_expired_subkey_says_to_name_a_release_signed_by_a_val
     ids=["revoked subkey", "bad signature", "signing key not in the file"],
 )
 def test_a_signature_that_a_new_key_file_cannot_mend_names_the_steps_that_can(scene, drive, status, steps):
-    """SONAR-117: a revoked signing subkey and a zip whose bytes do not match are not cured by replacing the key file alone"""
+    """SONAR-117, SONAR-126, SONAR-128: a revoked signing subkey, a zip whose bytes do not match and a signature by a key
+    the file does not hold are not cured by replacing the key file alone"""
     scene.status = status
     code, out, err = drive()
     assert (code, out, FIX_ADVICE in err) == (2, "", False)
@@ -269,7 +270,7 @@ def test_a_key_file_that_is_not_exactly_the_pinned_key_is_refused_before_any_dow
 
 
 def test_a_key_file_of_another_primary_key_names_both_ways_out_before_any_download(scene, drive):
-    """SONAR-116: restoring the file mends an accident, a rotation needs the fingerprint changed with the file"""
+    """SONAR-116, SONAR-125: restoring the file mends an accident, a rotation needs the fingerprint changed with the file"""
     scene.listing = key_listing(OTHER_FINGERPRINT)
     code, out, err = drive()
     assert (code, out, scene.requested) == (2, "", [])

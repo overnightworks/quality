@@ -169,11 +169,11 @@ that `binaries.sonarsource.com` does not serve, such as the constant in a newer 
 release's `dist/index.js` on GitHub or the key as published on keys.openpgp.org.
 
 The scanner's transport, verified at sonar-scanner-java-library 4.2.1.1698 (the library of sonar-scanner-cli
-8.3.1.16491, which `gate.yml` pins through `SCANNER_VERSION`; SONAR-97, SONAR-127):
+8.3.1.16491, which `gate.yml` pins through `SCANNER_VERSION`; SONAR-97):
 
 - The scanner CLI's signature is checked against the key file above; `binaries.sonarsource.com` is trusted for the bytes
   and SonarSource's signing key for the signature. A cache hit is trusted as found: with the directory and its marker
-  present the command verifies nothing again, and on a GitHub-hosted runner the tool cache starts empty.
+  present the command verifies nothing again (SONAR-118), and on a GitHub-hosted runner the tool cache starts empty.
 - The bootstrap's authenticated requests reach only `sonarcloud.io` and `api.sonarcloud.io`. This holds only with the
   pinned `-Dsonar.host.url=https://sonarcloud.io` argument (SONAR-98), a properties file that passed the properties
   check, and a job environment that sets none of `SONAR_HOST_URL`, `SONAR_REGION`, `SONAR_SCANNER_*`,
@@ -181,8 +181,8 @@ The scanner's transport, verified at sonar-scanner-java-library 4.2.1.1698 (the 
   of the `sonar` job set environment variables, and none of those.
 - The properties check keeps out every key that steers the endpoint or the requests: it allows only listed keys, so
   `sonar.host.url`, `sonar.scanner.apiBaseUrl`, `sonar.scanner.sonarcloudUrl`, `sonar.region`, the proxy keys and
-  `sonar.scanner.httpExtraHeaders` are refused. The last is new in this library version: its headers go on every
-  request, and an `Authorization` header among them replaces the token.
+  `sonar.scanner.httpExtraHeaders` are refused (SONAR-57). The last is new in this library version: its headers go on
+  every request, and an `Authorization` header among them replaces the token.
 - Residual limit: a redirect issued by SonarCloud itself carries the token to the host it names.
 - The engine is downloaded from SonarCloud and is not pinned by the CLI pin. SonarSource's server-side code is an
   accepted trust boundary: the token's only purpose is to authenticate to SonarCloud.

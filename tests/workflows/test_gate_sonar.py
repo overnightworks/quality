@@ -59,7 +59,7 @@ def test_the_sonar_job_checks_out_the_caller_with_full_history_without_credentia
 
 
 def test_the_scan_takes_the_scanner_version_the_install_step_installs_and_the_sonarcloud_origin(gate, sonar_steps):
-    """SONAR-96, SONAR-97, SONAR-98, SONAR-99, SONAR-122: the scan reads scannerVersion from the job env variable the install step installs, pins the SonarCloud host, does not wait for the gate and appends the properties step's output"""
+    """SONAR-96, SONAR-97, SONAR-98, SONAR-99, SONAR-122, SONAR-124: the scan reads scannerVersion from the job env variable the install step installs, pins the SonarCloud host, does not wait for the gate and appends the properties step's output"""
     options = step_named(sonar_steps, "Scan")["with"]
     assert options["scannerVersion"] == SCANNER_VERSION_EXPRESSION
     assert sonar_scanner.VERSION_VARIABLE in gate["jobs"]["sonar"]["env"]
@@ -103,7 +103,7 @@ def test_the_scan_cannot_download_a_scanner_of_its_own(sonar_steps):
 
 
 def test_the_install_step_gets_its_values_through_env_and_no_expression_stands_inside_its_script(sonar_steps):
-    """SONAR-122: the fingerprint is named in the step's env, the version comes from the job env, and no ${{ }} is in the script"""
+    """SONAR-122, SONAR-124: the fingerprint is named in the step's env, the version comes from the job env, and no ${{ }} is in the script"""
     install = step_named(sonar_steps, sonar_scanner.INSTALL_STEP)
     assert re.fullmatch("[0-9A-F]{40}", install["env"][sonar_scanner.FINGERPRINT_VARIABLE])
     assert "${{" not in install["run"]

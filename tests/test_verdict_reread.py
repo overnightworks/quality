@@ -417,10 +417,10 @@ def reread(capsys, monkeypatch, run_env, pull_request):
 def test_the_verdict_judges_the_first_settled_read_and_never_lets_a_red_reason_go(
     reread, answers, options, code, expected, slept
 ):
-    """READ-1 to READ-5, VERDICT-1, VERDICT-9, VERDICT-10, VERDICT-12, VERDICT-14, VERDICT-20, VERDICT-21: a stale
-    answer or a 5xx is re-read every 10 s, at most 12 times; the first settled read decides after the note of READ-4;
-    out of reads, or on any other failure, exit 2 keeps the last judged read's blocking lines; a red read is never
-    green and an unsettled job never prints a failure line."""
+    """READ-1, READ-2, READ-3, READ-4, READ-5, VERDICT-1, VERDICT-9, VERDICT-10, VERDICT-12, VERDICT-14,
+    VERDICT-20, VERDICT-21: a stale answer or a 5xx is re-read every 10 s, at most 12 times; the first settled
+    read decides after the note of READ-4; out of reads, or on any other failure, exit 2 keeps the last judged
+    read's blocking lines; a red read is never green and an unsettled job never prints a failure line."""
     assert reread(*answers, **options) == (code, expected, slept)
 
 
