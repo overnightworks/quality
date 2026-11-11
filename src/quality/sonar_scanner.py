@@ -146,7 +146,9 @@ def _unpacked_into_place(run: process.Run, budget: Budget, archive: Path, folder
     """The scanner appears at `target` whole: unpacked into a directory beside it, then moved."""
     target.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=target.parent) as unpacked:
-        _program(run, budget, ["unzip", "-q", str(archive), "-d", unpacked], UNZIP_TIMEOUT_SECONDS)
+        unzipped = _program(run, budget, ["unzip", "-q", str(archive), "-d", unpacked], UNZIP_TIMEOUT_SECONDS)
+        if unzipped.returncode != 0:
+            raise CannotJudge(f"unzip stopped with exit {unzipped.returncode} before it unpacked the scanner whole", (RERUN,))
         try:
             (Path(unpacked) / folder).replace(target)
         except OSError as error:

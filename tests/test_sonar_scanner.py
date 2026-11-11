@@ -66,6 +66,7 @@ class Scene:
     status: str = GOOD_STATUS
     downloads: dict[str, bytes | Exception] = field(default_factory=dict)
     broken_programs: dict[str, Exception] = field(default_factory=dict)
+    exit_codes: dict[str, int] = field(default_factory=dict)
     seconds_taken: dict[str, float] = field(default_factory=dict)
     requested: list[str] = field(default_factory=list)
     programs: list[str] = field(default_factory=list)
@@ -94,7 +95,7 @@ class Scene:
             scanner = destination / f"sonar-scanner-{VERSION}-linux-x64" / "bin" / "sonar-scanner"
             scanner.parent.mkdir(parents=True)
             scanner.write_text("#!/bin/sh\n")
-        return subprocess.CompletedProcess(command, 0, stdout, "")
+        return subprocess.CompletedProcess(command, self.exit_codes.get(program, 0), stdout, "")
 
     @property
     def installed(self) -> Path:
@@ -293,6 +294,16 @@ def test_a_failed_unzip_leaves_neither_the_scanner_nor_the_marker(scene, drive):
     """SONAR-118: the scanner appears whole or not at all"""
     scene.broken_programs["unzip"] = process.ProcessError("unzip failed")
     drive()
+    assert not scene.installed.exists()
+    assert not scene.marker.exists()
+
+
+def test_an_unzip_that_stops_partway_with_an_error_leaves_neither_the_scanner_nor_the_marker(scene, drive):
+    """SONAR-118: a non-zero exit of unzip is one line naming it and the re-run, exit 2; the half-written folder is not installed"""
+    scene.exit_codes["unzip"] = 50
+    code, out, err = drive()
+    assert (code, out) == (2, "")
+    assert ("unzip" in err, RERUN_ADVICE in err, len(err.strip().splitlines())) == (True, True, 2)
     assert not scene.installed.exists()
     assert not scene.marker.exists()
 
