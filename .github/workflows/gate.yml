@@ -96,7 +96,7 @@ jobs:
       contents: read
     env:
       TOOL_DIR: ${{ github.repository == 'overnightworks/quality' && '.' || '.gate-tool' }}
-      SCANNER_VERSION: 8.1.0.6389
+      SCANNER_VERSION: 8.3.1.16491
     steps:
       - name: Check out the caller with its full history for the scan
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
