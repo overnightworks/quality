@@ -69,6 +69,7 @@ containers = ["quality"]
 exhaustive = true
 layers = [
     "cli",
+    "cli_help",
     "merge",
     "landing",
     "verdict",
