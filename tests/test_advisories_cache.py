@@ -188,6 +188,7 @@ def test_a_cache_file_that_is_not_a_regular_file_is_no_copy(run, published_datab
         os.mkfifo(copy_of())
     code, output = run()
     assert (code, is_clean(output), statuses(published_databases)) == (0, True, [200])
+    assert published_databases.asked[-1].if_none_match is None
 
 
 def test_without_a_usable_cache_base_every_run_downloads(build_repo, published_databases):
