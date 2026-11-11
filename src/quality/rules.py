@@ -36,6 +36,7 @@ class RuleRelease:
 RELEASE_0_1 = "v0.1.0"
 RELEASE_0_3 = "v0.3.0"
 RELEASE_0_7 = "v0.7.0"
+RELEASE_0_11 = "v0.11.0"
 
 
 class Area(StrEnum):
@@ -71,7 +72,7 @@ class Rule(StrEnum):
     CLONE = "clone", Area.DEBT, "v0.4.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE)
     IMPORT_CONTRACT = "import-contract", Area.IMPORTS, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
     CLAUDE_MD = "claude-md", Area.FILES, RELEASE_0_3, Switch.ALWAYS
-    AGENTS_MD = "agents-md", Area.FILES, None, Switch.ALWAYS
+    AGENTS_MD = "agents-md", Area.FILES, RELEASE_0_11, Switch.ALWAYS
     ROOT_LAYOUT = "root-layout", Area.FILES, "v0.6.0", Switch.ALWAYS
     FILE_SUFFIX = "file-suffix", Area.FILES, RELEASE_0_7, Switch.ALWAYS
     SCRIPT_NAME = "script-name", Area.FILES, RELEASE_0_7, Switch.ALWAYS
@@ -84,8 +85,8 @@ class Rule(StrEnum):
     LEAK = "secret", Area.SECRETS, RELEASE_0_1, Switch.ALWAYS
     WORKFLOW_LINT = "workflow-lint", Area.WORKFLOWS, RELEASE_0_1, Switch.ALWAYS
     WORKFLOW_SECURITY = "workflow-security", Area.WORKFLOWS, RELEASE_0_1, Switch.ALWAYS
-    PR_CONCURRENCY = "pr-concurrency", Area.WORKFLOWS, None, Switch.ALWAYS
-    PYTEST_WORKERS = "pytest-workers", Area.WORKFLOWS, None, Switch.ALWAYS
+    PR_CONCURRENCY = "pr-concurrency", Area.WORKFLOWS, RELEASE_0_11, Switch.ALWAYS
+    PYTEST_WORKERS = "pytest-workers", Area.WORKFLOWS, RELEASE_0_11, Switch.ALWAYS
     ADVISORY = "advisory", Area.DEPENDENCIES, RELEASE_0_3, Switch.ALWAYS
 
     def __new__(
