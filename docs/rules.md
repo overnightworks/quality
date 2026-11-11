@@ -657,20 +657,22 @@ It applies these rules:
     even when it was opened for Sonar's legacy findings (LOOSE-2).
   - Removing the whole config file can be declared as well and goes through the door (LOOSE-3).
 
-  Ruled by the operator: a change that can only forbid more is no loosening. Per contract type: `allow_indirect_imports` turned from true to false (also by dropping the line)
-  and a module added to `source_modules` or `forbidden_modules` of a `forbidden` contract, the base's expressions all
-  kept; a module added to the `modules` of an `independence` contract, the base's all kept; and a module newly placed
-  in a `layers` contract: the head's `layers` are compared with every module
-  name the base's `layers` do not name stripped, and a layer left empty dropped. Base layers `a`, `b` against head
-  `a`, `new`, `b` is green. A layer left with one module has no sibling, so its independence says nothing: base `(game)`
-  against head `(game) : (agent)` is green, and base `a | b` against head `a : b : new` stays a loosening.
+  Ruled by the operator: a change that can only forbid more is no loosening (LOOSE-25). Per contract type:
+  `allow_indirect_imports` turned from true to false (also by dropping the line) (LOOSE-26) and a module added to
+  `source_modules` or `forbidden_modules` of a `forbidden` contract, the base's expressions all kept (LOOSE-27); a
+  module added to the `modules` of an `independence` contract, the base's all kept (LOOSE-28); and a module newly
+  placed in a `layers` contract: the head's `layers` are compared with every module name the base's `layers` do not
+  name stripped, and a layer left empty dropped. Base layers `a`, `b` against head `a`, `new`, `b` is green (LOOSE-29).
+  A layer left with one module has no sibling, so its independence says nothing: base `(game)` against head
+  `(game) : (agent)` is green, and base `a | b` against head `a : b : new` stays a loosening (LOOSE-30).
   Everything else stays a loosening, except a struck module the head no longer has and git does not read as renamed,
   or git reads as renamed to a module the same list names (below): a removed, renamed or replaced expression (`shop.web`
   turned into `shop.*` included), an expression added and another removed in
   one field, `allow_indirect_imports` turned from false to true, `as_packages`,
   `unmatched_ignore_imports_alerting`, `containers`, `exhaustive`, `exhaustive_ignores` and every `protected` or
   `acyclic_siblings` field in either direction, a reorder, a merge into `a | b`, a module moved to another layer,
-  `a | b` turned into `a : b`, a required `a` made optional `(a)`, and the session options. No import graph is built.
+  `a | b` turned into `a : b`, a required `a` made optional `(a)`, and the session options (LOOSE-12).
+  No import graph is built.
 
   A new contract (LOOSE-13), a removed `ignore_imports` entry (LOOSE-14), a reworded `broken_contract_guidance` and
   adopting import contracts (the base has no config) (LOOSE-15) are green. Two contracts of one name on a side
