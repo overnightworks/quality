@@ -1,0 +1,8 @@
+claim_id = "a003682b2c9b4ebea9ab317f703deae6"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "5e6237bf6defa95a95dab48c7f4b1afbce4e89d7"
+branch = "claude/issue-788-loose-31-34"
+scope = ["docs/rules.md", "tests/test_architecture.py", "tests/test_architecture_layers.py", "tests/test_verdict_reread.py"]
+opened_commit = "6ae5160f68ebe01fb5018e210c987d49b3c389db"
+whole_reason = "The sweep of 514 ends with this slice; four paths because each ID needs its prose mark and the docstring of the test that proves it, and three of the paths are tests that change only a docstring."
