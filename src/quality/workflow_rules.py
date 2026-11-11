@@ -210,6 +210,7 @@ ASSIGNMENT = re.compile(r"\w+=")
 DYNAMIC_COMMAND = re.compile(r"\$[\w{]")
 WORKERS_FLAG = re.compile(r"(?:-n|--numprocesses)(?:=(.*))?|-n(.+)", re.DOTALL)
 WHOLE_NUMBER = re.compile(r"\d+", re.ASCII)
+LEXER_PUNCTUATION = frozenset("();<>|&`")
 SEPARATOR_CHARACTERS = frozenset("();|&`")
 PREFIX_WORDS = frozenset({"time", "exec", "command", "nohup", "if", "then", "elif", "else", "do", "while", "until", "!", "{"})
 PYTEST_COMMANDS = frozenset({"pytest", "py.test"})
@@ -353,12 +354,12 @@ def _segments(text: str) -> list[list[str]]:
 
 
 def _split(text: str) -> list[list[str]]:
-    lexer = shlex.shlex(text, posix=True, punctuation_chars="();<>|&`")
+    lexer = shlex.shlex(text, posix=True, punctuation_chars="".join(sorted(LEXER_PUNCTUATION)))
     lexer.whitespace_split = True
     lexer.commenters = ""
     segments: list[list[str]] = [[]]
     for word in lexer:
-        if word and set(word) <= SEPARATOR_CHARACTERS:
+        if word and (set(word) <= SEPARATOR_CHARACTERS or ("`" in word and set(word) <= LEXER_PUNCTUATION)):
             segments.append([])
         elif SUBSTITUTION.search(word):
             inner = _split(word)

@@ -310,6 +310,23 @@ def test_a_line_that_cannot_be_split_and_holds_pytest_is_invalid_at_its_first_li
     assert shape(judged(build_repo, block_run(*script))) == [(INVALID, BLOCK_LINE, UNREADABLE)]
 
 
+@pytest.mark.parametrize(
+    "command",
+    ["echo hi >`mktemp`", "cat <`ls`", "make 2>`mktemp` ; pytest -n 2", "cat <<`ls`"],
+    ids=["output", "input", "descriptor before a call", "here-string"],
+)
+def test_a_redirection_glued_to_a_backtick_is_read_and_no_finding(build_repo, scalar, command):
+    """PYTEST-2."""
+    build, _ = scalar
+    assert judged(build_repo, build(command)) == []
+
+
+def test_a_call_in_a_substitution_after_a_glued_redirection_is_judged(build_repo, scalar):
+    """PYTEST-2."""
+    build, line = scalar
+    assert shape(judged(build_repo, build("echo >`pytest -q`"))) == [(SERIAL, line, WITHOUT_N)]
+
+
 def test_a_line_that_cannot_be_split_and_holds_no_pytest_is_no_finding(build_repo):
     """PYTEST-6."""
     assert judged(build_repo, block_run('echo "unbalanced')) == []
