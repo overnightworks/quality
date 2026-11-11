@@ -371,6 +371,7 @@ def test_a_command_built_at_run_time_in_a_run_without_pytest_is_no_finding(build
         "echo `a` $(b)",
         "git diff $(a) $(b) | wc",
         "echo $(( 1 + 2 )) $(( 3 ))",
+        'echo X="$(a)" $(b)',
     ],
 )
 def test_a_second_substitution_on_a_command_line_is_no_command_word_in_a_run_holding_pytest(build_repo, command):
@@ -390,9 +391,23 @@ def test_a_second_substitution_on_a_passing_calls_line_leaves_the_call_green(bui
         ('"$(which pytest)" -q', BUILT_AT_RUN_TIME),
         ("if $(which pytest) -q; then", BUILT_AT_RUN_TIME),
         ("$(cd x && which pytest) -q", BUILT_AT_RUN_TIME),
+        ("X=$(a) $(which pytest) -q", BUILT_AT_RUN_TIME),
+        ("env X=$(a) $(which pytest) -q", BUILT_AT_RUN_TIME),
+        ("X=`a` $(which pytest) -q", BUILT_AT_RUN_TIME),
+        ('X="$(a)" $(which pytest) -q', BUILT_AT_RUN_TIME),
         ("env -S 'pytest -k \"x'", UNREADABLE),
     ],
-    ids=["command substitution", "quoted substitution", "after if", "after a separator", "unreadable env -S value"],
+    ids=[
+        "command substitution",
+        "quoted substitution",
+        "after if",
+        "after a separator",
+        "after an assignment of a substitution",
+        "after env and an assignment of a substitution",
+        "after an assignment of a backtick substitution",
+        "after an assignment of a quoted substitution",
+        "unreadable env -S value",
+    ],
 )
 def test_a_command_the_reader_cannot_follow_in_a_run_holding_pytest_is_invalid(build_repo, script, fact):
     """PYTEST-6."""

@@ -354,27 +354,34 @@ def _segments(text: str) -> list[list[str]]:
 
 
 def _split(text: str) -> list[list[str]]:
-    return _lex(text, False)[0]
+    return _lex(text, False, [])[0]
 
 
-def _lex(text: str, after_substitution: bool) -> tuple[list[list[str]], bool]:
-    """The segments of `text`, and whether it ends on the separator that closes a substitution; a lone `$` right after one opens the next substitution of the same command and is dropped."""
+def _lex(text: str, after_substitution: bool, leading: list[str]) -> tuple[list[list[str]], bool]:
+    """The segments of `text` after the `leading` words of its segment, and whether it ends on the separator that closes a substitution that stands in a command with a command word; a lone `$` right after one opens the next substitution of the same command and is dropped."""
     lexer = shlex.shlex(text, posix=True, punctuation_chars="".join(sorted(LEXER_PUNCTUATION)))
     lexer.whitespace_split = True
     lexer.commenters = ""
-    segments: list[list[str]] = [[]]
+    segments: list[list[str]] = [list(leading)]
+    openers: list[int] = []
     backtick_open = False
     for word in lexer:
         if word and (set(word) <= SEPARATOR_CHARACTERS or ("`" in word and set(word) <= LEXER_PUNCTUATION)):
+            after_substitution = False
+            for character in word:
+                if character == "`":
+                    backtick_open = not backtick_open
+                if character == "(" or (character == "`" and backtick_open):
+                    openers.append(len(segments) - 1)
+                elif character in ")`" and openers:
+                    opener = segments[openers.pop()]
+                    after_substitution = _command_start(opener) < len(opener)
             segments.append([])
-            backtick_open ^= word.count("`") % 2 == 1
-            after_substitution = ")" in word or ("`" in word and not backtick_open)
         elif word == "$" and after_substitution and not segments[-1]:
             after_substitution = False
         elif SUBSTITUTION.search(word):
-            inner, after_substitution = _lex(word, after_substitution)
-            segments[-1].extend(inner[0])
-            segments.extend(inner[1:])
+            inner, after_substitution = _lex(word, after_substitution, segments[-1])
+            segments[-1:] = inner
         else:
             segments[-1].append(word)
             after_substitution = False
