@@ -24,6 +24,7 @@ COMMAND_DEADLINE_SECONDS = 100
 OPERATION_TIMEOUT_SECONDS = 15
 GPG_TIMEOUT_SECONDS = 10
 UNZIP_TIMEOUT_SECONDS = 15
+MAXIMUM_LINK_FOLLOWS = 40  # the Linux kernel stops at 40 links in one path
 RETRY_PAUSE_SECONDS = 3
 BINARIES_BASE_URL = "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli"
 INSTALL_STEP = "Install the pinned scanner"
@@ -154,20 +155,54 @@ def _stays_inside(name: str, folder: str) -> bool:
     return "\\" not in name and f"{posixpath.normpath(name)}/".startswith(f"{folder}/")
 
 
+def _leaves_through_links(path: str, links: Mapping[str, str], folder: str) -> bool:
+    """Whether following `path` (from the zip's root) through the archive's own symbolic links `links` (name to target)
+    ends outside `folder`, or never ends because the links loop; this is how the filesystem resolves it once unpacked."""
+    resolved: list[str] = []
+    pending = path.split("/")
+    follows = 0
+    while pending:
+        part = pending.pop(0)
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if len(resolved) <= 1:
+                return True
+            resolved.pop()
+            continue
+        resolved.append(part)
+        if resolved[0] != folder:
+            return True
+        target = links.get("/".join(resolved))
+        if target is not None:
+            follows += 1
+            if target.startswith("/") or follows > MAXIMUM_LINK_FOLLOWS:
+                return True
+            resolved.pop()
+            pending = [*target.split("/"), *pending]
+    return False
+
+
 def _escaping_entry(archive: Path, folder: str) -> str | None:
     """The first entry of the zip that would land outside `folder`, a symbolic link whose target does included; None when
     every entry stays inside."""
     try:
         with zipfile.ZipFile(archive) as opened:
-            for entry in opened.infolist():
-                if not _stays_inside(entry.filename, folder):
-                    return entry.filename
-                if stat.S_ISLNK(entry.external_attr >> 16):
-                    target = opened.read(entry).decode("utf-8", "replace")
-                    if not _stays_inside(posixpath.join(posixpath.dirname(entry.filename), target), folder):
-                        return f"{entry.filename} -> {target}"
+            entries = opened.infolist()
+            links = {
+                posixpath.normpath(entry.filename): opened.read(entry).decode("utf-8", "replace")
+                for entry in entries
+                if stat.S_ISLNK(entry.external_attr >> 16)
+            }
     except zipfile.BadZipFile as error:
         raise CannotJudge(f"the scanner zip is not a readable zip: {error}", (ANOTHER_RELEASE,)) from error
+    for entry in entries:
+        if not _stays_inside(entry.filename, folder):
+            return entry.filename
+        if (target := links.get(posixpath.normpath(entry.filename))) is not None and _leaves_through_links(
+            posixpath.join(posixpath.dirname(entry.filename), target), links, folder
+        ):
+            return f"{entry.filename} -> {target}"
     return None
 
 

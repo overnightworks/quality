@@ -334,13 +334,16 @@ def test_a_failed_unzip_leaves_neither_the_scanner_nor_the_marker(scene, drive):
     ("entries", "links"),
     [
         ((), ((f"{FOLDER}/bin/escape", "../../../../etc/passwd"),)),
+        ((), ((f"{FOLDER}/d/up", ".."), (f"{FOLDER}/bin/chained", "../d/up/../outside"))),
+        ((), ((f"{FOLDER}/a", "d"), (f"{FOLDER}/d/up", ".."), (f"{FOLDER}/bin/deep", "../a/up/../outside"))),
+        ((), ((f"{FOLDER}/loop/a", "b"), (f"{FOLDER}/loop/b", "a"))),
         ((), ((f"{FOLDER}/bin/absolute", "/etc/passwd"),)),
         (((f"{FOLDER}/../outside", "x"),), ()),
         (((f"/{FOLDER}/absolute", "x"),), ()),
         ((("other-folder/file", "x"),), ()),
         (((f"{FOLDER}\\..\\outside", "x"),), ()),
     ],
-    ids=["symlink out of the folder", "absolute symlink", "entry with a parent component", "absolute entry", "entry beside the folder", "entry with a backslash"],
+    ids=["symlink out of the folder", "symlink out through a link to the parent", "symlink out through two links", "links that loop", "absolute symlink", "entry with a parent component", "absolute entry", "entry beside the folder", "entry with a backslash"],
 )
 def test_an_archive_with_an_entry_that_leaves_its_folder_is_refused_before_unzip_runs(scene, drive, entries, links):
     """SONAR-118: a signed zip may still hold a path or a symbolic link that reaches outside the scanner's folder; nothing is unpacked or installed"""
