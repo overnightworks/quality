@@ -91,10 +91,10 @@ mandatory_jobs = ["checks"]
 - `[gate] sonar = false` turns SonarCloud off (VERDICT-15). The `sonar` job's properties step then hands it `sonar=off`,
   which [Coverage on new code](sonar.md#coverage-on-new-code) describes, with the refusals that make a later gate
   without the switch stop before its scan, and `gate.yml` skips the scanner install, the scan and the findings step only
-  on that output (CALLER-9), so the job is green and sends nothing. Absent or `true`, Sonar runs (VERDICT-16). Any other value is exit
-  `2` (VERDICT-17). On a pull request, a head that turns Sonar off under a base that runs it is the loosening
-  `sonar true → false` (VERDICT-18); an adoption (a base without `quality/config.toml`) may start with Sonar off
-  (VERDICT-19).
+  on that output (CALLER-9), so the job is green and sends nothing. Absent or `true`, Sonar runs (VERDICT-16). Any other
+  value is exit `2` (VERDICT-17). On a pull request, a head that turns Sonar off under a base that runs it is the
+  loosening `sonar true → false` (VERDICT-18); an adoption (a base without `quality/config.toml`) may start with Sonar
+  off (VERDICT-19).
 - `[gate] legacy` is described under [New and legacy findings](sonar.md#new-and-legacy-findings). On a pull request, a
   head whose `legacy` is not `fail` under a base whose `legacy` is `fail` is the loosening `legacy fail → report`; an
   absent key counts as `report` (VERDICT-51).

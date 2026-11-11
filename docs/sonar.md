@@ -19,22 +19,26 @@ Ruled by the operator:
 - The CI scanner analyses, and automatic analysis is off.
 
 The `sonar` job checks out the caller with its full history and without stored credentials, holds `contents: read` alone
-and the job, its scanner install step and its scan step are each bounded by a timeout, the job's covering the install, the scan, the task wait and the findings wait (SONAR-85). `SONAR_TOKEN` reaches only the properties check, the scan and the findings step,
-each through its own `env`, never through a workflow's or a job's (SONAR-86); the install step gets none. The pull request's number reaches the
-findings step alone, as `PULL_REQUEST_NUMBER` (SONAR-87).
+and the job, its scanner install step and its scan step are each bounded by a timeout, the job's covering the install,
+the scan, the task wait and the findings wait (SONAR-85). `SONAR_TOKEN` reaches only the properties check, the scan and
+the findings step, each through its own `env`, never through a workflow's or a job's (SONAR-86); the install step gets
+none. The pull request's number reaches the findings step alone, as `PULL_REQUEST_NUMBER` (SONAR-87).
 
 ### What the three steps print
 
-Every command prints rows on stdout and end with one closing line: `✓ clean · <time>` when the properties check passes
-(SONAR-100), `✓ off · nothing reaches SonarCloud · <time>`, `✓ clean · new 0 · legacy N · <time>`,
-`! red · …` or `✓ report only · …`; `scanner` prints `✓ clean · <time>` after its row `· scanner  installed  <version> · signature verified by <fingerprint>`, or `· scanner  cached  <version> is in the tool cache` (SONAR-114). When they cannot judge (exit `2`) they print the `error:`/`next:` pair on
-stderr instead (SONAR-101). A refusal that knows its own step names it: a `quality/config.toml` it cannot read shows
-[its example to copy](output.md#refusals), where the refusal has one, and `push the fix; the gate judges the new commit`
-(SONAR-102); an empty `SONAR_TOKEN` the step to set the secret and pass it to `gate.yml`; an unwritable `GITHUB_OUTPUT`
-`fix what the error names, then re-run this run's failed jobs` (SONAR-103); a changed tracked file the step to let the
-artifact add reports only (SONAR-104); an issue search that never reaches the analysis's own count
-`re-run this run's failed jobs` (SONAR-112). Every other refusal falls back to its step's general step: `properties`
-the push step, `scanner` the key-file step below, `findings` the re-run step (SONAR-105). `-v` adds nothing: no step runs a scanner (SONAR-106).
+Every command prints rows on stdout and ends with one closing line: `✓ clean · <time>` when the properties check passes
+(SONAR-100), `✓ off · nothing reaches SonarCloud · <time>`, `✓ clean · new 0 · legacy N · <time>`, `! red · …` or
+`✓ report only · …`; `scanner` prints `✓ clean · <time>` after its row
+`✓ scanner  installed  <version> · signature verified by <fingerprint>`, or its row
+`· scanner  cached  <version> is in the tool cache` (SONAR-114). When they cannot judge (exit `2`) they print the
+`error:`/`next:` pair on stderr instead (SONAR-101). A refusal that knows its own step names it: a `quality/config.toml`
+it cannot read shows [its example to copy](output.md#refusals), where the refusal has one, and
+`push the fix; the gate judges the new commit` (SONAR-102); an empty `SONAR_TOKEN` the step to set the secret and pass
+it to `gate.yml`; an unwritable `GITHUB_OUTPUT` `fix what the error names, then re-run this run's failed jobs`
+(SONAR-103); a changed tracked file the step to let the artifact add reports only (SONAR-104); an issue search that
+never reaches the analysis's own count `re-run this run's failed jobs` (SONAR-112). Every other refusal falls back to
+its step's general step: `properties` the push step, `scanner` the key-file step below, `findings` the re-run step
+(SONAR-105). `-v` adds nothing: no step runs a scanner (SONAR-106).
 
 ```text
 $ quality sonar properties
@@ -108,9 +112,9 @@ Dependabot exception below). With `[gate] sonar = false` the properties check re
 token (SONAR-65), prints `· sonar  off  quality/config.toml sets [gate] sonar = false` instead and appends `sonar=off`,
 and ends with `✓ off · nothing reaches SonarCloud` (SONAR-66).
 
-`quality sonar scanner` runs before the scan, with the same `if:` as the scan, so with `[gate] sonar = false` it does not
-run (SONAR-114). The scan action would verify the scanner CLI's signature against a key it fetches from a key server at
-every run, with no time limit, so a server that does not answer left the job red or hanging. The command takes that
+`quality sonar scanner` runs before the scan, with the same `if:` as the scan, so with `[gate] sonar = false` it does
+not run (SONAR-114). The scan action would verify the scanner CLI's signature against a key it fetches from a key server
+at every run, with no time limit, so a server that does not answer left the job red or hanging. The command takes that
 check over and leaves the key servers out of the trust path (SONAR-121):
 
 - `gate.yml` names the version (`SCANNER_VERSION`, the job's `env`, which the scan's `scannerVersion` reads too) and the

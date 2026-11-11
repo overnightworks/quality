@@ -4,6 +4,7 @@ fetches a key. It prints one row and one closing line, or the pair."""
 
 import posixpath
 import re
+import shutil
 import stat
 import tempfile
 import time
@@ -180,6 +181,8 @@ def _unpacked_into_place(run: process.Run, budget: Budget, archive: Path, folder
         unzipped = _program(run, budget, ["unzip", "-q", str(archive), "-d", unpacked], UNZIP_TIMEOUT_SECONDS)
         if unzipped.returncode != 0:
             raise CannotJudge(f"unzip stopped with exit {unzipped.returncode} before it unpacked the scanner whole", (RERUN,))
+        if target.exists():  # no marker: an earlier run stopped partway
+            shutil.rmtree(target)
         (Path(unpacked) / folder).replace(target)
 
 

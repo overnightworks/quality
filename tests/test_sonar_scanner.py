@@ -378,13 +378,14 @@ def test_an_unzip_that_stops_partway_with_an_error_leaves_neither_the_scanner_no
     assert not scene.marker.exists()
 
 
-def test_a_scanner_directory_that_cannot_be_moved_into_place_leaves_no_marker(scene, drive):
-    """SONAR-118: the marker is written last, so a move that fails leaves none"""
+def test_a_scanner_directory_found_without_its_marker_is_replaced(scene, drive):
+    """SONAR-118: a half-installed directory of an earlier run does not fail every later run"""
     (scene.installed / "stray").mkdir(parents=True)
-    code, out, err = drive()
-    assert (code, out) == (2, "")
-    assert not scene.marker.exists()
-    assert str(scene.installed) in err
+    code, _, err = drive()
+    assert (code, err) == (0, "")
+    assert not (scene.installed / "stray").exists()
+    assert (scene.installed / "bin" / "sonar-scanner").is_file()
+    assert scene.marker.is_file()
 
 
 def test_a_tool_cache_that_cannot_be_written_is_one_named_line_and_exit_2(scene, drive):
