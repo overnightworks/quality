@@ -13,7 +13,7 @@ import time
 import urllib.error
 import urllib.request
 import zipfile
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future
 from contextlib import suppress
 from dataclasses import dataclass
@@ -370,20 +370,8 @@ def _fetch_database(
     asking = copy
     while True:
         attempts += 1
-        deadline.ensure_time_left()
-        try:
-            answer = _download_once(url, ecosystem, ends_at, deadline.monotonic, asking)
-        except _TimeLimitReached:
-            if deadline.left() <= 0:
-                raise RunDeadlineSpent.cut(f"the {ecosystem} advisory database download") from None
-            raise _deadline_exceeded(ecosystem) from None
-        except DOWNLOAD_FAILURES as error:
-            if not _is_transient(error):
-                raise _cannot_download(ecosystem, url, error, "") from error
-            delay = next(delays, None)
-            if delay is None:
-                raise _cannot_download(ecosystem, url, error, f" after {attempts} attempts") from error
-            sleep(max(0.0, min(delay, ends_at - deadline.monotonic())))
+        answer = _answer_or_wait(url, ecosystem, asking, attempts, ends_at, deadline, delays, sleep)
+        if answer is None:
             continue
         fetched = _settled(answer, ecosystem, copy, asking is not None)
         if fetched is not None:
@@ -392,6 +380,29 @@ def _fetch_database(
         if next(delays, None) is None:
             contradiction = ValueError("not modified, but not the archive of the copy sent")
             raise _cannot_download(ecosystem, url, contradiction, f" after {attempts} attempts")
+
+
+def _answer_or_wait(
+    url: str, ecosystem: str, asking: _Copy | None, attempts: int, ends_at: float, deadline: RunDeadline,
+    delays: Iterator[float], sleep: Callable[[float], None],
+) -> _Answer | None:
+    """One request for `url`; the server's answer, or None after a transient failure and the wait that follows it. A
+    permanent failure, the last transient one and the end of the time are the refusal."""
+    deadline.ensure_time_left()
+    try:
+        return _download_once(url, ecosystem, ends_at, deadline.monotonic, asking)
+    except _TimeLimitReached:
+        if deadline.left() <= 0:
+            raise RunDeadlineSpent.cut(f"the {ecosystem} advisory database download") from None
+        raise _deadline_exceeded(ecosystem) from None
+    except DOWNLOAD_FAILURES as error:
+        if not _is_transient(error):
+            raise _cannot_download(ecosystem, url, error, "") from error
+        delay = next(delays, None)
+        if delay is None:
+            raise _cannot_download(ecosystem, url, error, f" after {attempts} attempts") from error
+        sleep(max(0.0, min(delay, ends_at - deadline.monotonic())))
+        return None
 
 
 def _settled(answer: _Answer, ecosystem: str, copy: _Copy | None, asked_with_copy: bool) -> _Fetched | None:
@@ -482,7 +493,7 @@ def cached_archive(cache: Path, ecosystem: str) -> Path:
 def md5_digest(data: bytes) -> str:
     """The hex md5 of `data`, the only hash the advisory server states for an archive (its ETag and `x-goog-hash` carry
     md5 and crc32c), so no other hash can be compared with the server's."""
-    return hashlib.md5(data).hexdigest()  # noqa: S324 - the server states only md5 in its ETag and x-goog-hash so no other hash can be compared
+    return hashlib.md5(data).hexdigest()  # noqa: S324 - the server states only md5 in its ETag and x-goog-hash so no other hash can be compared  # NOSONAR(S4790) - the same reason; an integrity check against the server's own statement, never a signature
 
 
 def _deadline_exceeded(ecosystem: str) -> ScannerError:
