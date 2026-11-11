@@ -39,7 +39,7 @@ def exhaustive(*layers: str, **options) -> dict:
     ],
 )
 def test_a_layers_contract_is_compared_without_the_modules_the_base_does_not_name(base, head, expected):
-    """The head's layers lose every module the base does not name, then compare as before."""
+    """LOOSE-29: The head's layers lose every module the base does not name, then compare as before."""
     assert loosened({"pyproject.toml": contracts_toml(one(base))}, {"pyproject.toml": contracts_toml(one(head))}) == expected
 
 
@@ -63,5 +63,5 @@ def test_a_layers_contract_is_compared_without_the_modules_the_base_does_not_nam
     ],
 )
 def test_a_new_sibling_loosens_nothing_unless_the_known_part_of_its_layer_changes(base, head, expected):
-    """A layer left with one known module has no sibling, so its independence says nothing."""
+    """LOOSE-30: A layer left with one known module has no sibling, so its independence says nothing."""
     assert loosened({"pyproject.toml": contracts_toml(one(base))}, {"pyproject.toml": contracts_toml(one(head))}) == expected
