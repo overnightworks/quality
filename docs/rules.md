@@ -815,8 +815,8 @@ action is not (PYTEST-1). The script is never run. The value is read line by lin
 block scalar at each file line, a folded or quoted one with each line break kept at the scalar's first line; each `${{
 }}` on a line becomes one dynamic word; a line ending in a backslash joins the next; a `#` that starts a word outside
 quotes ends the command text; the words are split by Python's `shlex`, and `&&`, `||`, `;`, `|`, `&`, `(`, `)` and a
-backtick, also one glued to `<` or `>`, end a segment. A word that holds `$(` or a backtick is split again the same way, so `"$(pytest -q)"` reads as
-`$(pytest -q)` (PYTEST-2).
+backtick, also one glued to `<` or `>`, end a segment. A word that holds `$(` or a backtick is split again the same
+way, so `"$(pytest -q)"` reads as `$(pytest -q)` (PYTEST-2).
 
 A segment is a pytest call when its command word, after assignments (`VAR=value`), `env` and `sudo` with their flags,
 `time`, `exec`, `command`, `nohup` and the shell keywords `if`, `then`, `elif`, `else`, `do`, `while`, `until`, `!` and
@@ -826,8 +826,8 @@ or a runner (`uv run`, `uvx`, `poetry run`, `pipenv run`, `pdm run`, `hatch run`
 past its flags and their values (PYTEST-3). The flags that take a value are `env` `-u`, `--unset`, `-C`, `--chdir`, `-a`
 and `--argv0`, and `sudo` `-u`, `-g`, `-D`, `-C`, `-h`, `-p`, `-r`, `-t`, `-T`, `-U` and `-R`, when the value follows as
 its own word; a long `sudo` flag with its value after a space is a named gap. The value of `env -S` (also `-S'…'` and
-`--split-string=…`) is read as the words it splits into, in its place (PYTEST-3). The word `pytest` anywhere else is no
-call: `pip install pytest`, `echo "run pytest"`, a path, a comment. A script, `make`, `tox`, `nox`, `timeout`,
+`--split-string=…`) is read as the words it splits into, in its place (PYTEST-3). The word `pytest` anywhere else is
+no call: `pip install pytest`, `echo "run pytest"`, a path, a comment. A script, `make`, `tox`, `nox`, `timeout`,
 `xvfb-run` or `docker run` starting pytest is the rule's named gap and reads as no call (PYTEST-4).
 
 The last of `-n N`, `-nN`, `-n=N`, `--numprocesses N` and `--numprocesses=N` counts, as argparse reads repeated flags.
@@ -842,7 +842,9 @@ read. A line `shlex` refuses that holds the word `pytest`, and a command word bu
 starting with `$`) in a `run:` that holds the word `pytest` outside comments, are `invalid`, because the rule sees a
 call it cannot read; without the word `pytest` in the `run:` they are no call. A command word that is a substitution
 (`$(which pytest) -q`, `"$(which pytest)" -q`, `if $(which pytest) -q; then`) in such a `run:` is `invalid` with the
-same fact, while `$(pytest -q)` is its pytest call, judged once (PYTEST-6).
+same fact, while `$(pytest -q)` is its pytest call, judged once (PYTEST-6). A second substitution on a command line
+(`cp $(a) $(b) dest`, `echo "$(date)" "$(uname)"`) is no command word; the same `$(…)` after the `)` of a `case`
+pattern is read the same way, a named gap.
 
 A comment `# pytest-workers: <reason>`, with a reason that holds a letter, clears every call of the logical line it
 stands on or directly above: for a plain or quoted value, a YAML comment above `run:` or after its value; for a block
