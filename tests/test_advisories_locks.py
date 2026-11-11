@@ -271,7 +271,7 @@ def test_one_deadline_spans_every_database_download(build_repo, publish_database
     today = datetime.date(2026, 10, 21)
     run_deadline = deadline.RunDeadline.starting(lambda: now)
     with pytest.raises(ScannerError, match="the npm advisory database download exceeded 300 seconds"):
-        advisories.scan(locks, repo, [], today, run_deadline)
+        advisories.scan(locks, repo, [], today, run_deadline, cache=None)
     assert served_databases.requested == ["/PyPI/all.zip"]
 
 
@@ -295,7 +295,7 @@ def test_the_run_ending_during_the_first_download_leaves_the_second_unrequested(
     today = datetime.date(2026, 10, 21)
     run_deadline = deadline.RunDeadline.starting(lambda: now)
     with pytest.raises(deadline.RunDeadlineSpent, match="^the run's 100 seconds are spent$"):
-        advisories.scan(locks, repo, [], today, run_deadline)
+        advisories.scan(locks, repo, [], today, run_deadline, cache=None)
     assert served_databases.requested == ["/PyPI/all.zip"]
 
 

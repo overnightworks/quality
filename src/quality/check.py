@@ -143,13 +143,13 @@ def check_workflows(
 
 def check_advisories(
     root: Path, tracked: list[str], allow_lists: AllowLists | CannotJudge, deadline: RunDeadline,
-    log: scanners.ScannerLog,
+    log: scanners.ScannerLog, cache: Path | None,
 ) -> RuleResult:
     """The allowances' `until` is judged against today's date in UTC, read here, once."""
     allowances = _required(allow_lists).advisories
     locks = {name: checkout.judged(repository.resolve_file, root, name) for name in checkout.on_disk(root, [n for n in tracked if advisories.is_lock(n)])}
     try:
-        return advisories.scan(locks, root, allowances, datetime.now(UTC).date(), deadline, log)
+        return advisories.scan(locks, root, allowances, datetime.now(UTC).date(), deadline, log, cache=cache)
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
 
@@ -387,6 +387,7 @@ class RunInputs:
     verbose: bool
     fix: Fix | None
     deadline: RunDeadline
+    cache: Path | None  # quality's user cache directory, where the advisory databases are kept
 
     @cached_property
     def allow_lists(self) -> AllowLists | CannotJudge:
@@ -574,7 +575,7 @@ def _judge_dependencies(inputs: RunInputs) -> AreaVerdict:
     runs, log = _run_log(inputs.verbose)
     advisory = _scanned(
         inputs.running, Area.DEPENDENCIES, scanners.OSV_SCANNER,
-        partial(check_advisories, inputs.root, inputs.tracked, inputs.allow_lists, inputs.deadline, log),
+        partial(check_advisories, inputs.root, inputs.tracked, inputs.allow_lists, inputs.deadline, log, inputs.cache),
     )
     return _area_verdict(Area.DEPENDENCIES, {Rule.ADVISORY: advisory}, runs)
 
@@ -611,16 +612,17 @@ def judge_repository(
     named: Iterable[Area] = (),
     fix: Fix | None = None,
     monotonic: Callable[[], float] = time.monotonic,
+    cache: Path | None = None,
 ) -> CheckResult:
     """Judges every active rule of the areas `named`, of all of them where none is, over the repository `root` lies
     in, area by area in row order, and hands each finished area and the count of tracked paths to `report_area`;
-    `running` holds the live line up around each scanner, and `verbose` keeps what each scanner said. Only one git
-    cannot list stops the run."""
+    `running` holds the live line up around each scanner, and `verbose` keeps what each scanner said; `cache` is where
+    the advisory databases are kept, None keeping none. Only one git cannot list stops the run."""
     root = checkout.work_tree_top(root)
     tracked = checkout.tracked_files(root)
     tracked_paths = len(set(tracked))
     inputs = RunInputs(
-        root, tracked, locate_ruff, locate_zizmor, running, verbose, fix, RunDeadline.starting(monotonic)
+        root, tracked, locate_ruff, locate_zizmor, running, verbose, fix, RunDeadline.starting(monotonic), cache
     )
     areas: list[AreaVerdict] = []
     for area in _judged_areas(inputs, frozenset(named) or frozenset(Area)):

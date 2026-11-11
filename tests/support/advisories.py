@@ -138,7 +138,7 @@ class PublishedDatabases(urllib.request.BaseHandler):
         self.asked: list[Asked] = []
         self.on_request: Callable[[str], None] = lambda path: None
         self.etag: Callable[[bytes], str | None] = lambda body: f'"{advisories.md5_digest(body)}"'
-        self.not_modified: Callable[[str | None, str | None], bool] = lambda sent, current: sent == current
+        self.not_modified: Callable[[str | None, str | None], bool] = lambda sent, current: sent is not None and sent == current
 
     @property
     def requested(self) -> list[str]:
@@ -161,7 +161,7 @@ class PublishedDatabases(urllib.request.BaseHandler):
         headers = Message()
         if etag is not None:
             headers["ETag"] = etag
-        if sent is not None and self.not_modified(sent, etag):
+        if self.not_modified(sent, etag):
             self._answer(path, sent, HTTPStatus.NOT_MODIFIED)
             raise urllib.error.HTTPError(request.full_url, HTTPStatus.NOT_MODIFIED, "Not Modified", headers, None)
         self._answer(path, sent, HTTPStatus.OK)

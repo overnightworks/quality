@@ -18,6 +18,7 @@ DATABASE = zipped({"GHSA-aaaa-bbbb-cccc.json": "{}"})
 TODAY = datetime.date(2026, 11, 9)
 GATEWAY_TIMEOUT = 504
 TRUNCATED = "truncated"
+NOT_MODIFIED = "not modified"  # a 304 whose ETag is not the md5 of the copy sent
 SERVED = "served"
 NOT_A_ZIP = "not a zip"
 
@@ -41,6 +42,10 @@ def scripted_server(monkeypatch):
                 self.send_header("ETag", f'"{advisories.md5_digest(body)}"')
                 self.end_headers()
                 self.wfile.write(body)
+            elif step == NOT_MODIFIED:
+                self.send_response(304)
+                self.send_header("ETag", f'"{"0" * 32}"')
+                self.end_headers()
             elif step == TRUNCATED:
                 self.send_response(200)
                 self.send_header("Content-Length", str(len(DATABASE) + 100))
@@ -90,10 +95,11 @@ def flaky_network(monkeypatch):
 
 
 @pytest.fixture
-def scan(build_repo):
+def scan(build_repo, tmp_path):
     """Scans a repository with a uv.lock; returns (the result or the refusal, the seconds slept) with a clock that
-    moves only by sleeping."""
+    moves only by sleeping. `.copy` is where the copy of the PyPI archive lives."""
     repo = build_repo({"uv.lock": uv_lock()})
+    cache = tmp_path / "cache"
     state = SimpleNamespace(now=0.0, slept=[], on_sleep=lambda: None)
 
     def sleep(seconds: float) -> None:
@@ -105,12 +111,13 @@ def scan(build_repo):
         try:
             return advisories.scan(
                 {"uv.lock": repo / "uv.lock"}, repo, [], TODAY, deadline.RunDeadline.starting(lambda: state.now),
-                sleep=sleep,
+                sleep=sleep, cache=cache,
             )
         except (ScannerError, deadline.RunDeadlineSpent) as refusal:
             return refusal
 
     run.state = state
+    run.copy = advisories.cached_archive(cache, "PyPI")
     return run
 
 
@@ -222,3 +229,15 @@ def test_a_run_that_ends_during_a_failed_attempt_cuts_the_wait_and_sends_no_furt
     assert isinstance(refusal, deadline.RunDeadlineSpent)
     assert (str(refusal), scan.state.slept, len(scripted_server.requested)) == (
         "the run's 100 seconds are spent", [0], 1)
+
+
+def test_a_not_modified_for_another_copy_and_the_failures_after_it_share_the_four_attempts(scan, scripted_server):
+    """ADVISORY-9: the plain request after a 304 that does not name the copy is one of the four attempts of the
+    database, not a fresh budget."""
+    scan.copy.parent.mkdir(parents=True)
+    scan.copy.write_bytes(DATABASE)
+    scripted_server.script = [NOT_MODIFIED, GATEWAY_TIMEOUT]
+    scripted_server.open()
+    refusal = scan()
+    assert isinstance(refusal, ScannerError)
+    assert (str(refusal).endswith(" after 4 attempts"), len(scripted_server.requested)) == (True, 4)

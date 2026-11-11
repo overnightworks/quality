@@ -191,7 +191,10 @@ def _run_check_door(
         staged_run = partial(judge_staged_change, Path("."), staged.scan_change, verbose=arguments.verbose)
         return run_check(partial(ports.judging, Path("."), staged.COMMAND, True, environment), staged_run, partial(reexecute, command=staged.COMMAND), staged.COMMAND, clock, channels)
     fix = _fix_mode(arguments)
-    repository_run = partial(judge_repository, Path("."), ports.locate_ruff, ports.locate_zizmor, verbose=arguments.verbose, named=arguments.areas, fix=fix)
+    repository_run = partial(
+        judge_repository, Path("."), ports.locate_ruff, ports.locate_zizmor, verbose=arguments.verbose, named=arguments.areas, fix=fix,
+        cache=process.user_cache_directory(environment),
+    )
     command = RERUN_COMMAND[fix]
     return run_check(partial(ports.judging, Path("."), command, False, environment), repository_run, partial(reexecute, command=command), command, clock, channels)
 
