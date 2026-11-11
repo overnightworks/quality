@@ -356,7 +356,7 @@ def _segments(text: str) -> list[list[str]]:
 
 
 def _backticks_as_dollar_substitutions(text: str) -> str:
-    """The text with each pair of backticks that no quote or backslash protects written as `$(` and `)`; a backtick left without a partner on the line, the end of a substitution that spans lines, is dropped."""
+    """The text with each pair of backticks that no quote or backslash protects written as `$(` and `)`; a last backtick left without a partner opens a substitution that spans lines when a word follows it and is dropped otherwise."""
     quote = ""
     escaped = False
     backticks: list[int] = []
@@ -373,7 +373,7 @@ def _backticks_as_dollar_substitutions(text: str) -> str:
             quote = character
     replacements = {position: "$(" if number % 2 == 0 else ")" for number, position in enumerate(backticks)}
     if len(backticks) % 2:
-        replacements[backticks[-1]] = " "
+        replacements[backticks[-1]] = "$(" if text[backticks[-1] + 1 :].strip() else " "
     return "".join(replacements.get(index, character) for index, character in enumerate(text))
 
 

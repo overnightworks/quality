@@ -815,8 +815,9 @@ action is not (PYTEST-1). The script is never run. The value is read line by lin
 block scalar at each file line, a folded or quoted one with each line break kept at the scalar's first line; each `${{
 }}` on a line becomes one dynamic word; a line ending in a backslash joins the next; a `#` that starts a word outside
 quotes ends the command text; a pair of backticks that no quote or backslash protects is read as `$(` and `)`, and a
-backtick left without a partner on the line is dropped; the words are split by Python's `shlex`, and `&&`, `||`, `;`,
-`|`, `&`, `(` and `)`, also one glued to `<` or `>`, end a segment. A word that holds `$(` is split again the same way,
+last backtick left without a partner on the line is read as `$(` when a word follows it (a substitution that spans
+lines) and dropped otherwise; the words are split by Python's `shlex`, and `&&`, `||`, `;`, `|`, `&`, `(` and `)`,
+also one glued to `<` or `>`, end a segment. A word that holds `$(` is split again the same way,
 so `"$(pytest -q)"` reads as `$(pytest -q)` (PYTEST-2).
 
 A segment is a pytest call when its command word, after assignments (`VAR=value`), `env` and `sudo` with their flags,

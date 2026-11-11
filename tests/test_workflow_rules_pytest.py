@@ -150,6 +150,8 @@ SERIAL_WITHOUT_N = [
     "uv run --python 3.14 pytest",
     "x=`pytest -q`",
     "echo `pytest -q` done",
+    "echo `pytest -q",
+    "tee out.txt <<< `pytest -q",
     "py.test -q",
     "time pytest -q",
     "exec pytest -q",
