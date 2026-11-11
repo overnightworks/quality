@@ -209,9 +209,9 @@ def unlink_config(repo: Path) -> None:
     ids=["no config", "a tracked config deleted from disk"],
 )
 def test_without_an_import_linter_config_the_row_is_a_grey_note_and_the_verdict_names_it(build_repo, capsys, files, arrange):
-    """IMPORT-3, ROW-13, CLOSING-10, CLOSING-30: without a config, or with a tracked one deleted from disk, the rule
-    only measures: the row is a grey note, nothing is found or noted, the exit is 0 and the verdict line names the
-    imports note before the duration."""
+    """IMPORT-3, IMPORT-27, ROW-13, CLOSING-10, CLOSING-30: without a config, or with a tracked one deleted from disk,
+    the rule only measures: the row is a grey note, nothing is found or noted, the exit is 0 and the verdict line names
+    the imports note before the duration."""
     repo = build_repo(files)
     if arrange:
         arrange(repo)
@@ -228,8 +228,8 @@ def test_without_an_import_linter_config_the_row_is_a_grey_note_and_the_verdict_
 
 
 def test_a_kept_contract_adds_one_clean_area_and_removes_exactly_the_imports_note(build_repo, capsys):
-    """CLOSING-6, CLOSING-10: with an unrelated finding, a run with a kept contract and one without a config find the
-    same and exit 1; only the clean count and the imports note differ."""
+    """CLOSING-6, CLOSING-10, IMPORT-28: with an unrelated finding, a run with a kept contract and one without a config
+    find the same and exit 1; only the clean count and the imports note differ."""
     runs = []
     for tracked in ({**SHOP, ".env": "A=1\n"}, {**KEPT_CONTRACT, ".env": "A=1\n"}):
         repo = build_repo(tracked)
