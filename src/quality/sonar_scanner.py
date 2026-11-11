@@ -157,18 +157,28 @@ def _will_not_change(error: Exception) -> bool:
     )
 
 
+def _timed_out(error: Exception) -> bool:
+    return isinstance(error, OSError) and web.timed_out(error)
+
+
+def _download_failure(url: str, error: Exception, failure_before: str) -> CannotJudge:
+    """The refusal for one failed attempt; a timeout keeps `failure_before`, the last attempt's real cause, in its line."""
+    if _will_not_change(error):
+        return _AnswerWillNotChange(f"could not download {url}: {error}", (ANOTHER_RELEASE,))
+    if _timed_out(error):
+        before = f"; the failure before it: {failure_before}" if failure_before else ""
+        return CannotJudge(f"could not download {url}: no answer in time{before}", (RERUN,))
+    return CannotJudge(f"could not download {url}: {error}", (RERUN,))
+
+
 def _download(url: str, fetch: Fetch, budget: Budget, sleep: web.Sleep) -> bytes:
-    last_failure = ""
+    failure_before = ""
 
     def unreadable(error: Exception) -> CannotJudge:
-        nonlocal last_failure
-        if _will_not_change(error):
-            return _AnswerWillNotChange(f"could not download {url}: {error}", (ANOTHER_RELEASE,))
-        if isinstance(error, OSError) and web.timed_out(error):
-            before = f"; the failure before it: {last_failure}" if last_failure else ""
-            return CannotJudge(f"could not download {url}: no answer in time{before}", (RERUN,))
-        last_failure = str(error)
-        return CannotJudge(f"could not download {url}: {error}", (RERUN,))
+        nonlocal failure_before
+        failure = _download_failure(url, error, failure_before)
+        failure_before = failure_before if _timed_out(error) else str(error)
+        return failure
 
     while True:
         try:
