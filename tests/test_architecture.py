@@ -692,7 +692,8 @@ PLAIN_FILE = "[metadata]\nname = shop\n"
 )
 def test_the_contract_diff_names_each_loosening_on_its_own_line(base, head, expected):
     """LOOSE-4, LOOSE-5, LOOSE-6, LOOSE-7, LOOSE-8, LOOSE-9, LOOSE-10, LOOSE-11, LOOSE-12, LOOSE-13, LOOSE-14,
-    LOOSE-15: the contracts of two sides differ by the lines the rule names, one each and sorted, and by no other."""
+    LOOSE-15, LOOSE-31, LOOSE-32, LOOSE-33, LOOSE-34: the contracts of two sides differ by the lines the rule names,
+    one each and sorted, and by no other."""
     assert loosened(base, head) == expected
 
 
