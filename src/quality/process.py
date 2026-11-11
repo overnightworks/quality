@@ -9,6 +9,8 @@ from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import NoReturn, Protocol, overload
 
+from quality import DISTRIBUTION
+
 VERSION_TIMEOUT_SECONDS = 30
 STDERR_TAIL_LINES = 5
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -43,6 +45,16 @@ def scratch_directory() -> Iterator[Path]:
             yield Path(scratch)
     finally:
         signal.signal(signal.SIGTERM, previous)
+
+
+def user_cache_directory(environment: Mapping[str, str]) -> Path | None:
+    """Where quality keeps what outlives a run for its user: `$XDG_CACHE_HOME` where it is an absolute path, else
+    `~/.cache`, below `overnightworks-quality`; None where neither is, which keeps nothing."""
+    for variable, below in (("XDG_CACHE_HOME", ()), ("HOME", (".cache",))):
+        base = Path(environment.get(variable, ""))
+        if base.is_absolute():
+            return base.joinpath(*below, DISTRIBUTION)
+    return None
 
 
 def attribute_free_git_environment(empty_home: Path) -> dict[str, str]:

@@ -244,11 +244,8 @@ def judge_here(root: Path, command: str, staged: bool, environment: Mapping[str,
 
 def release_records(environment: Mapping[str, str]) -> Path | None:
     """Where quality keeps one empty file per release its remote showed at its commit; None keeps none, so every run asks."""
-    for variable, below in (("XDG_CACHE_HOME", ()), ("HOME", (".cache",))):
-        base = Path(environment.get(variable, ""))
-        if base.is_absolute():
-            return base.joinpath(*below, DISTRIBUTION, "releases")
-    return None
+    cache = process.user_cache_directory(environment)
+    return None if cache is None else cache / "releases"
 
 
 def is_recorded(records: Path | None, commit: str, release: str) -> bool:

@@ -127,9 +127,10 @@ it. quality builds or runs a pinned commit only after quality's remote showed th
 asked before every fetch, and remembered per machine by a record that only a matched answer writes. The door reads that
 pin through `gh` at the pull request's merge commit and checks every listed name before it shapes a request; for
 quality itself it runs the installed quality, never the pull request's own code. The Sonar token's boundary stands in
-[sonar](sonar.md#quality-sonar-findings). The advisory archive is an unsigned zip over TLS and is never cached
-([rules](rules.md)). Agents are cooperative and share the operator's `gh` login, so the door is the agreed path, not a
-lock; a real lock (a token without admin rights) belongs to the machine's setup, not to quality.
+[sonar](sonar.md#quality-sonar-findings). The advisory archive is an unsigned zip over TLS; a local copy is used only
+when the server's ETag and the copy's own md5 agree ([rules](rules.md)). Agents are cooperative and share the operator's
+`gh` login, so the door is the agreed path, not a lock; a real lock (a token without admin rights) belongs to the
+machine's setup, not to quality.
 
 **Proof strategy.** A test's kind, `unit` or `integration`, follows from the markers in `pyproject.toml`, and
 `tests/conftest.py` fails a unit test that starts a process or opens a socket. A fake `mise` serves the scanners unless a
