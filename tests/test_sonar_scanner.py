@@ -270,23 +270,23 @@ def test_a_key_file_that_is_not_exactly_the_pinned_key_is_refused_before_any_dow
 
 
 @pytest.mark.parametrize(
-    ("variable", "value", "setter_name"),
+    ("variable", "value", "setter_kind", "setter_name"),
     [
-        (sonar_scanner.VERSION_VARIABLE, None, sonar_scanner.SCANNER_JOB),
-        (sonar_scanner.VERSION_VARIABLE, "8.1.0", sonar_scanner.SCANNER_JOB),
-        (sonar_scanner.VERSION_VARIABLE, "8.1.0.x", sonar_scanner.SCANNER_JOB),
-        (sonar_scanner.FINGERPRINT_VARIABLE, None, sonar_scanner.INSTALL_STEP),
-        (sonar_scanner.FINGERPRINT_VARIABLE, FINGERPRINT[:-1], sonar_scanner.INSTALL_STEP),
-        (sonar_scanner.FINGERPRINT_VARIABLE, "Z" * 40, sonar_scanner.INSTALL_STEP),
-        (sonar_scanner.TOOL_CACHE_VARIABLE, None, sonar_scanner.INSTALL_STEP),
+        (sonar_scanner.VERSION_VARIABLE, None, "job", sonar_scanner.SCANNER_JOB),
+        (sonar_scanner.VERSION_VARIABLE, "8.1.0", "job", sonar_scanner.SCANNER_JOB),
+        (sonar_scanner.VERSION_VARIABLE, "8.1.0.x", "job", sonar_scanner.SCANNER_JOB),
+        (sonar_scanner.FINGERPRINT_VARIABLE, None, "step", sonar_scanner.INSTALL_STEP),
+        (sonar_scanner.FINGERPRINT_VARIABLE, FINGERPRINT[:-1], "step", sonar_scanner.INSTALL_STEP),
+        (sonar_scanner.FINGERPRINT_VARIABLE, "Z" * 40, "step", sonar_scanner.INSTALL_STEP),
+        (sonar_scanner.TOOL_CACHE_VARIABLE, None, "step", sonar_scanner.INSTALL_STEP),
     ],
     ids=["no version", "three-part version", "version with a letter", "no fingerprint", "short fingerprint", "fingerprint that is no hex", "no tool cache"],
 )
-def test_a_missing_or_malformed_input_is_exit_2_naming_the_variable_and_the_step(scene, drive, variable, value, setter_name):
+def test_a_missing_or_malformed_input_is_exit_2_naming_the_variable_and_the_step(scene, drive, variable, value, setter_kind, setter_name):
     """SONAR-123: the line names the variable and the place that sets it, the job env for the version and the install step for the rest; nothing is fetched"""
     code, out, err = drive({variable: value})
     assert (code, out, scene.requested) == (2, "", [])
-    assert (variable in err, setter_name in err) == (True, True)
+    assert (variable in err, f'{setter_kind} "{setter_name}"' in err) == (True, True)
 
 
 def test_a_failed_download_is_retried_while_the_deadline_has_time_and_then_ends_naming_the_url(scene, drive):
