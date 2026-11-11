@@ -125,12 +125,12 @@ check over and leaves the key servers out of the trust path (SONAR-121):
   otherwise the command stops before any download with a line that names the file and says to replace it (SONAR-116).
 - It downloads the zip and its `.asc` from `binaries.sonarsource.com`, retrying a failed attempt while the deadline has
   time left; an answer that no retry changes (a redirect or a 4xx other than 429) ends the download at once with its
-  status and the step to set `SCANNER_VERSION` to another release. One deadline of `COMMAND_DEADLINE_SECONDS` covers the whole command: a download is cut at the deadline
-  however slowly its name lookup, connect, headers or body arrive, and each `gpg` call and `unzip` get the smaller of
-  their own limit and the time left. A failed or stalled download ends with one line naming the
-  URL and `re-run this run's failed jobs`; a deadline spent in `gpg` or `unzip` names that program and says the same
-  (SONAR-115). The install step's `timeout-minutes` is larger than the deadline plus the start-up of `uv` and Python
-  (SONAR-120).
+  status and the step to set `SCANNER_VERSION` to another release. One deadline of `COMMAND_DEADLINE_SECONDS` covers
+  the whole command: a download is cut at the deadline however slowly its name lookup, connect, headers or body arrive,
+  and each `gpg` call and `unzip` get the smaller of their own limit and the time left. A failed or stalled download
+  ends with one line naming the URL and `re-run this run's failed jobs`; a deadline spent in `gpg` or `unzip` names that
+  program and says the same (SONAR-115). The install step's `timeout-minutes` is larger than the deadline plus the
+  start-up of `uv` and Python (SONAR-120).
 - It installs only when `gpg --status-fd` reports `GOODSIG` and a `VALIDSIG` whose last field, the primary key's
   fingerprint, is the pinned one, and reports none of `EXPKEYSIG`, `REVKEYSIG`, `BADSIG` or `ERRSIG`; the exit status
   alone decides nothing, because `gpg` exits `0` for a signature by an expired key. A `KEYEXPIRED` line alone refuses
@@ -143,9 +143,9 @@ check over and leaves the key servers out of the trust path (SONAR-121):
 - The scanner is unpacked beside its place in the runner tool cache and moved there whole; the `.complete` marker the
   action looks for is written last (SONAR-118). The action finds the directory and the marker, prints
   `Using cached Sonar Scanner CLI`, and downloads and verifies nothing; a marker without its directory is no install
-  and is removed. Before `unzip` runs, every entry name must be unique and its own normal form inside the scanner's folder and
-  every link's target, followed through the links the zip declares, must stay inside it, so no entry reaches outside
-  whatever `unzip` does.
+  and is removed. Before `unzip` runs, every entry name must be unique and its own normal form inside the
+  scanner's folder, and every link's target, followed through the links the zip declares, must stay inside it, so no
+  entry reaches outside whatever `unzip` does.
 - The scan sets `scannerBinariesUrl` to a host under `.invalid`, which a cache hit never reads: a later action version
   that looks elsewhere fails at the download, before any key fetch, instead of falling back to a key server (SONAR-119).
 
