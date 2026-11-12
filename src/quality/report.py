@@ -186,6 +186,7 @@ class NoteEvent(StrEnum):
     LOWERED = "lowered"
     MOVE = "move"
     MOVED = "moved"
+    NOT_CALLED = "not called"
     NOT_MEASURED = "not measured"
     OPEN = "open"
     RECORD = "record"

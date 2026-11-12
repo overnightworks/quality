@@ -12,6 +12,7 @@ from quality.fleet import (
     COLUMNS,
     MATRIX_COLUMNS,
     Declared,
+    Gate,
     ReleaseTagsError,
     gate_release,
     pin_cell,
@@ -392,6 +393,11 @@ def test_a_rule_without_a_release_is_not_released_on_a_pinned_gate():
     assert rule_cell(unreleased, release, declared()) == "not released"
 
 
+def test_catalog_check_reads_report_only_on_main():
+    """FLEET-98: the rule only reports, so its cell on main is report-only."""
+    assert rule_cell(Rule.CATALOG_CHECK.release, Gate.MAIN, declared()) == "report-only"
+
+
 @pytest.mark.parametrize(
     ("files", "pin", "code", "cell_words"),
     [
@@ -475,5 +481,5 @@ def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces
     assert MATRIX_COLUMNS[5:] == (
         "size", "clone", "job-timeout", "import-contract", "claude-md", "agents-md", "root-layout", "file-suffix",
         "script-name", "script-header", "test-layout", "test-import", "python-floor",
-        "python-security", "python-print", "pr-concurrency", "pytest-workers", "runtime-install", "advisory",
+        "python-security", "python-print", "pr-concurrency", "pytest-workers", "runtime-install", "catalog-check", "advisory",
     )
