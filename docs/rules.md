@@ -986,7 +986,7 @@ makes the reading no call (CATALOG-13). The recipe is followed as make reads a p
 prerequisites' recipes, then the recipes of the `make` calls in them, each target once (CATALOG-14 to CATALOG-18). A `-`
 prefixed line, a line of a conditional or of a define block, a target whose recipe is given by two rules or by a
 double-colon rule, and a file with `.IGNORE`, `.RECIPEPREFIX`, `.ONESHELL`, an include or a `MAKEFLAGS` assignment are no
-call (CATALOG-16, CATALOG-19, CATALOG-20). A `Makefile` that is not UTF-8 is exit `2` naming the file, when a counted step
+call (CATALOG-16, CATALOG-17, CATALOG-19, CATALOG-20). A `Makefile` that is not UTF-8 is exit `2` naming the file, when a counted step
 has a `make` goal and no step calls the check directly (CATALOG-23). A word in an `echo`, a script, `tox`, `nox`, a
 composite action or a reusable workflow called through `uses:` is no call, and a command built at run time is read as no
 call (CATALOG-9); every other form the reading does not follow is no call too (CATALOG-22). A step with `continue-on-error: true` or with a `working-directory` other than `.` does not

@@ -316,6 +316,18 @@ def test_a_make_goal_that_does_not_reach_the_check_gets_the_note_with_the_new_fa
     assert NOT_CALLED_LINE in normalised(out)
 
 
+def test_a_recipe_line_whose_command_is_built_at_run_time_gets_the_note(build_repo):
+    """CATALOG-5, CATALOG-22: `lint` reaches a line whose command word is a make variable; that line is no call, so the note prints."""
+    repo = build_repo(
+        {
+            "pyproject.toml": pyproject(DECLARED),
+            WORKFLOW: workflow("make lint"),
+            MAKEFILE: "lint:\n\t$(UV) run design-catalogs --check\n",
+        }
+    )
+    assert rule_notes(repo, Rule.CATALOG_CHECK) == [NOT_CALLED]
+
+
 def test_a_gnumakefile_beside_the_makefile_makes_the_whole_reading_no_call(build_repo):
     """CATALOG-13: make reads `GNUmakefile` first, so a tracked one beside the `Makefile` gives the note."""
     repo = build_repo(

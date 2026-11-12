@@ -117,6 +117,35 @@ def test_a_name_that_starts_with_a_directive_word_is_no_directive(text, goal, li
 
 
 @pytest.mark.parametrize(
+    ("text", "goal", "lines"),
+    [
+        pytest.param(
+            makefile("words-check:", "\techo $$HOME"),
+            "words-check",
+            (RecipeLine("echo $HOME", 2),),
+            id="a double dollar becomes one dollar",
+        ),
+        pytest.param(
+            makefile("lint:", "\t${MAKE} words-check", "words-check:", f"\t{CHECK}"),
+            "lint",
+            (RecipeLine("make words-check", 2), RecipeLine(CHECK, 4)),
+            id="a braced MAKE becomes make and its goal is followed",
+        ),
+        pytest.param(
+            makefile("lint:", "\techo $$(MAKE) words-check", "words-check:", f"\t{CHECK}"),
+            "lint",
+            (RecipeLine("echo $(MAKE) words-check", 2),),
+            id="a double dollar before MAKE stays text and its goal is not followed",
+        ),
+    ],
+)
+def test_make_and_dollar_substitutions_read_as_the_manual_gives_them(text, goal, lines):
+    """CATALOG-17, CATALOG-18: `$$` becomes `$`, `${MAKE}` becomes `make` and is followed as a make call, and `$$(MAKE)` is
+    the text `$(MAKE)`, which is no make call."""
+    assert reached_recipe_lines(text, [goal]) == lines
+
+
+@pytest.mark.parametrize(
     ("text", "goals"),
     [
         pytest.param(COVERED, ["nope"], id="a goal the file does not define"),
@@ -173,8 +202,9 @@ def test_a_name_that_starts_with_a_directive_word_is_no_directive(text, goal, li
     ],
 )
 def test_each_gap_reads_as_no_call(text, goals):
-    """CATALOG-12, CATALOG-14, CATALOG-16, CATALOG-19, CATALOG-20, CATALOG-22: an undefined goal, a line the rule does not
-    follow, a whole file with a directive that the scan cannot see through; each reads with no recipe line that is the check."""
+    """CATALOG-12, CATALOG-14, CATALOG-16, CATALOG-17, CATALOG-19, CATALOG-20, CATALOG-22: an undefined goal, a line the rule
+    does not follow, a `-` prefixed line, a whole file with a directive that the scan cannot see through; each reads with no
+    recipe line that is the check."""
     assert CHECK not in [line.text for line in reached_recipe_lines(text, goals)]
 
 
