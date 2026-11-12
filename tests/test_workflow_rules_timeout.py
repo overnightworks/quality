@@ -427,7 +427,7 @@ def test_no_key_of_the_configuration_switches_the_rule_off(build_repo, capsys):
     assert (code, shape(rule_findings(repo, Rule.JOB_TIMEOUT))) == (2, [missing()])
 
 
-HAND_FIX = "delete or lower the entry in quality/baseline.toml by hand"
+FALL_FIX = "quality check --fix"
 
 
 def held(entries: dict[str, dict[str, int]]) -> str:
@@ -452,15 +452,15 @@ def grew(raw: str, entry: int, path: str = WORKFLOW, line: int = 6):
 
 
 def can_fall(raw: str, entry: int, path: str = WORKFLOW, line: int = 6):
-    return (CAN_FALL, path, line, f"job e2e has timeout-minutes {raw} · ceiling {entry}", HAND_FIX)
+    return (CAN_FALL, path, line, f"job e2e has timeout-minutes {raw} · ceiling {entry}", FALL_FIX)
 
 
 def gone(entry: int, path: str = WORKFLOW, job_id: str = "e2e"):
-    return (CAN_FALL, path, None, f"job {job_id} is gone · ceiling {entry}", HAND_FIX)
+    return (CAN_FALL, path, None, f"job {job_id} is gone · ceiling {entry}", FALL_FIX)
 
 
 def no_debt(entry: int, path: str = WORKFLOW, job_id: str = "e2e"):
-    return (CAN_FALL, path, None, f"job {job_id} has no debt · ceiling {entry}", HAND_FIX)
+    return (CAN_FALL, path, None, f"job {job_id} has no debt · ceiling {entry}", FALL_FIX)
 
 
 def judged_against(build_repo, text: str, entry: int | None | str):

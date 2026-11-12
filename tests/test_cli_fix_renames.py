@@ -605,10 +605,11 @@ def test_a_job_entry_git_cannot_place_refuses_and_writes_nothing(pull_request, c
 
 
 def test_a_workflow_move_the_index_does_not_record_is_not_followed(pull_request, capsys):
-    """TIMEOUT-19, FIX-41: a workflow only moved on disk keeps its job entry under the old path, which `check` calls
-    gone."""
+    """TIMEOUT-19, TIMEOUT-21, FIX-41: a workflow only moved on disk is not followed, so its job entry under the old path
+    is dropped as gone and the unindexed new file records nothing."""
     repo = workflow_held(pull_request)
     (repo / OLD_WORKFLOW).rename(repo / NEW_WORKFLOW)
-    before = digest(repo)
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
-    assert (code, "moved" in out, "job e2e is gone" in out, digest(repo)) == (1, False, True, before)
+    printed = squashed(out)
+    assert (code, "moved" in out, f"{OLD_WORKFLOW} dropped job e2e is gone · was 40 minutes" in printed) == (0, False, True), out
+    assert (repo / BASELINE_PATH).read_text() == rendered("[clones]\n[job_minutes]\n")

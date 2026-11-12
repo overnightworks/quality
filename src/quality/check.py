@@ -514,7 +514,8 @@ def _fix_ceiling(inputs: RunInputs, sources: dict[str, bytes], held: baseline_fi
     if inputs.fix is Fix.DRY_RUN:
         gone = _with_what_they_held(gone, followed.ceiling.size)
     lowered = ratchet.lower_ceiling(followed.ceiling, measurements, pairs, gone)
-    return replace(lowered, changes=(*followed.changes, *lowered.changes))
+    jobs = workflow_rules.lower_job_entries(inputs.root, inputs.tracked, lowered.ceiling)
+    return replace(jobs, changes=(*followed.changes, *lowered.changes, *jobs.changes))
 
 
 def _reported(ceiling: ratchet.CeilingFix | DryRun) -> ratchet.CeilingFix:
