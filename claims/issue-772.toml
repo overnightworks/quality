@@ -1,8 +1,0 @@
-claim_id = "45a39d700b6348408984675002f95f76"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "2ef93af31753d5b9da0abb6adcf9b3b29e81cef1"
-branch = "claude/issue-772-runtime-install"
-scope = ["docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/report.py", "src/quality/rules.py", "src/quality/run_script.py", "src/quality/workflow_rules.py", "tests/test_cli_help.py", "tests/test_fleet_matrix.py", "tests/test_run_script.py", "tests/test_workflow_rules_install.py", "tests/test_workflow_rules_pytest.py"]
-opened_commit = "91ceabd56f6040f4f4c02bb2ac931291910cef44"
-whole_reason = "The rule is its reader: the Rule member without the reading is dead code, the segment record has no caller until the rule uses it, and the marker and the cannot-read class are what keep it from passing an install silently; five production files and about 160 lines, about 60 of them moved with their generalisation, are one flow, three of the files one-line registrations, that no smaller cut keeps honest."
