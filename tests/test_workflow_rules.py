@@ -20,7 +20,7 @@ NO_CONCURRENCY = "no concurrency"
 NO_FLAG = "no cancel-in-progress"
 NOT_LISTED_GROUP = "group is not a listed form"
 NOT_LISTED_FLAG = "cancel-in-progress is not a listed form"
-JOBS = "permissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: 'true'\n"
+JOBS = "permissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n      - run: 'true'\n"
 ON_PULL_REQUEST = "on: pull_request\n"
 ON_COMBINED = "on: [pull_request, pull_request_review]\n"
 

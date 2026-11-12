@@ -439,18 +439,18 @@ def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_re
 
 def test_a_run_without_a_baseline_notes_the_debt_as_not_recorded_and_says_it_is_not_enforced(build_repo, capsys):
     """O21, CLOSING-8, CLOSING-30: with no ceiling file the debt row counts the entries over the thresholds and ends in
-    the mode measured only, the verdict says `debt measured, not enforced` and the exit is 0."""
+    the mode measured only, the verdict says `debt ceiling measured, not enforced` and the exit is 0."""
     repo = build_repo({**CLEAN_FILES, **KEPT_CONTRACT, "src/big.py": "x = 1\n" * 800})
     code, out, err = frame_run(capsys, repo)
     fact = area_fact("\n".join(out), Area.DEBT)
     assert (code, err) == (0, [])
     assert (leading_count(fact), fact.split(SEPARATOR)[-1]) == (recorded_entries(repo), check.Outcome.MEASURED_ONLY.value)
-    assert out[-1] == f"✓ clean · 7 areas · debt measured, not enforced · {ZERO_SECONDS}"
+    assert out[-1] == f"✓ clean · 7 areas · debt ceiling measured, not enforced · {ZERO_SECONDS}"
 
 
 def test_a_baseline_without_clones_is_partly_measured_only(build_repo, capsys):
     """O21, CLOSING-9: a ceiling file with no clones table makes the debt row count the clone pairs and end in the
-    partly mode, and the verdict says `debt partly measured, not enforced`."""
+    partly mode, and the verdict says `debt ceiling partly measured, not enforced`."""
     repo = build_repo({**CLEAN_FILES, **KEPT_CONTRACT, BASELINE_PATH: "", "src/a.py": function("first", "a", "b"), "src/b.py": function("second", "c", "d")})
     code, out, err = frame_run(capsys, repo)
     fact = area_fact("\n".join(out), Area.DEBT)
@@ -460,7 +460,7 @@ def test_a_baseline_without_clones_is_partly_measured_only(build_repo, capsys):
     assert mode != check.Outcome.MEASURED_ONLY.value
     assert door_in(repo, *FIX_WORDS) == 0
     assert leading_count(fact) == len(baseline_file.read_baseline(repo).clones) == 1
-    assert out[-1] == f"✓ clean · 7 areas · debt partly measured, not enforced · {ZERO_SECONDS}"
+    assert out[-1] == f"✓ clean · 7 areas · debt ceiling partly measured, not enforced · {ZERO_SECONDS}"
 
 
 def test_findings_in_two_areas_follow_their_rows_and_end_in_the_counted_verdict(build_repo, capsys):

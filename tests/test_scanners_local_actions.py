@@ -12,7 +12,7 @@ from tests.support.scanners import fake_scanner, fake_zizmor, recording
 
 def workflow_using(uses: str) -> str:
     """A workflow that holds no finding of its own but its one step, which is on line 7."""
-    return f"on: push\npermissions: {{}}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: {uses}\n"
+    return f"on: push\npermissions: {{}}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n      - uses: {uses}\n"
 
 
 def action_using(uses: str) -> str:
@@ -41,7 +41,7 @@ def test_an_action_without_a_ref_stays_a_finding(build_repo, installed_scanners,
     """The ignore holds for the `$/` form alone: a remote action with no ref is still invalid, though zizmor cannot load that workflow."""
     workflow = ".github/workflows/w.yml"
     check_door(build_repo({workflow: workflow_using("actions/checkout")}))
-    assert (f"{workflow}:7", FindingEvent.INVALID) in workflow_rows(capsys)
+    assert (f"{workflow}:8", FindingEvent.INVALID) in workflow_rows(capsys)
 
 
 @pytest.mark.scanner

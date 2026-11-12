@@ -37,7 +37,7 @@ def refused(repo: Path, capsys, **keywords) -> tuple[int, str, str]:
 
 
 def judged_repository(build_repo) -> Path:
-    return build_repo({".github/workflows/w.yml": "on: push\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n", "uv.lock": uv_lock(), "src/a.py": "x = 1\n"})
+    return build_repo({".github/workflows/w.yml": "on: push\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n      - run: echo hi\n", "uv.lock": uv_lock(), "src/a.py": "x = 1\n"})
 
 
 @pytest.mark.parametrize(

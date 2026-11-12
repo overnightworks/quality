@@ -424,7 +424,7 @@ def local_reusable_call(prefix: str) -> str:
 
 
 def runs_on(label: str) -> str:
-    return f"on: push\npermissions: {{}}\njobs:\n  j:\n    runs-on: {label}\n    steps:\n      - run: 'true'\n"
+    return f"on: push\npermissions: {{}}\njobs:\n  j:\n    runs-on: {label}\n    timeout-minutes: 15\n    steps:\n      - run: 'true'\n"
 
 
 INVALID_RUNS_ON = runs_on("${{ foo( }}")
@@ -474,7 +474,7 @@ def test_a_runner_label_github_hosts_passes_and_a_misspelt_one_stays_a_finding(w
 
 
 ONLY_AN_ONLINE_AUDIT_FLAGS_THIS = (
-    "on: push\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+    "on: push\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n"
     "      - uses: actions/checkout@0000000000000000000000000000000000000000\n"
     "        with:\n          persist-credentials: false\n"
 )
@@ -525,7 +525,7 @@ def test_a_shellcheck_on_path_never_runs_during_workflow_lint(build_repo, instal
     (planted / "shellcheck").write_text(f"#!/bin/sh\ntouch {marker}\necho '[]'\n")
     (planted / "shellcheck").chmod(0o755)
     monkeypatch.setenv("PATH", f"{planted}:{os.environ['PATH']}")
-    workflow = "on: push\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo $FOO\n"
+    workflow = "on: push\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n      - run: echo $FOO\n"
     scan(build_repo({".github/workflows/w.yml": workflow}))
     assert not marker.exists()
 
