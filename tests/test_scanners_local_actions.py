@@ -11,7 +11,7 @@ from tests.support.scanners import fake_scanner, fake_zizmor, recording
 
 
 def workflow_using(uses: str) -> str:
-    """A workflow that holds no finding of its own but its one step, which is on line 7."""
+    """A workflow that holds no finding of its own but its one step."""
     return f"on: push\npermissions: {{}}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n      - uses: {uses}\n"
 
 
