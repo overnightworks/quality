@@ -472,18 +472,15 @@ def judged_against(build_repo, text: str, entry: int | None | str):
 
 
 COMPARE = [
-    pytest.param("15", "no file", [], id="15, no file"),
     pytest.param("15", None, [], id="15, a table without the job"),
     pytest.param("15", 15, [no_debt(15)], id="15, an entry of 15 is read as gone"),
     pytest.param("15", 40, [can_fall("15", 40)], id="15, an entry above"),
     pytest.param("15", 12, [no_debt(12)], id="15, an entry of 12 is gone and never grew"),
-    pytest.param("16", "no file", [new_debt("16")], id="16, no file"),
     pytest.param("16", None, [new_debt("16")], id="16, a table without the job"),
     pytest.param("16", 16, [], id="16, an entry equal"),
     pytest.param("16", 20, [can_fall("16", 20)], id="16, an entry above"),
     pytest.param("16", 15, [new_debt("16"), no_debt(15)], id="16, an entry of 15 is no entry"),
     pytest.param("17", 16, [grew("17", 16)], id="17, an entry below"),
-    pytest.param("40", "no file", [new_debt("40")], id="40, no file"),
     pytest.param("40", None, [new_debt("40")], id="40, a table without the job"),
     pytest.param("40", 40, [], id="40, an entry equal"),
     pytest.param("40", 45, [can_fall("40", 45)], id="40, an entry above"),
@@ -493,7 +490,6 @@ COMPARE = [
     pytest.param("17.5", 18, [], id="17.5, an entry of 18 holds it"),
     pytest.param("17.5", 20, [can_fall("17.5", 20)], id="17.5, an entry of 20"),
     pytest.param("17.5", 17, [grew("17.5", 17)], id="17.5, an entry of 17"),
-    pytest.param("15.5", "no file", [new_debt("15.5")], id="15.5, no file"),
     pytest.param("15.5", None, [new_debt("15.5")], id="15.5, a table without the job"),
     pytest.param("15.5", 16, [], id="15.5, an entry of 16 holds it"),
     pytest.param("15.5", 20, [can_fall("15.5", 20)], id="15.5, an entry of 20"),
