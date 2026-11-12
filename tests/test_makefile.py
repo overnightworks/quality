@@ -166,6 +166,10 @@ def test_a_name_that_starts_with_a_directive_word_is_no_directive(text, goal, li
         pytest.param(makefile("-include x.mk", COVERED), ["lint"], id="a -include line"),
         pytest.param(makefile("sinclude x.mk", COVERED), ["lint"], id="a sinclude line"),
         pytest.param(makefile("MAKEFLAGS += -i", COVERED), ["lint"], id="an assignment to MAKEFLAGS"),
+        pytest.param(makefile("export MAKEFLAGS = -i", COVERED), ["lint"], id="an export of MAKEFLAGS"),
+        pytest.param(makefile("override MAKEFLAGS += -i", COVERED), ["lint"], id="an override of MAKEFLAGS"),
+        pytest.param(makefile("private MAKEFLAGS := -i", COVERED), ["lint"], id="a private assignment to MAKEFLAGS"),
+        pytest.param(makefile("MAKEFLAGS ::= -i", COVERED), ["lint"], id="a double-colon assignment to MAKEFLAGS"),
     ],
 )
 def test_each_gap_reads_as_no_call(text, goals):
