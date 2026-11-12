@@ -1,8 +1,0 @@
-claim_id = "350a16cdd3074c95b8b44bf6f76745f6"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "b4295fa913b8ad8acd83dd2c24c53ba8e264f06e"
-branch = "claude/issue-803-fix-job-renames"
-scope = ["docs/rules.md", "src/quality/check.py", "src/quality/ratchet.py", "tests/test_cli_fix_renames.py", "tests/test_ratchet_follow.py"]
-opened_commit = "db30a6c68cebe95665c137ad274c557976a217d0"
-whole_reason = "Two production files (ratchet.py, and four lines of check.py so that a dry run judges the made ceiling) with the document paragraph and the two test files that own the rename behaviour"
