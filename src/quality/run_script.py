@@ -3,12 +3,14 @@
 A script becomes logical lines (joined at a trailing backslash, comments dropped), each line becomes segments of words
 (split at `&&`, `||`, `;`, `|`, `&`, `(` and `)`, backticks read as `$(…)`), each segment's command word is found past
 assignments, prefix words and the wrappers `env`, `sudo`, `timeout`, `nice` and `xargs` with their flags, and a shell's
-`-c` string is split into segments of its own. The module reads text only and imports no other module of quality."""
+`-c` string is split into segments of its own. Each segment keeps the separator that opened it, the arguments of a call of
+a named tool are read behind its interpreter or runner, and the loop over a line's segments takes the rule's judge. The
+module reads text only and imports no other module of quality."""
 
 import re
 import shlex
-from collections.abc import Iterator
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator, Sequence
+from dataclasses import dataclass, replace
 from pathlib import PurePosixPath
 
 import yaml
@@ -56,7 +58,56 @@ WRAPPER_OPERANDS = {"timeout": 1}
 SHELLS = frozenset({"sh", "bash", "dash", "zsh", "ksh"})
 SHELL_LONG_VALUE_FLAGS = frozenset({"--rcfile", "--init-file"})
 SUBSTITUTION = re.compile(r"\$\(")
-LONE_DOLLAR = ["$"]
+LONE_DOLLAR = ("$",)
+DYNAMIC_COMMAND = re.compile(r"\$[\w{]")
+C_STRING_OPENER = "-c"
+PIPES = frozenset({"|", "|&"})
+PYTHON_INTERPRETER = re.compile(r"python(?:3(?:\.\d+t?)?)?")
+PYPY_INTERPRETER = re.compile(r"pypy(?:3(?:\.\d+)?)?")
+INTERPRETERS = (PYTHON_INTERPRETER, PYPY_INTERPRETER)
+INTERPRETER_VALUE_FLAGS = frozenset({"-W", "-X", "--check-hash-based-pycs"})
+RUNNERS = {
+    ("uv", "run"): False,
+    ("poetry", "run"): False,
+    ("pipenv", "run"): False,
+    ("pdm", "run"): False,
+    ("hatch", "run"): False,
+    ("coverage", "run"): False,
+    ("uvx",): True,
+    ("npx",): True,
+    ("bunx",): True,
+    ("npm", "exec"): True,
+    ("pnpm", "exec"): True,
+    ("pnpm", "dlx"): True,
+    ("yarn",): True,
+}
+
+
+@dataclass(frozen=True)
+class Segment:
+    """The words of one command and the separator word that opened it: `|`, `|&`, `&&`, `||`, `;`, `&`, `(`, `-c` for the
+    segment a shell's `-c` string opens, empty at the start of a line; `depth` counts the `-c` strings the segment stands in, so a
+    pipeline is the run of segments of one depth joined by pipes."""
+
+    words: tuple[str, ...]
+    opened_by: str
+    depth: int = 0
+
+
+@dataclass(frozen=True)
+class Tool:
+    """A tool a rule looks for: its command words, and the module a Python interpreter runs with `-m`."""
+
+    commands: frozenset[str]
+    module: str
+
+
+@dataclass
+class _Open:
+    """A segment while the lexer fills it."""
+
+    words: list[str]
+    opened_by: str
 
 
 @dataclass(frozen=True)
@@ -111,13 +162,14 @@ def _without_comment(line: str) -> str:
     return line
 
 
-def segments(text: str) -> list[list[str]]:
-    """The words of a line, split at `&&`, `||`, `;`, `|`, `&`, `(` and `)`, a backtick substitution read as `$(…)`; a word that holds a substitution is split again, and a shell's `-c` string is read as segments after them."""
-    result: list[list[str]] = []
-    for words in _lex(_backticks_as_dollar_substitutions(text), False, [])[0]:
-        if words:
-            result.append(words)
-            result.extend(_shell_script_segments(words))
+def segments(text: str) -> list[Segment]:
+    """The words of a line, split at `&&`, `||`, `;`, `|`, `&`, `(` and `)`, a backtick substitution read as `$(…)`; a word that holds a substitution is split again, except the string of a shell's `-c`, which is read as segments of its own after the shell's."""
+    result: list[Segment] = []
+    for part in _lex(_backticks_as_dollar_substitutions(text), False, _Open([], ""))[0]:
+        if part.words:
+            segment = Segment(tuple(part.words), part.opened_by)
+            result.append(segment)
+            result.extend(_shell_script_segments(segment.words))
     return result
 
 
@@ -143,41 +195,41 @@ def _backticks_as_dollar_substitutions(text: str) -> str:
     return "".join(replacements.get(index, character) for index, character in enumerate(text))
 
 
-def _lex(text: str, after_substitution: bool, leading: list[str]) -> tuple[list[list[str]], bool]:
-    """The segments of `text` after the `leading` words of its segment, and whether it ends on the separator that closes a substitution that stands in a command with a command word; a lone `$` right after one opens the next substitution of the same command and is dropped."""
+def _lex(text: str, after_substitution: bool, leading: _Open) -> tuple[list[_Open], bool]:
+    """The segments of `text` after the words of the `leading` segment, and whether it ends on the separator that closes a substitution that stands in a command with a command word; a lone `$` right after one opens the next substitution of the same command and is dropped."""
     lexer = shlex.shlex(text, posix=True, punctuation_chars="".join(sorted(LEXER_PUNCTUATION)))
     lexer.whitespace_split = True
     lexer.commenters = ""
-    segments: list[list[str]] = [list(leading)]
+    parts: list[_Open] = [_Open(list(leading.words), leading.opened_by)]
     openers: list[int] = []
     for word in lexer:
         if word and set(word) <= SEPARATOR_CHARACTERS:
-            after_substitution = _read_separator(word, segments, openers)
-            segments.append([])
-        elif word == "$" and after_substitution and not segments[-1]:
+            after_substitution = _read_separator(word, parts, openers)
+            parts.append(_Open([], word))
+        elif word == "$" and after_substitution and not parts[-1].words:
             after_substitution = False
-        elif SUBSTITUTION.search(word):
-            inner, after_substitution = _lex(word, after_substitution, segments[-1])
-            segments[-1:] = inner
+        elif SUBSTITUTION.search(word) and not _is_c_string(parts[-1].words, word):
+            inner, after_substitution = _lex(word, after_substitution, parts[-1])
+            parts[-1:] = inner
         else:
-            segments[-1].append(word)
+            parts[-1].words.append(word)
             after_substitution = False
-    return segments, after_substitution
+    return parts, after_substitution
 
 
-def _read_separator(word: str, segments: list[list[str]], openers: list[int]) -> bool:
+def _read_separator(word: str, parts: list[_Open], openers: list[int]) -> bool:
     """Whether the separator `word` closes a substitution whose opening segment holds a command word; the indexes of the segments that opened a substitution are kept in `openers`."""
     closes_with_command = False
     for character in word:
         if character == "(":
-            openers.append(len(segments) - 1)
+            openers.append(len(parts) - 1)
         elif character == ")" and openers:
-            opener = segments[openers.pop()]
+            opener = parts[openers.pop()].words
             closes_with_command = command_start(opener) < len(opener)
     return closes_with_command
 
 
-def with_env_strings_split(words: list[str]) -> list[str]:
+def with_env_strings_split(words: Sequence[str]) -> list[str]:
     """The words with the value of each `env -S` replaced by the words it splits into, placed where the value stood."""
     result: list[str] = []
     index = 0
@@ -189,7 +241,7 @@ def with_env_strings_split(words: list[str]) -> list[str]:
     return result
 
 
-def _copy_env_flags(words: list[str], index: int, result: list[str]) -> int:
+def _copy_env_flags(words: Sequence[str], index: int, result: list[str]) -> int:
     """Copies the flags of an `env` from `index` on, splitting the value of each `-S`; returns the index of its first operand."""
     while index < len(words) and words[index].startswith("-"):
         word = words[index]
@@ -216,7 +268,7 @@ def _glued_split_value(word: str) -> str | None:
     return None
 
 
-def command_start(words: list[str]) -> int:
+def command_start(words: Sequence[str]) -> int:
     """The index of the command word, after assignments, the wrappers with their flags and operands and the prefix words."""
     index = 0
     while index < len(words):
@@ -229,30 +281,42 @@ def command_start(words: list[str]) -> int:
     return index
 
 
-def _after_wrapper(words: list[str], index: int) -> int:
+def _after_wrapper(words: Sequence[str], index: int) -> int:
     """The index past the wrapper at `index`, its flags and the operands it takes before its command word."""
     after_flags = _after_flags(words, index + 1, WRAPPER_VALUE_FLAGS[words[index]])
     return min(after_flags + WRAPPER_OPERANDS.get(words[index], 0), len(words))
 
 
-def _after_flags(words: list[str], index: int, value_flags: frozenset[str]) -> int:
+def _after_flags(words: Sequence[str], index: int, value_flags: frozenset[str]) -> int:
     """The index past the flags from `index` on, each flag in `value_flags` taking the word after it as its value."""
     while index < len(words) and words[index].startswith("-"):
         index += 2 if words[index] in value_flags else 1
     return index
 
 
-def _shell_script_segments(words: list[str]) -> list[list[str]]:
-    """The segments of the `-c` string of a shell that starts `words`, read as a script of its own; none when no shell with a `-c` string starts them."""
+def _shell_script_segments(words: Sequence[str]) -> list[Segment]:
+    """The segments of the `-c` string of a shell that starts `words`, read as a script of its own and opened by the flag; none when no shell with a `-c` string starts them."""
     index = command_start(words)
     if index >= len(words) or PurePosixPath(words[index]).name not in SHELLS:
         return []
-    string = _c_string(words[index + 1 :])
-    return [] if string is None else segments(string)
+    arguments = words[index + 1 :]
+    string_index = _c_string_index(arguments)
+    inner = [] if string_index is None else segments(arguments[string_index])
+    nested = [replace(part, depth=part.depth + 1) for part in inner]
+    return [replace(nested[0], opened_by=C_STRING_OPENER), *nested[1:]] if nested else []
 
 
-def _c_string(arguments: list[str]) -> str | None:
-    """The first operand after a shell's flags, when a `-c` flag came before it; a lone `-` or `--` ends the flags, and the word after it is the operand."""
+def _is_c_string(words: Sequence[str], word: str) -> bool:
+    """Whether `word` would be the `-c` string of the shell that the words so far start."""
+    index = command_start(words)
+    if index >= len(words) or PurePosixPath(words[index]).name not in SHELLS:
+        return False
+    arguments = [*words[index + 1 :], word]
+    return _c_string_index(arguments) == len(arguments) - 1
+
+
+def _c_string_index(arguments: Sequence[str]) -> int | None:
+    """The index of the first operand after a shell's flags, when a `-c` flag came before it; a lone `-` or `--` ends the flags, and the word after it is the operand."""
     has_c_flag = False
     index = 0
     while index < len(arguments) and _is_shell_flag(arguments[index]):
@@ -260,7 +324,7 @@ def _c_string(arguments: list[str]) -> str | None:
         index += 2 if _shell_flag_takes_value(arguments[index]) else 1
     if index < len(arguments) and arguments[index] in ("-", "--"):
         index += 1
-    return arguments[index] if has_c_flag and index < len(arguments) else None
+    return index if has_c_flag and index < len(arguments) else None
 
 
 def _is_shell_flag(word: str) -> bool:
@@ -276,3 +340,96 @@ def _is_c_flag(word: str) -> bool:
 def _shell_flag_takes_value(word: str) -> bool:
     """`-o`, `+o`, `-O`, `+O` and any single-dash or plus word ending in `o` or `O` take the next word; so do `--rcfile` and `--init-file`."""
     return word in SHELL_LONG_VALUE_FLAGS or (not word.startswith("--") and word.endswith(("o", "O")))
+
+
+def command_words(segment: Segment) -> tuple[str, ...]:
+    """The words of the segment from its command word on."""
+    return segment.words[command_start(segment.words) :]
+
+
+def tool_arguments(words: Sequence[str], tool: Tool) -> tuple[str, ...] | None:
+    """The words after the tool's command word when `words` start a call of it, directly, through a Python interpreter's `-m` or behind a runner; None otherwise."""
+    if not words:
+        return None
+    command = PurePosixPath(words[0]).name
+    if command in tool.commands:
+        return tuple(words[1:])
+    if any(interpreter.fullmatch(command) for interpreter in INTERPRETERS):
+        return _module_arguments(words[1:], tool)
+    for runner in ((command, *words[1:2]), (command,)):
+        if runner in RUNNERS:
+            return _runner_arguments(words[len(runner) :], tool, RUNNERS[runner])
+    return None
+
+
+def _module_arguments(words: Sequence[str], tool: Tool) -> tuple[str, ...] | None:
+    """The words after `-m <module>`, when only flags stand before the `-m`; a flag of `INTERPRETER_VALUE_FLAGS` takes a value."""
+    index = 0
+    while index < len(words):
+        word = words[index]
+        if word == "-m":
+            return tuple(words[index + 2 :]) if tuple(words[index + 1 : index + 2]) == (tool.module,) else None
+        if not word.startswith("-"):
+            return None
+        index += 2 if word in INTERPRETER_VALUE_FLAGS else 1
+    return None
+
+
+def _runner_arguments(words: Sequence[str], tool: Tool, strips_version: bool) -> tuple[str, ...] | None:
+    """The call of the tool a runner starts, past its flags and the values of its flags; a runner that fetches its tool reads the tool word without a trailing `@version`."""
+    index = 0
+    while index < len(words):
+        if (arguments := tool_arguments(_words_from(words, index, strips_version), tool)) is not None:
+            return arguments
+        if not words[index].startswith("-"):
+            return None
+        index += 1
+        if (
+            index < len(words)
+            and not words[index].startswith("-")
+            and tool_arguments(_words_from(words, index, strips_version), tool) is None
+        ):
+            index += 1
+    return None
+
+
+def _words_from(words: Sequence[str], index: int, strips_version: bool) -> list[str]:
+    """The words from `index` on, the word at `index` without a trailing `@version` when the runner reads it as its tool word."""
+    if not strips_version:
+        return list(words[index:])
+    return [words[index].partition("@")[0], *words[index + 1 :]]
+
+
+@dataclass(frozen=True)
+class LineReading[Problem]:
+    """What a rule brings to the loop over a line's segments: the judge of one segment (given all of them and its index), whether a command is a call the rule reads, whether a text holds a word that makes a hidden command a finding, and the two problems the loop itself reports."""
+
+    judge: Callable[[Sequence[Segment], int], Problem | None]
+    starts_call: Callable[[Sequence[str]], bool]
+    holds_hidden_word: Callable[[str], bool]
+    unreadable: Problem
+    built_at_run_time: Problem
+
+
+def line_problems[Problem](text: str, reading: LineReading[Problem], script_holds_hidden_word: bool) -> Iterator[Problem]:
+    """The problems of one logical line, read with the value of each `env -S` split into its words: the line the lexer refuses when it holds a hidden word, each segment the judge faults, and a command built at run time when the whole script holds a hidden word."""
+    try:
+        parts = [replace(part, words=tuple(with_env_strings_split(part.words))) for part in segments(text)]
+    except ValueError:
+        if reading.holds_hidden_word(text):
+            yield reading.unreadable
+        return
+    for index, part in enumerate(parts):
+        problem = reading.judge(parts, index)
+        if problem is not None:
+            yield problem
+        elif script_holds_hidden_word and _is_built_at_run_time(parts, index, reading.starts_call):
+            yield reading.built_at_run_time
+
+
+def _is_built_at_run_time(parts: Sequence[Segment], index: int, starts_call: Callable[[Sequence[str]], bool]) -> bool:
+    """A command word that is a substitution (a lone `$`) whose own command is no call the rule reads, `eval`, or a word that starts with `$`."""
+    command = command_words(parts[index])
+    if command == LONE_DOLLAR:
+        return not (index + 1 < len(parts) and starts_call(command_words(parts[index + 1])))
+    return bool(command) and (command[0] == "eval" or bool(DYNAMIC_COMMAND.match(command[0]))) and not starts_call(command)

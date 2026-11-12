@@ -88,6 +88,8 @@ GREEN = [
     "xargs pytest -n auto",
     'bash -c "pytest -n auto"',
     "uvx pytest@8 -n auto",
+    "npx pytest@8 -n auto",
+    "yarn pytest -n auto",
     "pytest -n " + "9" * 5000,
     'x="$(pytest -n auto)"',
     'echo "$(pytest -n auto)"',
@@ -99,6 +101,7 @@ GREEN = [
     "python3.14t -m pytest -n auto",
     "sudo -E pytest -n auto",
     "pytest -n auto -- tests",
+    'bash -c "pytest -n auto --x=$(echo y)"',
 ]
 
 
@@ -141,6 +144,7 @@ NO_CALL = [
     "python -X dev tests/run.py",
     "env -u NAME ruff check",
     "python3.14tx -m pytest -q",
+    "yarn dlx pytest -q",
 ]
 
 
@@ -185,6 +189,12 @@ SERIAL_WITHOUT_N = [
     "hatch run pytest -q",
     "coverage run -m pytest -q",
     "uvx pytest -q",
+    "npx pytest@8 -q",
+    "pnpm exec pytest -q",
+    "pnpm dlx pytest -q",
+    "npm exec pytest -q",
+    "yarn pytest -q",
+    "bunx pytest -q",
     "env -i A=b pytest -q",
     'x="$(pytest -q)"',
     'echo "result: $(pytest -q) done"',
@@ -279,6 +289,8 @@ def test_a_pytest_call_with_zero_workers_is_serial(build_repo, scalar, command):
         "pytest -n $WORKERS",
         "pytest -n ${{ matrix.n }}",
         "pytest -n $(nproc)",
+        'bash -c "pytest -n $(nproc)"',
+        "bash -c 'pytest -n \"$(nproc)\"'",
         "pytest -n",
         "pytest -n -1",
         "pytest -n 2.5",

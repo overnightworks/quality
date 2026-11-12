@@ -572,6 +572,7 @@ def _judge_workflows(inputs: RunInputs) -> AreaVerdict:
     }
     judged[Rule.PR_CONCURRENCY] = _attempt(lambda: workflow_rules.check_pr_concurrency(inputs.root, inputs.tracked))
     judged[Rule.PYTEST_WORKERS] = _attempt(lambda: workflow_rules.check_pytest_workers(inputs.root, inputs.tracked))
+    judged[Rule.RUNTIME_INSTALL] = _attempt(lambda: workflow_rules.check_runtime_install(inputs.root, inputs.tracked))
     return _area_verdict(Area.WORKFLOWS, judged, runs)
 
 
