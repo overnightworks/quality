@@ -165,6 +165,18 @@ The secret's name is illustrative.
   each one.
 - The outputs, set only with `push`: `digest` (`sha256:<hex>`) and `ref`
   (`ghcr.io/<owner>/<repository>[/<image>]:<version>@<digest>`) (IMAGE-13).
+- `reproducible-layers: true` (default `false`) gives every file in the layers one fixed time, so a layer whose inputs
+  did not change keeps its digest from one release to the next, and a node that rolls a release pulls only the changed
+  layers. The build then sets `SOURCE_DATE_EPOCH` to the constant `0` and the image output to
+  `type=image,rewrite-timestamp=true`; with `false` the build is unchanged (IMAGE-16, IMAGE-17). Four points:
+  - The epoch is a constant, never the commit's time, because a layer repeats only when its files' times do. It reaches
+    the build as a build argument, which the provenance records like every other one. A `SOURCE_DATE_EPOCH` in the
+    caller's `build-args` wins over it, and a Dockerfile that declares `ARG SOURCE_DATE_EPOCH` reads `0`.
+  - The workflow fixes times, not bytes: a layer repeats only if the Dockerfile writes no logs, caches or wall-clock
+    data into it.
+  - The image's `created`, the history entries of the build and the index annotation
+    `org.opencontainers.image.created` read `1970-01-01`, so a filter or a sort by image age treats the image as old.
+  - BuildKit is not pinned: a newer BuildKit can assemble a layer differently once, and its digest then changes.
 - The package takes the access of the caller's repository (IMAGE-14); a deployment that pulls it needs read access set
   on the package.
 
