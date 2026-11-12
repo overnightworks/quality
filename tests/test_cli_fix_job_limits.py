@@ -211,7 +211,9 @@ def test_the_fixed_ceiling_is_committed_to_a_green_verdict_and_a_second_fix_chan
     commit_all(repo, "fixed")
     verdict_code, verdict_out, verdict_err = verdict_streams(repo, capsys)
     assert (verdict_code, "✓ green" in verdict_out, verdict_err) == (0, True, ""), verdict_out
+    before_again = tree_of(repo)
     again = dry_run_then_fix(capsys, repo)
+    assert tree_of(repo) == before_again
     assert (again.planned_code, again.code, "✓ clean · nothing to lower" in again.done) == (0, 0, True)
 
 
