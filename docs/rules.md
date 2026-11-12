@@ -919,7 +919,8 @@ whole number of minutes (`[job_minutes.".github/workflows/ci.yml"]`, then `e2e =
 and empty; a value that is no positive integer, or a subtable or key that is no table, is a malformed baseline
 (`needs <where> as a positive count, not <value>`, `needs <where> as a table`) (TIMEOUT-12). It renders after the size and
 `[clones]` tables, subtables sorted by path and keys by job id, and a file that already renders so stays untouched by
-`--fix`; an older quality refuses the table as unknown (TIMEOUT-13). The debt a limit counts as is its rounded-up whole
+`--fix`, and the unknown-table message lists `job_minutes` among the tables quality knows (TIMEOUT-13). An older quality
+refuses the table as unknown. The debt a limit counts as is its rounded-up whole
 minutes, so `17.5` is held by an entry of `18`; a fact prints the limit as written (TIMEOUT-14).
 
 Against the table a judged job with a readable limit is compared by its rounded-up value `d`, with or without a
