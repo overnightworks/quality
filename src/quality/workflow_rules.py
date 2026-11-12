@@ -1,4 +1,4 @@
-"""Three rules over the tracked workflows, each reading a closed list of forms and judging anything outside it a finding.
+"""Four rules over the tracked workflows, each reading a closed list of forms and judging anything outside it a finding.
 
 `pr-concurrency`: a workflow a pull request triggers sets a top-level `concurrency` that groups a pull-request run by its
 number and cancels only pull-request runs; no expression is read.
@@ -6,11 +6,15 @@ number and cancels only pull-request runs; no expression is read.
 `pytest-workers`: every pytest call in a `run:` script passes `-n` with more than zero workers or carries a
 `# pytest-workers: <reason>` marker; the script is read as POSIX shell words, never run.
 
+`runtime-install`: no `run:` script installs through an operating-system package manager or pipes a download into a
+shell, unless the step carries a `# runtime-install: <reason>` marker on the line above; the script is read by the same
+reader as `pytest-workers`.
+
 `job-timeout`: every job of a workflow a pull request or a push to main triggers, and of the workflows those call through a
 local `uses:`, declares `timeout-minutes` as a plain number of at most 15."""
 
 import re
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path, PurePosixPath
@@ -22,13 +26,19 @@ from quality.checkout import Document, PullRequestEvent
 from quality.report import CannotJudge, Example, Finding, FindingEvent, Instruction, RuleResult
 from quality.rules import Rule
 from quality.run_script import (
+    C_STRING_OPENER,
     LONE_DOLLAR,
+    PIPES,
+    SHELLS,
+    LineReading,
     ScriptLine,
-    command_start,
+    Segment,
+    Tool,
+    command_words,
+    line_problems,
     logical_lines,
     physical_lines,
-    segments,
-    with_env_strings_split,
+    tool_arguments,
 )
 
 EXPRESSION = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
@@ -215,31 +225,90 @@ BAD_COUNT_FACT = "-n count is not a number above zero or auto"
 UNREADABLE_FACT = "command cannot be read to its end"
 RUN_TIME_FACT = "command is built at run time, pytest -n cannot be read"
 PYTEST_WORD = re.compile(r"(?<![\w-])pytest(?![\w-])")
-MARKER = re.compile(r"#[ \t]*pytest-workers:[^\n]*?[^\W\d_]")
-DYNAMIC_COMMAND = re.compile(r"\$[\w{]")
 WORKERS_FLAG = re.compile(r"(?:-n|--numprocesses)(?:=(.*))?|-n(.+)", re.DOTALL)
 WHOLE_NUMBER = re.compile(r"\d+", re.ASCII)
-PYTEST_COMMANDS = frozenset({"pytest", "py.test"})
-PYTHON_INTERPRETER = re.compile(r"python(?:3(?:\.\d+t?)?)?")
-PYPY_INTERPRETER = re.compile(r"pypy(?:3(?:\.\d+)?)?")
-INTERPRETERS = (PYTHON_INTERPRETER, PYPY_INTERPRETER)
-INTERPRETER_VALUE_FLAGS = frozenset({"-W", "-X", "--check-hash-based-pycs"})
-RUNNERS = frozenset({("uv", "run"), ("poetry", "run"), ("pipenv", "run"), ("pdm", "run"), ("hatch", "run"), ("coverage", "run")})
+PYTEST = Tool(commands=frozenset({"pytest", "py.test"}), module="pytest")
 AUTOMATIC_COUNTS = frozenset({"auto", "logical"})
 
 Problem = tuple[FindingEvent, str]
 
 
+@dataclass(frozen=True)
+class Marker:
+    """The comment `# <rule>: <reason>` that clears a rule's findings: on a call's logical line or directly above its first line, and, where the rule allows it, in the column of a step's `-` directly above the step."""
+
+    pattern: re.Pattern[str]
+    above_step: bool
+
+    @classmethod
+    def of(cls, rule: Rule, above_step: bool) -> Marker:
+        return cls(re.compile(rf"#[ \t]*{re.escape(rule.value)}:[^\n]*?[^\W\d_]"), above_step)
+
+    def lines(self, file_lines: list[str]) -> frozenset[int]:
+        """The numbers of the file lines that carry the marker."""
+        return frozenset(number for number, line in enumerate(file_lines, 1) if self.pattern.search(line))
+
+    def clears_step(self, file_lines: list[str], step: yaml.Node) -> bool:
+        """Whether the marker stands directly above the step's first line, its `#` in the column of the `-` on that line; a step whose `-` stands alone on its line has no such column."""
+        number = step.start_mark.line
+        before_step = file_lines[number][: step.start_mark.column]
+        if not self.above_step or number == 0 or before_step.strip() != "-":
+            return False
+        column = len(before_step) - len(before_step.lstrip())
+        above = file_lines[number - 1]
+        return not above[:column].strip() and self.pattern.match(above, column) is not None
+
+
+@dataclass(frozen=True)
+class ScriptRule:
+    """What one rule over the `run:` scripts brings: its marker, its reading of a line and its fix."""
+
+    rule: Rule
+    marker: Marker
+    reading: LineReading[Problem]
+    fix: str
+
+
+def _pytest_arguments(command: Sequence[str]) -> tuple[str, ...] | None:
+    return tool_arguments(command, PYTEST)
+
+
+def _pytest_problem(parts: Sequence[Segment], index: int) -> Problem | None:
+    arguments = _pytest_arguments(command_words(parts[index]))
+    return None if arguments is None else _workers_problem(arguments)
+
+
+PYTEST_RULE = ScriptRule(
+    Rule.PYTEST_WORKERS,
+    Marker.of(Rule.PYTEST_WORKERS, above_step=False),
+    LineReading(
+        judge=_pytest_problem,
+        starts_call=lambda command: _pytest_arguments(command) is not None,
+        holds_hidden_word=lambda text: bool(PYTEST_WORD.search(text)),
+        unreadable=(FindingEvent.INVALID, UNREADABLE_FACT),
+        built_at_run_time=(FindingEvent.INVALID, RUN_TIME_FACT),
+    ),
+    PYTEST_FIX,
+)
+
+
 def check_pytest_workers(root: Path, tracked: list[str]) -> RuleResult:
     """Every pytest call in a `run:` of a tracked workflow, judged; the extent is how many workflows were read."""
+    return _judge_scripts(PYTEST_RULE, root, tracked)
+
+
+def _judge_scripts(script_rule: ScriptRule, root: Path, tracked: list[str]) -> RuleResult:
+    """Every `run:` step of every tracked workflow, read line by line under the rule; the extent is how many workflows were read."""
     findings: list[Finding] = []
     read = 0
     for name, text in _readable_workflows(root, tracked):
         read += 1
-        document = _composed(name, text)
-        marked = frozenset(number for number, line in enumerate(text.split("\n"), 1) if MARKER.search(line))
-        for run in _run_values(name, document):
-            findings.extend(_script_findings(name, list(logical_lines(physical_lines(run))), marked))
+        file_lines = text.split("\n")
+        marked = script_rule.marker.lines(file_lines)
+        for step, run in _run_steps(name, _composed(name, text)):
+            if not script_rule.marker.clears_step(file_lines, step):
+                lines = list(logical_lines(physical_lines(run)))
+                findings.extend(_script_findings(script_rule, name, lines, marked))
     return RuleResult(findings, read, False)
 
 
@@ -250,8 +319,8 @@ def _guarded(name: str, document: Document, node: yaml.Node | None) -> yaml.Node
     return node
 
 
-def _run_values(name: str, document: Document) -> Iterator[yaml.ScalarNode]:
-    """The `run:` of every step of every job."""
+def _run_steps(name: str, document: Document) -> Iterator[tuple[yaml.Node, yaml.ScalarNode]]:
+    """Every step of every job that has a `run:`, with that `run:`."""
     top = _guarded(name, document, document.root)
     jobs = _guarded(name, document, checkout.mapping_values(top).get("jobs"))
     for job in checkout.mapping_values(jobs).values():
@@ -259,7 +328,7 @@ def _run_values(name: str, document: Document) -> Iterator[yaml.ScalarNode]:
         for step in _guarded(name, document, steps).value if isinstance(steps, yaml.SequenceNode) else ():
             run = checkout.mapping_values(_guarded(name, document, step)).get("run")
             if run is not None:
-                yield _script(name, document, run)
+                yield step, _script(name, document, run)
 
 
 def _script(name: str, document: Document, run: yaml.Node) -> yaml.ScalarNode:
@@ -270,102 +339,17 @@ def _script(name: str, document: Document, run: yaml.Node) -> yaml.ScalarNode:
     return run
 
 
-def _script_findings(name: str, lines: list[ScriptLine], marked: frozenset[int]) -> Iterator[Finding]:
-    holds_pytest = any(PYTEST_WORD.search(line.text) for line in lines)
+def _script_findings(script_rule: ScriptRule, name: str, lines: list[ScriptLine], marked: frozenset[int]) -> Iterator[Finding]:
+    reading = script_rule.reading
+    holds_hidden_word = any(reading.holds_hidden_word(line.text) for line in lines)
     for line in lines:
         if any(number in marked for number in range(line.first - 1, line.last + 1)):
             continue
-        for event, fact in _line_problems(line.text, holds_pytest):
-            yield Finding(Rule.PYTEST_WORKERS, name, line.first, fact, PYTEST_FIX, event=event)
+        for event, fact in line_problems(line.text, reading, holds_hidden_word):
+            yield Finding(script_rule.rule, name, line.first, fact, script_rule.fix, event=event)
 
 
-def _line_problems(text: str, script_holds_pytest: bool) -> Iterator[Problem]:
-    try:
-        segment_words = [with_env_strings_split(words) for words in segments(text)]
-    except ValueError:
-        if PYTEST_WORD.search(text):
-            yield FindingEvent.INVALID, UNREADABLE_FACT
-        return
-    for index, words in enumerate(segment_words):
-        command = words[command_start(words) :]
-        if command == LONE_DOLLAR:
-            if script_holds_pytest and not (index + 1 < len(segment_words) and _starts_pytest_call(segment_words[index + 1])):
-                yield FindingEvent.INVALID, RUN_TIME_FACT
-            continue
-        problem = _segment_problem(command, script_holds_pytest)
-        if problem is not None:
-            yield problem
-
-
-def _starts_pytest_call(words: list[str]) -> bool:
-    command = words[command_start(words) :]
-    return bool(command) and _pytest_arguments(command) is not None
-
-
-def _segment_problem(words: list[str], script_holds_pytest: bool) -> Problem | None:
-    if not words:
-        return None
-    arguments = _pytest_arguments(words)
-    if arguments is not None:
-        return _workers_problem(arguments)
-    if script_holds_pytest and (words[0] == "eval" or DYNAMIC_COMMAND.match(words[0])):
-        return FindingEvent.INVALID, RUN_TIME_FACT
-    return None
-
-
-def _pytest_arguments(words: list[str]) -> list[str] | None:
-    """The words after `pytest` when `words` start a pytest call, else None."""
-    command = PurePosixPath(words[0]).name
-    if command in PYTEST_COMMANDS:
-        return words[1:]
-    if any(interpreter.fullmatch(command) for interpreter in INTERPRETERS):
-        return _module_arguments(words[1:])
-    if command == "uvx":
-        return _runner_arguments(words[1:], strips_version=True)
-    if (command, *words[1:2]) in RUNNERS:
-        return _runner_arguments(words[2:], strips_version=False)
-    return None
-
-
-def _module_arguments(words: list[str]) -> list[str] | None:
-    """The words after `-m pytest`, when only flags stand before the `-m`; a flag of `INTERPRETER_VALUE_FLAGS` takes a value."""
-    index = 0
-    while index < len(words):
-        word = words[index]
-        if word == "-m":
-            return words[index + 2 :] if words[index + 1 : index + 2] == ["pytest"] else None
-        if not word.startswith("-"):
-            return None
-        index += 2 if word in INTERPRETER_VALUE_FLAGS else 1
-    return None
-
-
-def _runner_arguments(words: list[str], strips_version: bool) -> list[str] | None:
-    """The pytest call a runner starts, past its flags and the values of its flags; `uvx` reads its tool word without a trailing `@version`."""
-    index = 0
-    while index < len(words):
-        if (arguments := _pytest_arguments(_words_from(words, index, strips_version))) is not None:
-            return arguments
-        if not words[index].startswith("-"):
-            return None
-        index += 1
-        if (
-            index < len(words)
-            and not words[index].startswith("-")
-            and _pytest_arguments(_words_from(words, index, strips_version)) is None
-        ):
-            index += 1
-    return None
-
-
-def _words_from(words: list[str], index: int, strips_version: bool) -> list[str]:
-    """The words from `index` on, the word at `index` without a trailing `@version` when a `uvx` runner reads it as its tool word."""
-    if not strips_version:
-        return words[index:]
-    return [words[index].partition("@")[0], *words[index + 1 :]]
-
-
-def _workers_problem(arguments: list[str]) -> Problem | None:
+def _workers_problem(arguments: Sequence[str]) -> Problem | None:
     counts = _worker_counts(arguments)
     if not counts:
         return FindingEvent.SERIAL, WITHOUT_WORKERS_FACT
@@ -377,7 +361,7 @@ def _workers_problem(arguments: list[str]) -> Problem | None:
     return FindingEvent.INVALID, BAD_COUNT_FACT
 
 
-def _worker_counts(arguments: list[str]) -> list[str | None]:
+def _worker_counts(arguments: Sequence[str]) -> list[str | None]:
     """The value of each readable workers flag before the first `--`, None for one with no value; an abbreviated or glued flag is not read."""
     if "--" in arguments:
         arguments = arguments[: arguments.index("--")]
@@ -394,6 +378,112 @@ def _worker_counts(arguments: list[str]) -> list[str | None]:
             index += 1
         counts.append(count)
     return counts
+
+
+INSTALL_FIX = (
+    "take the tool from the lockfile, the runner image or an image pinned by digest, "
+    "or explain on the line above: # runtime-install: <reason>"
+)
+DOWNLOAD_FACT = "a download runs as a shell script"
+INSTALL_RUN_TIME_FACT = "command is built at run time, an install cannot be read"
+APT_INSTALLS = frozenset({"install", "reinstall", "satisfy", "build-dep", "upgrade", "dist-upgrade", "full-upgrade"})
+DNF_INSTALLS = frozenset({"install", "reinstall", "localinstall", "groupinstall", "upgrade", "update"})
+INSTALL_WORDS = {
+    "apt-get": APT_INSTALLS,
+    "apt": APT_INSTALLS,
+    "dpkg": frozenset({"-i", "--install"}),
+    "dnf": DNF_INSTALLS,
+    "yum": DNF_INSTALLS,
+    "apk": frozenset({"add", "upgrade"}),
+    "brew": frozenset({"install", "reinstall", "bundle", "upgrade"}),
+    "snap": frozenset({"install", "refresh"}),
+    "pacman": frozenset({"-S", "-Sy", "-Syu", "--sync", "-U"}),
+    "zypper": frozenset({"install", "in", "update", "up", "dist-upgrade", "dup"}),
+    "choco": frozenset({"install", "upgrade"}),
+    "winget": frozenset({"install", "upgrade"}),
+    "port": frozenset({"install", "upgrade"}),
+}
+PLAYWRIGHT = Tool(commands=frozenset({"playwright"}), module="playwright")
+PLAYWRIGHT_DEPENDENCY_WORDS = frozenset({"--with-deps", "install-deps"})
+HIDDEN_INSTALL_WORDS = {**INSTALL_WORDS, "playwright": PLAYWRIGHT_DEPENDENCY_WORDS}
+CRUDE_WORD_BREAKS = re.compile(r"[\s;|&()<>/\"'`$=]+")
+DOWNLOADERS = frozenset({"curl", "wget"})
+PROCESS_SUBSTITUTION = "<("
+
+
+def _holds_install_word(text: str) -> bool:
+    """Whether the text holds a package manager's name and one of that manager's install words, each as a word of its own."""
+    words = frozenset(CRUDE_WORD_BREAKS.split(text))
+    return any(manager in words and not install_words.isdisjoint(words) for manager, install_words in HIDDEN_INSTALL_WORDS.items())
+
+
+def _install_fact(command: Sequence[str]) -> str | None:
+    """`<manager> <install word>` when the command is an install of the closed table, else None."""
+    name = PurePosixPath(command[0]).name if command else ""
+    if name in INSTALL_WORDS:
+        matched = next((word for word in command[1:] if word in INSTALL_WORDS[name]), None)
+        return None if matched is None else f"{name} {matched}"
+    arguments = tool_arguments(command, PLAYWRIGHT)
+    if arguments is None:
+        return None
+    if "install-deps" in arguments:
+        return "playwright install-deps"
+    return "playwright install --with-deps" if {"install", "--with-deps"} <= set(arguments) else None
+
+
+def _names_one_of(command: Sequence[str], names: frozenset[str]) -> bool:
+    return bool(command) and PurePosixPath(command[0]).name in names
+
+
+def _is_download_into_shell(parts: Sequence[Segment], index: int) -> bool:
+    """A shell fed by a pipeline that starts or continues with a downloader, a shell that runs a process substitution of a downloader, or the `$` of a shell's `-c` string that is a command substitution of a downloader."""
+    command = command_words(parts[index])
+    if _names_one_of(command, SHELLS):
+        return _is_piped_from_downloader(parts, index) or _runs_substitution_of_downloader(command)
+    following = parts[index + 1 :][:1]
+    return (
+        parts[index].opened_by == C_STRING_OPENER
+        and command == LONE_DOLLAR
+        and any(part.opened_by == "(" and _names_one_of(command_words(part), DOWNLOADERS) for part in following)
+    )
+
+
+def _is_piped_from_downloader(parts: Sequence[Segment], index: int) -> bool:
+    while parts[index].opened_by in PIPES:
+        index -= 1
+        if _names_one_of(command_words(parts[index]), DOWNLOADERS):
+            return True
+    return False
+
+
+def _runs_substitution_of_downloader(command: Sequence[str]) -> bool:
+    return PROCESS_SUBSTITUTION in command and _names_one_of(command[command.index(PROCESS_SUBSTITUTION) + 1 :], DOWNLOADERS)
+
+
+def _install_problem(parts: Sequence[Segment], index: int) -> Problem | None:
+    fact = _install_fact(command_words(parts[index]))
+    if fact is None and _is_download_into_shell(parts, index):
+        fact = DOWNLOAD_FACT
+    return None if fact is None else (FindingEvent.INSTALLS, fact)
+
+
+INSTALL_RULE = ScriptRule(
+    Rule.RUNTIME_INSTALL,
+    Marker.of(Rule.RUNTIME_INSTALL, above_step=True),
+    LineReading(
+        judge=_install_problem,
+        starts_call=lambda command: _install_fact(command) is not None,
+        holds_hidden_word=_holds_install_word,
+        unreadable=(FindingEvent.INVALID, UNREADABLE_FACT),
+        built_at_run_time=(FindingEvent.INVALID, INSTALL_RUN_TIME_FACT),
+    ),
+    INSTALL_FIX,
+)
+
+
+def check_runtime_install(root: Path, tracked: list[str]) -> RuleResult:
+    """Every install and every download run as a shell in a `run:` of a tracked workflow, judged; the extent is how many workflows were read."""
+    return _judge_scripts(INSTALL_RULE, root, tracked)
 
 
 MAXIMUM_MINUTES = 15

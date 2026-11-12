@@ -49,7 +49,7 @@ class Area(StrEnum):
     DEBT = "debt", "size, near copies and job time limits against the debt ceiling (quality/baseline.toml)"
     IMPORTS = "imports", "the import contracts"
     SECRETS = "secrets", "secrets in the committed history"
-    WORKFLOWS = "workflows", "GitHub workflows: lint, security, concurrency, pytest -n"
+    WORKFLOWS = "workflows", "GitHub workflows: lint, security, concurrency, pytest -n, run-time installs"
     DEPENDENCIES = "dependencies", "known advisories in the lockfiles"
     CODE = "code", "Python source: security findings and print calls"
 
@@ -88,6 +88,7 @@ class Rule(StrEnum):
     WORKFLOW_SECURITY = "workflow-security", Area.WORKFLOWS, RELEASE_0_1, Switch.ALWAYS
     PR_CONCURRENCY = "pr-concurrency", Area.WORKFLOWS, RELEASE_0_11, Switch.ALWAYS
     PYTEST_WORKERS = "pytest-workers", Area.WORKFLOWS, RELEASE_0_11, Switch.ALWAYS
+    RUNTIME_INSTALL = "runtime-install", Area.WORKFLOWS, None, Switch.ALWAYS
     ADVISORY = "advisory", Area.DEPENDENCIES, RELEASE_0_3, Switch.ALWAYS
 
     def __new__(

@@ -88,6 +88,8 @@ GREEN = [
     "xargs pytest -n auto",
     'bash -c "pytest -n auto"',
     "uvx pytest@8 -n auto",
+    "npx pytest@8 -n auto",
+    "yarn pytest -n auto",
     "pytest -n " + "9" * 5000,
     'x="$(pytest -n auto)"',
     'echo "$(pytest -n auto)"',
@@ -141,6 +143,7 @@ NO_CALL = [
     "python -X dev tests/run.py",
     "env -u NAME ruff check",
     "python3.14tx -m pytest -q",
+    "yarn dlx pytest -q",
 ]
 
 
@@ -185,6 +188,12 @@ SERIAL_WITHOUT_N = [
     "hatch run pytest -q",
     "coverage run -m pytest -q",
     "uvx pytest -q",
+    "npx pytest@8 -q",
+    "pnpm exec pytest -q",
+    "pnpm dlx pytest -q",
+    "npm exec pytest -q",
+    "yarn pytest -q",
+    "bunx pytest -q",
     "env -i A=b pytest -q",
     'x="$(pytest -q)"',
     'echo "result: $(pytest -q) done"',

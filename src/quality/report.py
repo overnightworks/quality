@@ -155,6 +155,7 @@ class FindingEvent(StrEnum):
     SHARED_GROUP = "shared group"
     CANCELS_MAIN = "cancels main"
     SERIAL = "serial"
+    INSTALLS = "installs"
     NO_HEADER = "no header"
     STRAY = "stray"
     TEST_IMPORT = "test import"
