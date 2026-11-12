@@ -22,8 +22,8 @@ CALLED = ".github/workflows/called.yml"
 RENAMED = ".github/workflows/renamed.yml"
 SIZE_FILE = "src/old.py"
 FIX_RUN = "fix: quality check --fix"
-PLANNED_EVENTS = {"lower": "lowered", "drop": "dropped"}
-CHANGE_ROW = re.compile(r"^(?P<glyph>[~✓]) (?!debt )(?P<path>\S+) (?P<event>lower|drop|lowered|dropped) (?P<fact>.+)$")
+PLANNED_EVENTS = {"move": "moved", "lower": "lowered", "drop": "dropped"}
+CHANGE_ROW = re.compile(r"^(?P<glyph>[~✓]) (?!debt )(?P<path>\S+) (?P<event>move|lower|drop|moved|lowered|dropped) (?P<fact>.+)$")
 FINDING_ROW = re.compile(r"^(?:! \.github/\S+ .+|fix: .+)$")
 
 
@@ -45,7 +45,7 @@ def squashed(text: str) -> str:
 
 
 def change_rows(out: str) -> list[tuple[str, str, str]]:
-    """The path, event and fact of each lowered or dropped row, a planned row's event worded as the fix's."""
+    """The path, event and fact of each moved, lowered or dropped row, a planned row's event worded as the fix's."""
     rows = []
     for match in filter(None, map(CHANGE_ROW.match, map(squashed, out.splitlines()))):
         planned = match["glyph"] == "~"
@@ -244,7 +244,10 @@ def test_a_renamed_workflow_takes_its_entry_and_has_it_lowered_in_one_fix(pull_r
     repo = renamed_and_shrunk(pull_request)
     run = dry_run_then_fix(capsys, repo)
     assert (run.code, run.planned_code, (repo / BASELINE_PATH).read_text()) == (0, 1, ceiling({"e2e": 30}, path=RENAMED))
-    assert change_rows(run.done) == [(RENAMED, "lowered", "job e2e 40 → 30 minutes")], run.done
+    assert change_rows(run.done) == [
+        (RENAMED, "moved", f"job e2e 40 minutes from {WORKFLOW}"),
+        (RENAMED, "lowered", "job e2e 40 → 30 minutes"),
+    ], run.done
     assert "is gone" not in run.done
 
 
