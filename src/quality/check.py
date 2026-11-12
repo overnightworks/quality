@@ -538,7 +538,9 @@ def _judge_debt(inputs: RunInputs) -> AreaVerdict:
     )
     if fixed:
         size = ratchet.after_fix(_required(size), _reported(ceiling))  # the config was read and the tree is complete
-    timeouts = _attempt(lambda: workflow_rules.check_job_timeouts(inputs.root, inputs.tracked, judged_baseline(inputs.root)))
+    timeouts = _attempt(
+        lambda: workflow_rules.check_job_timeouts(inputs.root, inputs.tracked, made.ceiling if fixed else judged_baseline(inputs.root))
+    )
     return _area_verdict(Area.DEBT, {Rule.SIZE: size, Rule.CLONE: clone, Rule.JOB_TIMEOUT: timeouts}, ceiling=ceiling)
 
 

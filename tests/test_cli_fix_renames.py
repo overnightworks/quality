@@ -586,11 +586,13 @@ def test_a_dry_run_names_the_job_entry_it_would_move_and_writes_nothing(pull_req
     repo = workflow_moved_with_git(pull_request)
     before = digest(repo)
     code, out, _ = fixed(capsys, repo, *DRY_RUN_WORDS)
-    assert (code, f"{NEW_WORKFLOW} move job e2e 40 minutes from {OLD_WORKFLOW}" in squashed(out), digest(repo)) == (
-        1,
-        True,
-        before,
-    )
+    printed = squashed(out)
+    assert (
+        code,
+        f"{NEW_WORKFLOW} move job e2e 40 minutes from {OLD_WORKFLOW}" in printed,
+        "new debt" in printed or "is gone" in printed,
+        digest(repo),
+    ) == (1, True, False, before)
 
 
 def test_a_second_fix_leaves_a_followed_workflow_move_as_it_is(pull_request, capsys):
