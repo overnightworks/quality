@@ -19,7 +19,7 @@ IGNORED_FAILURE_PREFIX = "-"
 KEYWORD = re.compile(r"[a-z]+(?=\s|$)")
 CONDITIONALS = frozenset({"ifeq", "ifneq", "ifdef", "ifndef"})
 REFUSED_TARGETS = re.compile(r"(?:\.IGNORE|\.RECIPEPREFIX|\.ONESHELL)(?![\w.-])")
-REFUSED_INCLUDE = re.compile(r"-?s?include\b")
+REFUSED_INCLUDE = re.compile(r"-?s?include(?![\w.-])")
 REFUSED_MAKEFLAGS = re.compile(r"(?:(?:export|override|private)\s+)*MAKEFLAGS\s*[:+?!]*=")
 VARIABLE_WORD = re.compile(r"\w+=.*", re.DOTALL)
 MAKE_SUBSTITUTION = re.compile(r"\$\$|\$\(MAKE\)|\$\{MAKE\}")

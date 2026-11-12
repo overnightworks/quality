@@ -108,6 +108,12 @@ def test_a_line_that_ends_the_rule_stops_its_recipe():
             (RecipeLine(CHECK, 2),),
             id="a rule whose name starts with endif",
         ),
+        pytest.param(
+            makefile("include-check:", f"\t{CHECK}"),
+            "include-check",
+            (RecipeLine(CHECK, 2),),
+            id="a rule whose name starts with include",
+        ),
     ],
 )
 def test_a_name_that_starts_with_a_directive_word_is_no_directive(text, goal, lines):
@@ -181,7 +187,12 @@ def test_make_and_dollar_substitutions_read_as_the_manual_gives_them(text, goal,
             id="a second recipe after the first",
         ),
         pytest.param(makefile("words-check::", f"\t{CHECK}"), ["words-check"], id="a double-colon rule"),
-        pytest.param(makefile("%-check:", f"\t{CHECK}"), ["words-check"], id="a pattern rule"),
+        pytest.param(
+            makefile("words-check: %-x", f"\t{CHECK}"), ["words-check"], id="a pattern prerequisite of the goal"
+        ),
+        pytest.param(
+            makefile("words-check: $(X)", f"\t{CHECK}"), ["words-check"], id="a variable prerequisite of the goal"
+        ),
         pytest.param(makefile("words-check: ; " + CHECK), ["words-check"], id="a recipe after a semicolon"),
         pytest.param(
             makefile("words-check: X=1", f"\t{CHECK}"),
