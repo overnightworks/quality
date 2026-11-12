@@ -1,13 +1,17 @@
-"""`quality check debt --fix` lowers and drops the entries of a held `[job_minutes]` table."""
+"""`quality check debt --fix` lowers and drops the entries of a held `[job_minutes]` table, and `--dry-run` plans the same
+rows."""
 
+import re
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
 from quality.baseline_file import BASELINE_PATH
 from tests.support.baselines import rendered
-from tests.support.door import CHECK_WORD, DRY_RUN_WORDS, FIX_WORDS, digest, fixed
+from tests.support.door import CHECK_WORD, DRY_RUN_WORDS, FIX_WORDS, fixed, tree_of
 from tests.support.git_repositories import git, put
+from tests.support.job_workflows import job, workflow
 from tests.support.source_code import long_function
 from tests.support.verdict import verdict_streams
 from tests.support.verdict_renames import commit_all
@@ -18,16 +22,9 @@ CALLED = ".github/workflows/called.yml"
 RENAMED = ".github/workflows/renamed.yml"
 SIZE_FILE = "src/old.py"
 FIX_RUN = "fix: quality check --fix"
-PLANNED_WORDS = {"lowered": "lower", "dropped": "drop"}
-
-
-def workflow_of(on: str = "pull_request", **limits: str | None) -> str:
-    """A workflow whose jobs (id to `timeout-minutes`, none when the value is None) run on `on`."""
-    steps = "    runs-on: ubuntu-latest\n    steps:\n      - run: 'true'\n"
-    jobs = "".join(
-        f"  {name}:\n" + (f"    timeout-minutes: {limit}\n" if limit else "") + steps for name, limit in limits.items()
-    )
-    return f"name: w\non: {on}\npermissions: {{}}\njobs:\n{jobs}"
+PLANNED_EVENTS = {"lower": "lowered", "drop": "dropped"}
+CHANGE_ROW = re.compile(r"^(?P<glyph>[~✓]) (?!debt )(?P<path>\S+) (?P<event>lower|drop|lowered|dropped) (?P<fact>.+)$")
+FINDING_ROW = re.compile(r"^(?:! \.github/\S+ .+|fix: .+)$")
 
 
 def ceiling(entries: dict[str, int] | None = None, size: int | None = None, path: str = WORKFLOW) -> str:
@@ -39,7 +36,7 @@ def ceiling(entries: dict[str, int] | None = None, size: int | None = None, path
     if not entries:
         job_tables = "[job_minutes]\n"
     else:
-        job_tables = f'[job_minutes."{path}"]\n' + "".join(f"{job} = {minutes}\n" for job, minutes in entries.items())
+        job_tables = f'[job_minutes."{path}"]\n' + "".join(f"{name} = {minutes}\n" for name, minutes in entries.items())
     return rendered(f"{size_table}[clones]\n{job_tables}")
 
 
@@ -47,238 +44,216 @@ def squashed(text: str) -> str:
     return " ".join(text.split())
 
 
+def change_rows(out: str) -> list[tuple[str, str, str]]:
+    """The path, event and fact of each lowered or dropped row, a planned row's event worded as the fix's."""
+    rows = []
+    for match in filter(None, map(CHANGE_ROW.match, map(squashed, out.splitlines()))):
+        planned = match["glyph"] == "~"
+        rows.append((match["path"], PLANNED_EVENTS[match["event"]] if planned else match["event"], match["fact"]))
+    return rows
+
+
+def finding_rows(out: str) -> list[str]:
+    """The workflow findings and their fixes, which the fix leaves as it found them."""
+    return [row for row in map(squashed, out.splitlines()) if FINDING_ROW.match(row)]
+
+
+@dataclass(frozen=True)
+class Run:
+    planned_code: int
+    planned: str
+    code: int
+    done: str
+
+
+def dry_run_then_fix(capsys, repo: Path) -> Run:
+    """The dry run, which writes nothing to the tree or the index and plans the change rows and findings the fix then
+    prints, and the fix."""
+    index = git(repo, "ls-files", "--stage").stdout
+    tree = tree_of(repo)
+    planned_code, planned, _ = fixed(capsys, repo, *DRY_RUN_WORDS)
+    assert (tree_of(repo), git(repo, "ls-files", "--stage").stdout) == (tree, index), planned
+    code, done, _ = fixed(capsys, repo, *FIX_WORDS)
+    assert (change_rows(planned), finding_rows(planned)) == (change_rows(done), finding_rows(done)), (planned, done)
+    return Run(planned_code, planned, code, done)
+
+
 def a_job_removed() -> dict[str, str]:
-    return {WORKFLOW: workflow_of(lint="10")}
+    return {WORKFLOW: workflow(jobs=job("lint", "10"))}
 
 
 def a_workflow_no_root_reaches() -> dict[str, str]:
-    return {WORKFLOW: workflow_of("workflow_call", e2e="40")}
+    return {WORKFLOW: workflow("on: workflow_call\n", job("e2e", "40"))}
 
 
 def a_job_turned_into_a_call() -> dict[str, str]:
-    call = f"name: w\non: pull_request\npermissions: {{}}\njobs:\n  e2e:\n    uses: ./{CALLED}\n"
-    return {WORKFLOW: call, CALLED: workflow_of("workflow_call", build="10")}
+    call = workflow(jobs=f"  e2e:\n    uses: ./{CALLED}\n")
+    return {WORKFLOW: call, CALLED: workflow("on: workflow_call\n", job("build", "10"))}
+
+
+@dataclass(frozen=True)
+class Scenario:
+    """A workflow tree and the table it is held against, with what the fix writes, prints and exits."""
+
+    files: dict[str, str]
+    entries: dict[str, int]
+    written: dict[str, int]
+    rows: tuple[tuple[str, str], ...] = ()
+    exit_code: int = 0
+    deleted: tuple[str, ...] = ()
+    kept_findings: tuple[str, ...] = ()
 
 
 GONE = "job e2e is gone · was 40 minutes"
 NO_DEBT = "job e2e 40 → {} minutes · debt from 16 minutes"
-# the last column is the exit: a job of 30 minutes whose entry of 10 is dropped is new debt
-CASES = [
-    pytest.param(
-        {WORKFLOW: workflow_of(e2e="30")},
-        (),
-        {"e2e": 40},
-        {"e2e": 30},
-        [("lowered", "job e2e 40 → 30 minutes")],
-        0,
-        id="30",
-    ),
-    pytest.param(
-        {WORKFLOW: workflow_of(e2e="17.5")},
-        (),
-        {"e2e": 40},
-        {"e2e": 18},
-        [("lowered", "job e2e 40 → 18 minutes")],
-        0,
-        id="17.5",
-    ),
-    pytest.param(
-        {WORKFLOW: workflow_of(e2e="15.5")},
-        (),
-        {"e2e": 40},
-        {"e2e": 16},
-        [("lowered", "job e2e 40 → 16 minutes")],
-        0,
-        id="15.5",
-    ),
-    pytest.param({WORKFLOW: workflow_of(e2e="15")}, (), {"e2e": 40}, {}, [("dropped", NO_DEBT.format(15))], 0, id="15"),
-    pytest.param(
-        {WORKFLOW: workflow_of(e2e="14.5")}, (), {"e2e": 40}, {}, [("dropped", NO_DEBT.format(15))], 0, id="14.5"
-    ),
-    pytest.param(
-        {WORKFLOW: workflow_of(e2e="30")},
-        (),
+LOWER_TO_15 = "lower timeout-minutes to 15 or less"
+SET_A_LIMIT = "set timeout-minutes to a number"
+
+
+def lowers(raw: str, to: int) -> Scenario:
+    return Scenario({WORKFLOW: workflow(jobs=job("e2e", raw))}, {"e2e": 40}, {"e2e": to}, (("lowered", f"job e2e 40 → {to} minutes"),))
+
+
+def drops(raw: str) -> Scenario:
+    return Scenario({WORKFLOW: workflow(jobs=job("e2e", raw))}, {"e2e": 40}, {}, (("dropped", NO_DEBT.format(15)),))
+
+
+def stands(raw: str | None, entry: int, kept_finding: str) -> Scenario:
+    return Scenario({WORKFLOW: workflow(jobs=job("e2e", raw))}, {"e2e": entry}, {"e2e": entry}, (), 1, (), (kept_finding,))
+
+
+def gone(files: dict[str, str], deleted: tuple[str, ...] = ()) -> Scenario:
+    return Scenario(files, {"e2e": 40}, {}, (("dropped", GONE),), 0, deleted)
+
+
+SCENARIOS = {
+    "30": lowers("30", 30),
+    "17.5": lowers("17.5", 18),
+    "15.5": lowers("15.5", 16),
+    "equal": Scenario({WORKFLOW: workflow(jobs=job("e2e", "40"))}, {"e2e": 40}, {"e2e": 40}),
+    "above": stands("45", 40, "bring it back to 40 or below"),
+    "15": drops("15"),
+    "14.5": drops("14.5"),
+    "an entry of 10": Scenario(
+        {WORKFLOW: workflow(jobs=job("e2e", "30"))},
         {"e2e": 10},
         {},
-        [("dropped", "job e2e has no debt · was 10 minutes")],
+        (("dropped", "job e2e has no debt · was 10 minutes"),),
         1,
-        id="an entry of 10",
-    ),
-    pytest.param(
-        {WORKFLOW: workflow_of(e2e="15")},
         (),
+        (LOWER_TO_15,),
+    ),
+    "an entry of 15": Scenario(
+        {WORKFLOW: workflow(jobs=job("e2e", "15"))},
         {"e2e": 15},
         {},
-        [("dropped", "job e2e has no debt · was 15 minutes")],
-        0,
-        id="an entry of 15",
+        (("dropped", "job e2e has no debt · was 15 minutes"),),
     ),
-    pytest.param(a_job_removed(), (), {"e2e": 40}, {}, [("dropped", GONE)], 0, id="the job is removed"),
-    pytest.param(a_job_turned_into_a_call(), (), {"e2e": 40}, {}, [("dropped", GONE)], 0, id="the job is a call"),
-    pytest.param(
-        a_workflow_no_root_reaches(), (), {"e2e": 40}, {}, [("dropped", GONE)], 0, id="no root reaches the workflow"
+    "the job is removed": gone(a_job_removed()),
+    "the job is a call": gone(a_job_turned_into_a_call()),
+    "no root reaches the workflow": gone(a_workflow_no_root_reaches()),
+    "the file is deleted": gone({WORKFLOW: workflow(jobs=job("e2e", "40"))}, (WORKFLOW,)),
+    "no limit beside an entry of 40": stands(None, 40, "set timeout-minutes to a number of at most 15"),
+    "no limit beside an entry of 10": stands(None, 10, "set timeout-minutes to a number of at most 15"),
+    "an invalid limit beside an entry of 40": stands("${{ vars.T }}", 40, SET_A_LIMIT),
+    "an invalid limit beside an entry of 10": stands("${{ vars.T }}", 10, SET_A_LIMIT),
+    "a job without an entry": Scenario(
+        {WORKFLOW: workflow(jobs=job("e2e", "20") + job("lint", "20"))},
+        {"lint": 20},
+        {"lint": 20},
+        (),
+        1,
+        (),
+        (LOWER_TO_15,),
     ),
-    pytest.param(
-        {WORKFLOW: workflow_of(e2e="40")},
-        (WORKFLOW,),
-        {"e2e": 40},
-        {},
-        [("dropped", GONE)],
-        0,
-        id="the file is deleted",
-    ),
-]
+}
 
 
-def held_repo(build_repo, files: dict[str, str], deleted: tuple[str, ...], entries: dict[str, int]) -> Path:
-    repo = build_repo({**files, BASELINE_PATH: ceiling(entries)})
-    for name in deleted:
+def held_repo(build_repo, scenario: Scenario) -> Path:
+    repo = build_repo({**scenario.files, BASELINE_PATH: ceiling(scenario.entries)})
+    for name in scenario.deleted:
         (repo / name).unlink()
     return repo
 
 
-@pytest.mark.parametrize(("files", "deleted", "entries", "written", "rows", "exit_code"), CASES)
-def test_the_fix_writes_the_lowered_table_names_each_change_and_leaves_a_ceiling_the_check_holds(
-    build_repo, capsys, files, deleted, entries, written, rows, exit_code
+@pytest.mark.parametrize("scenario", SCENARIOS.values(), ids=SCENARIOS.keys())
+def test_the_fix_writes_the_lowered_table_names_each_change_and_the_dry_run_plans_the_same_rows(
+    build_repo, capsys, scenario
 ):
-    """TIMEOUT-20, TIMEOUT-21, TIMEOUT-25: the table is written lowered, each job change is a row naming the workflow
-    and its facts, and the check then finds nothing to lower."""
-    repo = held_repo(build_repo, files, deleted, entries)
-    code, out, err = fixed(capsys, repo, *FIX_WORDS)
-    printed = squashed(out)
-    assert (code, err, (repo / BASELINE_PATH).read_text()) == (exit_code, "", ceiling(written))
-    assert [f"{WORKFLOW} {event} {fact}" in printed for event, fact in rows] == [True] * len(rows), out
-    checked_code, checked_out, _ = fixed(capsys, repo, CHECK_WORD, "debt")
-    assert (checked_code, "can fall" in checked_out) == (exit_code, False)
-
-
-@pytest.mark.parametrize(("files", "deleted", "entries", "written", "rows", "exit_code"), CASES)
-def test_a_dry_run_words_each_change_as_what_the_fix_would_do_and_writes_nothing(
-    build_repo, capsys, files, deleted, entries, written, rows, exit_code
-):
-    """TIMEOUT-26: the dry run plans the rows the fix then writes, with the same facts, and exits 1."""
-    repo = held_repo(build_repo, files, deleted, entries)
-    before = digest(repo)
-    code, planned, _ = fixed(capsys, repo, *DRY_RUN_WORDS)
-    assert (code, digest(repo)) == (1, before)
-    printed = squashed(planned)
-    assert [f"{WORKFLOW} {PLANNED_WORDS[event]} {fact}" in printed for event, fact in rows] == [True] * len(rows), (
-        planned
+    """TIMEOUT-20, TIMEOUT-21, TIMEOUT-22, TIMEOUT-25, TIMEOUT-26: the table is written lowered, never raised or filled,
+    each job change is a row naming the workflow and its facts, the findings keep their fixes, the dry run plans the
+    same rows without writing and exits 1 where the fix changes the file, and the check then finds nothing to lower."""
+    repo = held_repo(build_repo, scenario)
+    run = dry_run_then_fix(capsys, repo)
+    changes = [(WORKFLOW, event, fact) for event, fact in scenario.rows]
+    changed = scenario.written != scenario.entries
+    assert (run.code, run.planned_code, (repo / BASELINE_PATH).read_text()) == (
+        scenario.exit_code,
+        1 if changed or scenario.exit_code else 0,
+        ceiling(scenario.written),
     )
-    assert fixed(capsys, repo, *FIX_WORDS)[0] == exit_code
+    assert change_rows(run.done) == changes, run.done
+    assert [fix in run.done for fix in scenario.kept_findings] == [True] * len(scenario.kept_findings), run.done
+    checked_code, checked_out, _ = fixed(capsys, repo, CHECK_WORD, "debt")
+    assert (checked_code, "can fall" in checked_out) == (scenario.exit_code, False)
 
 
 def test_the_fixed_ceiling_is_committed_to_a_green_verdict_and_a_second_fix_changes_nothing(pull_request, capsys):
-    """TIMEOUT-20, TIMEOUT-25: the count names one entry in the debt row and the verdict line; the verdict after the
-    commit is green; a second fix writes the same bytes and says nothing to lower."""
+    """TIMEOUT-20, TIMEOUT-25, TIMEOUT-26: the count names one entry in the debt row and the verdict line; the verdict
+    after the commit is green; a second fix and dry run find nothing to lower."""
     repo, commit_base = pull_request
-    put(repo / WORKFLOW, workflow_of(e2e="30"))
+    put(repo / WORKFLOW, workflow(jobs=job("e2e", "30")))
     commit_base(ceiling({"e2e": 40}))
-    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
-    printed = squashed(out)
-    assert (code, "debt lowered 1 entry" in printed, "ceiling lowered by 1 entry" in printed) == (0, True, True), out
+    run = dry_run_then_fix(capsys, repo)
+    printed = squashed(run.done)
+    assert (run.code, "debt lowered 1 entry" in printed, "ceiling lowered by 1 entry" in printed) == (0, True, True)
+    assert (run.planned_code, "debt 1 to lower" in squashed(run.planned)) == (1, True)
     commit_all(repo, "fixed")
     verdict_code, verdict_out, verdict_err = verdict_streams(repo, capsys)
     assert (verdict_code, "✓ green" in verdict_out, verdict_err) == (0, True, ""), verdict_out
-    written = digest(repo)
-    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
-    assert (code, digest(repo), "✓ clean · nothing to lower" in out) == (0, written, True)
+    again = dry_run_then_fix(capsys, repo)
+    assert (again.planned_code, again.code, "✓ clean · nothing to lower" in again.done) == (0, 0, True)
 
 
 def test_every_lowered_and_dropped_entry_counts_with_the_size_entries_in_the_ceiling_line(build_repo, capsys):
-    """TIMEOUT-25: a lowered job, a dropped job and a lowered size entry are three entries, the job rows after the size
-    row in the order of the file's entries."""
-    files = {SIZE_FILE: long_function(70), WORKFLOW: workflow_of(a="30", b="12")}
+    """TIMEOUT-25, TIMEOUT-26: a lowered job, a dropped job and a lowered size entry are three entries, the job rows
+    after the size row in the order of the file's entries, in the fix and in the dry run."""
+    files = {SIZE_FILE: long_function(70), WORKFLOW: workflow(jobs=job("a", "30") + job("b", "12"))}
     repo = build_repo({**files, BASELINE_PATH: ceiling({"a": 40, "b": 40}, size=80)})
-    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
-    printed = squashed(out)
-    assert (code, "debt lowered 3 entries" in printed, "ceiling lowered by 3 entries" in printed) == (0, True, True), (
-        out
-    )
-    rows = [
-        printed.index(row)
-        for row in (f"{SIZE_FILE}:1 lowered", f"{WORKFLOW} lowered job a", f"{WORKFLOW} dropped job b")
-    ]
-    assert rows == sorted(rows)
+    run = dry_run_then_fix(capsys, repo)
+    done, planned = squashed(run.done), squashed(run.planned)
+    assert (run.code, "debt lowered 3 entries" in done, "ceiling lowered by 3 entries" in done) == (0, True, True), run.done
+    assert (run.planned_code, "debt 3 to lower" in planned, "3 ceiling entries would fall" in planned) == (1, True, True)
+    assert [row[:2] for row in change_rows(run.done)] == [(f"{SIZE_FILE}:1", "lowered"), (WORKFLOW, "lowered"), (WORKFLOW, "dropped")]
+    assert [row[2] for row in change_rows(run.done)[1:]] == ["job a 40 → 30 minutes", "job b 40 → 12 minutes · debt from 16 minutes"]
     assert (repo / BASELINE_PATH).read_text() == ceiling({"a": 30}, size=70)
-
-
-def test_a_dry_run_counts_every_job_entry_it_would_lower_or_drop_with_the_size_entries(build_repo, capsys):
-    """TIMEOUT-25, TIMEOUT-26."""
-    files = {SIZE_FILE: long_function(70), WORKFLOW: workflow_of(a="30", b="12")}
-    repo = build_repo({**files, BASELINE_PATH: ceiling({"a": 40, "b": 40}, size=80)})
-    code, out, _ = fixed(capsys, repo, *DRY_RUN_WORDS)
-    printed = squashed(out)
-    assert (code, "debt 3 to lower" in printed, "3 ceiling entries would fall" in printed) == (1, True, True), out
-
-
-def test_dropping_the_last_entry_leaves_the_table_held_and_empty(build_repo, capsys):
-    """TIMEOUT-21."""
-    repo = held_repo(build_repo, {WORKFLOW: workflow_of(e2e="12")}, (), {"e2e": 40})
-    assert fixed(capsys, repo, *FIX_WORDS)[0] == 0
-    assert "[job_minutes]\n" in (repo / BASELINE_PATH).read_text()
 
 
 def renamed_and_shrunk(pull_request) -> Path:
     repo, commit_base = pull_request
-    put(repo / WORKFLOW, workflow_of(e2e="40", other="10"))
+    put(repo / WORKFLOW, workflow(jobs=job("e2e", "40") + job("other", "10")))
     commit_base(ceiling({"e2e": 40}))
     git(repo, "mv", WORKFLOW, RENAMED)
-    put(repo / RENAMED, workflow_of(e2e="30", other="10"))
+    put(repo / RENAMED, workflow(jobs=job("e2e", "30") + job("other", "10")))
     return repo
 
 
 def test_a_renamed_workflow_takes_its_entry_and_has_it_lowered_in_one_fix(pull_request, capsys):
-    """TIMEOUT-20, TIMEOUT-21: the renames are followed before an entry is judged, so a renamed workflow's entry moves
-    and falls to its job's limit instead of falling as gone."""
+    """TIMEOUT-20, TIMEOUT-21, TIMEOUT-26: the renames are followed before an entry is judged, so a renamed workflow's
+    entry moves and falls to its job's limit instead of falling as gone, in the fix and in the dry run."""
     repo = renamed_and_shrunk(pull_request)
-    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
-    printed = squashed(out)
-    assert (code, (repo / BASELINE_PATH).read_text()) == (0, ceiling({"e2e": 30}, path=RENAMED))
-    assert (f"{RENAMED} lowered job e2e 40 → 30 minutes" in printed, "is gone" in printed) == (True, False), out
-
-
-@pytest.mark.parametrize(
-    ("files", "entries", "expected_rows"),
-    [
-        pytest.param(
-            {WORKFLOW: workflow_of(e2e="45")}, {"e2e": 40}, ["bring it back to 40 or below"], id="a job above its entry"
-        ),
-        pytest.param(
-            {WORKFLOW: workflow_of(e2e="20", lint="20")},
-            {"lint": 20},
-            ["lower timeout-minutes to 15 or less"],
-            id="a job without an entry",
-        ),
-        pytest.param(
-            {WORKFLOW: workflow_of(e2e=None)},
-            {"e2e": 40},
-            ["set timeout-minutes to a number of at most 15"],
-            id="no limit",
-        ),
-        pytest.param(
-            {WORKFLOW: workflow_of(e2e="${{ vars.T }}")},
-            {"e2e": 10},
-            ["set timeout-minutes to a number"],
-            id="an invalid limit",
-        ),
-    ],
-)
-def test_the_fix_never_raises_adds_or_drops_what_it_cannot_measure(build_repo, capsys, files, entries, expected_rows):
-    """TIMEOUT-22: the table stays as held and the finding stays with its own fix."""
-    repo = build_repo({**files, BASELINE_PATH: ceiling(entries)})
-    before = digest(repo)
-    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
-    assert (code, digest(repo)) == (1, before)
-    assert [row in out for row in expected_rows] == [True] * len(expected_rows), out
+    run = dry_run_then_fix(capsys, repo)
+    assert (run.code, run.planned_code, (repo / BASELINE_PATH).read_text()) == (0, 1, ceiling({"e2e": 30}, path=RENAMED))
+    assert change_rows(run.done) == [(RENAMED, "lowered", "job e2e 40 → 30 minutes")], run.done
+    assert "is gone" not in run.done
 
 
 @pytest.mark.parametrize(
     ("files", "entries"),
     [
-        pytest.param({WORKFLOW: workflow_of(e2e="30")}, {"e2e": 40}, id="measured"),
-        pytest.param({WORKFLOW: workflow_of(lint="10")}, {"e2e": 40}, id="gone"),
-        pytest.param({WORKFLOW: workflow_of(e2e="30")}, {"e2e": 10}, id="no debt"),
+        pytest.param({WORKFLOW: workflow(jobs=job("e2e", "30"))}, {"e2e": 40}, id="measured"),
+        pytest.param({WORKFLOW: workflow(jobs=job("lint", "10"))}, {"e2e": 40}, id="gone"),
+        pytest.param({WORKFLOW: workflow(jobs=job("e2e", "30"))}, {"e2e": 10}, id="no debt"),
     ],
 )
 def test_a_can_fall_finding_names_the_fix_command_as_its_fix(build_repo, capsys, files, entries):
@@ -288,32 +263,57 @@ def test_a_can_fall_finding_names_the_fix_command_as_its_fix(build_repo, capsys,
     assert (code, "can fall" in out, FIX_RUN in out, "by hand" in out) == (1, True, True, False), out
 
 
-UNREADABLE_WORKFLOW = {BROKEN: "on: [pull_request\njobs: {"}
 
 
-@pytest.mark.parametrize("words", [FIX_WORDS, DRY_RUN_WORDS], ids=["fix", "dry run"])
-def test_a_workflow_that_cannot_be_read_refuses_the_whole_fix_while_an_entry_is_held(build_repo, capsys, words):
-    """TIMEOUT-23, TIMEOUT-26: nothing is written, the size entries and the job entries stand, and the row names the
-    file."""
-    files = {SIZE_FILE: long_function(70), WORKFLOW: workflow_of(e2e="30"), **UNREADABLE_WORKFLOW}
+UNREADABLE_WORKFLOWS = {
+    "no YAML": {BROKEN: "on: [pull_request\njobs: {"},
+    "an alias hides the jobs": {BROKEN: "x: &j\n  e2e: 1\non: pull_request\njobs: *j\n"},
+    "a local call names an untracked workflow": {BROKEN: workflow(jobs=f"  e2e:\n    uses: ./{CALLED}\n")},
+}
+
+
+@pytest.mark.parametrize("unreadable", UNREADABLE_WORKFLOWS.values(), ids=UNREADABLE_WORKFLOWS.keys())
+def test_a_workflow_that_cannot_be_read_refuses_the_whole_fix_while_an_entry_is_held(build_repo, capsys, unreadable):
+    """TIMEOUT-23, TIMEOUT-26: the dry run and the fix refuse alike with the file named, and nothing is written, the
+    size entries and the job entries included."""
+    files = {SIZE_FILE: long_function(70), WORKFLOW: workflow(jobs=job("e2e", "30")), **unreadable}
     repo = build_repo({**files, BASELINE_PATH: ceiling({"e2e": 40}, size=80)})
-    before = digest(repo)
-    code, out, _ = fixed(capsys, repo, *words)
-    assert (code, digest(repo), f"✗ debt not fixed cannot read {BROKEN}" in squashed(out)) == (2, before, True), out
+    before = tree_of(repo)
+    run = dry_run_then_fix(capsys, repo)
+    assert (run.planned_code, run.code, tree_of(repo)) == (2, 2, before)
+    for printed in (run.planned, run.done):
+        assert f"✗ debt not fixed cannot read {BROKEN}" in squashed(printed), printed
 
 
-@pytest.mark.parametrize("entries", [None, {}], ids=["no table", "an empty table"])
+READ_NOWHERE = {
+    "no table": (ceiling(None, size=80), ceiling(None, size=70)),
+    "an empty table": (ceiling({}, size=80), ceiling({}, size=70)),
+}
+
+
+@pytest.mark.parametrize(("held", "written"), READ_NOWHERE.values(), ids=READ_NOWHERE.keys())
 def test_a_workflow_that_cannot_be_read_does_not_block_the_size_fix_where_no_job_entry_is_held(
-    build_repo, capsys, entries
+    build_repo, capsys, held, written
 ):
-    """TIMEOUT-23: the fix reads no workflow where the table is absent or empty, so the size entry falls and the rule
-    alone reports the file."""
-    files = {SIZE_FILE: long_function(70), **UNREADABLE_WORKFLOW}
-    repo = build_repo({**files, BASELINE_PATH: ceiling(entries, size=80)})
-    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
-    assert (code, (repo / BASELINE_PATH).read_text(), "not fixed" in out, f"cannot read {BROKEN}" in out) == (
+    """TIMEOUT-23, TIMEOUT-26: an absent table and an empty table read no workflow for the fix, so
+    the size entry falls, in the dry run too, and the rule alone reports the file."""
+    files = {SIZE_FILE: long_function(70), WORKFLOW: workflow(jobs=job("e2e", "20")), **UNREADABLE_WORKFLOWS["no YAML"]}
+    repo = build_repo({**files, BASELINE_PATH: held})
+    run = dry_run_then_fix(capsys, repo)
+    assert (run.code, (repo / BASELINE_PATH).read_text(), "not fixed" in run.done, f"cannot read {BROKEN}" in run.done) == (
         2,
-        ceiling(entries, size=70),
+        written,
         False,
         True,
     )
+    assert (run.planned_code, "not fixed" in run.planned, f"cannot read {BROKEN}" in run.planned) == (2, False, True)
+
+
+def test_a_first_recording_adds_no_job_entry_and_leaves_a_job_above_fifteen_new_debt(build_repo, capsys):
+    """TIMEOUT-22, TIMEOUT-23, TIMEOUT-26: with no ceiling file the fix records the size entries only, so the job stays
+    new debt, in the dry run too."""
+    repo = build_repo({SIZE_FILE: long_function(70), WORKFLOW: workflow(jobs=job("e2e", "20"))})
+    run = dry_run_then_fix(capsys, repo)
+    assert (run.code, run.planned_code, (repo / BASELINE_PATH).read_text()) == (1, 1, ceiling(None, size=70))
+    assert ("ceiling recorded" in run.done, "ceiling would be recorded" in run.planned) == (True, True)
+    assert [("new debt" in out, LOWER_TO_15 in out) for out in (run.done, run.planned)] == [(True, True)] * 2
