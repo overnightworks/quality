@@ -299,7 +299,7 @@ def test_a_workflow_that_cannot_be_read_refuses_the_whole_fix_while_an_entry_is_
     repo = build_repo({**files, BASELINE_PATH: ceiling({"e2e": 40}, size=80)})
     before = digest(repo)
     code, out, _ = fixed(capsys, repo, *words)
-    assert (code, digest(repo), f"✗ debt not checked cannot read {BROKEN}" in squashed(out)) == (2, before, True), out
+    assert (code, digest(repo), f"✗ debt not fixed cannot read {BROKEN}" in squashed(out)) == (2, before, True), out
 
 
 @pytest.mark.parametrize("entries", [None, {}], ids=["no table", "an empty table"])

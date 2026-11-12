@@ -243,7 +243,12 @@ class AreaVerdict:
 
     @property
     def only_the_fix_refused(self) -> bool:
-        return isinstance(self.ceiling, CannotJudge) and all(verdict.refusal is None for verdict in self.verdicts)
+        """The fix refused and no rule refused but the job timeouts with the fix's own reason: the fix reads the workflows
+        through that rule, so the one unreadable file stops the fix and not only the check."""
+        return isinstance(self.ceiling, CannotJudge) and all(
+            verdict.refusal is None or (verdict.rule is Rule.JOB_TIMEOUT and verdict.refusal.reason == self.ceiling.reason)
+            for verdict in self.verdicts
+        )
 
     @property
     def findings(self) -> tuple[Finding, ...]:
