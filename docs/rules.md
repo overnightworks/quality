@@ -820,9 +820,10 @@ last backtick left without a partner on the line is read as `$(` when a word fol
 lines) and dropped otherwise; the words are split by Python's `shlex`, and `&&`, `||`, `;`, `|`, `&`, `(` and `)`,
 also one glued to `<` or `>`, end a segment. A word that holds `$(` is split again the same way,
 so `"$(pytest -q)"` reads as `$(pytest -q)` (PYTEST-2). The string after the `-c` flag of `sh`, `bash`, `dash`, `zsh` or
-`ksh` is read as a script of its own by the same reader, and its segments stand after the shell's. The shell's flags are
-read only before its first operand: a flag is a word that starts with a dash or a plus sign, and `-o`, `+o`, `-O`, `+O`
-and `--rcfile` and `--init-file` take the next word as their value (so does any flag that ends in `o` or `O`, as `-eo`).
+`ksh` is taken whole, substitutions included, before it is split, and is read as a script of its own by the same reader;
+its segments stand after the shell's. The shell's flags are read only before its first operand: a flag is a word that
+starts with a dash or a plus sign, and `-o`, `+o`, `-O`, `+O` and `--rcfile` and `--init-file` take the next word as their
+value (so does any flag that ends in `o` or `O`, as `-eo`).
 A lone `-` or `--` ends the flags, and the word after it is the first operand. A `-c` flag is a single-dash word that
 holds the letter `c`, so `-c`, `-ec` and `-lc` count, and the first operand after one is the string. A string the reader
 cannot split to its end is `invalid` where the run holds the word `pytest` (PYTEST-6); `bash run.sh -c 'pytest -q'`

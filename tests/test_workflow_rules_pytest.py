@@ -101,6 +101,7 @@ GREEN = [
     "python3.14t -m pytest -n auto",
     "sudo -E pytest -n auto",
     "pytest -n auto -- tests",
+    'bash -c "pytest -n auto --x=$(echo y)"',
 ]
 
 
@@ -288,6 +289,8 @@ def test_a_pytest_call_with_zero_workers_is_serial(build_repo, scalar, command):
         "pytest -n $WORKERS",
         "pytest -n ${{ matrix.n }}",
         "pytest -n $(nproc)",
+        'bash -c "pytest -n $(nproc)"',
+        "bash -c 'pytest -n \"$(nproc)\"'",
         "pytest -n",
         "pytest -n -1",
         "pytest -n 2.5",
