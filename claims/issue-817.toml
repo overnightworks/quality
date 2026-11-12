@@ -1,8 +1,0 @@
-claim_id = "b62bba23de88410e8f97bf09ab9f42a1"
-agent = "Claude 3cb16e78-3ea2-405c-947b-02cb3fc89cde"
-role = "builder"
-base = "9cae04f5deb5c08b68349af188fbc6daa1021c28"
-branch = "claude/issue-817-catalog-check-is-red-when-a-covered-repo"
-scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/catalog_rules.py", "src/quality/fleet.py", "src/quality/report.py", "src/quality/rules.py", "tests/test_catalog_rules.py", "tests/test_fleet_matrix.py"]
-opened_commit = "d9af239b5dac73de777dc9973ebfb27c60c4393a"
-whole_reason = "The verdict, the switch, the Declared field and the fleet cell are one change of what a gate release does with the rule: each alone leaves the matrix lying or the note without a caller, and the dead note event goes with the code that stopped producing it."
