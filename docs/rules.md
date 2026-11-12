@@ -864,6 +864,47 @@ the rule's extent is the count of workflows it read (PYTEST-10). quality's own c
 (PYTEST-11). No configuration switches the rule off. It first ships in v0.11.0, so a dependent meets it
 at its first bump to that release.
 
+The `job-timeout` rule, in the `debt` area, judges every job of a workflow that runs on a pull request or on a push to
+main, and of the reusable workflows those call through a local `uses:`. Every tracked workflow is parsed, a root or not,
+because a root is known only after the parse; a tracked file gone from the tree is skipped and a composite action is not
+read (TIMEOUT-1). A workflow is a root when its `on:` (a string, a list or the keys of a mapping) names
+`pull_request`, `pull_request_target` or `pull_request_review`, or names `push`: bare or with an empty, `~` or `null`
+value, with filters that name no `branches`, `branches-ignore` or `tags`, with `branches` of which a pattern that does
+not start with `!` matches `main`, or with `branches-ignore` of which none matches it. A pattern matches as Python's
+`fnmatch` reads it with `**` read as `*`; a `!` pattern is not read, so the reading errs toward a root. A `push` with
+only `tags` is no root, and `schedule`, `workflow_dispatch`, `merge_group`, `workflow_run` and `workflow_call` alone are
+none (TIMEOUT-2).
+
+A job whose `uses:` starts with `./` or `$/` and names `.github/workflows/<file>.yml` or `.yaml`, a tracked workflow,
+makes that file judged, followed from every root and judged once, so a cycle ends where it closes and is no finding. A
+remote reusable workflow is not followed. A workflow no root reaches is outside, which is how release and image
+workflows stay outside; a local call in a file that is not judged is not read (TIMEOUT-3). A judged job is an entry of
+`jobs:` with no `uses:`; a job with `uses:` is not judged itself, and a matrix job is one job (TIMEOUT-4).
+
+The limit is read in this order: no `timeout-minutes` key is `missing`, never debt; a plain unquoted decimal number
+above zero is that many minutes; any other value is `invalid` (an expression, a quoted number, `0`, a negative, signed,
+hex or exponent form, an empty value, `~`, `null`, a word, a sequence or a mapping); a limit above 15 is `new debt`,
+`15.5` included (TIMEOUT-5). The findings stand in the `debt` area at the file that defines the job, a reached
+workflow under its own path, at the `timeout-minutes` line or the job id's line for `missing`, in the listing's order
+and the file's job order. The facts are `job <id> has no timeout-minutes`, `job <id> has a timeout-minutes that is not a
+number above zero` and `job <id> has timeout-minutes <value> · limit 15`; the fix is `set timeout-minutes to a number of
+at most 15` for the first two and `lower timeout-minutes to 15 or less` for the last (TIMEOUT-6).
+
+A workflow whose YAML or file cannot be read, an alias or a merge key where it can hide the top mapping, `on:`, the
+`push` value, its `branches`, `branches-ignore` or `tags`, or in a judged file `jobs`, a job, a `uses:` or a
+`timeout-minutes` value, a `push` that is a word, a number or a sequence, a filter of another shape, a `jobs` or a job
+that is no mapping, a local call in a judged file that names no tracked workflow of the workflow folder, and a called
+workflow gone from the tree are exit `2` naming the file; the other rules still judge. A workflow with no `jobs:` has no
+job (TIMEOUT-7). The rule is judged beside `size` and `clone` and independent of both, and the debt area counts only the
+rules a ceiling file switches as measured, so the verdict reads `debt ceiling measured, not enforced` where no ceiling
+file holds the debt, even when `job-timeout` finds (TIMEOUT-8). A clean `debt` row keeps its words, and no
+configuration switches the rule off (TIMEOUT-10). It has no release yet, so the fleet matrix shows `not released` in
+its column (TIMEOUT-11). A repeated job id or a repeated `timeout-minutes` key is read as the loader reads it, the last
+winning; actionlint, which `workflow-lint` runs, refuses the repetition. Named gaps: `merge_group` and `workflow_run`
+as roots, the negation and the `+` of a push filter, a limit set only by a `workflow_call` input, a step's
+`timeout-minutes`, and a default branch other than `main`; the jobs of a remote reusable workflow that only another
+repository calls are judged by no rule yet.
+
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
 and nested, with osv-scanner against the OSV advisory database (dev dependencies count) (ADVISORY-1). `uv.lock` and the

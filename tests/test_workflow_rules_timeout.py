@@ -2,7 +2,14 @@ import pytest
 
 from quality.report import FindingEvent
 from quality.rules import Rule
-from tests.support.check import area_finding_rows, assert_finding_vocabulary, is_clean, refusal_row, refusals, rule_findings
+from tests.support.check import (
+    area_finding_rows,
+    assert_finding_vocabulary,
+    is_clean,
+    refusal_row,
+    refusals,
+    rule_findings,
+)
 from tests.support.check import check_output as run
 from tests.support.door import PinnedJudging, door_in
 
@@ -102,6 +109,14 @@ def test_a_matrix_job_is_one_job(build_repo):
     assert judged(build_repo, workflow(jobs=matrix)) == []
     bare = "  j:\n    strategy:\n      matrix:\n        shard: [1, 2, 3]\n" + STEPS
     assert shape(judged(build_repo, workflow(jobs=bare))) == [missing()]
+
+
+def test_a_tracked_workflow_gone_from_the_tree_is_skipped_and_a_composite_action_is_not_read(build_repo):
+    """TIMEOUT-1."""
+    action = "name: a\non: pull_request\njobs:\n  j:\n    runs-on: ubuntu-latest\n"
+    repo = build_repo({WORKFLOW: workflow(), CALLED: workflow(), ".github/actions/x/action.yml": action})
+    (repo / WORKFLOW).unlink()
+    assert shape(rule_findings(repo, Rule.JOB_TIMEOUT)) == [missing(path=CALLED)]
 
 
 def test_a_workflow_without_jobs_has_no_job_to_judge(build_repo):
@@ -371,7 +386,7 @@ def test_the_three_kinds_of_finding_print_in_the_debt_area_with_their_facts_and_
 
 
 def test_a_conforming_repository_is_clean_under_every_rule(build_repo, capsys):
-    """TIMEOUT-6, TIMEOUT-9: a limit of fifteen in a pull-request workflow is clean in the whole run."""
+    """TIMEOUT-5: a limit of fifteen in a pull-request workflow is clean in the whole run."""
     code, output = run(capsys, build_repo({WORKFLOW: workflow(top=CONCURRENCY, jobs=job(limit="15"))}))
     assert (code, is_clean(output)) == (0, True), output
 
