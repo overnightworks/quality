@@ -231,6 +231,38 @@ def job_followed_cases():
             [],
             id="job entries without a committed table and already moved stay",
         ),
+        pytest.param(
+            timed({booked("a.yml"): 40, booked("b.yml"): 10}),
+            timed(None),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("b.yml"): 40}),
+            [NoteEvent.MOVED, NoteEvent.DROPPED],
+            id="job entries without a committed table drop the target entry a moved one takes",
+        ),
+        pytest.param(
+            timed({booked("a.yml"): 40, booked("b.yml", "lint"): 20}),
+            timed(None),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("b.yml"): 40, booked("b.yml", "lint"): 20}),
+            [NoteEvent.MOVED],
+            id="job entries without a committed table move beside a distinct target entry",
+        ),
+        pytest.param(
+            timed({booked("a.yml"): 40, booked("b.yml", "lint"): 20}),
+            timed({booked("a.yml"): 40, booked("a.yml", "lint"): 20}),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("b.yml"): 40, booked("b.yml", "lint"): 20}),
+            [NoteEvent.MOVED],
+            id="a half-moved workflow moves the rest and keeps what is carried",
+        ),
+        pytest.param(
+            timed({booked("a.yml"): 40, booked("b.yml", "lint"): 20}),
+            timed({booked("a.yml"): 40, booked("a.yml", "lint"): 20, booked("b.yml", "lint"): 30}),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("b.yml"): 40, booked("b.yml", "lint"): 20}),
+            [NoteEvent.MOVED],
+            id="a half-moved workflow keeps a carried entry whose key the committed target also held",
+        ),
     ]
 
 

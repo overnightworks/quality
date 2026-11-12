@@ -523,6 +523,11 @@ def _require_placed[Entry: (Key, JobKey)](
         raise _unexplained(unplaced[0])
 
 
+def _holds[Entry: (Key, JobKey)](table: Mapping[Entry, int] | None, key: Entry, value: int) -> bool:
+    """The table holds the entry at this value or higher."""
+    return table is not None and key in table and value <= table[key]
+
+
 def _entries_to_move[Entry: (Key, JobKey)](
     kind: EntryKind[Entry],
     held: Mapping[Entry, int],
@@ -530,17 +535,26 @@ def _entries_to_move[Entry: (Key, JobKey)](
     carried: Mapping[Entry, int] | None,
     source: str | None,
     target: str,
-) -> dict[Entry, int]:
-    """The held entries under a rename's two paths that the fix rewrites, none where they already read as carried. An
-    entry the committed table does not explain refuses; without a committed table nothing is compared."""
-    mine = {key: value for key, value in held.items() if key.path in (source, target)}
-    if committed is None or carried is None:
-        return {key: value for key, value in mine.items() if key.path == source}
-    if not _raised(carried, mine, kind.order(mine)):
-        return {}
-    if outside := _raised(committed, mine, kind.order(mine)):
-        raise _unexplained(outside[0].key.path)
-    return mine
+) -> tuple[dict[Entry, int], dict[Entry, int]]:
+    """The held entries a rename moves from its source and the held entries under its target that go, each judged on
+    its own: a target entry the carry holds, no higher, stays unless a moved entry takes its key; any other entry the
+    committed table does not explain refuses. Without a committed table nothing is compared, so the target's entries
+    stay but those a moved entry takes."""
+    here = {key: value for key, value in held.items() if key.path in (source, target)}
+    moving: dict[Entry, int] = {}
+    leftovers: dict[Entry, int] = {}
+    for key in kind.order(here):
+        value = here[key]
+        carried_already = key.path == target and _holds(carried, key, value)
+        if committed is not None and not carried_already and not _holds(committed, key, value):
+            raise _unexplained(key.path)
+        if key.path == source:
+            moving[key] = value
+        elif committed is not None and not carried_already:
+            leftovers[key] = value
+    taken = {key._replace(path=target) for key in moving}
+    leftovers.update({key: value for key, value in here.items() if key in taken})
+    return moving, leftovers
 
 
 def _followed_entries[Entry: (Key, JobKey)](
@@ -560,12 +574,14 @@ def _followed_entries[Entry: (Key, JobKey)](
     entries, changes = dict(held), []
     for target in sorted(renames.targets):
         source = sources.get(target)
-        mine = _entries_to_move(kind, held, committed, carried, source, target)
-        for key in mine:
+        moving, leftovers = _entries_to_move(kind, held, committed, carried, source, target)
+        for key in (*moving, *leftovers):
             del entries[key]
-        entries.update({key._replace(path=target): value for key, value in mine.items() if key.path == source})
-        moved_first = sorted(kind.order(mine), key=lambda key: key.path != source)
-        changes += [_followed_note(kind.held(key, mine[key]), key.path, source, target) for key in moved_first]
+        entries.update({key._replace(path=target): value for key, value in moving.items()})
+        changes += [
+            _followed_note(kind.held(key, value), key.path, source, target)
+            for key, value in (*moving.items(), *leftovers.items())
+        ]
     if committed is not None:
         _require_placed(entries, committed, tracked)
     return entries, changes
