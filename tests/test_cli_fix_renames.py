@@ -7,7 +7,7 @@ import pytest
 from quality.baseline_file import BASELINE_PATH
 from tests.support.baselines import rendered
 from tests.support.clones import function as clone_function
-from tests.support.door import CHECK_WORD, FIX_WORDS, digest, door_in, fixed, restore_step
+from tests.support.door import CHECK_WORD, DRY_RUN_WORDS, FIX_WORDS, digest, door_in, fixed, restore_step
 from tests.support.git_repositories import git, head_commit, put, shallow_clone
 from tests.support.source_code import long_function
 from tests.support.verdict import verdict_streams
@@ -461,3 +461,172 @@ def test_a_move_beside_a_finding_is_named_in_the_debt_row(pull_request, capsys):
     code, out, err = fixed(capsys, moved_beside_a_grown_file(pull_request), *FIX_WORDS)
     assert (code, err) == (1, "")
     assert "  ! debt          1 finding      1 entry moved · quality/baseline.toml\n" in out
+
+
+OLD_WORKFLOW, NEW_WORKFLOW = ".github/workflows/old.yml", ".github/workflows/new.yml"
+CONCURRENCY = (
+    "concurrency:\n  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}\n"
+    "  cancel-in-progress: ${{ github.event.pull_request.number != null }}\n"
+)
+
+
+def workflow_with(*jobs: str, minutes: int = 40) -> str:
+    """A workflow on pull requests whose jobs run with a `timeout-minutes` of `minutes`."""
+    steps = "    runs-on: ubuntu-latest\n    steps:\n      - run: 'true'\n"
+    body = "".join(f"  {job}:\n    timeout-minutes: {minutes}\n{steps}" for job in jobs)
+    return f"name: w\non: pull_request\npermissions: {{}}\n{CONCURRENCY}jobs:\n{body}"
+
+
+def job_ceiling(path: str, **limits: int) -> str:
+    """A ceiling holding the job limits (job id to minutes) under `path` and nothing else."""
+    entries = "".join(f"{job} = {minutes}\n" for job, minutes in limits.items())
+    return rendered(f'[clones]\n[job_minutes."{path}"]\n{entries}')
+
+
+def workflow_held(pull_request, held: str | None = None, jobs: tuple[str, ...] = ("e2e",)) -> Path:
+    """The base commit holds the workflow under its old path and a ceiling with a job table (`held` by default)."""
+    return based(
+        pull_request,
+        {OLD_WORKFLOW: workflow_with(*jobs)},
+        held or job_ceiling(OLD_WORKFLOW, **{job: 40 for job in jobs}),
+    )
+
+
+def workflow_moved_with_git(pull_request, **keywords) -> Path:
+    repo = workflow_held(pull_request, **keywords)
+    git(repo, "mv", OLD_WORKFLOW, NEW_WORKFLOW)
+    return repo
+
+
+def workflow_moved_and_committed(pull_request) -> Path:
+    repo = workflow_moved_with_git(pull_request)
+    commit_all(repo, "move")
+    return repo
+
+
+def two_workflow_jobs_moved(pull_request) -> Path:
+    return workflow_moved_with_git(pull_request, jobs=("e2e", "lint"))
+
+
+def workflow_moved_after_a_hand_lowering(pull_request) -> Path:
+    repo = workflow_moved_with_git(pull_request)
+    put(repo / BASELINE_PATH, job_ceiling(OLD_WORKFLOW, e2e=30))
+    put(repo / NEW_WORKFLOW, workflow_with("e2e", minutes=30))
+    return repo
+
+
+def workflow_moved_onto_a_stale_target(pull_request) -> Path:
+    held = rendered(
+        f'[clones]\n[job_minutes."{NEW_WORKFLOW}"]\ne2e = 25\n\n[job_minutes."{OLD_WORKFLOW}"]\ne2e = 40\n'
+    )
+    repo = workflow_held(pull_request, held)
+    git(repo, "mv", OLD_WORKFLOW, NEW_WORKFLOW)
+    return repo
+
+
+def job_moved_note(job: str, minutes: int) -> str:
+    return f"{NEW_WORKFLOW} moved job {job} {minutes} minutes from {OLD_WORKFLOW}"
+
+
+def squashed(text: str) -> str:
+    return " ".join(text.split())
+
+
+@pytest.mark.parametrize(
+    ("arrange", "held_jobs", "notes"),
+    [
+        pytest.param(workflow_moved_with_git, {"e2e": 40}, [job_moved_note("e2e", 40)], id="git mv, uncommitted"),
+        pytest.param(workflow_moved_and_committed, {"e2e": 40}, [job_moved_note("e2e", 40)], id="committed move"),
+        pytest.param(
+            two_workflow_jobs_moved,
+            {"e2e": 40, "lint": 40},
+            [job_moved_note("e2e", 40), job_moved_note("lint", 40)],
+            id="two jobs of one workflow",
+        ),
+        pytest.param(
+            workflow_moved_after_a_hand_lowering, {"e2e": 30}, [job_moved_note("e2e", 30)], id="held lower than committed"
+        ),
+        pytest.param(
+            workflow_moved_onto_a_stale_target,
+            {"e2e": 40},
+            [job_moved_note("e2e", 40), f"{NEW_WORKFLOW} dropped job e2e 25 minutes · left from before the move"],
+            id="the stale entry under the target goes",
+        ),
+    ],
+)
+def test_a_moved_workflow_takes_its_job_entries_and_passes_check_and_the_verdict(
+    pull_request, capsys, arrange, held_jobs, notes
+):
+    """TIMEOUT-19, FIX-34, FIX-36, FIX-37: a workflow the index renames since the ceiling's last commit takes its held
+    job entries to the new path at their held values, drops what the target held, and the followed ceiling passes
+    `check` and the verdict."""
+    repo = arrange(pull_request)
+    capsys.readouterr()
+    code, fix_out, err = fixed(capsys, repo, *FIX_WORDS)
+    printed = squashed(fix_out)
+    assert (code, err, (repo / BASELINE_PATH).read_text()) == (0, "", job_ceiling(NEW_WORKFLOW, **held_jobs))
+    assert [note in printed for note in notes] == [True] * len(notes), fix_out
+    assert checked(capsys, repo)[0] == 0
+    commit_all(repo, "fixed")
+    verdict_code, verdict_out, verdict_err = verdict_streams(repo, capsys)
+    assert (verdict_code, "✓ green" in verdict_out, verdict_err) == (0, True, ""), verdict_out
+
+
+def test_a_moved_job_entry_is_counted_in_the_debt_row_and_the_verdict(pull_request, capsys):
+    """TIMEOUT-19, FIX-36, FIX-45: a moved job entry is named by a `moved` row and counted as moved in the debt row and
+    in the verdict line."""
+    repo = workflow_moved_with_git(pull_request)
+    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
+    printed = squashed(out)
+    assert (code, "debt moved 1 entry" in printed, "ceiling moved 1 entry" in printed) == (0, True, True), out
+
+
+def test_a_dry_run_names_the_job_entry_it_would_move_and_writes_nothing(pull_request, capsys):
+    """TIMEOUT-19, FIX-36: a dry run words the move as what would happen and leaves the ceiling as it was."""
+    repo = workflow_moved_with_git(pull_request)
+    before = digest(repo)
+    code, out, _ = fixed(capsys, repo, *DRY_RUN_WORDS)
+    assert (code, f"{NEW_WORKFLOW} move job e2e 40 minutes from {OLD_WORKFLOW}" in squashed(out), digest(repo)) == (
+        1,
+        True,
+        before,
+    )
+
+
+def test_a_second_fix_leaves_a_followed_workflow_move_as_it_is(pull_request, capsys):
+    """TIMEOUT-19, FIX-38: a job entry already moved stays, so a second fix writes nothing and says nothing to lower."""
+    repo = workflow_moved_with_git(pull_request)
+    fixed(capsys, repo, *FIX_WORDS)
+    written = digest(repo)
+    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
+    assert (code, digest(repo), "moved" in out) == (0, written, False)
+
+
+def workflow_entry_raised_by_hand(pull_request) -> Path:
+    repo = workflow_moved_with_git(pull_request)
+    put(repo / BASELINE_PATH, job_ceiling(OLD_WORKFLOW, e2e=45))
+    return repo
+
+
+def test_a_job_entry_git_cannot_place_refuses_and_writes_nothing(pull_request, capsys):
+    """TIMEOUT-19, FIX-39: a job entry raised by hand under a renamed workflow refuses with the restore step, names the
+    workflow and writes nothing; once the ceiling is restored the move is followed."""
+    repo = workflow_entry_raised_by_hand(pull_request)
+    capsys.readouterr()
+    before = digest(repo)
+    code, out, err = fixed(capsys, repo, *FIX_WORDS)
+    assert (code, "  ✗ debt          not fixed      " in out, OLD_WORKFLOW in out, digest(repo)) == (2, True, True, before)
+    assert err.endswith(f"next: {restore_step()}\n")
+    git(repo, "checkout", "HEAD", "--", BASELINE_PATH)
+    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
+    assert (code, job_moved_note("e2e", 40) in squashed(out)) == (0, True)
+
+
+def test_a_workflow_move_the_index_does_not_record_is_not_followed(pull_request, capsys):
+    """TIMEOUT-19, FIX-41: a workflow only moved on disk keeps its job entry under the old path, which `check` calls
+    gone."""
+    repo = workflow_held(pull_request)
+    (repo / OLD_WORKFLOW).rename(repo / NEW_WORKFLOW)
+    before = digest(repo)
+    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
+    assert (code, "moved" in out, "job e2e is gone" in out, digest(repo)) == (1, False, True, before)

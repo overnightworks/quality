@@ -10,7 +10,7 @@ import ast
 import io
 import tokenize
 from collections import Counter
-from collections.abc import Collection, Iterable, Iterator, Mapping
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from enum import Enum
 from operator import attrgetter
@@ -490,9 +490,8 @@ def lower_ceiling(
     return CeilingFix(Baseline(size, held.clones & pairs, held.job_minutes), tuple(changes))
 
 
-def _followed_note(key: Key, value: int, source: str | None, target: str) -> Note:
-    held = f"{_subject(key)} {describe_value(key.metric, value)}"
-    if key.path == source:
+def _followed_note(held: str, entry_path: str, source: str | None, target: str) -> Note:
+    if entry_path == source:
         return Note(target, NoteEvent.MOVED, f"{held} from {source}")
     return Note(target, NoteEvent.DROPPED, SEPARATOR.join((held, LEFT_BEHIND)))
 
@@ -501,44 +500,79 @@ def _unexplained(path: str) -> CannotJudge:
     return CannotJudge(f"{BASELINE_PATH} holds entries under {path} its last commit does not explain", (RESTORE_STEP,))
 
 
-def _source_first(entries: SizeEntries, source: str | None) -> list[Key]:
-    return sorted(entries, key=lambda key: (key.path != source, key_order(key)))
+@dataclass(frozen=True)
+class EntryKind[Entry: (Key, JobKey)]:
+    """How one table of the ceiling lists its entries and words a held one when a rename moves it."""
+
+    order: Callable[[Iterable[Entry]], list[Entry]]
+    held: Callable[[Entry, int], str]
 
 
-def _require_placed(size: SizeEntries, committed: SizeEntries, tracked: frozenset[str]) -> None:
+SIZE_ENTRIES = EntryKind(
+    lambda keys: sorted(keys, key=key_order), lambda key, value: f"{_subject(key)} {describe_value(key.metric, value)}"
+)
+JOB_ENTRIES = EntryKind(list, lambda key, value: f"job {key.job} {value} minutes")
+
+
+def _require_placed[Entry: (Key, JobKey)](
+    entries: Mapping[Entry, int], committed: Mapping[Entry, int], tracked: frozenset[str]
+) -> None:
     """An entry the committed ceiling lacks under a path git no longer tracks has no lineage."""
-    unplaced = sorted({key.path for key in size if key.path not in tracked and key not in committed})
+    unplaced = sorted({key.path for key in entries if key.path not in tracked and key not in committed})
     if unplaced:
         raise _unexplained(unplaced[0])
 
 
-def follow_renames(held: Baseline, committed: Baseline, renames: Renames, tracked: frozenset[str]) -> CeilingFix:
-    """The held ceiling as the verdict will carry the committed one.
-
-    Per rename, held entries still in the committed form leave their source for its target, and the target's leftovers
-    go; entries the carry already holds, no higher, stay. Anything else under a renamed path, and an entry the committed
-    ceiling lacks under a path git no longer tracks, has no lineage git can show: the fix refuses before it writes.
-    """
-    carried = carried_base(committed, renames, ())  # git renamed every source out of the index, so the fix keeps none
+def _followed_entries[Entry: (Key, JobKey)](
+    kind: EntryKind[Entry],
+    held: Mapping[Entry, int],
+    committed: Mapping[Entry, int] | None,
+    carried: Mapping[Entry, int] | None,
+    renames: Renames,
+    tracked: frozenset[str],
+) -> tuple[dict[Entry, int], list[Note]]:
+    """Per rename, held entries still in the committed form leave their source for its target, and the target's
+    leftovers go; entries the carry already holds, no higher, stay. Anything else under a renamed path, and an entry the
+    committed table lacks under a path git no longer tracks, has no lineage git can show: the fix refuses before it
+    writes. Without a committed table the verdict compares nothing, so the source's entries move and no leftover is
+    judged."""
     sources = {target: source for source, target in renames.moves.items()}
-    size, changes = dict(held.size), []
+    entries, changes = dict(held), []
     for target in sorted(renames.targets):
         source = sources.get(target)
-        mine = {key: value for key, value in held.size.items() if key.path in (source, target)}
-        if not raised_entries(carried.size, mine):
+        mine = {key: value for key, value in held.items() if key.path in (source, target)}
+        if committed is None or carried is None:
+            mine = {key: value for key, value in mine.items() if key.path == source}
+        elif not _raised(carried, mine, kind.order(mine)):
             continue
-        if outside := raised_entries(committed.size, mine):
+        elif outside := _raised(committed, mine, kind.order(mine)):
             raise _unexplained(outside[0].key.path)
         for key in mine:
-            del size[key]
-        size.update({key._replace(path=target): value for key, value in mine.items() if key.path == source})
-        moved_first = _source_first(mine, source)
-        changes += [_followed_note(key, mine[key], source, target) for key in moved_first]
-    _require_placed(size, committed.size, tracked)
-    if held.clones is None:
-        return CeilingFix(Baseline(size, None, held.job_minutes), tuple(changes))
-    pairs, pair_changes = _followed_pairs(held.clones, carried.clones, renames)
-    return CeilingFix(Baseline(size, pairs, held.job_minutes), (*changes, *pair_changes))
+            del entries[key]
+        entries.update({key._replace(path=target): value for key, value in mine.items() if key.path == source})
+        moved_first = sorted(kind.order(mine), key=lambda key: key.path != source)
+        changes += [_followed_note(kind.held(key, mine[key]), key.path, source, target) for key in moved_first]
+    if committed is not None:
+        _require_placed(entries, committed, tracked)
+    return entries, changes
+
+
+def follow_renames(held: Baseline, committed: Baseline, renames: Renames, tracked: frozenset[str]) -> CeilingFix:
+    """The held ceiling as the verdict will carry the committed one, for the size entries, the clone pairs and the job
+    entries alike; a table the held ceiling lacks stays lacking."""
+    carried = carried_base(committed, renames, ())  # git renamed every source out of the index, so the fix keeps none
+    size, changes = _followed_entries(SIZE_ENTRIES, held.size, committed.size, carried.size, renames, tracked)
+    pairs = held.clones
+    if held.clones is not None:
+        pairs, pair_changes = _followed_pairs(held.clones, carried.clones, renames)
+        changes += pair_changes
+    limits = held.job_minutes
+    if held.job_minutes is not None:
+        limits, limit_changes = _followed_entries(
+            JOB_ENTRIES, held.job_minutes, committed.job_minutes, carried.job_minutes, renames, tracked
+        )
+        changes += limit_changes
+    return CeilingFix(Baseline(size, pairs, limits), tuple(changes))
 
 
 def _followed_pairs(
