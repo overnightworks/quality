@@ -2,10 +2,11 @@
 them, which of them are workflow files, which release their gate calls pin, whether the checkout is quality's own, and
 the turning of a refused read into `cannot judge`."""
 
+import fnmatch
 import os
 import re
 import subprocess
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, StrEnum, auto
 from pathlib import Path, PurePosixPath
@@ -30,6 +31,8 @@ GATE_URL = f"{GITHUB}{GATE_REPOSITORY}"
 GATE_FILE = "gate.yml"
 CODEQL_FILE = "codeql.yml"
 LOCAL_PREFIXES = ("./", "$/")
+DEFAULT_BRANCH = "main"
+NULL_WORDS = frozenset({"", "~", "null", "Null", "NULL"})
 RELEASE_TAG = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
 COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
 RELEASE_COMMENT = re.compile(rf"\s+# ?(?P<release>{RELEASE_TAG.pattern})\s*")
@@ -372,6 +375,97 @@ def pull_request_events(document: Document) -> frozenset[PullRequestEvent]:
     else:
         names = set(mapping_values(triggers))
     return frozenset(event for event in PullRequestEvent if event.value in names)
+
+
+class UnreadableTrigger(Exception):
+    """A `push:` the reader cannot take to its end; `reason` says which part."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def pushes_to_main(document: Document) -> bool:
+    """Whether the workflow's `on:` names `push` in a way that can run for the default branch: the bare event, or a
+    mapping whose `branches` match it or whose `branches-ignore` leave it; a mapping with only `tags` does not. A pattern
+    matches as `fnmatch` reads it with `**` as `*`; a `!` pattern is not read, so the reading errs toward a root. A `push`
+    that is neither empty nor a mapping, and a filter that is not a string or a list of strings, are refused."""
+    triggers = mapping_values(document.root).get("on")
+    if isinstance(triggers, yaml.ScalarNode):
+        return triggers.value == "push"
+    if isinstance(triggers, yaml.SequenceNode):
+        return any(isinstance(item, yaml.ScalarNode) and item.value == "push" for item in triggers.value)
+    push = mapping_values(triggers).get("push")
+    if push is None:
+        return False
+    if isinstance(push, yaml.MappingNode):
+        return _filters_admit_default_branch(mapping_values(push))
+    if isinstance(push, yaml.ScalarNode) and not push.style and push.value in NULL_WORDS:
+        return True
+    raise UnreadableTrigger("push is neither empty nor a mapping")
+
+
+def _patterns(filters: Mapping[str, yaml.Node], key: str) -> list[str] | None:
+    """The patterns of a push filter: a string is one pattern; None where the filter is not given."""
+    node = filters.get(key)
+    if node is None:
+        return None
+    items = node.value if isinstance(node, yaml.SequenceNode) else [node]
+    if not all(isinstance(item, yaml.ScalarNode) for item in items):
+        raise UnreadableTrigger(f"{key} is not a string or a list of strings")
+    return [item.value for item in items]
+
+
+def _matches_default_branch(pattern: str) -> bool:
+    return fnmatch.fnmatchcase(DEFAULT_BRANCH, pattern.replace("**", "*"))
+
+
+def _filters_admit_default_branch(filters: Mapping[str, yaml.Node]) -> bool:
+    branches, ignored, tags = (_patterns(filters, key) for key in ("branches", "branches-ignore", "tags"))
+    if branches is not None:
+        return any(_matches_default_branch(pattern) for pattern in branches if not pattern.startswith("!"))
+    if ignored is not None:
+        return not any(_matches_default_branch(pattern) for pattern in ignored)
+    return tags is None
+
+
+class UnfollowableCall(Exception):
+    """A local `uses:` of a judged workflow that names no tracked workflow in the tree."""
+
+    def __init__(self, caller: str, uses: str, because: str) -> None:
+        super().__init__(f"{caller} calls {uses}, which {because}")
+        self.caller = caller
+        self.uses = uses
+        self.because = because
+
+
+def reached_workflows(
+    documents: Mapping[str, Document | None], roots: Collection[str], local_calls: Callable[[str], Iterable[str]]
+) -> list[str]:
+    """The roots and every workflow they call through a local `uses:`, each once, in the order of `documents`, which
+    maps each tracked workflow to its document, None for one gone from the tree. `local_calls` gives the `uses:` values
+    of a judged workflow; one that names no tracked workflow in the tree is refused."""
+    judged_names: set[str] = set()
+    pending = [name for name in documents if name in roots]
+    while pending:
+        caller = pending.pop()
+        if caller in judged_names:
+            continue
+        judged_names.add(caller)
+        pending.extend(_called(documents, caller, uses) for uses in local_calls(caller) if uses.startswith(LOCAL_PREFIXES))
+    return [name for name in documents if name in judged_names]
+
+
+def _called(documents: Mapping[str, Document | None], caller: str, uses: str) -> str:
+    """The tracked workflow a local `uses:` names, which the tree holds."""
+    path = uses.removeprefix(next(prefix for prefix in LOCAL_PREFIXES if uses.startswith(prefix)))
+    if not is_workflow(PurePosixPath(path)) or str(PurePosixPath(path)) != path:
+        raise UnfollowableCall(caller, uses, "is no workflow file of the workflow folder")
+    if path not in documents:
+        raise UnfollowableCall(caller, uses, "is not a tracked workflow")
+    if documents[path] is None:
+        raise UnfollowableCall(caller, uses, "is not in the tree")
+    return path
 
 
 def job_calls(document: object) -> Iterator[yaml.ScalarNode]:

@@ -46,7 +46,7 @@ class Area(StrEnum):
     help_line: str
 
     FILES = "files", "what the repository tracks: layout, tests, env files, compose ports, the Python floor"
-    DEBT = "debt", "size and near copies against the debt ceiling (quality/baseline.toml)"
+    DEBT = "debt", "size, near copies and job time limits against the debt ceiling (quality/baseline.toml)"
     IMPORTS = "imports", "the import contracts"
     SECRETS = "secrets", "secrets in the committed history"
     WORKFLOWS = "workflows", "GitHub workflows: lint, security, concurrency, pytest -n"
@@ -70,6 +70,7 @@ class Rule(StrEnum):
     COMPOSE_PORT = "compose-port", Area.FILES, RELEASE_0_1, Switch.ALWAYS
     SIZE = "size", Area.DEBT, RELEASE_0_3, Switch.SIZE_BASELINE
     CLONE = "clone", Area.DEBT, "v0.4.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE)
+    JOB_TIMEOUT = "job-timeout", Area.DEBT, None, Switch.ALWAYS
     IMPORT_CONTRACT = "import-contract", Area.IMPORTS, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
     CLAUDE_MD = "claude-md", Area.FILES, RELEASE_0_3, Switch.ALWAYS
     AGENTS_MD = "agents-md", Area.FILES, RELEASE_0_11, Switch.ALWAYS

@@ -566,7 +566,7 @@ def area_extent(verdict: AreaVerdict, tracked_paths: int) -> str:
 
 def measured_notes(areas: tuple[AreaVerdict, ...]) -> tuple[str, ...]:
     """What the verdict says of an area whose rules only measured: it is not enforced, and measured where it measured something."""
-    words = {Measurement.MEASURED_ONLY: "measured", Measurement.PARTLY_MEASURED_ONLY: "partly measured"}
+    words = {Measurement.MEASURED_ONLY: "ceiling measured", Measurement.PARTLY_MEASURED_ONLY: "ceiling partly measured"}
     return tuple(
         f"{verdict.area} not enforced" if MEASURED_ONLY_EVENT[verdict.area] is AreaEvent.NOT_SET_UP
         else f"{verdict.area} {words[verdict.measurement]}, not enforced"

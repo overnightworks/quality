@@ -574,3 +574,158 @@ def test_a_workflow_is_a_pull_request_root_for_each_of_the_three_events_in_any_s
 def test_a_workflow_without_one_of_the_three_events_is_no_pull_request_root(on):
     """CONCURRENCY-1."""
     assert pull_request_events(f"name: w\n{on}jobs: {{}}\n") == frozenset()
+
+
+def pushes_to_main(on: str) -> bool:
+    return checkout.pushes_to_main(checkout.composed_document(f"name: w\n{on}jobs: {{}}\n"))
+
+
+@pytest.mark.parametrize(
+    "on",
+    [
+        "on: push\n",
+        "on: [workflow_dispatch, push]\n",
+        "on:\n  - push\n",
+        "on:\n  push:\n",
+        "on:\n  push: ~\n",
+        "on:\n  push: null\n",
+        "on:\n  push: Null\n",
+        "on:\n  push: NULL\n",
+        "on:\n  push: {}\n",
+        "on:\n  push:\n    paths: ['src/**']\n",
+        "on:\n  push:\n    branches: [main]\n",
+        "on:\n  push:\n    branches: main\n",
+        "on:\n  push:\n    branches: ['**']\n",
+        "on:\n  push:\n    branches: ['ma*']\n",
+        "on:\n  push:\n    branches: ['**', '!main']\n",
+        "on:\n  push:\n    branches: [develop, main]\n",
+        "on:\n  push:\n    branches-ignore: [develop]\n",
+        "on:\n  push:\n    tags-ignore: ['v*']\n",
+    ],
+    ids=[
+        "string", "list", "list item", "empty", "tilde", "null", "capital null", "upper null", "empty mapping", "paths only",
+        "branch main", "branch string", "branch globstar", "branch glob", "negation is not read", "branch among others",
+        "ignoring another branch", "tags ignored",
+    ],
+)
+def test_a_workflow_that_runs_on_a_push_to_main_is_a_root(on):
+    """TIMEOUT-2."""
+    assert pushes_to_main(on) is True
+
+
+@pytest.mark.parametrize(
+    "on",
+    [
+        "",
+        "on: pull_request\n",
+        "on: [schedule, workflow_dispatch]\n",
+        "on:\n  workflow_call:\n  merge_group:\n  workflow_run:\n    workflows: [a]\n",
+        "on:\n  push:\n    branches: [develop]\n",
+        "on:\n  push:\n    branches: ['release/**']\n",
+        "on:\n  push:\n    branches-ignore: [main]\n",
+        "on:\n  push:\n    branches-ignore: ['ma*']\n",
+        "on:\n  push:\n    tags: ['v*']\n",
+        "on:\n  push:\n    tags: ['v*']\n    paths: ['src/**']\n",
+    ],
+    ids=[
+        "no on", "pull request only", "other events", "three more events", "another branch", "a branch glob that misses main",
+        "ignoring main", "ignoring main by glob", "tags only", "tags with paths",
+    ],
+)
+def test_a_workflow_that_does_not_run_on_a_push_to_main_is_no_push_root(on):
+    """TIMEOUT-2."""
+    assert pushes_to_main(on) is False
+
+
+@pytest.mark.parametrize(
+    "on",
+    [
+        "on:\n  push: main\n",
+        "on:\n  push: 5\n",
+        "on:\n  push: [main]\n",
+        "on:\n  push:\n    branches: {a: b}\n",
+        "on:\n  push:\n    branches: [[a]]\n",
+        "on:\n  push:\n    branches-ignore: [{a: b}]\n",
+        "on:\n  push:\n    tags: {a: b}\n",
+        "on:\n  push:\n    tags: [[v1]]\n",
+    ],
+    ids=[
+        "a word", "a number", "a sequence", "branches as mapping", "branches with a sequence item",
+        "ignored branches with a mapping item", "tags as mapping", "tags with a sequence item",
+    ],
+)
+def test_a_push_the_reader_cannot_take_to_its_end_is_refused(on):
+    """TIMEOUT-2, TIMEOUT-7."""
+    with pytest.raises(checkout.UnreadableTrigger):
+        pushes_to_main(on)
+
+
+def reached(files: dict[str, str | None], roots: list[str]) -> list[str]:
+    """The workflows the roots reach, `files` mapping each tracked workflow to its text or None for one gone from the tree."""
+    documents = {name: None if text is None else checkout.composed_document(text) for name, text in files.items()}
+
+    def calls(name: str) -> list[str]:
+        return [uses.value for uses in checkout.job_calls(documents[name].root)]
+
+    return checkout.reached_workflows(documents, roots, calls)
+
+
+def calling(*uses: str) -> str:
+    return "jobs:\n" + "".join(f"  j{number}:\n    uses: {value}\n" for number, value in enumerate(uses))
+
+
+A, B, C = ".github/workflows/a.yml", ".github/workflows/b.yml", ".github/workflows/c.yaml"
+
+
+@pytest.mark.parametrize(
+    ("files", "roots", "expected"),
+    [
+        ({A: "jobs: {}\n"}, [A], [A]),
+        ({A: calling(f"./{B}"), B: "jobs: {}\n"}, [A], [A, B]),
+        ({A: calling(f"$/{B}"), B: "jobs: {}\n"}, [A], [A, B]),
+        ({A: calling(f"./{B}"), B: calling(f"./{C}"), C: "jobs: {}\n"}, [A], [A, B, C]),
+        ({C: "jobs: {}\n", B: "jobs: {}\n", A: calling(f"./{B}", f"./{C}")}, [A], [C, B, A]),
+        ({A: calling(f"./{A}", f"$/{A}")}, [A], [A]),
+        ({A: calling(f"./{B}"), B: calling(f"./{A}")}, [A], [A, B]),
+        ({A: calling(f"./{B}"), B: calling(f"./{A}")}, [A, B], [A, B]),
+        ({A: calling("owner/repository/.github/workflows/x.yml@v1")}, [A], [A]),
+        ({A: "jobs: {}\n", B: "jobs: {}\n"}, [A], [A]),
+        ({A: "jobs: {}\n", B: calling("./gone.yml")}, [A], [A]),
+        ({A: calling(f"./{B}", f"./{B}"), B: "jobs: {}\n"}, [A], [A, B]),
+    ],
+    ids=[
+        "a root alone", "a local call", "a call by dollar", "two levels", "the listing's order", "a file calling itself",
+        "two files calling each other", "two roots calling each other", "a remote call", "a file no root calls",
+        "a call in a file that is not judged", "a file called twice",
+    ],
+)
+def test_a_root_reaches_the_workflows_it_calls_through_a_local_uses_each_once(files, roots, expected):
+    """TIMEOUT-3: every file judged once, in the order of the listing, a cycle stopping where it closes."""
+    assert reached(files, roots) == expected
+
+
+@pytest.mark.parametrize(
+    "uses",
+    [
+        "./.github/workflows/gone.yml",
+        "./actions/x",
+        "./.github/workflows/sub/x.yml",
+        "./.github/workflows/b.yml@v1",
+        "./.github/workflows/../workflows/b.yml",
+        "./",
+        "$/.github/workflows/b.txt",
+    ],
+    ids=["not tracked", "an action", "a subfolder", "with a ref", "with a parent step", "the root", "not a workflow suffix"],
+)
+def test_a_local_call_the_reach_cannot_follow_is_refused_naming_the_caller_and_the_value(uses):
+    """TIMEOUT-3, TIMEOUT-7."""
+    with pytest.raises(checkout.UnfollowableCall) as refusal:
+        reached({A: calling(uses), B: "jobs: {}\n"}, [A])
+    assert (refusal.value.caller, refusal.value.uses) == (A, uses)
+
+
+def test_a_called_workflow_gone_from_the_tree_is_refused():
+    """TIMEOUT-3, TIMEOUT-7."""
+    with pytest.raises(checkout.UnfollowableCall) as refusal:
+        reached({A: calling(f"./{B}"), B: None}, [A])
+    assert (refusal.value.caller, refusal.value.uses) == (A, f"./{B}")
