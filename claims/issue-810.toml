@@ -1,8 +1,0 @@
-claim_id = "bede28985da1434eaede1e9aa5672883"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "a9035f9b0fb2a2303ee619cc63dff18af436f545"
-branch = "claude/issue-810-fix-job-recording"
-scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/baseline_file.py", "src/quality/check.py", "src/quality/cli.py", "src/quality/workflow_rules.py", "tests/test_baseline_file.py", "tests/test_cli_fix_job_limits.py", "tests/test_cli_fix_job_recording.py", "tests/test_workflow_rules_timeout.py"]
-opened_commit = "86ca5d3e4771c762ae0f7c66f55fae7b8bf5022f"
-whole_reason = "Four production files and about 85 lines, one over the three-file bound because the guard, the record, the wiring and the row are four owners and the row cannot stay out (it would name the wrong table); the other seven paths are the three documents that state the sentences and the four test files that prove them or pin the changed words, so the slice does not split."
