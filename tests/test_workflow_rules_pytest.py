@@ -234,6 +234,8 @@ SERIAL_WITHOUT_N = [
     'bash -c "x=$(pytest -q)"',
     "uvx pytest@8 -q",
     "uvx pytest@8.3 -q",
+    "uvx -q pytest@8 -q",
+    "uvx --quiet pytest@8 -q",
 ]
 
 

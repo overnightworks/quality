@@ -340,16 +340,25 @@ def _runner_arguments(words: list[str], strips_version: bool) -> list[str] | Non
     """The pytest call a runner starts, past its flags and the values of its flags; `uvx` reads its tool word without a trailing `@version`."""
     index = 0
     while index < len(words):
-        tool_words = [words[index].partition("@")[0], *words[index + 1 :]] if strips_version else words[index:]
-        arguments = _pytest_arguments(tool_words)
-        if arguments is not None:
+        if (arguments := _pytest_arguments(_words_from(words, index, strips_version))) is not None:
             return arguments
         if not words[index].startswith("-"):
             return None
         index += 1
-        if index < len(words) and not words[index].startswith("-") and _pytest_arguments(words[index:]) is None:
+        if (
+            index < len(words)
+            and not words[index].startswith("-")
+            and _pytest_arguments(_words_from(words, index, strips_version)) is None
+        ):
             index += 1
     return None
+
+
+def _words_from(words: list[str], index: int, strips_version: bool) -> list[str]:
+    """The words from `index` on, the word at `index` without a trailing `@version` when a `uvx` runner reads it as its tool word."""
+    if not strips_version:
+        return words[index:]
+    return [words[index].partition("@")[0], *words[index + 1 :]]
 
 
 def _workers_problem(arguments: list[str]) -> Problem | None:
