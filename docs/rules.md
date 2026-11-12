@@ -980,16 +980,17 @@ A covered repository's `run:` steps are read in every workflow a pull request tr
 script calls `design-catalogs` with `--check` in a form the shared shell reader reads as a call of a named tool, so the forms
 that `pytest-workers` reads stand (CATALOG-7). A call through `make`, a word in an `echo`, a script, `tox`, `nox`, a composite
 action or a reusable workflow called through `uses:` is no call, and a command built at run time is read as no call (CATALOG-9).
-A step with `continue-on-error: true` or with a `working-directory` other than `.` does not count; a step `if:`, `|| true`
-are named gaps that count: a job that is not mandatory counts too, and a `defaults.run.working-directory` is not read. An
-unreadable workflow, a `run:` that is no string, or an alias or a merge key where it can hide a step is exit `2`
-naming the workflow (CATALOG-11).
+A step with `continue-on-error: true` or with a `working-directory` other than `.` does not count. Three named gaps
+count as calls: a step with an `if:`, a call ending in `|| true`, and a job that is not mandatory. A
+`defaults.run.working-directory` is not read. An unreadable workflow, a `run:` that is no string, or an alias or a merge
+key where it can hide a step is exit `2` naming the workflow (CATALOG-11).
 
 A covered repository with no counting step gets one note row and exit 0, never a finding, so the `workflows` row stays
-clean: `· .github/workflows  not called  no workflow step runs design-catalogs --check directly on a pull request; a call
-through make is not read yet` (CATALOG-5). A repository that runs the generator without declaring it (`uvx --from
+clean: `· .github/workflows  not called  no workflow step runs design-catalogs --check directly on a pull request; a call through make is not read yet`
+(CATALOG-5). A repository that runs the generator without declaring it (`uvx --from
 'overnightworks-design[catalogs]' design-catalogs --check`, uv's legacy `[tool.uv] dev-dependencies`) is not covered and
-sees nothing; that is a named gap. The rule only reports, so no run turns red for it, and its fleet cell reads `report-only`. It has no release yet, so a dependent meets it at its first bump to the release that carries it.
+sees nothing; that is a named gap. The rule only reports, so no run turns red for it, and its fleet cell reads
+`report-only`. It has no release yet, so a dependent meets it at its first bump to the release that carries it.
 
 The `job-timeout` rule, in the `debt` area, judges every job of a workflow that runs on a pull request or on a push to
 main, and of the reusable workflows those call through a local `uses:`. Every tracked workflow is parsed, a root or not,
