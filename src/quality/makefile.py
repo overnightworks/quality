@@ -133,7 +133,7 @@ def _follow(name: str, rules: Sequence[_Rule], visited: set[str], found: list[Re
     for prerequisite in (word for rule in named for word in rule.prerequisites):
         _follow(prerequisite, rules, visited, found)
     for line in recipe:
-        for goal in _make_goals_in(line.text):
+        for goal in goals_in_line(line.text):
             _follow(goal, rules, visited, found)
 
 
@@ -160,7 +160,7 @@ def _substitute(match: re.Match[str]) -> str:
     return "$" if match.group() == "$$" else MAKE
 
 
-def _make_goals_in(text: str) -> list[str]:
+def goals_in_line(text: str) -> list[str]:
     try:
         parts = segments(text)
     except ValueError:

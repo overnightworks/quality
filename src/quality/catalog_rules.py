@@ -1,6 +1,6 @@
 """The `catalog-check` rule: a repository whose root `pyproject.toml` declares `overnightworks-design` with the extra
-`catalogs` should call `design-catalogs --check` directly in a `run:` step of a pull-request workflow. Until a step does,
-it gets one note, never a finding, so the rule reports and never turns a run red."""
+`catalogs` should call `design-catalogs --check` in a `run:` step of a pull-request workflow, directly or through a `make` goal
+the root Makefile reaches. Until a step does, it gets one note, never a finding, so the rule reports and never turns a run red."""
 
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -9,7 +9,7 @@ import yaml
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 
-from quality import checkout, repository, workflow_rules
+from quality import checkout, makefile, repository, workflow_rules
 from quality.report import Note, NoteEvent, RuleResult, Unparsable
 from quality.run_script import LineReading, Segment, Tool, command_words, line_problems, tool_arguments
 from quality.workflow_rules import PullRequestRunStep
@@ -24,9 +24,9 @@ CONTINUE_ON_ERROR = "continue-on-error"
 WORKING_DIRECTORY = "working-directory"
 ROOT_DIRECTORY = "."
 NOTE_PATH = ".github/workflows"
-NOT_CALLED_FACT = (
-    "no workflow step runs design-catalogs --check directly on a pull request; a call through make is not read yet"
-)
+MAKEFILE = "Makefile"
+MAKEFILE_ALTERNATIVES = frozenset({"GNUmakefile", "makefile"})
+NOT_CALLED_FACT = "no workflow step runs design-catalogs --check on a pull request, directly or through make"
 
 
 def _group_values(table: object) -> list[object]:
@@ -112,14 +112,17 @@ def _scalar(node: yaml.Node | None) -> str | None:
     return node.value if isinstance(node, yaml.ScalarNode) else None
 
 
-def _calls_generator(step: PullRequestRunStep) -> bool:
-    """Whether the step calls the check with `--check`, and is neither `continue-on-error: true` nor run in another directory."""
+def _counts(step: PullRequestRunStep) -> bool:
+    """Whether the step counts: it is neither `continue-on-error: true` nor run in another directory."""
     fields = checkout.mapping_values(step.step)
-    if _scalar(fields.get(CONTINUE_ON_ERROR)) == "true" or _scalar(fields.get(WORKING_DIRECTORY)) not in (
+    return _scalar(fields.get(CONTINUE_ON_ERROR)) != "true" and _scalar(fields.get(WORKING_DIRECTORY)) in (
         None,
         ROOT_DIRECTORY,
-    ):
-        return False
+    )
+
+
+def _calls_generator(step: PullRequestRunStep) -> bool:
+    """Whether a line of the step calls the check directly, with `--check`."""
     return any(
         problem
         for line in step.lines
@@ -127,14 +130,35 @@ def _calls_generator(step: PullRequestRunStep) -> bool:
     )
 
 
+def _makefile_text(root: Path, tracked: list[str]) -> str | None:
+    """The tracked root `Makefile`'s text, read once; None when it is absent, untracked, or shadowed by a tracked `GNUmakefile`
+    or `makefile`, which make would read first."""
+    if MAKEFILE_ALTERNATIVES & set(tracked):
+        return None
+    names = checkout.on_disk(root, [name for name in tracked if name == MAKEFILE])
+    return checkout.read_existing(repository.read_text, root, names).get(MAKEFILE)
+
+
+def _reaches_generator_through_make(root: Path, tracked: list[str], counted: Sequence[PullRequestRunStep]) -> bool:
+    """Whether a `make` goal of a counted step reaches a recipe line of the Makefile that calls the check directly."""
+    goals = tuple(goal for step in counted for line in step.lines for goal in makefile.goals_in_line(line.text))
+    text = _makefile_text(root, tracked) if goals else None
+    if text is None:
+        return False
+    return any(
+        problem
+        for line in makefile.reached_recipe_lines(text, goals)
+        for problem in line_problems(line.text, GENERATOR_READING, script_holds_hidden_word=False)
+    )
+
+
 def check_catalog_call(root: Path, tracked: list[str]) -> RuleResult:
-    """A note when a covered repository has no pull-request workflow step that calls the check; its extent is the steps read."""
+    """A note when a covered repository has no counted pull-request workflow step that calls the check, directly or through a
+    `make` goal; its extent is the steps read. The Makefile is read only when no counted step calls the check directly."""
     if not _declares_catalogs(root, tracked):
         return RuleResult([], 0, False)
     steps = list(workflow_rules.pull_request_run_steps(root, tracked))
-    notes = (
-        ()
-        if any(_calls_generator(step) for step in steps)
-        else (Note(NOTE_PATH, NoteEvent.NOT_CALLED, NOT_CALLED_FACT),)
-    )
+    counted = [step for step in steps if _counts(step)]
+    calls = any(_calls_generator(step) for step in counted) or _reaches_generator_through_make(root, tracked, counted)
+    notes = () if calls else (Note(NOTE_PATH, NoteEvent.NOT_CALLED, NOT_CALLED_FACT),)
     return RuleResult([], len(steps), False, notes)
