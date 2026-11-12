@@ -926,8 +926,9 @@ of that `-`, and clears every finding of the step's `run:`; a `#` in another col
 column that follows the previous step and stands directly above the next step clears the next step, and a step whose `-`
 stands alone on its line or that stands in a flow sequence (`steps: [{run: x}]`) has no step form. The per-line form is
 that of `pytest-workers`: the marker on a call's logical line or directly above its first line clears that call, for a
-block scalar on the `run: |` line (it covers the first line) or on a block line directly above the call; a marker
-between a step's `name:` and its `run: |` clears nothing. A marker that clears nothing is not reported (RUNTIME-7).
+block scalar on the `run: |` line (it covers the first line) or on a block line directly above the call; the line above
+a step whose `run:` stands on the step's own first line (`- run: x`, a flow step) belongs to the step form alone, so
+that step takes a marker on its own line only; a marker between a step's `name:` and its `run: |` clears nothing. A marker that clears nothing is not reported (RUNTIME-7).
 `pytest-workers` keeps its per-line reading, so a `# pytest-workers:` marker above a step clears nothing and the two ids
 are not interchangeable. The marker is for a step that proves an install on a fresh system, and for nothing else: the
 reader cannot see a step's purpose, so the review of the dependent's diff judges it, and any other use is a deviation

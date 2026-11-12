@@ -323,12 +323,19 @@ def test_a_marker_in_the_dash_column_above_a_step_clears_every_call_of_the_step(
         (f"      - name: a\n        run: |\n          echo a\n          {MARKER}\n      - name: t\n        run: |\n          apt-get install -y x\n", 14),
         (f"      - name: a\n        run: |\n          echo a\n        {MARKER}\n      - name: t\n        run: |\n          apt-get install -y x\n", 14),
         (f"      {MARKER}\n      -\n        name: t\n        run: apt-get install -y x\n", 11),
+        (f"      - name: a\n        run: |\n          echo a\n          {MARKER}\n      - run: apt-get install -y x\n", 12),
+        (f"      - name: a\n        run: |\n          echo a\n        {MARKER}\n      - run: 'apt-get install -y x'\n", 12),
     ],
-    ids=["deeper column", "run column", "a dash that stands alone"],
+    ids=["deeper column", "run column", "a dash that stands alone", "a one-line step under a deeper column", "a quoted one-line step under the run column"],
 )
 def test_a_marker_in_another_column_or_above_a_dash_that_stands_alone_clears_nothing(build_repo, step, line):
     """RUNTIME-7."""
     assert shape(judged(build_repo, steps_of() + step)) == [(INSTALLS, line, "apt-get install")]
+
+
+def test_a_marker_on_the_line_of_a_one_line_step_clears_it(build_repo):
+    """RUNTIME-7."""
+    assert judged(build_repo, steps_of() + f"      - run: apt-get install -y x  {MARKER}\n") == []
 
 
 def test_a_marker_above_the_first_step_of_two_clears_that_step_only(build_repo):
@@ -337,10 +344,18 @@ def test_a_marker_above_the_first_step_of_two_clears_that_step_only(build_repo):
     assert shape(judged(build_repo, text)) == [(INSTALLS, 14, "apt-get install")]
 
 
-def test_a_flow_step_has_no_step_form(build_repo):
+@pytest.mark.parametrize(
+    ("steps", "line"),
+    [
+        ('steps: [{name: t,\n      run: "apt-get install x"}]', 7),
+        ('steps: [{run: "apt-get install x"}]', 6),
+    ],
+    ids=["over two lines", "on one line"],
+)
+def test_a_flow_step_has_no_step_form(build_repo, steps, line):
     """RUNTIME-7."""
-    text = f"on: push\njobs:\n  j:\n    runs-on: x\n    {MARKER}\n    steps: [{{name: t,\n      run: \"apt-get install x\"}}]\n"
-    assert shape(judged(build_repo, text)) == [(INSTALLS, 7, "apt-get install")]
+    text = f"on: push\njobs:\n  j:\n    runs-on: x\n    {MARKER}\n    {steps}\n"
+    assert shape(judged(build_repo, text)) == [(INSTALLS, line, "apt-get install")]
 
 
 def test_the_ids_of_the_two_markers_are_not_interchangeable(build_repo):

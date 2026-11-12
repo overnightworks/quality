@@ -248,6 +248,12 @@ class Marker:
         """The numbers of the file lines that carry the marker."""
         return frozenset(number for number, line in enumerate(file_lines, 1) if self.pattern.search(line))
 
+    def per_line_marks(self, marked: frozenset[int], step: yaml.Node, run: yaml.Node) -> frozenset[int]:
+        """The marked lines the per-line form reads for the step's `run:`; where the rule has a step form, the line above a step whose `run:` stands on the step's first line is read by the step form alone."""
+        if self.above_step and run.start_mark.line == step.start_mark.line:
+            return marked - {step.start_mark.line}
+        return marked
+
     def clears_step(self, file_lines: list[str], step: yaml.Node) -> bool:
         """Whether the marker stands directly above the step's first line, its `#` in the column of the `-` on that line; a step whose `-` stands alone on its line has no such column."""
         number = step.start_mark.line
@@ -308,7 +314,7 @@ def _judge_scripts(script_rule: ScriptRule, root: Path, tracked: list[str]) -> R
         for step, run in _run_steps(name, _composed(name, text)):
             if not script_rule.marker.clears_step(file_lines, step):
                 lines = list(logical_lines(physical_lines(run)))
-                findings.extend(_script_findings(script_rule, name, lines, marked))
+                findings.extend(_script_findings(script_rule, name, lines, script_rule.marker.per_line_marks(marked, step, run)))
     return RuleResult(findings, read, False)
 
 
