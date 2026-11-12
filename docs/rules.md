@@ -621,8 +621,8 @@ It applies these rules:
   A lowered, equal or removed entry or pair is green (BASELINE-7), and so is adopting a baseline (the base has none) or
   neither side having one (BASELINE-8). A `[clones]` table the base lacks is an adoption too: its pairs are not
   compared (BASELINE-9), while the size entries are still held against the base's (BASELINE-10). A `[job_minutes]` table
-the base lacks is an adoption in the same way, whatever the base's `[clones]` table is, and the job lines stand after the
-size and clone lines in the file's order (TIMEOUT-18).
+  the base lacks is an adoption in the same way, whatever the base's `[clones]` table is, and the job lines stand after the
+  size and clone lines in the file's order (TIMEOUT-18).
   A malformed baseline on either side is exit `2`, naming the side (`quality/baseline.toml at the base commit <sha>:
   ...`, `quality/baseline.toml at the head: ...`) (BASELINE-20). So is a head baseline that links out of the repository
   (BASELINE-21), a base file that is not a regular file (`... : not a regular file`) (BASELINE-22), and a base that git

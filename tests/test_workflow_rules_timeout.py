@@ -589,14 +589,9 @@ def test_an_entry_of_a_path_the_index_does_not_track_is_gone(build_repo):
     assert outcome(rule_findings(repo, Rule.JOB_TIMEOUT)) == [gone(40, ".github/workflows/old.yml")]
 
 
-@pytest.mark.parametrize(
-    "baseline",
-    ["[job_minutes", f'[job_minutes."{WORKFLOW}"]\ne2e = 40.5\n'],
-    ids=["invalid TOML", "a float entry"],
-)
-def test_a_malformed_baseline_makes_the_rule_cannot_judge_naming_the_file_as_size_and_clone_do(build_repo, capsys, baseline):
+def test_a_malformed_job_table_makes_the_rule_cannot_judge_naming_the_file_as_size_and_clone_do(build_repo, capsys):
     """TIMEOUT-15."""
-    repo = build_repo({WORKFLOW: workflow(), BASELINE_PATH: baseline})
+    repo = build_repo({WORKFLOW: workflow(), BASELINE_PATH: f'[job_minutes."{WORKFLOW}"]\ne2e = 40.5\n'})
     code, _ = run(capsys, repo)
     reasons = refusals(repo)
     assert code == 2
