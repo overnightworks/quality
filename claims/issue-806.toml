@@ -3,6 +3,6 @@ agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
 role = "builder"
 base = "542311a03aa9d9944a5607937304c07aead71e3f"
 branch = "claude/issue-806-fix-job-lowering"
-scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/workflow_rules.py", "tests/test_cli_fix_job_limits.py", "tests/test_cli_fix_renames.py", "tests/test_workflow_rules_timeout.py", "tests/test_workflow_rules_timeout_fix.py"]
+scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/workflow_rules.py", "tests/support/job_workflows.py", "tests/test_cli_fix_job_limits.py", "tests/test_cli_fix_renames.py", "tests/test_workflow_rules_timeout.py"]
 opened_commit = "966b67a8f9ec6ab02dbedb37c050ee0736578946"
 whole_reason = "Two production files and about 55 lines; the other seven paths are the three documents that state the sentences and the four test files that prove them or pin the changed fix words, so the slice does not split."
