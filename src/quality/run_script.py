@@ -253,15 +253,15 @@ def _shell_script_segments(words: list[str]) -> list[list[str]]:
 def _c_string(arguments: list[str]) -> str | None:
     """The first operand after the `-c` flag of a shell, when that flag stands before the shell's first operand; `-o` and `-O` take their value."""
     index = 0
+    has_c_flag = False
     while index < len(arguments):
         word = arguments[index]
         index += 1
         if word == "-" or not word.startswith("-"):
-            return None
+            return word if has_c_flag else None
         if word.startswith("--"):
             continue
-        if "c" in word:
-            return arguments[index] if index < len(arguments) else None
+        has_c_flag = has_c_flag or "c" in word
         if word.endswith(("o", "O")):
             index += 1
     return None

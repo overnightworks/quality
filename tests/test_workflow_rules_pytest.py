@@ -236,6 +236,9 @@ SERIAL_WITHOUT_N = [
     "uvx pytest@8.3 -q",
     "uvx -q pytest@8 -q",
     "uvx --quiet pytest@8 -q",
+    "bash -c -x 'pytest -q'",
+    "bash -c -o pipefail 'pytest -q'",
+    "bash -c -- 'pytest -q'",
 ]
 
 
