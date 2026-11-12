@@ -360,8 +360,9 @@ def test_a_marker_above_the_first_step_of_two_clears_that_step_only(build_repo):
         (f"    runs-on: x\n    {MARKER}\n", 'steps: [{name: t,\n      run: "apt-get install x"}]', 7),
         (f"    runs-on: x\n    {MARKER}\n", 'steps: [{run: "apt-get install x"}]', 6),
         (f"    runs-on: x  {MARKER}\n", 'steps: [{run: "apt-get install x"}]', 5),
+        ("    runs-on: x\n", f'steps: [\n      {MARKER}\n      {{run: "apt-get install x"}}\n    ]', 7),
     ],
-    ids=["over two lines", "on one line", "a marker trailing the line above"],
+    ids=["over two lines", "on one line", "a marker trailing the line above", "a brace that starts its own line"],
 )
 def test_a_flow_step_has_no_step_form(build_repo, above, steps, line):
     """RUNTIME-7."""
