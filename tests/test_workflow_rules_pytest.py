@@ -83,6 +83,11 @@ GREEN = [
     "pytest --numprocesses 3",
     "poetry run pytest -n auto",
     "uvx pytest -n auto",
+    "timeout 600 pytest -n auto",
+    "nice -n 5 pytest -n auto",
+    "xargs pytest -n auto",
+    'bash -c "pytest -n auto"',
+    "uvx pytest@8 -n auto",
     "pytest -n " + "9" * 5000,
     'x="$(pytest -n auto)"',
     'echo "$(pytest -n auto)"',
@@ -118,7 +123,14 @@ NO_CALL = [
     "make test",
     "tox -e py",
     "uv run ruff check",
-    "timeout 600 pytest",
+    "timeout 600 xvfb-run pytest",
+    "timeout 600 make test",
+    "nice make",
+    "xargs",
+    "timeout 60",
+    "bash run.sh -c 'pytest -q'",
+    "bash script.sh",
+    "bash -c",
     "xvfb-run pytest",
     "docker run img pytest",
     "pytest-cov",
@@ -201,6 +213,27 @@ SERIAL_WITHOUT_N = [
     "pytest tests -- -n auto",
     "pytest -- -n auto",
     "python -m pytest tests -- -n auto",
+    "timeout 600 pytest",
+    "timeout -k 10 600 pytest -q",
+    "timeout -s KILL 600 pytest",
+    "timeout --signal=KILL 600 pytest",
+    "timeout 600 uv run pytest -q",
+    "nice pytest",
+    "nice -n 5 pytest",
+    "echo x | xargs pytest",
+    "xargs -n 1 pytest",
+    "sudo timeout 60 pytest",
+    "time nice timeout 60 pytest",
+    "nohup timeout 60 pytest &",
+    'bash -c "pytest -q"',
+    "sh -c 'a && pytest -q'",
+    'bash -lc "pytest -q"',
+    'bash -o pipefail -c "pytest -q"',
+    'bash -eo pipefail -c "pytest -q"',
+    'bash -O extglob -c "pytest -q"',
+    'bash -c "x=$(pytest -q)"',
+    "uvx pytest@8 -q",
+    "uvx pytest@8.3 -q",
 ]
 
 
@@ -332,6 +365,20 @@ def test_a_call_in_a_substitution_after_a_glued_redirection_is_judged(build_repo
 def test_a_line_that_cannot_be_split_and_holds_no_pytest_is_no_finding(build_repo):
     """PYTEST-6."""
     assert judged(build_repo, block_run('echo "unbalanced')) == []
+
+
+@pytest.mark.parametrize(
+    ("command", "fact"),
+    [
+        ("timeout 60 $PYTEST -q; pytest -n auto", BUILT_AT_RUN_TIME),
+        ('bash -c "pytest -q \'x"', UNREADABLE),
+    ],
+    ids=["run-time command behind timeout", "shell string that cannot be split"],
+)
+def test_a_wrapped_or_shell_call_the_reader_cannot_read_is_invalid(build_repo, scalar, command, fact):
+    """PYTEST-2, PYTEST-4, PYTEST-6."""
+    build, line = scalar
+    assert shape(judged(build_repo, build(command))) == [(INVALID, line, fact)]
 
 
 @pytest.mark.parametrize(

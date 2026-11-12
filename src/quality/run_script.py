@@ -1,14 +1,15 @@
 """The shell reader of the workflow rules: a `run:` script read as POSIX shell words, never run.
 
 A script becomes logical lines (joined at a trailing backslash, comments dropped), each line becomes segments of words
-(split at `&&`, `||`, `;`, `|`, `&`, `(` and `)`, backticks read as `$(…)`), and each segment's command word is found past
-assignments, prefix words, `env` and `sudo` with their flags. The module reads text only and imports no other module of
-quality."""
+(split at `&&`, `||`, `;`, `|`, `&`, `(` and `)`, backticks read as `$(…)`), each segment's command word is found past
+assignments, prefix words and the wrappers `env`, `sudo`, `timeout`, `nice` and `xargs` with their flags, and a shell's
+`-c` string is split into segments of its own. The module reads text only and imports no other module of quality."""
 
 import re
 import shlex
 from collections.abc import Iterator
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 
 import yaml
 
@@ -22,7 +23,20 @@ ENV_VALUE_FLAGS = frozenset({"-u", "--unset", "-C", "--chdir", "-a", "--argv0"})
 ENV_SPLIT_FLAGS = frozenset({"-S", "--split-string"})
 ENV_SPLIT_PREFIXES = ("-S", "--split-string=")
 SUDO_VALUE_FLAGS = frozenset({"-u", "-g", "-D", "-C", "-h", "-p", "-r", "-t", "-T", "-U", "-R"})
-WRAPPER_VALUE_FLAGS = {"env": ENV_VALUE_FLAGS, "sudo": SUDO_VALUE_FLAGS}
+TIMEOUT_VALUE_FLAGS = frozenset({"-k", "-s", "--kill-after", "--signal"})
+NICE_VALUE_FLAGS = frozenset({"-n", "--adjustment"})
+XARGS_VALUE_FLAGS = frozenset(
+    {"-I", "-n", "-P", "-d", "-E", "-L", "-s", "-a", "--replace", "--max-args", "--max-procs", "--delimiter", "--eof", "--max-lines", "--max-chars", "--arg-file"}
+)
+WRAPPER_VALUE_FLAGS = {
+    "env": ENV_VALUE_FLAGS,
+    "sudo": SUDO_VALUE_FLAGS,
+    "timeout": TIMEOUT_VALUE_FLAGS,
+    "nice": NICE_VALUE_FLAGS,
+    "xargs": XARGS_VALUE_FLAGS,
+}
+WRAPPER_OPERANDS = {"timeout": 1}
+SHELLS = frozenset({"sh", "bash", "dash", "zsh", "ksh"})
 SUBSTITUTION = re.compile(r"\$\(")
 LONE_DOLLAR = ["$"]
 
@@ -81,7 +95,12 @@ def _without_comment(line: str) -> str:
 
 def segments(text: str) -> list[list[str]]:
     """The words of a line, split at `&&`, `||`, `;`, `|`, `&`, `(` and `)`, a backtick substitution read as `$(…)`; a word that holds a substitution is split again."""
-    return [words for words in _lex(_backticks_as_dollar_substitutions(text), False, [])[0] if words]
+    result: list[list[str]] = []
+    for words in _lex(_backticks_as_dollar_substitutions(text), False, [])[0]:
+        if words:
+            result.append(words)
+            result.extend(_shell_script_segments(words))
+    return result
 
 
 def _backticks_as_dollar_substitutions(text: str) -> str:
@@ -180,11 +199,11 @@ def _glued_split_value(word: str) -> str | None:
 
 
 def command_start(words: list[str]) -> int:
-    """The index of the command word, after assignments, `env` and `sudo` with their flags and the prefix words."""
+    """The index of the command word, after assignments, the wrappers with their flags and operands and the prefix words."""
     index = 0
     while index < len(words):
         if words[index] in WRAPPER_VALUE_FLAGS:
-            index = _after_flags(words, index + 1, WRAPPER_VALUE_FLAGS[words[index]])
+            index = _after_wrapper(words, index)
         elif words[index] in PREFIX_WORDS or ASSIGNMENT.match(words[index]):
             index += 1
         else:
@@ -192,8 +211,40 @@ def command_start(words: list[str]) -> int:
     return index
 
 
+def _after_wrapper(words: list[str], index: int) -> int:
+    """The index past the wrapper at `index`, its flags and the operands it takes before its command word."""
+    after_flags = _after_flags(words, index + 1, WRAPPER_VALUE_FLAGS[words[index]])
+    return min(after_flags + WRAPPER_OPERANDS.get(words[index], 0), len(words))
+
+
 def _after_flags(words: list[str], index: int, value_flags: frozenset[str]) -> int:
     """The index past the flags from `index` on, each flag in `value_flags` taking the word after it as its value."""
     while index < len(words) and words[index].startswith("-"):
         index += 2 if words[index] in value_flags else 1
     return index
+
+
+def _shell_script_segments(words: list[str]) -> list[list[str]]:
+    """The segments of the `-c` string of a shell that starts `words`, read as a script of its own; none when no shell with a `-c` string starts them."""
+    index = command_start(words)
+    if index >= len(words) or PurePosixPath(words[index]).name not in SHELLS:
+        return []
+    string = _c_string(words[index + 1 :])
+    return [] if string is None else segments(string)
+
+
+def _c_string(arguments: list[str]) -> str | None:
+    """The first operand after the `-c` flag of a shell, when that flag stands before the shell's first operand; `-o` and `-O` take their value."""
+    index = 0
+    while index < len(arguments):
+        word = arguments[index]
+        index += 1
+        if word == "-" or not word.startswith("-"):
+            return None
+        if word.startswith("--"):
+            continue
+        if "c" in word:
+            return arguments[index] if index < len(arguments) else None
+        if word.endswith(("o", "O")):
+            index += 1
+    return None

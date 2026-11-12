@@ -317,9 +317,9 @@ def _pytest_arguments(words: list[str]) -> list[str] | None:
     if any(interpreter.fullmatch(command) for interpreter in INTERPRETERS):
         return _module_arguments(words[1:])
     if command == "uvx":
-        return _runner_arguments(words[1:])
+        return _runner_arguments(words[1:], strips_version=True)
     if (command, *words[1:2]) in RUNNERS:
-        return _runner_arguments(words[2:])
+        return _runner_arguments(words[2:], strips_version=False)
     return None
 
 
@@ -336,11 +336,12 @@ def _module_arguments(words: list[str]) -> list[str] | None:
     return None
 
 
-def _runner_arguments(words: list[str]) -> list[str] | None:
-    """The pytest call a runner starts, past its flags and the values of its flags."""
+def _runner_arguments(words: list[str], strips_version: bool) -> list[str] | None:
+    """The pytest call a runner starts, past its flags and the values of its flags; `uvx` reads its tool word without a trailing `@version`."""
     index = 0
     while index < len(words):
-        arguments = _pytest_arguments(words[index:])
+        tool_words = [words[index].partition("@")[0], *words[index + 1 :]] if strips_version else words[index:]
+        arguments = _pytest_arguments(tool_words)
         if arguments is not None:
             return arguments
         if not words[index].startswith("-"):
