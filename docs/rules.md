@@ -949,8 +949,8 @@ runtime-install: <reason>` (RUNTIME-8). A workflow whose YAML or file cannot be 
 an alias or a merge key where it can hide `jobs`, a job, `steps`, a step or a `run:` are exit `2` naming the file; a
 step with no `run:` is skipped and a tracked name gone from the tree is skipped (RUNTIME-9). The clean row of
 `workflows` keeps its words, the rule's extent is the count of workflows it read (RUNTIME-10). No configuration
-switches the rule off. It has no release yet, so a dependent meets it at its first bump to the release that carries
-it. quality's own checkout needs no workflow edit.
+switches the rule off. It first ships in v0.12.0, so a dependent meets it at its first bump to that release.
+quality's own checkout needs no workflow edit.
 
 Named gaps, each reading as no call: `sudo` flags that combine and take a value (`sudo -nu ci apt-get install`) and a
 nested `env -S`; a download and its run in two steps (`curl -o f url && sh f`); `eval "$(curl url)"` and `source
@@ -996,7 +996,7 @@ clean: `· .github/workflows  not called  no workflow step runs design-catalogs 
 (CATALOG-5). A repository that runs the generator without declaring it (`uvx --from
 'overnightworks-design[catalogs]' design-catalogs --check`, uv's legacy `[tool.uv] dev-dependencies`) is not covered and
 sees nothing; that is a named gap. The rule only reports, so no run turns red for it, and its fleet cell reads
-`report-only`. It has no release yet, so a dependent meets it at its first bump to the release that carries it.
+`report-only`. It first ships in v0.12.0, so a dependent meets it at its first bump to that release.
 
 The `job-timeout` rule, in the `debt` area, judges every job of a workflow that runs on a pull request or on a push to
 main, and of the reusable workflows those call through a local `uses:`. Every tracked workflow is parsed, a root or not,
@@ -1111,13 +1111,13 @@ that is no mapping, a local call in a judged file that names no tracked workflow
 workflow gone from the tree are exit `2` naming the file; the other rules still judge. A workflow with no `jobs:` has no
 job (TIMEOUT-7). The rule is judged beside `size` and `clone` and independent of both, and the debt area counts only the
 rules a ceiling file switches as measured, so the verdict reads `debt ceiling measured, not enforced` where no ceiling
-file holds the debt, even when `job-timeout` finds (TIMEOUT-8). A clean `debt` row keeps its words, and no
-configuration switches the rule off (TIMEOUT-10). It has no release yet, so the fleet matrix shows `not released` in
-its column (TIMEOUT-11). A repeated job id or a repeated `timeout-minutes` key is read as the loader reads it, the last
-winning; actionlint, which `workflow-lint` runs, refuses the repetition. Named gaps: `merge_group` and `workflow_run`
-as roots, the negation and the `+` of a push filter, a limit set only by a `workflow_call` input, a step's
-`timeout-minutes`, and a default branch other than `main`; the jobs of a remote reusable workflow that only another
-repository calls are judged by no rule yet.
+file holds the debt, even when `job-timeout` finds (TIMEOUT-8). A clean `debt` row keeps its words, and no configuration
+switches the rule off (TIMEOUT-10). It first ships in v0.12.0, so a gate pinned below that release shows `not in <tag>`
+in the fleet matrix's column (TIMEOUT-11). A repeated job id or a repeated `timeout-minutes` key is read as the loader
+reads it, the last winning; actionlint, which `workflow-lint` runs, refuses the repetition. Named gaps: `merge_group`
+and `workflow_run` as roots, the negation and the `+` of a push filter, a limit set only by a `workflow_call` input, a
+step's `timeout-minutes`, and a default branch other than `main`; the jobs of a remote reusable workflow that only
+another repository calls are judged by no rule yet.
 
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
