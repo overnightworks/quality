@@ -435,31 +435,36 @@ def _recorded_facts(fix: ratchet.CeilingFix) -> str:
 
 
 def _planned_row(area: Area, fix: ratchet.CeilingFix) -> Row | None:
-    """A dry run's debt row: what would fall, counted, else what would move, else the recording it would write."""
-    for count, event in ((fix.fell, AreaEvent.TO_LOWER), (fix.moved, AreaEvent.TO_MOVE)):
-        if count:
-            return Row(Glyph.WILL_CHANGE, area, event, baseline_file.BASELINE_PATH, count=count, counts_plural=False)
+    """A dry run's debt row: the recording it would write, else what would fall, counted, else what would move."""
     if fix.first:
         new = SEPARATOR.join((_recorded_extent(fix), f"{baseline_file.BASELINE_PATH} would be new"))
         return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_RECORD, new)
+    if fix.recorded:
+        return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_RECORD, _recorded_facts(fix))
+    for count, event in ((fix.fell, AreaEvent.TO_LOWER), (fix.moved, AreaEvent.TO_MOVE)):
+        if count:
+            return Row(Glyph.WILL_CHANGE, area, event, baseline_file.BASELINE_PATH, count=count, counts_plural=False)
     if fix.text_differs:
         return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_REWRITE, SEPARATOR.join(("text differs", baseline_file.BASELINE_PATH)))
-    return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_RECORD, _recorded_facts(fix)) if fix.recorded else None
+    return None
 
 
 def _ceiling_row(area: Area, ceiling: ratchet.CeilingFix | DryRun) -> Row | None:
+    """The debt row: what the fix recorded, else what it lowered, moved or rewrote."""
     fix, planned = _made(ceiling)
     if planned:
         return _planned_row(area, fix)
     if fix.first:
         return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, SEPARATOR.join((_recorded_extent(fix), f"{baseline_file.BASELINE_PATH} is new")))
+    if fix.recorded:
+        return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, _recorded_facts(fix))
     if fix.fell:
         return Row(Glyph.CLEAN, area, AreaEvent.LOWERED, _in_file(counted(fix.fell, "entry", "entries")))
     if fix.moved:
         return Row(Glyph.CLEAN, area, AreaEvent.MOVED, _in_file(counted(fix.moved, "entry", "entries")))
     if fix.text_differs:
         return Row(Glyph.CLEAN, area, AreaEvent.REWRITTEN, baseline_file.BASELINE_PATH)
-    return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, _recorded_facts(fix)) if fix.recorded else None
+    return None
 
 
 def _ceiling_words(ceiling: ratchet.CeilingFix | DryRun | None, findings: int) -> str:

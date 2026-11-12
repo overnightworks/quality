@@ -183,13 +183,15 @@ CLONE_FILES = {
 
 
 def test_a_recording_beside_clone_pairs_and_a_lowered_size_entry_names_each_and_counts_only_the_fall(build_repo, capsys):
-    """TIMEOUT-31: the clone pairs and the job limits recorded in one fix are named in one debt row, each under its own
+    """TIMEOUT-31: the clone pairs and the job limits recorded in one fix are named in one debt row and each under its own
     note after the lowered entry, and the verdict counts the lowered entry alone; with nothing lowered it counts the
     recording."""
     files = {**CLONE_FILES, SIZE_FILE: long_function(62), WORKFLOW: workflow(jobs=job("e2e", "20"))}
     lowered = build_repo({**files, BASELINE_PATH: ceiling(size=80, clones=False)})
     planned, done = both(capsys, lowered)
     assert (done[0], planned[0]) == (0, 1)
+    assert "✓ debt recorded 1 clone pair, 1 job limit · quality/baseline.toml" in done[1]
+    assert "~ debt to record 1 clone pair, 1 job limit · quality/baseline.toml" in planned[1]
     assert "ceiling lowered by 1 entry" in done[1]
     notes = [
         "✓ src/old.py:1 lowered function long_one 80 → 62 lines",

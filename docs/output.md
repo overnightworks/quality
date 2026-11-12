@@ -146,7 +146,7 @@ entries over the thresholds · measured only` (`M clone pairs · partly measured
 debt  lowered  N entries · quality/baseline.toml` with a `✓` row per lowered or dropped entry, `✓ debt  moved  N entries
 · quality/baseline.toml` where it moves entries and lowers none, `✓ debt  recorded  N entries, M clone pairs ·
 quality/baseline.toml is new` (`, K job limits` after the pairs where it records the job table), `✓ debt  recorded  K
-job limits · quality/baseline.toml` with a `✓` row `recorded  K job limits` under it, `✓ debt  rewritten  quality/baseline.toml` (entries equal, text not), `! debt  N findings
+job limits · quality/baseline.toml` with a `✓` row `recorded  K job limits` under it (it names the clone pairs recorded beside, and stands in place of the lowered or moved row where entries fall or move in the same fix), `✓ debt  rewritten  quality/baseline.toml` (entries equal, text not), `! debt  N findings
 nothing lowered` or `✗ debt  not fixed  <reason>`; under `--dry-run` it is `~ debt  N to lower` (`N to move`, `to
 record`, `to rewrite  text differs · quality/baseline.toml`) with a `~` row per entry.
 Without an import-linter config the imports row is `· imports  not set up  no import-linter config` (ROW-13). An area
