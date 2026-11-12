@@ -94,7 +94,8 @@ rows, by area:
   or `invalid` (`command cannot be read to its end`, `command is built at run time, an install cannot be read`), its fix
   naming the routes (the lockfile, the runner image, an image pinned by digest) and the marker ([rules](rules.md)); an
   actionlint finding names the scanner and holds its message whole as its one detail line (O37); a row with a finding or
-  a refusal does not say `offline audits only` (O39).
+  a refusal does not say `offline audits only` (O39); a `catalog-check` note is `not called` at `.github/workflows`, with
+  its fact as [rules](rules.md) gives it and no fix.
 - `dependencies`: an advisory is an `affected` row, its fact the package and version, the group's id and where it
   lists them the versions that fix it, its fix per lock kind (O41); the id is the group's first, never an alias (O42);
   a nested lock's fix names its folder (O43); the fix of a pnpm or requirements lock is the same hint for every
@@ -157,7 +158,8 @@ that cannot check is `✗ <area>  not checked  <reason>` ([Refusals](#refusals))
 A note is a `·` row under its area, after the area's findings, aligned with them (ROW-15):
 `· <path[:line]>  <event>  <fact>`, with no `fix:` of its own (ROW-16). Its events are `allowed` (file rules,
 dependencies, secrets and python-print), `not measured` (a Python file the size rule cannot parse, without a ceiling
-file; O22), `unused` and `warning` (import-contract) and `unused` (secret). An allowed advisory and an honoured output
+file; O22), `not called` (a covered repository with no pull-request step that calls `design-catalogs --check`, at
+`.github/workflows`, [rules](rules.md)), `unused` and `warning` (import-contract) and `unused` (secret). An allowed advisory and an honoured output
 owner stand as notes, and the clean row counts them (O15, O49):
 
 ```text

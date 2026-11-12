@@ -968,6 +968,36 @@ is reported (its fix is a tracked Dockerfile), while a simple `RUN apt-get insta
 (`apt-get -s install`, `--simulate`, `--dry-run`, and `apt-get --print-uris`, which prints download addresses and
 installs nothing) reads as the real call.
 
+The `catalog-check` rule, in the `workflows` area, reports a covered repository whose pull-request workflows never call the
+generator's check. A repository is covered when its tracked root `pyproject.toml` declares `overnightworks-design` with the
+extra `catalogs` in `[project] dependencies`, in a group of `[project.optional-dependencies]` or in a group of
+`[dependency-groups]`; the name and the extra are compared canonicalised, a version, a marker or a URL does not count, and
+an `{include-group}` entry is skipped (CATALOG-1). Only the root file counts, so a nested project is a named gap, and
+`[tool.design-catalogs]` without the declaration does not cover (CATALOG-6). A repository that is not covered sees no row
+and no workflow is read (CATALOG-3). A `pyproject.toml` that is not UTF-8 TOML, whose dependency list is no list or whose
+entry is neither a requirement string nor an `{include-group}` table is exit `2` naming the file (CATALOG-4).
+
+A covered repository's `run:` steps are read in every workflow a pull request triggers (CATALOG-8). A step counts when
+its script calls `design-catalogs` with `--check` in a form the shared shell reader reads as a call of a named tool, so
+the forms that `pytest-workers` reads stand (CATALOG-7). A call through `make`, a word in an `echo`, a script, `tox`,
+`nox`, a composite action or a reusable workflow called through `uses:` is no call, and a command built at run time is
+read as no call (CATALOG-9). A step with `continue-on-error: true` or with a `working-directory` other than `.` does not
+count. Three named gaps count as calls:
+
+- a step with an `if:`;
+- a call ending in `|| true`;
+- a job that is not mandatory.
+
+A `defaults.run.working-directory` is not read. An unreadable workflow, a `run:` that is no string, or an alias or a
+merge key where it can hide a step is exit `2` naming the workflow (CATALOG-11).
+
+A covered repository with no counting step gets one note row and exit 0, never a finding, so the `workflows` row stays
+clean: `· .github/workflows  not called  no workflow step runs design-catalogs --check directly on a pull request; a call through make is not read yet`
+(CATALOG-5). A repository that runs the generator without declaring it (`uvx --from
+'overnightworks-design[catalogs]' design-catalogs --check`, uv's legacy `[tool.uv] dev-dependencies`) is not covered and
+sees nothing; that is a named gap. The rule only reports, so no run turns red for it, and its fleet cell reads
+`report-only`. It has no release yet, so a dependent meets it at its first bump to the release that carries it.
+
 The `job-timeout` rule, in the `debt` area, judges every job of a workflow that runs on a pull request or on a push to
 main, and of the reusable workflows those call through a local `uses:`. Every tracked workflow is parsed, a root or not,
 because a root is known only after the parse; a tracked file gone from the tree is skipped and a composite action is not

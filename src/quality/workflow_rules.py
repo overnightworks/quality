@@ -344,6 +344,24 @@ def _run_steps(name: str, document: Document) -> Iterator[tuple[yaml.Node, yaml.
                 yield step, _script(name, document, run)
 
 
+@dataclass(frozen=True)
+class PullRequestRunStep:
+    """A `run:` step of a workflow a pull request triggers: the workflow's name, the step's mapping and its script's logical lines."""
+
+    workflow: str
+    step: yaml.Node
+    lines: tuple[ScriptLine, ...]
+
+
+def pull_request_run_steps(root: Path, tracked: list[str]) -> Iterator[PullRequestRunStep]:
+    """Every `run:` step of every workflow a pull request triggers, its script read line by line; the walk the rules over `run:` scripts share."""
+    for name, text in _readable_workflows(root, tracked):
+        document = _document(name, text)
+        if checkout.pull_request_events(document):
+            for step, run in _run_steps(name, document):
+                yield PullRequestRunStep(name, step, tuple(logical_lines(physical_lines(run))))
+
+
 def _script(name: str, document: Document, run: yaml.Node) -> yaml.ScalarNode:
     if document.is_alias(run):
         raise _hidden(name)

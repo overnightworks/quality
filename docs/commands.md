@@ -242,7 +242,8 @@ repository a token can list is dropped without a trace (FLEET-72).
   sentence under the heading (FLEET-14). A rule cell says what the pinned gate does with the rule, never whether the
   repository passes it: `enforced`, `report-only` (`size` without `quality/baseline.toml` (FLEET-15), `import-contract`
   without an import-linter config (FLEET-16), `clone` on v0.4.0 and, from v0.5.0 on, without a `[clones]` table in
-  `quality/baseline.toml` (FLEET-17)), `not in <tag>` when the pinned release predates the rule (FLEET-18),
+  `quality/baseline.toml` (FLEET-17), `catalog-check` while it only reports (FLEET-98)),
+  `not in <tag>` when the pinned release predates the rule (FLEET-18),
   `not released` when only main has the rule (FLEET-19), `no judged project` (`test-layout`, from v0.7.0 on, when the
   clone has no Python project with a package under `src/` and no frontend project (a `package.json` outside every
   project's `tests/`)) (FLEET-20), and `—` without a gate (FLEET-21). Two pins give the oldest release; a pin that is
