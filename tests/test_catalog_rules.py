@@ -278,19 +278,13 @@ def test_a_covered_repository_with_an_unreadable_workflow_exits_two_through_the_
     assert code == 2
 
 
-@pytest.mark.parametrize(
-    "run",
-    [
-        pytest.param("make lint", id="the goal reaches the check"),
-        pytest.param("make -j4 lint", id="a flag makes no call, so the note prints"),
-    ],
-)
-def test_a_make_goal_that_reaches_the_check_in_the_makefile_gets_no_note_only_when_it_is_read(build_repo, run):
+def test_a_make_goal_that_reaches_the_check_in_the_makefile_gets_no_note(build_repo):
     """CATALOG-5, CATALOG-12, CATALOG-14 to CATALOG-18, CATALOG-21: `lint` reaches `words-check` through `$(MAKE)`, and the
-    check's line is the same reading as a direct call; a flag is no call of make."""
-    repo = build_repo({"pyproject.toml": pyproject(DECLARED), WORKFLOW: workflow(run), MAKEFILE: COVERED_MAKEFILE})
-    expected = [] if run == "make lint" else [NOT_CALLED]
-    assert rule_notes(repo, Rule.CATALOG_CHECK) == expected
+    check's line is the same reading as a direct call."""
+    repo = build_repo(
+        {"pyproject.toml": pyproject(DECLARED), WORKFLOW: workflow("make lint"), MAKEFILE: COVERED_MAKEFILE}
+    )
+    assert rule_notes(repo, Rule.CATALOG_CHECK) == []
 
 
 @pytest.mark.parametrize(
@@ -298,10 +292,12 @@ def test_a_make_goal_that_reaches_the_check_in_the_makefile_gets_no_note_only_wh
     [
         pytest.param("make test", id="the goal is not in the file"),
         pytest.param("make -C sub lint", id="make -C reads another directory"),
+        pytest.param("make -j4 lint", id="a flag makes no call of make"),
     ],
 )
 def test_a_make_goal_that_does_not_reach_the_check_gets_the_note_with_the_new_fact(build_repo, capsys, run):
-    """CATALOG-5, CATALOG-12: a goal that does not reach the check gets the note, its fact word for word, and exit 0."""
+    """CATALOG-5, CATALOG-12: a goal that does not reach the check, or a make call with a flag, which is no call of make, gets
+    the note, its fact word for word, and exit 0."""
     repo = build_repo(
         {
             "pyproject.toml": pyproject(DECLARED),
