@@ -937,7 +937,7 @@ tool from the lockfile, the runner image or an image pinned by digest, or explai
 <reason>` (RUNTIME-8). A workflow whose YAML or file cannot be read, a `run:` that is no string, and an alias or a merge
 key where it can hide `jobs`, a job, `steps`, a step or a `run:` are exit `2` naming the file; a step with no `run:` is
 skipped and a tracked name gone from the tree is skipped (RUNTIME-9). The clean row of `workflows` keeps its words, the
-rule's extent is the count of workflows it read, and no configuration switches the rule off (RUNTIME-10). It has no
+rule's extent is the count of workflows it read (RUNTIME-10). No configuration switches the rule off. It has no
 release yet, so a dependent meets it at its first bump to the release that carries it. quality's own checkout needs no
 workflow edit.
 
