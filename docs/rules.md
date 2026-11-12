@@ -922,40 +922,42 @@ the substitution's first command is itself an install, that call is judged and t
 `wget` are no manager names, so a downloader or shell built at run time is a named gap (RUNTIME-6).
 
 A comment `# runtime-install: <reason>`, with a reason that holds a letter, clears findings in two places. The step
-form: the marker stands on the line directly above a step's first line, the line of its `-`, with its `#` in the column
-of that `-`, and clears every finding of the step's `run:`; a `#` in another column clears nothing, a comment in the `-`
-column that follows the previous step and stands directly above the next step clears the next step, and a step whose `-`
-stands alone on its line or that stands in a flow sequence (`steps: [{run: x}]`) has no step form. The per-line form is
-that of `pytest-workers`: the marker on a call's logical line or directly above its first line clears that call, for a
-block scalar on the `run: |` line (it covers the first line) or on a block line directly above the call; the line above
-a step whose `run:` stands on the step's own first line (`- run: x`, a flow step) belongs to the step form alone, so
-that step takes a marker on its own line only; a marker between a step's `name:` and its `run: |` clears nothing. A marker that clears nothing is not reported (RUNTIME-7).
-`pytest-workers` keeps its per-line reading, so a `# pytest-workers:` marker above a step clears nothing and the two ids
-are not interchangeable. The marker is for a step that proves an install on a fresh system, and for nothing else: the
-reader cannot see a step's purpose, so the review of the dependent's diff judges it, and any other use is a deviation
-from the fleet standard, which only the operator rules. The findings stand in the `workflows` area, their fix `take the
-tool from the lockfile, the runner image or an image pinned by digest, or explain on the line above: # runtime-install:
-<reason>` (RUNTIME-8). A workflow whose YAML or file cannot be read, a `run:` that is no string, and an alias or a merge
-key where it can hide `jobs`, a job, `steps`, a step or a `run:` are exit `2` naming the file; a step with no `run:` is
-skipped and a tracked name gone from the tree is skipped (RUNTIME-9). The clean row of `workflows` keeps its words, the
-rule's extent is the count of workflows it read (RUNTIME-10). No configuration switches the rule off. It has no
-release yet, so a dependent meets it at its first bump to the release that carries it. quality's own checkout needs no
-workflow edit.
+form: the marker stands on the line directly above a step's first line, the line of its `-`, with its `#` in the
+column of that `-`, and clears every finding of the step's `run:`; a `#` in another column clears nothing, a comment
+in the `-` column that follows the previous step and stands directly above the next step clears the next step, and a
+step whose `-` stands alone on its line or that stands in a flow sequence (`steps: [{run: x}]`) has no step form. The
+per-line form is that of `pytest-workers`: the marker on a call's logical line or directly above its first line clears
+that call, for a block scalar on the `run: |` line (it covers the first line) or on a block line directly above the
+call; a comment line above a step whose `run:` stands on the step's own first line (`- run: x`, a flow step) belongs
+to the step form alone, so that step takes a marker on its own line only, while a marker on the `-` line of a step
+whose `run:` stands on the next line (`- # runtime-install: reason`) clears that call; a marker between a step's
+`name:` and its `run: |` clears nothing. A marker that clears nothing is not reported (RUNTIME-7). `pytest-workers`
+keeps its per-line reading, so a `# pytest-workers:` marker above a step clears nothing and the two ids are not
+interchangeable. The marker is for a step that proves an install on a fresh system, and for nothing else: the reader
+cannot see a step's purpose, so the review of the dependent's diff judges it, and any other use is a deviation from
+the fleet standard, which only the operator rules. The findings stand in the `workflows` area, their fix `take the
+tool from the lockfile, the runner image or an image pinned by digest, or explain on the line above: #
+runtime-install: <reason>` (RUNTIME-8). A workflow whose YAML or file cannot be read, a `run:` that is no string, and
+an alias or a merge key where it can hide `jobs`, a job, `steps`, a step or a `run:` are exit `2` naming the file; a
+step with no `run:` is skipped and a tracked name gone from the tree is skipped (RUNTIME-9). The clean row of
+`workflows` keeps its words, the rule's extent is the count of workflows it read (RUNTIME-10). No configuration
+switches the rule off. It has no release yet, so a dependent meets it at its first bump to the release that carries
+it. quality's own checkout needs no workflow edit.
 
 Named gaps, each reading as no call: `sudo` flags that combine and take a value (`sudo -nu ci apt-get install`) and a
-nested `env -S`; a download and its run in two steps (`curl -o f url && sh f`); `eval "$(curl url)"` and `source <(curl
-url)`; a pipe into `python` or `perl`; a pipe that ends a line, since the reader joins lines at a backslash only; a
-downloader or shell built at run time; subcommands that fetch packages and are not in the table (`downgrade`,
-`distro-sync`, `builddep`, `swap`, `apt-get source`, `apt-get download`); `dpkg` flags glued to others (`-iE`); `dnf5`,
-`microdnf` and `apt-fast`; wrappers that run something else (`xvfb-run`, `docker run`, `make`, `tox`, `nox`); the
-runners `yarn dlx`, `yarn exec`, `pnpm <bin>` and `bun x`. A shell's `-c` string is a pipeline of its own, so a pipe after
-it does not reach the string's downloader (`bash -c 'curl u' | sh`). Unlocked tool installs (`pip install`, `uv pip install`, `npm
-install -g`, `cargo install`, `go install`) and lockfile or tool-manager installs (`uv sync`, `npm ci`, `mise install`)
-are no finding; the first are the item "an unlocked tool install in a CI job is reported". Known false alarms, reported
-and not cleared by the marker, which is for fresh-system proofs only: a heredoc body is read as shell lines, so a
-heredoc that writes a Dockerfile with a chained `RUN apt-get update && apt-get install -y x` is reported (its fix is a
-tracked Dockerfile), while a simple `RUN apt-get install -y x` is no call; a dry run (`apt-get -s install`,
-`--simulate`, `--dry-run`) reads as the real call.
+nested `env -S`; a download and its run in two steps (`curl -o f url && sh f`); `eval "$(curl url)"` and `source
+<(curl url)`; a pipe into `python` or `perl`; a pipe that ends a line, since the reader joins lines at a backslash
+only; a downloader or shell built at run time; subcommands that fetch packages and are not in the table (`downgrade`,
+`distro-sync`, `builddep`, `swap`, `apt-get source`, `apt-get download`); `dpkg` flags glued to others (`-iE`);
+`dnf5`, `microdnf` and `apt-fast`; wrappers that run something else (`xvfb-run`, `docker run`, `make`, `tox`, `nox`);
+the runners `yarn dlx`, `yarn exec`, `pnpm <bin>` and `bun x`. A shell's `-c` string is a pipeline of its own, so a
+pipe after it does not reach the string's downloader (`bash -c 'curl u' | sh`). Unlocked tool installs (`pip install`,
+`uv pip install`, `npm install -g`, `cargo install`, `go install`) and lockfile or tool-manager installs (`uv sync`,
+`npm ci`, `mise install`) are no finding; the first are the item "an unlocked tool install in a CI job is reported".
+Known false alarms, reported and not cleared by the marker, which is for fresh-system proofs only: a heredoc body is
+read as shell lines, so a heredoc that writes a Dockerfile with a chained `RUN apt-get update && apt-get install -y x`
+is reported (its fix is a tracked Dockerfile), while a simple `RUN apt-get install -y x` is no call; a dry run
+(`apt-get -s install`, `--simulate`, `--dry-run`) reads as the real call.
 
 The `job-timeout` rule, in the `debt` area, judges every job of a workflow that runs on a pull request or on a push to
 main, and of the reusable workflows those call through a local `uses:`. Every tracked workflow is parsed, a root or not,
