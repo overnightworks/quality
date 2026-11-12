@@ -19,7 +19,7 @@ from quality.config import (
     LegacyMode,
 )
 from quality.output import SEPARATOR, Glyph, Row, SubLine, counted, format_duration
-from quality.ratchet import Renames, added_pairs, carried_base, named_paths, raised_entries
+from quality.ratchet import Renames, added_pairs, carried_base, named_paths, raised_entries, raised_job_limits
 from quality.report import (
     FIX_THEN_RERUN,
     PUSH_THE_FIX,
@@ -307,12 +307,14 @@ def _removal(name: str) -> str:
 
 
 def _baseline_loosenings(base: Baseline | None, head: Baseline | None, renames: Renames) -> list[str]:
-    """Without a base baseline any head one is adoption; with one, the head may only lower or drop entries and pairs.
+    """Without a base baseline any head one is adoption; with one, the head may only lower or drop entries, pairs and
+    job limits.
 
     A head entry in a file git renamed is held against the base entry under the old path; it is still named, and
     declared, under its head path.
 
-    A base `[clones]` table is held the same way: the head keeps it, and a base without one lets the head introduce it.
+    A base `[clones]` or `[job_minutes]` table is held the same way: the head keeps it, and a base without one lets the
+    head introduce it. The two tables are judged apart, so a base without one never skips the other.
     """
     if base is None:
         return []
@@ -320,11 +322,23 @@ def _baseline_loosenings(base: Baseline | None, head: Baseline | None, renames: 
         return [f"{BASELINE_PATH} removed"]
     base = carried_base(base, renames, named_paths(head))
     lines = [f"size baseline {entry.describe()}" for entry in raised_entries(base.size, head.size)]
+    return [*lines, *_clone_loosenings(base, head), *_job_loosenings(base, head)]
+
+
+def _clone_loosenings(base: Baseline, head: Baseline) -> list[str]:
     if base.clones is None:
-        return lines
+        return []
     if head.clones is None:
-        return [*lines, "clone baseline removed"]
-    return [*lines, *(f"clone baseline adds {pair.label}" for pair in added_pairs(base.clones, head.clones))]
+        return ["clone baseline removed"]
+    return [f"clone baseline adds {pair.label}" for pair in added_pairs(base.clones, head.clones)]
+
+
+def _job_loosenings(base: Baseline, head: Baseline) -> list[str]:
+    if base.job_minutes is None:
+        return []
+    if head.job_minutes is None:
+        return ["job limit baseline removed"]
+    return [f"job limit baseline {entry.describe()}" for entry in raised_job_limits(base.job_minutes, head.job_minutes)]
 
 
 def _judge_job(name: str, jobs: list[Job], current_attempt: int) -> tuple[JobOutcome, Unsettled | None]:

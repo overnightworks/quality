@@ -1,5 +1,6 @@
 """A pure rename is no loosening: the verdict and the door read the files git renamed between the base and the head."""
 
+import json
 import os
 import signal
 import subprocess
@@ -10,6 +11,7 @@ import pytest
 
 from quality import sides
 from quality.baseline_file import BASELINE_PATH, Baseline, Key, Metric, render_baseline
+from quality.config import CONFIG_PATH
 from quality.ratchet import Renames, renames_of
 from quality.report import CannotJudge
 from tests.support.door import RELEASE_ROW
@@ -25,7 +27,7 @@ from tests.support.merge import (
     not_judged_pair,
 )
 from tests.support.processes import process_is_gone
-from tests.support.verdict import verdict_of, verdict_streams, viewed
+from tests.support.verdict import ONLY_DECLARED, declaration, declared, gate_config, verdict_of, verdict_streams, viewed
 from tests.support.verdict_renames import MOVABLE_FILE, OLD_ENTRY, commit_all, entry, moved_in_head, pulled
 
 OTHER_FILE = "".join(f"nothing like the movable file, row {number}\n" for number in range(30))
@@ -580,3 +582,126 @@ def test_a_rename_list_git_did_not_finish_cannot_be_judged_at_the_door(capsys, t
         2, loosenings_not_judged("cannot list the files git renamed between the pull request's commits"), not_judged_pair(),
     )
     changed_nothing(gh)
+
+
+CI = ".github/workflows/ci.yml"
+CI_MAIN = ".github/workflows/ci-main.yml"
+
+
+def limits(path, minutes, job="e2e"):
+    """A `[job_minutes]` table holding one job of one workflow file."""
+    return f"[job_minutes.{json.dumps(path)}]\n{json.dumps(job)} = {minutes}\n"
+
+
+def pull_request_workflow(minutes):
+    """A workflow a pull request triggers, with the job `e2e` limited to `minutes`."""
+    return f"on: pull_request\njobs:\n  e2e:\n    runs-on: ubuntu-latest\n    timeout-minutes: {minutes}\n    steps:\n      - run: 'true'\n"
+
+
+def raise_line(path, base, head, job="e2e"):
+    return f"job limit baseline raises {path} {job} {base} -> {head}"
+
+
+@pytest.mark.parametrize(
+    ("head", "code", "expected"),
+    [
+        (limits(CI_MAIN, 40), 0, None),
+        (limits(CI_MAIN, 35), 0, None),
+        (limits(CI_MAIN, 45), 1, raise_line(CI_MAIN, 40, 45)),
+        (limits(CI, 40) + limits(CI_MAIN, 40), 1, f"job limit baseline adds {CI_MAIN} e2e 40"),
+    ],
+    ids=["moved and equal", "moved and lowered", "moved and raised", "the head still names the old path"],
+)
+def test_a_renamed_workflow_meets_the_job_limits_of_its_predecessor(capsys, pull_request, head, code, expected):
+    """TIMEOUT-17, BASELINE-12, BASELINE-16: git's pairing moves the base entries to the new path, a raise names the head
+    path, and a head that keeps the old path moves nothing."""
+    moved_in_head(pull_request, limits(CI, 40), head, old=CI, new=CI_MAIN)
+    actual_code, output = verdict_of(pull_request[0], capsys)
+    assert (actual_code, expected is None or expected in output, output.count("\n    ! ")) == (code, True, int(code))
+
+
+def test_a_workflow_rename_git_does_not_pair_leaves_the_old_entries_gone_and_the_new_ones_adds(capsys, pull_request):
+    """TIMEOUT-17, BASELINE-3."""
+    moved_in_head(pull_request, limits(CI, 40), limits(CI_MAIN, 40), new_text=OTHER_FILE, old=CI, new=CI_MAIN)
+    code, output = verdict_of(pull_request[0], capsys)
+    assert (code, f"job limit baseline adds {CI_MAIN} e2e 40" in output) == (1, True)
+
+
+def test_a_job_id_renamed_inside_a_file_is_an_added_entry(capsys, pull_request):
+    """TIMEOUT-17."""
+    repo, commit_base = pull_request
+    commit_base(limits(CI, 40))
+    put(repo / BASELINE_PATH, limits(CI, 40, "e2e-long"))
+    commit_all(repo, "renames the job")
+    code, output = verdict_of(repo, capsys)
+    assert (code, f"job limit baseline adds {CI} e2e-long 40" in output) == (1, True)
+
+
+@pytest.mark.parametrize(("base", "head", "code"), [(40, 45, 1), (45, 40, 0)], ids=["raised", "lowered"])
+def test_a_job_limit_and_its_workflow_changed_together_in_one_commit_is_judged_from_the_baseline_alone(
+    capsys, pull_request, base, head, code
+):
+    """TIMEOUT-18: the raise is read between the base commit's table and the head commit's, the swapped pair is green."""
+    repo, commit_base = pull_request
+    put(repo / CI, pull_request_workflow(base))
+    commit_base(limits(CI, base))
+    put(repo / CI, pull_request_workflow(head))
+    put(repo / BASELINE_PATH, limits(CI, head))
+    commit_all(repo, "moves the limit")
+    expected = [f"    ! {raise_line(CI, base, head)}", "! red"] if code else ["✓ green"]
+    assert viewed(repo, capsys) == (code, expected)
+
+
+def test_a_job_raised_over_its_entry_with_no_baseline_change_has_no_loosening_line(capsys, pull_request):
+    """TIMEOUT-18: the verdict reads the baseline only; a job over its entry is the check's finding."""
+    repo, commit_base = pull_request
+    put(repo / CI, pull_request_workflow(40))
+    commit_base(limits(CI, 40))
+    put(repo / CI, pull_request_workflow(45))
+    commit_all(repo, "raises the job only")
+    assert viewed(repo, capsys) == (0, ["✓ green"])
+
+
+def test_a_baseline_file_deleted_in_the_head_removes_the_job_table_with_the_file(capsys, pull_request):
+    """TIMEOUT-18: a deleted file is `quality/baseline.toml removed`, not `job limit baseline removed`."""
+    repo, commit_base = pull_request
+    commit_base(limits(CI, 40))
+    (repo / BASELINE_PATH).unlink()
+    commit_all(repo, "deletes the baseline")
+    code, output = verdict_of(repo, capsys)
+    assert (code, f"    ! {BASELINE_PATH} removed" in output, "job limit baseline removed" in output) == (1, True, False)
+
+
+JOB_LOOSENINGS = [
+    pytest.param(limits(CI, 40), limits(CI, 45), raise_line(CI, 40, 45), id="a raise"),
+    pytest.param(limits(CI, 40), f'{limits(CI, 40)}"other" = 20\n', f"job limit baseline adds {CI} other 20", id="an added entry"),
+    pytest.param(limits(CI, 40), "", "job limit baseline removed", id="the table removed"),
+]
+
+
+@pytest.mark.parametrize(("base", "head", "what"), JOB_LOOSENINGS)
+def test_a_declared_job_limit_loosening_is_the_declared_red_of_the_verdict_and_an_undeclared_one_is_red(
+    capsys, pull_request, base, head, what
+):
+    """TIMEOUT-18, VERDICT-53: the loosening, declared with its exact text, closes the verdict as only declared
+    loosenings; undeclared it is red with the line to copy."""
+    repo, commit_base = pull_request
+    commit_base(base, gate_config("checks"))
+    put(repo / BASELINE_PATH, head)
+    commit_all(repo, "loosens the job limits")
+    assert viewed(repo, capsys) == (1, [f"    ! {what}", "! red"])
+    put(repo / CONFIG_PATH, gate_config("checks", declared=(declaration(what),)))
+    commit_all(repo, "declares it")
+    assert viewed(repo, capsys) == (1, [declared(what), ONLY_DECLARED])
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(("base", "head", "what"), JOB_LOOSENINGS)
+@pytest.mark.parametrize("is_declared", [False, True], ids=["undeclared", "declared"])
+def test_the_door_refuses_an_undeclared_job_limit_loosening_and_merges_a_declared_one(capsys, tmp_path, base, head, what, is_declared):
+    """TIMEOUT-18, MERGE-84: the door judges the job limits as the verdict does: undeclared they are refused with the
+    line, declared they merge."""
+    options = {"checks": SONAR_GREEN, "base_config": ONE_JOB, "merge_config": ONE_JOB + (declaring(what) if is_declared else "")}
+    gh = pulled(tmp_path, base, head, **options)
+    assert drive(gh)[0] == (0 if is_declared else 1)
+    assert (f"    ! {what}" in capsys.readouterr().out, len(gh.merge_calls)) == (True, int(is_declared))

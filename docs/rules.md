@@ -131,7 +131,7 @@ It applies these rules:
   (deleted but not staged, left out by a sparse checkout, or a dangling symlink) is skipped, and its entries stand,
   unjudged, while the index tracks it (CEILING-1). A `quality/baseline.toml` that is not UTF-8 is malformed like invalid
   TOML and says to restore it from git or repair it by hand (CEILING-2). A baseline with a table this quality does not
-  know (`has an unknown table [future]; quality <version> knows ccn, file_lines, function_lines, clones`) is not told
+  know (`has an unknown table [future]; quality <version> knows ccn, file_lines, function_lines, clones, job_minutes`) is not told
   that: a newer quality may have written it, so the head is told to run the quality release its gate pins (CEILING-3).
   With `quality/baseline.toml`, the tree on disk must hold the baseline: a new violation, an entry that grew and an
   entry above its measured value are findings, each a row under the [debt row](output.md#area-rows): `new debt`
@@ -593,6 +593,11 @@ It applies these rules:
   - a clone pair the base does not hold, when the base has a `[clones]` table:
     `clone baseline adds tests/test_a.py run <-> tests/test_b.py check` (BASELINE-4);
   - the base's `[clones]` table gone from a head that still has the file: `clone baseline removed` (BASELINE-5);
+  - a job limit the base's `[job_minutes]` table does not hold or holds lower, when the base has the table:
+    `job limit baseline raises .github/workflows/ci.yml e2e 40 -> 45`,
+    `job limit baseline adds .github/workflows/ci.yml e2e 40` (TIMEOUT-18);
+  - the base's `[job_minutes]` table gone from a head that still has the file: `job limit baseline removed`
+    (TIMEOUT-18);
   - the base's file deleted: `quality/baseline.toml removed` (BASELINE-6);
   - a `[[size.generated]]` declaration is judged as in [gate](gate.md), "Declared loosenings".
 
@@ -615,7 +620,9 @@ It applies these rules:
 
   A lowered, equal or removed entry or pair is green (BASELINE-7), and so is adopting a baseline (the base has none) or
   neither side having one (BASELINE-8). A `[clones]` table the base lacks is an adoption too: its pairs are not
-  compared (BASELINE-9), while the size entries are still held against the base's (BASELINE-10).
+  compared (BASELINE-9), while the size entries are still held against the base's (BASELINE-10). A `[job_minutes]` table
+  the base lacks is an adoption in the same way, whatever the base's `[clones]` table is, and the job lines stand after the
+  size and clone lines in the file's order (TIMEOUT-18).
   A malformed baseline on either side is exit `2`, naming the side (`quality/baseline.toml at the base commit <sha>:
   ...`, `quality/baseline.toml at the head: ...`) (BASELINE-20). So is a head baseline that links out of the repository
   (BASELINE-21), a base file that is not a regular file (`... : not a regular file`) (BASELINE-22), and a base that git
@@ -899,11 +906,39 @@ workflows stay outside; a local call in a file that is not judged is not read (T
 The limit is read in this order: no `timeout-minutes` key is `missing`, never debt; a plain unquoted decimal number
 above zero is that many minutes; any other value is `invalid` (an expression, a quoted number, `0`, a negative, signed,
 hex or exponent form, an empty value, `~`, `null`, a word, a sequence or a mapping); a limit above 15 is `new debt`,
-`15.5` included (TIMEOUT-5). The findings stand in the `debt` area at the file that defines the job, a reached
-workflow under its own path, at the `timeout-minutes` line or the job id's line for `missing`, in the listing's order
-and the file's job order. The facts are `job <id> has no timeout-minutes`, `job <id> has a timeout-minutes that is not a
-number above zero` and `job <id> has timeout-minutes <value> · limit 15`; the fix is `set timeout-minutes to a number of
-at most 15` for the first two and `lower timeout-minutes to 15 or less` for the last (TIMEOUT-6).
+`15.5` included, unless the baseline holds it (TIMEOUT-5). The findings stand in the `debt` area at the file that
+defines the job, a reached workflow under its own path, at the `timeout-minutes` line or the job id's line for
+`missing`, in the listing's order and the file's job order. The facts are `job <id> has no timeout-minutes`, `job <id>
+has a timeout-minutes that is not a number above zero` and `job <id> has timeout-minutes <value> · limit 15`; the fix is
+`set timeout-minutes to a number of at most 15` for the first two and `lower timeout-minutes to 15 or less` for the last
+(TIMEOUT-6).
+
+A job above 15 may be held as debt in a `[job_minutes]` table of `quality/baseline.toml`: one subtable per workflow
+file, keyed by the repository-relative path of the file that defines the job, and one key per job id with a positive
+whole number of minutes (`[job_minutes.".github/workflows/ci.yml"]`, then `e2e = 40`). A table with no subtable is held
+and empty; a value that is no positive integer, or a subtable or key that is no table, is a malformed baseline
+(`needs <where> as a positive count, not <value>`, `needs <where> as a table`) (TIMEOUT-12). It renders after the size and
+`[clones]` tables, subtables sorted by path and keys by job id, and a file that already renders so stays untouched by
+`--fix`, and the unknown-table message lists `job_minutes` among the tables quality knows (TIMEOUT-13). An older quality
+refuses the table as unknown. The debt a limit counts as is its rounded-up whole
+minutes, so `17.5` is held by an entry of `18`; a fact prints the limit as written (TIMEOUT-14).
+
+Against the table a judged job with a readable limit is compared by its rounded-up value `d`, with or without a
+ceiling file. An entry of 15 or less is no debt and reads as no entry. With no entry and `d` above 15 the job is `new
+debt`; an entry above 15 and `d` above it is `grew` (`job e2e has timeout-minutes 45 · ceiling 40`, fix: bring it back
+to 40 or below); an entry above 15 and `d` below it, or `d` of 15 or less, is `can fall` (`job e2e has timeout-minutes
+20 · ceiling 40`, fix: delete or lower the entry in quality/baseline.toml by hand); `d` equal to the entry, and no entry
+with `d` of 15 or less, are green. A job without a readable limit keeps its `missing` or `invalid` finding and its entry
+stands (TIMEOUT-15). After the measured findings, sorted by path and job and with no line, each entry that can fall with
+nothing to measure is `can fall`: its path is not tracked or no root reaches the file any more, the file has no such job
+or the job calls a workflow (`job e2e is gone · ceiling 40`), or the entry is of 15 or less (`job e2e has no debt ·
+ceiling 10`) (TIMEOUT-16). The rule's extent and a clean `debt` row's words (`ceiling held · N entries, M clone pairs`)
+count no job entry. A baseline that cannot be read makes the rule `cannot judge` and names the baseline, as it does for
+`size` and `clone`; one that is absent leaves the rule judging with no entry.
+
+A renamed workflow carries its base entries to its new path in the verdict as a renamed source file carries its size
+entries, a leftover under the new path and an entry under a path the head still names moving nothing; a job id renamed
+inside a file is a new entry (TIMEOUT-17).
 
 A workflow whose YAML or file cannot be read, an alias or a merge key where it can hide the top mapping, `on:`, the
 `push` value, its `branches`, `branches-ignore` or `tags`, or in a judged file `jobs`, a job, a `uses:` or a

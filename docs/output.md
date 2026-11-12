@@ -71,9 +71,12 @@ rows, by area:
   one `unused` row per rule, each fix deleting every entry of the path (O18); `script-name` says `misnamed` where the
   shape breaks, its fact then holding the place too, and `misplaced` where only the place does (O19).
 - `debt`: a `job-timeout` finding is `missing` (`job <id> has no timeout-minutes`, at the job's line), `invalid`
-  (`job <id> has a timeout-minutes that is not a number above zero`) or `new debt` (`job <id> has timeout-minutes
-  <value> · limit 15`), the last two at the `timeout-minutes` line; the fix of the first two is `set timeout-minutes to a
-  number of at most 15`, of the last `lower timeout-minutes to 15 or less` ([rules](rules.md)).
+  (`job <id> has a timeout-minutes that is not a number above zero`), `new debt` (`job <id> has timeout-minutes
+  <value> · limit 15`), `grew` (`job <id> has timeout-minutes <value> · ceiling <entry>`) or `can fall` (the same fact
+  at the line, or `job <id> is gone · ceiling <entry>` and `job <id> has no debt · ceiling <entry>` at the file with no
+  line), the measured ones at the `timeout-minutes` line; the fix of the first two is `set timeout-minutes to a number
+  of at most 15`, of `new debt` `lower timeout-minutes to 15 or less`, of `grew` `bring it back to <entry> or below` and
+  of `can fall` `delete or lower the entry in quality/baseline.toml by hand` ([rules](rules.md)).
 - `imports`: a broken contract is a `broken` finding; an unmatched ignore is an `unused` finding at `error` and an
   `unused` note at `warn`; a grimp or import-linter warning is a `warning` note (O23); a `broken` finding's detail
   lines are import-linter's own rendering of the contract ([Rows](#rows)).

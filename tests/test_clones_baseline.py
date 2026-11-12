@@ -551,13 +551,13 @@ def test_a_file_python_cannot_parse_leaves_the_enforced_clone_rule_unable_to_jud
 
 
 @pytest.mark.parametrize("text", ["[size\n", *MALFORMED], ids=["no clone table, not TOML", *MALFORMED_IDS])
-def test_a_malformed_baseline_leaves_both_rules_unable_to_judge_and_names_one_restore_step(build_repo, capsys, text):
-    """CLONE-9, CEILING-9: a baseline that cannot be read, with a `[clones]` table or without one, leaves the size and
-    clone rules both unable to judge, and the restore step stands once on `next:`."""
+def test_a_malformed_baseline_leaves_the_debt_rules_unable_to_judge_and_names_one_restore_step(build_repo, capsys, text):
+    """CLONE-9, CEILING-9: a baseline that cannot be read, with a `[clones]` table or without one, leaves the size, clone
+    and job-timeout rules all unable to judge, and the restore step stands once on `next:`."""
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: text})
     code, output = check_output(capsys, repo)
     assert code == 2, output
-    assert set(refusals(repo)) == {Rule.SIZE, Rule.CLONE}
+    assert set(refusals(repo)) == {Rule.SIZE, Rule.CLONE, Rule.JOB_TIMEOUT}
     assert output.count(f"restore {BASELINE_PATH} from git, or repair it by hand") == 1, output
     assert f"next: restore {BASELINE_PATH} from git, or repair it by hand" in output.splitlines()
 

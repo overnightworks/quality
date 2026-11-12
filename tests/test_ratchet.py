@@ -8,8 +8,26 @@ from pathlib import Path
 import pytest
 
 from quality import __version__, cli
-from quality.baseline_file import BASELINE_PATH, Baseline, ClonePair, Key, Metric, Place, load_baseline, render_baseline
-from quality.ratchet import RaisedEntry, Renames, carried_base, debt_from, named_paths, raised_entries
+from quality.baseline_file import (
+    BASELINE_PATH,
+    Baseline,
+    ClonePair,
+    JobKey,
+    Key,
+    Metric,
+    Place,
+    load_baseline,
+    render_baseline,
+)
+from quality.ratchet import (
+    RaisedEntry,
+    Renames,
+    carried_base,
+    debt_from,
+    follow_renames,
+    named_paths,
+    raised_entries,
+)
 from quality.report import FindingEvent, NoteEvent
 from quality.rules import Rule
 from tests.support.check import (
@@ -382,22 +400,22 @@ def test_fixing_twice_yields_the_same_file(build_repo):
     ids=["not-toml", "not-a-count"],
 )
 def test_an_unreadable_baseline_cannot_be_judged(build_repo, capsys, baseline):
-    """CEILING-9: a baseline the rule cannot read is exit 2 for the size and clone rules, never clean, and the run names
-    the restore step once."""
+    """CEILING-9, TIMEOUT-15: a baseline the rule cannot read is exit 2 for the size, clone and job-timeout rules, never
+    clean, and the run names the restore step once."""
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: baseline})
     code, output = run(capsys, repo)
     assert code == 2
-    assert list(refusals(repo)) == [Rule.SIZE, Rule.CLONE]
+    assert list(refusals(repo)) == [Rule.SIZE, Rule.CLONE, Rule.JOB_TIMEOUT]
     assert (output.count("restore quality/baseline.toml from git, or repair it by hand"), "rewrite it with" in output) == (1, False), output  # both rules, one reason: the run names it once, on next:
     assert "next: restore quality/baseline.toml from git, or repair it by hand" in output.splitlines()
 
 
 def test_an_unknown_baseline_table_states_the_fact_and_sends_the_head_to_its_pinned_release(build_repo, capsys):
-    """CEILING-3: an unknown table is refused with the fact and the tables this quality knows, and the head is sent to
-    the release its gate pins."""
+    """CEILING-3, TIMEOUT-15: an unknown table is refused with the fact and the tables this quality knows, and the head
+    is sent to the release its gate pins."""
     repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: "[future]\n"})
     code, output = run(capsys, repo)
-    assert (code, list(refusals(repo))) == (2, [Rule.SIZE, Rule.CLONE])
+    assert (code, list(refusals(repo))) == (2, [Rule.SIZE, Rule.CLONE, Rule.JOB_TIMEOUT])
     assert f"{BASELINE_PATH} has an unknown table [future]; quality {__version__} knows ccn, file_lines, function_lines, clones" in output
     assert output.count("run the quality release your gate pins") == 1, output
     assert "rewrite it" not in output
@@ -569,6 +587,62 @@ def test_a_base_without_a_clone_table_stays_without_one():
     assert carried_base(Baseline({sized("a.py"): 16}, None), renamed({"a.py": "b.py"}), named_paths(Baseline({sized("b.py"): 16}, None))).clones is None
 
 
+def booked(path, job="e2e"):
+    return JobKey(path, job)
+
+
+def job_baseline(entries, size=None):
+    return Baseline(size or {}, None, entries)
+
+
+@pytest.mark.parametrize(
+    ("renames", "base", "head", "expected"),
+    [
+        ({"a.yml": "b.yml"}, {booked("a.yml"): 40}, {booked("b.yml"): 40}, {booked("b.yml"): 40}),
+        ({"a.yml": "b.yml"}, {booked("a.yml"): 40, booked("b.yml"): 99}, {booked("b.yml"): 40}, {booked("b.yml"): 40}),
+        ({"a.yml": "b.yml"}, {booked("b.yml"): 99}, {booked("b.yml"): 40}, {}),
+        ({"a.yml": "b.yml"}, {booked("a.yml"): 40}, {booked("a.yml"): 40, booked("b.yml"): 40}, {booked("a.yml"): 40}),
+        ({"a.yml": "b.yml"}, {booked("a.yml"): 40, booked("c.yml"): 20}, {booked("b.yml"): 40}, {booked("b.yml"): 40, booked("c.yml"): 20}),
+    ],
+    ids=["the allowance moves", "a leftover under the target is dropped", "a lone leftover is dropped",
+         "nothing moves while the head holds the old path", "an unrelated path stays"],
+)
+def test_the_base_job_limits_move_to_a_rename_target_by_the_same_rules_as_size_entries(renames, base, head, expected):
+    """TIMEOUT-17, BASELINE-12, BASELINE-13, BASELINE-16."""
+    carried = carried_base(job_baseline(base), renamed(renames), named_paths(job_baseline(head)))
+    assert carried.job_minutes == expected
+
+
+def test_a_base_without_a_job_table_stays_without_one_and_a_held_empty_one_stays_held():
+    """TIMEOUT-17, BASELINE-9."""
+    rename = renamed({"a.yml": "b.yml"})
+    absent, empty = (carried_base(job_baseline(entries), rename, frozenset()) for entries in (None, {}))
+    assert (absent.job_minutes, empty.job_minutes) == (None, {})
+
+
+def test_a_path_only_a_job_limit_names_is_a_path_the_baseline_names():
+    """TIMEOUT-17, BASELINE-16: a head that names the old path only by a job entry keeps the move from happening."""
+    assert "a.yml" in named_paths(job_baseline({booked("a.yml"): 40}))
+
+
+@pytest.mark.parametrize("pairs", [None, frozenset()], ids=["no clone table", "an empty clone table"])
+def test_a_carried_base_keeps_the_job_table_beside_the_size_entries_and_pairs(pairs):
+    """TIMEOUT-17: the size entries move with a rename and the job table is handed on, whatever the clone table is."""
+    base = Baseline({sized("a.py"): 16}, pairs, {booked("ci.yml"): 40})
+    carried = carried_base(base, renamed({"a.py": "b.py"}), frozenset())
+    assert (carried.size, carried.job_minutes) == ({sized("b.py"): 16}, {booked("ci.yml"): 40})
+
+
+@pytest.mark.parametrize("pairs", [None, frozenset({paired("a.py", "z.py")})], ids=["no clone table", "a clone table"])
+@pytest.mark.parametrize("jobs", [None, {}, {booked("ci.yml"): 40}], ids=["no job table", "an empty job table", "an entry"])
+def test_following_renames_hands_a_held_job_table_on_unchanged(pairs, jobs):
+    """TIMEOUT-17, FIX-31: the fix that moves size entries rewrites the job table byte for byte and never drops it."""
+    committed = Baseline({sized("a.py"): 16}, pairs, jobs)
+    held = Baseline({sized("b.py"): 16}, pairs and frozenset({paired("b.py", "z.py")}), jobs)
+    fix = follow_renames(held, committed, renamed({"a.py": "b.py"}), frozenset({"b.py"}))
+    assert fix.ceiling.job_minutes == jobs
+
+
 def test_a_key_with_quotes_or_unicode_matches_itself_exactly():
     """BASELINE-2, BASELINE-7: a key with quotes or unicode is the same entry on both sides, so equal is no raise and a
     raise on it is found."""
@@ -613,11 +687,11 @@ def not_utf8_baseline_repo(build_repo) -> Path:
 
 
 def test_a_baseline_that_is_not_utf8_is_malformed_and_names_the_restore_step_once(build_repo, capsys):
-    """CEILING-2: a baseline that is not UTF-8 is exit 2 for the size and clone rules, naming the invalid encoding, and
-    the run names the restore step once."""
+    """CEILING-2, TIMEOUT-15: a baseline that is not UTF-8 is exit 2 for the size, clone and job-timeout rules, naming the
+    invalid encoding, and the run names the restore step once."""
     repo = not_utf8_baseline_repo(build_repo)
     code, output = run(capsys, repo)
-    assert (code, list(refusals(repo))) == (2, [Rule.SIZE, Rule.CLONE])
+    assert (code, list(refusals(repo))) == (2, [Rule.SIZE, Rule.CLONE, Rule.JOB_TIMEOUT])
     assert f"{BASELINE_PATH} is not valid UTF-8" in output
     assert (output.count("restore quality/baseline.toml from git, or repair it by hand"), "rewrite it with" in output) == (1, False), output
 
