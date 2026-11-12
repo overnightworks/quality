@@ -982,16 +982,19 @@ its script calls `design-catalogs` with `--check` in a form the shared shell rea
 the forms that `pytest-workers` reads stand (CATALOG-7). A call through `make` counts when the goal of a counted step reaches a
 recipe line of the tracked root `Makefile` that calls the check (CATALOG-12, CATALOG-21). The file is read only when no
 counted step calls the check directly and a counted step has a `make` goal, and only when it is a tracked file on disk; a
-tracked `GNUmakefile` or `makefile` makes the reading no call (CATALOG-13). The recipe is followed as make reads a plain
-file: a goal's recipe, then its prerequisites' recipes, then the recipes of the `make` calls in them, each target once
-(CATALOG-14 to CATALOG-18). A `-` prefixed line, a line of a conditional or of a define block, a target whose recipe is
-given by two rules or by a double-colon rule, and a file with `.IGNORE`, `.RECIPEPREFIX`, `.ONESHELL`, an include or a
-`MAKEFLAGS` assignment are no call (CATALOG-16, CATALOG-17, CATALOG-19, CATALOG-20). A `Makefile` that is not UTF-8, or is a
-symlink that resolves outside the repository, is exit `2` naming the file, when a counted step has a `make` goal and no step
-calls the check directly (CATALOG-23). A word in an `echo`, a script, `tox`, `nox`, a composite action or a reusable workflow
-called through `uses:` is no call (CATALOG-9); every other form the reading does not follow is no call too (CATALOG-22). A
-step with `continue-on-error: true` or with a `working-directory` other than `.` does not count. An unreadable workflow, a
-`run:` that is no string, or an alias or a merge key where it can hide a step is exit `2` naming the workflow (CATALOG-11).
+tracked `GNUmakefile` or `makefile` makes the reading no call (CATALOG-13). A `make` call is followed only with literal
+goal words (a `VAR=x` word is skipped), with no flag at all (so no `-C`, `-f` or `-j`); target and prerequisite names
+are literal too, so a rule whose name or prerequisite holds `$(VAR)` or `%` defines nothing and is not followed. The
+recipe is followed as make reads a plain file: a goal's recipe, then its prerequisites' recipes, then the recipes of the
+`make` calls in them, each target once (CATALOG-14 to CATALOG-18). A `-` prefixed line, a line of a conditional or of a
+define block, a target whose recipe is given by two rules or by a double-colon rule, and a file with `.IGNORE`,
+`.RECIPEPREFIX`, `.ONESHELL`, an include or a `MAKEFLAGS` assignment are no call (CATALOG-16, CATALOG-17, CATALOG-19,
+CATALOG-20). A `Makefile` that is not UTF-8, or is a symlink that resolves outside the repository, is exit `2` naming
+the file, when a counted step has a `make` goal and no step calls the check directly (CATALOG-23). A word in an `echo`,
+a script, `tox`, `nox`, a composite action or a reusable workflow called through `uses:` is no call (CATALOG-9); every
+other form the reading does not follow is no call too (CATALOG-22). A step with `continue-on-error: true` or with a
+`working-directory` other than `.` does not count. An unreadable workflow, a `run:` that is no string, or an alias or a
+merge key where it can hide a step is exit `2` naming the workflow (CATALOG-11).
 
 A covered repository is judged in this order (CATALOG-24). Any counted step with a call, directly or through `make`, makes the
 rule clean: no row, whatever else the workflows hold. Otherwise each unreadable line and each command built at run time is an
