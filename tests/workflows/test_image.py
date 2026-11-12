@@ -26,7 +26,7 @@ def run_job_step(image: dict, name: str, directory, **scenario: str):
 
 
 def test_the_call_takes_exactly_the_image_interface(image):
-    """IMAGE-2, IMAGE-4, IMAGE-5, IMAGE-6, IMAGE-11, IMAGE-12, IMAGE-13."""
+    """IMAGE-2, IMAGE-4, IMAGE-5, IMAGE-6, IMAGE-11, IMAGE-12, IMAGE-13, IMAGE-16."""
     call = image[True]["workflow_call"]
     assert {
         name: (spec["type"], spec.get("required", False), spec.get("default")) for name, spec in call["inputs"].items()
@@ -40,6 +40,7 @@ def test_the_call_takes_exactly_the_image_interface(image):
         "push": ("boolean", True, None),
         "cache": ("boolean", False, False),
         "submodules": ("boolean", False, False),
+        "reproducible-layers": ("boolean", False, False),
     }
     assert {name: spec["required"] for name, spec in call["secrets"].items()} == {"build-secrets": False}
     assert {name: spec["value"] for name, spec in call["outputs"].items()} == {
@@ -134,8 +135,14 @@ def test_only_the_image_job_holds_the_four_grants(image):
 
 
 def test_the_build_is_amd64_with_max_provenance_and_an_sbom(image):
-    """IMAGE-4, IMAGE-5, IMAGE-6, IMAGE-7, IMAGE-9, IMAGE-11, IMAGE-14."""
-    assert step(image, "image", BUILD_STEP)["with"] == {
+    """IMAGE-4, IMAGE-5, IMAGE-6, IMAGE-7, IMAGE-9, IMAGE-11, IMAGE-14, IMAGE-17.
+
+    With reproducible-layers off, both expressions are empty. An empty outputs adds no --output argument, and an empty
+    SOURCE_DATE_EPOCH is read as unset, as the pinned action and buildx read them, so the command is today's. The
+    constant is the quoted string '0': an unquoted 0 is falsy in an expression and would turn the option off.
+    """
+    build = step(image, "image", BUILD_STEP)
+    assert build["with"] == {
         "context": "${{ inputs.context }}",
         "file": "${{ inputs.file }}",
         "target": "${{ inputs.target }}",
@@ -149,7 +156,9 @@ def test_the_build_is_amd64_with_max_provenance_and_an_sbom(image):
         "sbom": True,
         "cache-from": "${{ inputs.cache && 'type=gha' || '' }}",
         "cache-to": "${{ inputs.cache && 'type=gha,mode=max' || '' }}",
+        "outputs": "${{ inputs.reproducible-layers && 'type=image,rewrite-timestamp=true' || '' }}",
     }
+    assert build["env"] == {"SOURCE_DATE_EPOCH": "${{ inputs.reproducible-layers && '0' || '' }}"}
 
 
 def test_the_attestation_is_pushed_provenance_of_the_built_digest(image):
