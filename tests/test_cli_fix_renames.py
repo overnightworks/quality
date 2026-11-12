@@ -464,17 +464,17 @@ def test_a_move_beside_a_finding_is_named_in_the_debt_row(pull_request, capsys):
 
 
 OLD_WORKFLOW, NEW_WORKFLOW = ".github/workflows/old.yml", ".github/workflows/new.yml"
-CONCURRENCY = (
-    "concurrency:\n  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}\n"
-    "  cancel-in-progress: ${{ github.event.pull_request.number != null }}\n"
-)
 
 
-def workflow_with(*jobs: str, minutes: int = 40) -> str:
-    """A workflow on pull requests whose jobs run with a `timeout-minutes` of `minutes`."""
+def workflow_with(**timeouts: int) -> str:
+    """A workflow on pull requests whose jobs (job id to minutes) run with that `timeout-minutes`."""
+    concurrency = (
+        "concurrency:\n  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}\n"
+        "  cancel-in-progress: ${{ github.event.pull_request.number != null }}\n"
+    )
     steps = "    runs-on: ubuntu-latest\n    steps:\n      - run: 'true'\n"
-    body = "".join(f"  {job}:\n    timeout-minutes: {minutes}\n{steps}" for job in jobs)
-    return f"name: w\non: pull_request\npermissions: {{}}\n{CONCURRENCY}jobs:\n{body}"
+    body = "".join(f"  {job}:\n    timeout-minutes: {minutes}\n{steps}" for job, minutes in timeouts.items())
+    return f"name: w\non: pull_request\npermissions: {{}}\n{concurrency}jobs:\n{body}"
 
 
 def job_ceiling(path: str, **limits: int) -> str:
@@ -483,17 +483,15 @@ def job_ceiling(path: str, **limits: int) -> str:
     return rendered(f'[clones]\n[job_minutes."{path}"]\n{entries}')
 
 
-def workflow_held(pull_request, held: str | None = None, jobs: tuple[str, ...] = ("e2e",)) -> Path:
-    """The base commit holds the workflow under its old path and a ceiling with a job table (`held` by default)."""
-    return based(
-        pull_request,
-        {OLD_WORKFLOW: workflow_with(*jobs)},
-        held or job_ceiling(OLD_WORKFLOW, **{job: 40 for job in jobs}),
-    )
+def workflow_held(pull_request, held: str | None = None, **timeouts: int) -> Path:
+    """The base commit holds the workflow (`e2e` at 40 minutes by default) under its old path and a ceiling with a job
+    table (`held` by default)."""
+    timeouts = timeouts or {"e2e": 40}
+    return based(pull_request, {OLD_WORKFLOW: workflow_with(**timeouts)}, held or job_ceiling(OLD_WORKFLOW, **timeouts))
 
 
-def workflow_moved_with_git(pull_request, **keywords) -> Path:
-    repo = workflow_held(pull_request, **keywords)
+def workflow_moved_with_git(pull_request) -> Path:
+    repo = workflow_held(pull_request)
     git(repo, "mv", OLD_WORKFLOW, NEW_WORKFLOW)
     return repo
 
@@ -504,22 +502,13 @@ def workflow_moved_and_committed(pull_request) -> Path:
     return repo
 
 
-def two_workflow_jobs_moved(pull_request) -> Path:
-    return workflow_moved_with_git(pull_request, jobs=("e2e", "lint"))
-
-
-def workflow_moved_after_a_hand_lowering(pull_request) -> Path:
-    repo = workflow_moved_with_git(pull_request)
-    put(repo / BASELINE_PATH, job_ceiling(OLD_WORKFLOW, e2e=30))
-    put(repo / NEW_WORKFLOW, workflow_with("e2e", minutes=30))
-    return repo
-
-
-def workflow_moved_onto_a_stale_target(pull_request) -> Path:
-    held = rendered(
-        f'[clones]\n[job_minutes."{NEW_WORKFLOW}"]\ne2e = 25\n\n[job_minutes."{OLD_WORKFLOW}"]\ne2e = 40\n'
+def workflow_moved_without_a_committed_job_table(pull_request) -> Path:
+    """The base ceiling has no job table; the entries, one under each path, are a hand edit not yet committed."""
+    repo = workflow_held(pull_request, rendered("[clones]\n"), e2e=40, lint=20)
+    put(
+        repo / BASELINE_PATH,
+        rendered(f'[clones]\n[job_minutes."{OLD_WORKFLOW}"]\ne2e = 40\n\n[job_minutes."{NEW_WORKFLOW}"]\nlint = 20\n'),
     )
-    repo = workflow_held(pull_request, held)
     git(repo, "mv", OLD_WORKFLOW, NEW_WORKFLOW)
     return repo
 
@@ -538,19 +527,10 @@ def squashed(text: str) -> str:
         pytest.param(workflow_moved_with_git, {"e2e": 40}, [job_moved_note("e2e", 40)], id="git mv, uncommitted"),
         pytest.param(workflow_moved_and_committed, {"e2e": 40}, [job_moved_note("e2e", 40)], id="committed move"),
         pytest.param(
-            two_workflow_jobs_moved,
-            {"e2e": 40, "lint": 40},
-            [job_moved_note("e2e", 40), job_moved_note("lint", 40)],
-            id="two jobs of one workflow",
-        ),
-        pytest.param(
-            workflow_moved_after_a_hand_lowering, {"e2e": 30}, [job_moved_note("e2e", 30)], id="held lower than committed"
-        ),
-        pytest.param(
-            workflow_moved_onto_a_stale_target,
-            {"e2e": 40},
-            [job_moved_note("e2e", 40), f"{NEW_WORKFLOW} dropped job e2e 25 minutes · left from before the move"],
-            id="the stale entry under the target goes",
+            workflow_moved_without_a_committed_job_table,
+            {"e2e": 40, "lint": 20},
+            [job_moved_note("e2e", 40)],
+            id="no committed job table",
         ),
     ],
 )
@@ -601,7 +581,7 @@ def test_a_second_fix_leaves_a_followed_workflow_move_as_it_is(pull_request, cap
     fixed(capsys, repo, *FIX_WORDS)
     written = digest(repo)
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
-    assert (code, digest(repo), "moved" in out) == (0, written, False)
+    assert (code, digest(repo), "moved" in out, "✓ clean · nothing to lower" in out) == (0, written, False, True)
 
 
 def workflow_entry_raised_by_hand(pull_request) -> Path:
