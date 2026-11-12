@@ -41,6 +41,10 @@ on:
         description: Check out the commit's git submodules, one level, with the job's token and without persisting it
         type: boolean
         default: false
+      reproducible-layers:
+        description: Fix each file's time in the layers, so unchanged layers keep their digests; the image is dated 1970
+        type: boolean
+        default: false
     secrets:
       build-secrets:
         description: BuildKit secrets, one id=value per line, for RUN --mount=type=secret
@@ -127,6 +131,10 @@ jobs:
           sbom: true
           cache-from: ${{ inputs.cache && 'type=gha' || '' }}
           cache-to: ${{ inputs.cache && 'type=gha,mode=max' || '' }}
+          outputs: ${{ inputs.reproducible-layers && 'type=image,rewrite-timestamp=true' || '' }}
+        env:
+          # A constant, not the commit's time: a layer repeats between releases only when the times of its files do.
+          SOURCE_DATE_EPOCH: ${{ inputs.reproducible-layers && '0' || '' }}
 
       - name: Attest the image's build provenance
         if: inputs.push
