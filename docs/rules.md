@@ -938,10 +938,10 @@ that call, for a block scalar on the `run: |` line (it covers the first line) or
 call; the line above a step whose `run:` stands on the step's own first line (`- run: x`, a flow step) belongs
 to the step form alone, so that step takes a marker on its own line only, while a marker on the `-` line of a step
 whose `run:` stands on the next line (`- # runtime-install: reason`) clears that call; a marker between a step's
-`name:` and its `run: |` clears nothing. A marker that clears nothing is not reported (RUNTIME-7). `pytest-workers`
-keeps its per-line reading, so a `# pytest-workers:` marker above a step clears nothing and the two ids are not
-interchangeable. The marker is for a step that proves an install on a fresh system, and for nothing else: the reader
-cannot see a step's purpose, so the review of the dependent's diff judges it, and any other use is a deviation from
+`name:` and its `run: |` clears nothing. A marker that clears nothing is not reported (RUNTIME-7). A
+`pytest-workers` marker clears no `runtime-install` finding and a `runtime-install` marker clears no `pytest-workers`
+finding: each rule reads only its own id, and `pytest-workers` keeps its per-line placement. The marker is for a step
+that proves an install on a fresh system, and for nothing else: the reader cannot see a step's purpose, so the review of the dependent's diff judges it, and any other use is a deviation from
 the fleet standard, which only the operator rules. The findings stand in the `workflows` area, their fix `take the
 tool from the lockfile, the runner image or an image pinned by digest, or explain on the line above: #
 runtime-install: <reason>` (RUNTIME-8). A workflow whose YAML or file cannot be read, a `run:` that is no string, and
@@ -964,7 +964,8 @@ pipe after it does not reach the string's downloader (`bash -c 'curl u' | sh`). 
 Known false alarms, reported and not cleared by the marker, which is for fresh-system proofs only: a heredoc body is
 read as shell lines, so a heredoc that writes a Dockerfile with a chained `RUN apt-get update && apt-get install -y x`
 is reported (its fix is a tracked Dockerfile), while a simple `RUN apt-get install -y x` is no call; a dry run
-(`apt-get -s install`, `--simulate`, `--dry-run`) reads as the real call.
+(`apt-get -s install`, `--simulate`, `--dry-run`, and `apt-get --print-uris`, which prints download addresses and
+installs nothing) reads as the real call.
 
 The `job-timeout` rule, in the `debt` area, judges every job of a workflow that runs on a pull request or on a push to
 main, and of the reusable workflows those call through a local `uses:`. Every tracked workflow is parsed, a root or not,
