@@ -194,6 +194,11 @@ def job_cases():
             [NoteEvent.MOVED, NoteEvent.MOVED],
             id="every job of the workflow moves",
         ),
+    ]
+
+
+def job_followed_cases():
+    return [
         pytest.param(
             timed({booked("b.yml"): 40}),
             timed({booked("a.yml"): 40}),
@@ -226,6 +231,11 @@ def job_cases():
             [],
             id="job entries without a committed table and already moved stay",
         ),
+    ]
+
+
+def job_table_cases():
+    return [
         pytest.param(
             timed({}),
             timed({booked("a.yml"): 40}),
@@ -264,7 +274,7 @@ def job_cases():
 def follow_cases():
     return pytest.mark.parametrize(
         ("held", "committed", "renames", "expected", "events"),
-        [*moved_entry_cases(), *followed_entry_cases(), *pair_cases(), *job_cases()],
+        [*moved_entry_cases(), *followed_entry_cases(), *pair_cases(), *job_cases(), *job_followed_cases(), *job_table_cases()],
     )
 
 

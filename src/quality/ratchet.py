@@ -523,6 +523,26 @@ def _require_placed[Entry: (Key, JobKey)](
         raise _unexplained(unplaced[0])
 
 
+def _entries_to_move[Entry: (Key, JobKey)](
+    kind: EntryKind[Entry],
+    held: Mapping[Entry, int],
+    committed: Mapping[Entry, int] | None,
+    carried: Mapping[Entry, int] | None,
+    source: str | None,
+    target: str,
+) -> dict[Entry, int]:
+    """The held entries under a rename's two paths that the fix rewrites, none where they already read as carried. An
+    entry the committed table does not explain refuses; without a committed table nothing is compared."""
+    mine = {key: value for key, value in held.items() if key.path in (source, target)}
+    if committed is None or carried is None:
+        return {key: value for key, value in mine.items() if key.path == source}
+    if not _raised(carried, mine, kind.order(mine)):
+        return {}
+    if outside := _raised(committed, mine, kind.order(mine)):
+        raise _unexplained(outside[0].key.path)
+    return mine
+
+
 def _followed_entries[Entry: (Key, JobKey)](
     kind: EntryKind[Entry],
     held: Mapping[Entry, int],
@@ -540,13 +560,7 @@ def _followed_entries[Entry: (Key, JobKey)](
     entries, changes = dict(held), []
     for target in sorted(renames.targets):
         source = sources.get(target)
-        mine = {key: value for key, value in held.items() if key.path in (source, target)}
-        if committed is None or carried is None:
-            mine = {key: value for key, value in mine.items() if key.path == source}
-        elif not _raised(carried, mine, kind.order(mine)):
-            continue
-        elif outside := _raised(committed, mine, kind.order(mine)):
-            raise _unexplained(outside[0].key.path)
+        mine = _entries_to_move(kind, held, committed, carried, source, target)
         for key in mine:
             del entries[key]
         entries.update({key._replace(path=target): value for key, value in mine.items() if key.path == source})
