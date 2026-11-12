@@ -422,7 +422,16 @@ def _lowered_fact(ceiling: ratchet.CeilingFix | DryRun) -> str:
 
 
 def _recorded_extent(fix: ratchet.CeilingFix) -> str:
-    return f"{counted(len(fix.ceiling.size), 'entry', 'entries')}, {counted(len(fix.ceiling.clones), CLONE_PAIR)}"
+    """What a first recording holds: its entries and clone pairs, and its job limits when it holds a job table."""
+    parts = [counted(len(fix.ceiling.size), "entry", "entries"), counted(len(fix.ceiling.clones), CLONE_PAIR)]
+    if fix.ceiling.job_minutes:
+        parts.append(counted(len(fix.ceiling.job_minutes), baseline_file.JOB_LIMIT))
+    return ", ".join(parts)
+
+
+def _recorded_facts(fix: ratchet.CeilingFix) -> str:
+    """What the fix recorded in a ceiling it did not make: the facts of its `recorded` notes, in the order they stand."""
+    return _in_file(", ".join(change.fact for change in fix.changes if change.event is NoteEvent.RECORDED))
 
 
 def _planned_row(area: Area, fix: ratchet.CeilingFix) -> Row | None:
@@ -435,8 +444,7 @@ def _planned_row(area: Area, fix: ratchet.CeilingFix) -> Row | None:
         return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_RECORD, new)
     if fix.text_differs:
         return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_REWRITE, SEPARATOR.join(("text differs", baseline_file.BASELINE_PATH)))
-    pairs = _in_file(counted(len(fix.ceiling.clones), CLONE_PAIR))
-    return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_RECORD, pairs) if fix.recorded else None
+    return Row(Glyph.WILL_CHANGE, area, AreaEvent.TO_RECORD, _recorded_facts(fix)) if fix.recorded else None
 
 
 def _ceiling_row(area: Area, ceiling: ratchet.CeilingFix | DryRun) -> Row | None:
@@ -451,7 +459,7 @@ def _ceiling_row(area: Area, ceiling: ratchet.CeilingFix | DryRun) -> Row | None
         return Row(Glyph.CLEAN, area, AreaEvent.MOVED, _in_file(counted(fix.moved, "entry", "entries")))
     if fix.text_differs:
         return Row(Glyph.CLEAN, area, AreaEvent.REWRITTEN, baseline_file.BASELINE_PATH)
-    return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, _in_file(counted(len(fix.ceiling.clones), CLONE_PAIR))) if fix.recorded else None
+    return Row(Glyph.CLEAN, area, AreaEvent.RECORDED, _recorded_facts(fix)) if fix.recorded else None
 
 
 def _ceiling_words(ceiling: ratchet.CeilingFix | DryRun | None, findings: int) -> str:

@@ -302,8 +302,9 @@ READ_NOWHERE = {
 def test_a_workflow_that_cannot_be_read_does_not_block_the_size_fix_where_no_job_entry_is_held(
     build_repo, capsys, held, written
 ):
-    """TIMEOUT-23, TIMEOUT-26: a first recording, an absent table and an empty table read no workflow for the fix, so
-    the size file is recorded or lowered, in the dry run too, and the rule alone reports the file."""
+    """TIMEOUT-23, TIMEOUT-26, TIMEOUT-30: a first recording, an absent table and an empty table read no workflow for the
+    fix, so the size file is recorded or lowered, in the dry run too, and the rule alone reports the file; a recording
+    of the job table is skipped there, so no job table is written."""
     files = {SIZE_FILE: long_function(70), WORKFLOW: workflow(jobs=job("e2e", "20")), **UNREADABLE_WORKFLOWS["no YAML"]}
     repo = build_repo(files if held is NO_CEILING_FILE else {**files, BASELINE_PATH: held})
     run = dry_run_then_fix(capsys, repo)
@@ -314,13 +315,14 @@ def test_a_workflow_that_cannot_be_read_does_not_block_the_size_fix_where_no_job
         True,
     )
     assert (run.planned_code, "not fixed" in run.planned, f"cannot read {BROKEN}" in run.planned) == (2, False, True)
+    assert "e2e" not in (repo / BASELINE_PATH).read_text()
 
 
-def test_a_first_recording_adds_no_job_entry_and_leaves_a_job_above_fifteen_new_debt(build_repo, capsys):
-    """TIMEOUT-22, TIMEOUT-23, TIMEOUT-26: with no ceiling file the fix records the size entries only, so the job stays
-    new debt, in the dry run too."""
+def test_a_first_recording_records_a_job_above_fifteen_beside_the_size_entries(build_repo, capsys):
+    """TIMEOUT-22, TIMEOUT-27: with no ceiling file the fix records the size entries and the job above 15 at its limit,
+    so the job is no new debt, in the dry run too."""
     repo = build_repo({SIZE_FILE: long_function(70), WORKFLOW: workflow(jobs=job("e2e", "20"))})
     run = dry_run_then_fix(capsys, repo)
-    assert (run.code, run.planned_code, (repo / BASELINE_PATH).read_text()) == (1, 1, ceiling(None, size=70))
+    assert (run.code, run.planned_code, (repo / BASELINE_PATH).read_text()) == (0, 1, ceiling({"e2e": 20}, size=70))
     assert ("ceiling recorded" in run.done, "ceiling would be recorded" in run.planned) == (True, True)
-    assert [("new debt" in out, LOWER_TO_15 in out) for out in (run.done, run.planned)] == [(True, True)] * 2
+    assert [("new debt" in out) for out in (run.done, run.planned)] == [False, False]

@@ -17,6 +17,7 @@ FIX_COMMAND = "quality check --fix"
 
 CLONES = "clones"
 JOB_MINUTES = "job_minutes"
+JOB_LIMIT = "job limit"
 BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 BASELINE_HEADER = f"# Measured by `{FIX_COMMAND}`. Entries only ever go down.\n"
 
@@ -219,8 +220,9 @@ def _clone_pairs(table: object) -> frozenset[ClonePair]:
 def _job_minutes(table: object) -> JobMinutes:
     limits = {}
     for path, entry in _table(JOB_MINUTES, table).items():
-        for job, minutes in _table(f"{JOB_MINUTES}.{path}", entry).items():
-            limits[JobKey(path, job)] = _count(f"{JOB_MINUTES}.{path}.{job}", minutes)
+        where = f"{JOB_MINUTES}.{_toml_string(path)}"
+        for job, minutes in _table(where, entry).items():
+            limits[JobKey(path, job)] = _count(f"{where}.{_toml_key(job)}", minutes)
     return limits
 
 
@@ -232,10 +234,10 @@ def _metric_named(name: str) -> Metric:
         raise UnknownTable(f"{BASELINE_PATH} has an unknown table [{name}]; quality {__version__} knows {known}") from None
 
 
-def holds_clones_table(version: bytes) -> bool:
-    """Whether a version has a top-level `clones` key; text no parser reads proves nothing."""
+def holds_table(version: bytes, name: str) -> bool:
+    """Whether a version has a top-level key `name`; text no parser reads proves nothing."""
     try:
-        return CLONES in repository.parse_toml(version.decode("utf-8"))
+        return name in repository.parse_toml(version.decode("utf-8"))
     except (UnicodeDecodeError, repository.TomlError) as error:
         raise SizeError(f"a version of {BASELINE_PATH} in git cannot be read") from error
 
