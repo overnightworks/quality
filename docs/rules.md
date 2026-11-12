@@ -976,14 +976,19 @@ an `{include-group}` entry is skipped (CATALOG-1). Only the root file counts, so
 and no workflow is read (CATALOG-3). A `pyproject.toml` that is not UTF-8 TOML, whose dependency list is no list or whose
 entry is neither a requirement string nor an `{include-group}` table is exit `2` naming the file (CATALOG-4).
 
-A covered repository's `run:` steps are read in every workflow a pull request triggers (CATALOG-8). A step counts when its
-script calls `design-catalogs` with `--check` in a form the shared shell reader reads as a call of a named tool, so the forms
-that `pytest-workers` reads stand (CATALOG-7). A call through `make`, a word in an `echo`, a script, `tox`, `nox`, a composite
-action or a reusable workflow called through `uses:` is no call, and a command built at run time is read as no call (CATALOG-9).
-A step with `continue-on-error: true` or with a `working-directory` other than `.` does not count. Three named gaps
-count as calls: a step with an `if:`, a call ending in `|| true`, and a job that is not mandatory. A
-`defaults.run.working-directory` is not read. An unreadable workflow, a `run:` that is no string, or an alias or a merge
-key where it can hide a step is exit `2` naming the workflow (CATALOG-11).
+A covered repository's `run:` steps are read in every workflow a pull request triggers (CATALOG-8). A step counts when
+its script calls `design-catalogs` with `--check` in a form the shared shell reader reads as a call of a named tool, so
+the forms that `pytest-workers` reads stand (CATALOG-7). A call through `make`, a word in an `echo`, a script, `tox`,
+`nox`, a composite action or a reusable workflow called through `uses:` is no call, and a command built at run time is
+read as no call (CATALOG-9). A step with `continue-on-error: true` or with a `working-directory` other than `.` does not
+count. Three named gaps count as calls:
+
+- a step with an `if:`;
+- a call ending in `|| true`;
+- a job that is not mandatory.
+
+A `defaults.run.working-directory` is not read. An unreadable workflow, a `run:` that is no string, or an alias or a
+merge key where it can hide a step is exit `2` naming the workflow (CATALOG-11).
 
 A covered repository with no counting step gets one note row and exit 0, never a finding, so the `workflows` row stays
 clean: `· .github/workflows  not called  no workflow step runs design-catalogs --check directly on a pull request; a call through make is not read yet`
