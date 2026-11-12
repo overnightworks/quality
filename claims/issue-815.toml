@@ -1,0 +1,8 @@
+claim_id = "bce228549a97466bbe15e0aab9fd989e"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "be32abeb120d29f75ee7ea456d6e510ae001de04"
+branch = "claude/issue-815-catalog-make-reading"
+scope = ["docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/catalog_rules.py", "src/quality/makefile.py", "tests/test_catalog_rules.py", "tests/test_makefile.py"]
+opened_commit = "3f42a264d7b516b3e915ecd97ab14c853d92730a"
+whole_reason = "The pure scan, its only caller, the layers row and the changed fact in code, tests and the two documents are one fact: the note's reading changes once, and each part alone is dead code or a stale statement."
