@@ -928,7 +928,7 @@ in the `-` column that follows the previous step and stands directly above the n
 step whose `-` stands alone on its line or that stands in a flow sequence (`steps: [{run: x}]`) has no step form. The
 per-line form is that of `pytest-workers`: the marker on a call's logical line or directly above its first line clears
 that call, for a block scalar on the `run: |` line (it covers the first line) or on a block line directly above the
-call; a comment line above a step whose `run:` stands on the step's own first line (`- run: x`, a flow step) belongs
+call; the line above a step whose `run:` stands on the step's own first line (`- run: x`, a flow step) belongs
 to the step form alone, so that step takes a marker on its own line only, while a marker on the `-` line of a step
 whose `run:` stands on the next line (`- # runtime-install: reason`) clears that call; a marker between a step's
 `name:` and its `run: |` clears nothing. A marker that clears nothing is not reported (RUNTIME-7). `pytest-workers`

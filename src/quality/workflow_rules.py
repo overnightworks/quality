@@ -249,10 +249,11 @@ class Marker:
         return frozenset(number for number, line in enumerate(file_lines, 1) if self.pattern.search(line))
 
     def per_line_marks(self, file_lines: list[str], marked: frozenset[int], step: yaml.Node, run: yaml.Node) -> frozenset[int]:
-        """The marked lines the per-line form reads for the step's `run:`; where the rule has a step form, a comment line above a step whose `run:` stands on the step's first line is read by the step form alone."""
-        line_above = file_lines[step.start_mark.line - 1].lstrip() if step.start_mark.line else ""
-        if self.above_step and run.start_mark.line == step.start_mark.line and line_above.startswith("#"):
-            return marked - {step.start_mark.line}
+        """The marked lines the per-line form reads for the step's `run:`; where the rule has a step form, the line above a step whose `run:` stands on the step's own first line after its `-` or `[` (`- run: x`, a flow step) is read by the step form alone."""
+        number = step.start_mark.line
+        before_step = file_lines[number][: step.start_mark.column]
+        if self.above_step and run.start_mark.line == number and before_step.strip():
+            return marked - {number}
         return marked
 
     def clears_step(self, file_lines: list[str], step: yaml.Node) -> bool:

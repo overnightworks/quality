@@ -330,8 +330,13 @@ def test_a_marker_in_the_dash_column_above_a_step_clears_every_call_of_the_step(
         (f"      {MARKER}\n      -\n        name: t\n        run: apt-get install -y x\n", 11),
         (f"      - name: a\n        run: |\n          echo a\n          {MARKER}\n      - run: apt-get install -y x\n", 12),
         (f"      - name: a\n        run: |\n          echo a\n        {MARKER}\n      - run: 'apt-get install -y x'\n", 12),
+        (f"      - run: echo a  {MARKER}\n      - run: apt-get install -y x\n", 9),
+        (f"      - name: a\n        run: |\n          echo a  {MARKER}\n      - run: apt-get install -y x\n", 11),
     ],
-    ids=["deeper column", "run column", "a dash that stands alone", "a one-line step under a deeper column", "a quoted one-line step under the run column"],
+    ids=[
+        "deeper column", "run column", "a dash that stands alone", "a one-line step under a deeper column", "a quoted one-line step under the run column",
+        "a marker on the previous one-line step", "a marker trailing the last line of the previous block",
+    ],
 )
 def test_a_marker_in_another_column_or_above_a_dash_that_stands_alone_clears_nothing(build_repo, step, line):
     """RUNTIME-7."""
@@ -350,16 +355,17 @@ def test_a_marker_above_the_first_step_of_two_clears_that_step_only(build_repo):
 
 
 @pytest.mark.parametrize(
-    ("steps", "line"),
+    ("above", "steps", "line"),
     [
-        ('steps: [{name: t,\n      run: "apt-get install x"}]', 7),
-        ('steps: [{run: "apt-get install x"}]', 6),
+        (f"    runs-on: x\n    {MARKER}\n", 'steps: [{name: t,\n      run: "apt-get install x"}]', 7),
+        (f"    runs-on: x\n    {MARKER}\n", 'steps: [{run: "apt-get install x"}]', 6),
+        (f"    runs-on: x  {MARKER}\n", 'steps: [{run: "apt-get install x"}]', 5),
     ],
-    ids=["over two lines", "on one line"],
+    ids=["over two lines", "on one line", "a marker trailing the line above"],
 )
-def test_a_flow_step_has_no_step_form(build_repo, steps, line):
+def test_a_flow_step_has_no_step_form(build_repo, above, steps, line):
     """RUNTIME-7."""
-    text = f"on: push\njobs:\n  j:\n    runs-on: x\n    {MARKER}\n    {steps}\n"
+    text = f"on: push\njobs:\n  j:\n{above}    {steps}\n"
     assert shape(judged(build_repo, text)) == [(INSTALLS, line, "apt-get install")]
 
 
