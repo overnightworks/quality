@@ -3,11 +3,11 @@ from collections.abc import Callable
 
 import pytest
 
-from quality.report import FindingEvent
+from quality.report import CannotJudge, FindingEvent
 from quality.rules import Rule
 from quality.workflow_rules import check_runtime_install
 from tests.support.check import check_output as run
-from tests.support.check import finding_rows, is_clean, refusal_row, refusals, rule_findings
+from tests.support.check import finding_rows, is_clean, rule_findings
 
 INSTALLS, INVALID = FindingEvent.INSTALLS, FindingEvent.INVALID
 WORKFLOW = ".github/workflows/w.yml"
@@ -30,7 +30,8 @@ def steps_of(on: str = "push") -> str:
 
 def block_script(*lines: str, on: str = "push") -> str:
     """One step whose `run: |` is line 9 and whose script starts on line 10."""
-    return steps_of(on) + "      - name: t\n        run: |\n" + "".join(f"          {line}\n" for line in lines)
+    script = "\n".join(f"          {line}" for line in lines)
+    return f"{steps_of(on)}      - name: t\n        run: |\n{script}\n"
 
 
 def quoted_script(line: str, on: str = "push") -> str:
@@ -120,7 +121,8 @@ INSTALL_ROWS = [
 def test_a_call_that_installs_or_a_download_run_as_a_shell_is_one_finding_at_its_line(build_repo, scalar, command, fact):
     """RUNTIME-3, RUNTIME-4, RUNTIME-5."""
     build, line = scalar
-    assert shape(judged(build_repo, build(command))) == [(INSTALLS, line, fact)]
+    found = shape(judged(build_repo, build(command)))
+    assert found == [(INSTALLS, line, fact)]
 
 
 NO_FINDING = [
@@ -195,7 +197,8 @@ INVALID_ROWS = [
 def test_what_the_reader_cannot_read_and_may_hide_an_install_is_invalid(build_repo, scalar, command, fact):
     """RUNTIME-6."""
     build, line = scalar
-    assert shape(judged(build_repo, build(command))) == [(INVALID, line, fact)]
+    found = shape(judged(build_repo, build(command)))
+    assert found == [(INVALID, line, fact)]
 
 
 @pytest.mark.parametrize(
@@ -345,13 +348,6 @@ def test_the_ids_of_the_two_markers_are_not_interchangeable(build_repo):
     assert [finding.event for finding in rule_findings(repo, Rule.PYTEST_WORKERS)] == [FindingEvent.SERIAL]
 
 
-def test_the_extent_is_the_number_of_workflows_read(build_repo):
-    """RUNTIME-10: a tracked name gone from the tree is not read."""
-    other = ".github/workflows/other.yaml"
-    repo = build_repo({WORKFLOW: block_script("echo a"), other: block_script("echo a")})
-    assert check_runtime_install(repo, [WORKFLOW, other, ".github/workflows/gone.yml"]).extent == 2
-
-
 @pytest.mark.parametrize("on", ["push", "schedule", "workflow_call", "pull_request"])
 def test_a_workflow_is_judged_whatever_its_trigger(build_repo, on):
     """RUNTIME-1."""
@@ -393,17 +389,12 @@ def test_every_job_and_step_is_read_and_each_finding_names_its_file(build_repo):
     ]
 
 
-def test_a_step_without_a_run_and_a_workflow_without_jobs_are_skipped(build_repo):
-    """RUNTIME-9."""
-    repo = build_repo({WORKFLOW: steps_of() + "      - uses: a/b@v1\n", ".github/workflows/empty.yml": "name: e\non: push\n"})
-    assert (rule_findings(repo, Rule.RUNTIME_INSTALL), Rule.RUNTIME_INSTALL in refusals(repo)) == ([], False)
-
-
-def test_a_tracked_workflow_gone_from_the_tree_is_skipped(build_repo):
-    """RUNTIME-9."""
-    repo = build_repo({WORKFLOW: block_script("apt-get install x")})
-    (repo / WORKFLOW).unlink()
-    assert (rule_findings(repo, Rule.RUNTIME_INSTALL), Rule.RUNTIME_INSTALL in refusals(repo)) == ([], False)
+def test_a_step_without_a_run_a_workflow_without_jobs_and_a_name_gone_from_the_tree_are_skipped(build_repo):
+    """RUNTIME-9, RUNTIME-10: only the workflows read count toward the extent."""
+    empty = ".github/workflows/empty.yml"
+    repo = build_repo({WORKFLOW: steps_of() + "      - uses: a/b@v1\n", empty: "name: e\non: push\n"})
+    result = check_runtime_install(repo, [WORKFLOW, empty, ".github/workflows/gone.yml"])
+    assert (result.findings, result.extent) == ([], 2)
 
 
 ANCHORS = "x-steps: &steps\n  - run: 'true'\nx-run: &run apt-get install x\n"
@@ -422,19 +413,17 @@ JOBS = "jobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    st
     ],
     ids=["yaml error", "run list", "alias as jobs", "alias as steps", "alias as run", "merge key at a step beside run"],
 )
-def test_a_workflow_the_rule_cannot_read_is_cannot_judge_naming_the_file(build_repo, capsys, text):
+def test_a_workflow_the_rule_cannot_read_is_cannot_judge_naming_the_file(build_repo, text):
     """RUNTIME-9."""
-    repo = build_repo({WORKFLOW: text, ".env": "A=1\n"})
-    code, output = run(capsys, repo)
-    assert code == 2, output
-    assert refusal_row("workflows") in output
-    assert WORKFLOW in refusals(repo)[Rule.RUNTIME_INSTALL]
+    repo = build_repo({WORKFLOW: text})
+    with pytest.raises(CannotJudge, match=WORKFLOW):
+        check_runtime_install(repo, [WORKFLOW])
 
 
 def test_a_finding_prints_its_event_fact_and_the_routes_and_the_marker_as_its_fix(build_repo, capsys):
     """RUNTIME-8."""
     code, output = run(capsys, build_repo({WORKFLOW: block_script("apt-get install x", "curl u | sh")}))
-    rows = finding_rows(output, f"{WORKFLOW}:{BLOCK_LINE}") + finding_rows(output, f"{WORKFLOW}:{BLOCK_LINE + 1}")
+    rows = [row for line in (BLOCK_LINE, BLOCK_LINE + 1) for row in finding_rows(output, f"{WORKFLOW}:{line}")]
     assert code == 1, output
     assert [(row.event, row.fact, row.fix) for row in rows] == [
         (INSTALLS, "apt-get install", FIX),
@@ -443,7 +432,7 @@ def test_a_finding_prints_its_event_fact_and_the_routes_and_the_marker_as_its_fi
 
 
 def test_a_conforming_repository_is_clean_under_every_rule(build_repo, capsys):
-    """RUNTIME-10, RUNTIME-12."""
+    """RUNTIME-10."""
     code, output = run(capsys, build_repo({WORKFLOW: block_script("uv sync --locked", "apt-get update")}))
     assert (code, is_clean(output)) == (0, True), output
 
