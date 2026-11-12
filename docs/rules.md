@@ -979,9 +979,17 @@ entry is neither a requirement string nor an `{include-group}` table is exit `2`
 
 A covered repository's `run:` steps are read in every workflow a pull request triggers (CATALOG-8). A step counts when
 its script calls `design-catalogs` with `--check` in a form the shared shell reader reads as a call of a named tool, so
-the forms that `pytest-workers` reads stand (CATALOG-7). A call through `make`, a word in an `echo`, a script, `tox`,
-`nox`, a composite action or a reusable workflow called through `uses:` is no call, and a command built at run time is
-read as no call (CATALOG-9). A step with `continue-on-error: true` or with a `working-directory` other than `.` does not
+the forms that `pytest-workers` reads stand (CATALOG-7). A call through `make` counts when the goal of a counted step reaches a
+recipe line of the tracked root `Makefile` that calls the check (CATALOG-12, CATALOG-21). The file is read only when no
+counted step calls the check directly, and only when it is a tracked file on disk; a tracked `GNUmakefile` or `makefile`
+makes the reading no call (CATALOG-13). The recipe is followed as make reads a plain file: a goal's recipe, then its
+prerequisites' recipes, then the recipes of the `make` calls in them, each target once (CATALOG-14 to CATALOG-18). A `-`
+prefixed line, a line of a conditional or of a define block, a target whose recipe is given by two rules or by a
+double-colon rule, and a file with `.IGNORE`, `.RECIPEPREFIX`, `.ONESHELL`, an include or a `MAKEFLAGS` assignment are no
+call (CATALOG-16, CATALOG-19, CATALOG-20). A `Makefile` that is not UTF-8 is exit `2` naming the file, when a counted step
+has a `make` goal and no step calls the check directly (CATALOG-23). A word in an `echo`, a script, `tox`, `nox`, a
+composite action or a reusable workflow called through `uses:` is no call, and a command built at run time is read as no
+call (CATALOG-9); every other form the reading does not follow is no call too (CATALOG-22). A step with `continue-on-error: true` or with a `working-directory` other than `.` does not
 count. Three named gaps count as calls:
 
 - a step with an `if:`;
@@ -991,8 +999,8 @@ count. Three named gaps count as calls:
 A `defaults.run.working-directory` is not read. An unreadable workflow, a `run:` that is no string, or an alias or a
 merge key where it can hide a step is exit `2` naming the workflow (CATALOG-11).
 
-A covered repository with no counting step gets one note row and exit 0, never a finding, so the `workflows` row stays
-clean: `· .github/workflows  not called  no workflow step runs design-catalogs --check directly on a pull request; a call through make is not read yet`
+A covered repository with no counting step that calls the check gets one note row and exit 0, never a finding, so the `workflows` row stays
+clean: `· .github/workflows  not called  no workflow step runs design-catalogs --check on a pull request, directly or through make`
 (CATALOG-5). A repository that runs the generator without declaring it (`uvx --from
 'overnightworks-design[catalogs]' design-catalogs --check`, uv's legacy `[tool.uv] dev-dependencies`) is not covered and
 sees nothing; that is a named gap. The rule only reports, so no run turns red for it, and its fleet cell reads

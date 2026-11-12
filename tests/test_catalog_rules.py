@@ -168,7 +168,7 @@ def test_a_direct_call_of_the_check_in_any_reader_form_counts(build_repo, run):
     ],
 )
 def test_no_counting_call_gives_the_note(build_repo, run):
-    """CATALOG-5, CATALOG-7, CATALOG-9: a call through make, a word in an echo, the check without its flag, a script and tox."""
+    """CATALOG-5, CATALOG-7, CATALOG-9: a call through make with no Makefile, a word in an echo, the check without its flag, a script and tox."""
     repo = build_repo({"pyproject.toml": pyproject(DECLARED), WORKFLOW: workflow(run)})
     assert rule_notes(repo, Rule.CATALOG_CHECK) == [NOT_CALLED]
 
