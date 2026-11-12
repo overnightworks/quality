@@ -458,8 +458,8 @@ def gone(entry: int, path: str = WORKFLOW, job_id: str = "e2e"):
     return (CAN_FALL, path, None, f"job {job_id} is gone · ceiling {entry}", HAND_FIX)
 
 
-def no_debt(entry: int, path: str = WORKFLOW):
-    return (CAN_FALL, path, None, f"job e2e has no debt · ceiling {entry}", HAND_FIX)
+def no_debt(entry: int, path: str = WORKFLOW, job_id: str = "e2e"):
+    return (CAN_FALL, path, None, f"job {job_id} has no debt · ceiling {entry}", HAND_FIX)
 
 
 def judged_against(build_repo, text: str, entry: int | None | str):
@@ -522,10 +522,15 @@ def test_a_job_without_a_readable_limit_keeps_its_finding_and_its_entry_stands(b
     assert [finding[:4] for finding in findings] == [expected]
 
 
-def test_an_entry_for_a_job_the_file_lacks_is_gone_with_no_line(build_repo):
+@pytest.mark.parametrize(
+    ("entry", "expected"),
+    [(40, gone(40, job_id="old")), (15, no_debt(15, job_id="old")), (10, no_debt(10, job_id="old"))],
+    ids=["an entry above 15", "an entry of 15", "an entry of 10 has no debt"],
+)
+def test_an_entry_for_a_job_the_file_lacks_is_gone_with_no_line_or_has_no_debt_when_it_is_15_or_less(build_repo, entry, expected):
     """TIMEOUT-16."""
-    repo = build_repo({WORKFLOW: workflow(jobs=job("e2e", "10")), BASELINE_PATH: held({WORKFLOW: {"old": 40}})})
-    assert outcome(rule_findings(repo, Rule.JOB_TIMEOUT)) == [gone(40, job_id="old")]
+    repo = build_repo({WORKFLOW: workflow(jobs=job("e2e", "10")), BASELINE_PATH: held({WORKFLOW: {"old": entry}})})
+    assert outcome(rule_findings(repo, Rule.JOB_TIMEOUT)) == [expected]
 
 
 def test_gone_entries_follow_the_measured_findings_sorted_by_path_then_job(build_repo):

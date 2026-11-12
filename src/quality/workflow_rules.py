@@ -417,30 +417,29 @@ def check_job_timeouts(root: Path, tracked: list[str], baseline: Baseline | None
     documents = {name: parsed.get(name) for name in tracked if checkout.is_workflow(PurePosixPath(name))}
     roots = frozenset(name for name, document in parsed.items() if _is_root(name, document))
     held = (baseline.job_minutes if baseline else None) or {}
+    debt = {key: minutes for key, minutes in held.items() if minutes > MAXIMUM_MINUTES}
+    no_debt = {key: minutes for key, minutes in held.items() if minutes <= MAXIMUM_MINUTES}
     findings: list[Finding] = []
     readable: dict[JobKey, bool] = {}
     for name in _reached(documents, roots):
         jobs = [job for job in _jobs(name, documents[name]) if "uses" not in checkout.mapping_values(job[2])]
         for job in jobs:
             key = JobKey(name, job[0])
-            job_findings = list(_limit_findings(name, documents[name], job, held.get(key)))
+            job_findings = list(_limit_findings(name, documents[name], job, debt.get(key)))
             readable[key] = not any(finding.event in UNREADABLE_LIMIT for finding in job_findings)
             findings.extend(job_findings)
-    findings.extend(_unheld_entries(held, readable))
+    findings.extend(_unheld_entries(debt, no_debt, readable))
     return RuleResult(findings, len(readable), False)
 
 
-def _unheld_entries(held: dict[JobKey, int], readable: dict[JobKey, bool]) -> Iterator[Finding]:
-    """Each entry that can fall with no limit to measure: its job is gone, or its job has a valid limit and the entry
-    is no debt. An entry of a job without a readable limit stands."""
-    for key in sorted(held):
-        if key not in readable:
-            reason = "is gone"
-        elif readable[key] and held[key] <= MAXIMUM_MINUTES:
-            reason = "has no debt"
-        else:
-            continue
-        fact = f"job {key.job} {reason} · ceiling {held[key]}"
+def _unheld_entries(debt: dict[JobKey, int], no_debt: dict[JobKey, int], readable: dict[JobKey, bool]) -> Iterator[Finding]:
+    """Each entry that can fall with no limit to measure: a debt entry whose job is gone, and an entry that is no debt
+    unless its job is there with a limit that cannot be read, which makes the entry stand."""
+    reasons = {key: ("is gone", minutes) for key, minutes in debt.items() if key not in readable}
+    reasons |= {key: ("has no debt", minutes) for key, minutes in no_debt.items() if readable.get(key, True)}
+    for key in sorted(reasons):
+        reason, minutes = reasons[key]
+        fact = f"job {key.job} {reason} · ceiling {minutes}"
         yield Finding(Rule.JOB_TIMEOUT, key.path, None, fact, LOWER_ENTRY_FIX, event=FindingEvent.CAN_FALL)
 
 
@@ -503,8 +502,8 @@ def _jobs(name: str, document: Document) -> list[Job]:
     return entries
 
 
-def _limit_findings(name: str, document: Document, job: Job, entry: int | None) -> Iterator[Finding]:
-    """The job's finding against its baseline entry; an entry of at most the maximum is no debt and reads as none."""
+def _limit_findings(name: str, document: Document, job: Job, ceiling: int | None) -> Iterator[Finding]:
+    """The job's finding against the debt entry that holds it, if any."""
     job_id, id_key, mapping = job
 
     def finding(event: FindingEvent, line: int, fact: str, fix: str) -> Finding:
@@ -520,7 +519,6 @@ def _limit_findings(name: str, document: Document, job: Job, entry: int | None) 
         fact = f"job {job_id} has a {TIMEOUT_KEY} that is not a number above zero"
         yield finding(FindingEvent.INVALID, _line(key), fact, SET_TIMEOUT_FIX)
         return
-    ceiling = entry if entry is not None and entry > MAXIMUM_MINUTES else None
     debt = _debt_minutes(minutes)
     given = f"job {job_id} has {TIMEOUT_KEY} {value.value}"
     if ceiling is None and debt > MAXIMUM_MINUTES:
