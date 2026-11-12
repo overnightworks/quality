@@ -2,13 +2,34 @@
 
 import pytest
 
-from quality.baseline_file import Baseline, ClonePair, Key, Metric, Place
-from quality.ratchet import RESTORE_STEP, Renames, carried_base, follow_renames, named_paths, raised_entries
-from quality.report import CannotJudge, NoteEvent
+from quality.baseline_file import Baseline, ClonePair, JobKey, Key, Metric, Place
+from quality.ratchet import (
+    RESTORE_STEP,
+    Renames,
+    carried_base,
+    follow_renames,
+    named_paths,
+    raised_entries,
+    raised_job_limits,
+)
+from quality.report import CannotJudge, Note, NoteEvent
 
 
 def sized(path, symbol="f"):
     return Key(Metric.CCN, path, symbol)
+
+
+def lined(path):
+    return Key(Metric.FILE_LINES, path)
+
+
+def booked(path, job="e2e"):
+    return JobKey(path, job)
+
+
+def timed(entries):
+    """A ceiling that holds only job entries, none when `entries` is None."""
+    return Baseline({}, None, entries)
 
 
 def paired(first, second):
@@ -143,27 +164,190 @@ def pair_cases():
     ]
 
 
+def job_cases():
+    return [
+        pytest.param(
+            timed({booked("a.yml"): 40}),
+            timed({booked("a.yml"): 40}),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("b.yml"): 40}),
+            [NoteEvent.MOVED],
+            id="a job entry as committed moves",
+        ),
+        pytest.param(
+            timed({booked("a.yml"): 30}),
+            timed({booked("a.yml"): 40}),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("b.yml"): 30}),
+            [NoteEvent.MOVED],
+            id="a job entry held lower than committed moves lower",
+        ),
+        pytest.param(
+            timed({booked("a.yml"): 40, booked("b.yml"): 25}),
+            timed({booked("a.yml"): 40, booked("b.yml"): 25}),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("b.yml"): 40}),
+            [NoteEvent.MOVED, NoteEvent.DROPPED],
+            id="the stale job entry under the target goes",
+        ),
+        pytest.param(
+            timed({booked("a.yml"): 40, booked("a.yml", "lint"): 20}),
+            timed({booked("a.yml"): 40, booked("a.yml", "lint"): 20}),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("b.yml"): 40, booked("b.yml", "lint"): 20}),
+            [NoteEvent.MOVED, NoteEvent.MOVED],
+            id="every job of the workflow moves",
+        ),
+    ]
+
+
+def job_followed_cases():
+    return [
+        pytest.param(
+            timed({booked("b.yml"): 40}),
+            timed({booked("a.yml"): 40}),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("b.yml"): 40}),
+            [],
+            id="a job entry already moved stays",
+        ),
+        pytest.param(
+            timed({booked("b.yml"): 30}),
+            timed({booked("a.yml"): 40}),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("b.yml"): 30}),
+            [],
+            id="a job entry already moved and lowered stays",
+        ),
+    ]
+
+
+def job_partial_lineage_cases():
+    return [
+        pytest.param(
+            timed({booked("a.yml"): 40}),
+            timed(None),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("b.yml"): 40}),
+            [NoteEvent.MOVED],
+            id="job entries without a committed table move",
+        ),
+        pytest.param(
+            timed({booked("b.yml"): 40}),
+            timed(None),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("b.yml"): 40}),
+            [],
+            id="job entries without a committed table and already moved stay",
+        ),
+        pytest.param(
+            timed({booked("a.yml"): 40, booked("b.yml"): 10}),
+            timed(None),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("b.yml"): 40}),
+            [NoteEvent.MOVED, NoteEvent.DROPPED],
+            id="job entries without a committed table drop the target entry a moved one takes",
+        ),
+        pytest.param(
+            timed({booked("a.yml"): 40, booked("b.yml", "lint"): 20}),
+            timed(None),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("b.yml"): 40, booked("b.yml", "lint"): 20}),
+            [NoteEvent.MOVED],
+            id="job entries without a committed table move beside a distinct target entry",
+        ),
+        pytest.param(
+            timed({booked("a.yml"): 40, booked("b.yml", "lint"): 20}),
+            timed({booked("a.yml"): 40, booked("a.yml", "lint"): 20}),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("b.yml"): 40, booked("b.yml", "lint"): 20}),
+            [NoteEvent.MOVED],
+            id="a half-moved workflow moves the rest and keeps what is carried",
+        ),
+        pytest.param(
+            timed({booked("a.yml"): 40, booked("b.yml", "lint"): 20}),
+            timed({booked("a.yml"): 40, booked("a.yml", "lint"): 20, booked("b.yml", "lint"): 30}),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("b.yml"): 40, booked("b.yml", "lint"): 20}),
+            [NoteEvent.MOVED],
+            id="a half-moved workflow keeps a carried entry whose key the committed target also held",
+        ),
+    ]
+
+
+def job_table_cases():
+    return [
+        pytest.param(
+            timed({}),
+            timed({booked("a.yml"): 40}),
+            renamed({"a.yml": "b.yml"}),
+            timed({}),
+            [],
+            id="a held empty job table stays held",
+        ),
+        pytest.param(
+            timed(None),
+            timed({booked("a.yml"): 40}),
+            renamed({"a.yml": "b.yml"}),
+            timed(None),
+            [],
+            id="a held ceiling without the job table stays without it",
+        ),
+        pytest.param(
+            timed({booked("ci.yml"): 40}),
+            timed({booked("ci.yml"): 40}),
+            renamed({"a.yml": "b.yml"}),
+            timed({booked("ci.yml"): 40}),
+            [],
+            id="a workflow no rename touches is handed on",
+        ),
+        pytest.param(
+            Baseline({sized("a.py"): 16}, None, {booked("a.yml"): 40}),
+            Baseline({sized("a.py"): 16}, None, {booked("a.yml"): 40}),
+            renamed({"a.py": "b.py", "a.yml": "b.yml"}),
+            Baseline({sized("b.py"): 16}, None, {booked("b.yml"): 40}),
+            [NoteEvent.MOVED, NoteEvent.MOVED],
+            id="a source file and a workflow move together",
+        ),
+    ]
+
+
 def follow_cases():
     return pytest.mark.parametrize(
         ("held", "committed", "renames", "expected", "events"),
-        [*moved_entry_cases(), *followed_entry_cases(), *pair_cases()],
+        [*moved_entry_cases(), *followed_entry_cases(), *pair_cases(), *job_cases(), *job_followed_cases(), *job_partial_lineage_cases(), *job_table_cases()],
     )
 
 
 @follow_cases()
 def test_follow_renames(held, committed, renames, expected, events):
-    """FIX-36, FIX-37, FIX-38: an entry or a pair moves with its file at its held value, what the target held goes, and
-    an entry already moved stays."""
+    """FIX-36, FIX-37, FIX-38, TIMEOUT-19: an entry, a pair or a job entry moves with its file at its held value, what
+    the target held goes, and an entry already moved stays."""
     followed = follow_renames(held, committed, renames, tracked_after(held, committed, renames))
     assert (followed.ceiling, [change.event for change in followed.changes]) == (expected, events)
 
 
 @follow_cases()
 def test_the_verdict_names_nothing_the_fix_carried(held, committed, renames, expected, events):
-    """FIX-34: the verdict, reading the committed ceiling as renamed, names nothing the fix carried."""
+    """FIX-34, TIMEOUT-19: the verdict, reading the committed ceiling as renamed, names nothing the fix carried."""
     result = follow_renames(held, committed, renames, tracked_after(held, committed, renames)).ceiling
     carried = carried_base(committed, renames, named_paths(result))
     assert raised_entries(carried.size, result.size) == []
+    tables = (carried.job_minutes, result.job_minutes)
+    assert None in tables or raised_job_limits(*tables) == []
+
+
+def test_a_followed_job_entry_is_named_by_its_new_path_in_the_file_order_with_the_leftover_last():
+    """TIMEOUT-19: a moved job entry's note carries the new path, source entries come first in the file's order, and
+    the leftover under the target is dropped last."""
+    held = timed({booked("b.yml", "old"): 25, booked("a.yml", "lint"): 20, booked("a.yml"): 40})
+    renames = renamed({"a.yml": "b.yml"})
+    followed = follow_renames(held, held, renames, tracked_after(held, held, renames))
+    assert followed.changes == (
+        Note("b.yml", NoteEvent.MOVED, "job lint 20 minutes from a.yml"),
+        Note("b.yml", NoteEvent.MOVED, "job e2e 40 minutes from a.yml"),
+        Note("b.yml", NoteEvent.DROPPED, "job old 25 minutes · left from before the move"),
+    )
 
 
 @pytest.mark.parametrize(
@@ -190,16 +374,54 @@ def test_the_verdict_names_nothing_the_fix_carried(held, committed, renames, exp
             "z.py",
             id="untracked and not committed",
         ),
+        pytest.param(
+            Baseline({lined("b.py"): 900, sized("a.py"): 20}, None),
+            Baseline({lined("a.py"): 900, sized("a.py"): 20}, None),
+            {"b.py"},
+            "b.py",
+            id="size entries half moved by hand are one group",
+        ),
+        pytest.param(
+            Baseline({sized("a.py"): 16, sized("b.py", "g"): 17}, None),
+            Baseline({sized("a.py"): 16, sized("a.py", "g"): 17}, None),
+            {"b.py"},
+            "b.py",
+            id="size entries neither committed nor carried as a group",
+        ),
+        pytest.param(
+            timed({booked("b.yml", "lint"): 5}),
+            timed({booked("a.yml"): 40}),
+            {"b.yml"},
+            "b.yml",
+            id="a job entry neither committed nor under the old path",
+        ),
+        pytest.param(
+            timed({booked("a.yml"): 45}),
+            timed({booked("a.yml"): 40}),
+            {"b.yml"},
+            "a.yml",
+            id="a hand raise of a job entry under a renamed workflow",
+        ),
+        pytest.param(
+            timed({booked("b.yml"): 40, booked("z.yml"): 30}),
+            timed({booked("a.yml"): 40}),
+            {"b.yml"},
+            "z.yml",
+            id="a job entry untracked and not committed",
+        ),
     ],
 )
 def test_an_entry_without_lineage_refuses(held, committed, tracked, path):
-    """FIX-39: an entry that neither the committed ceiling nor the tracked paths explain refuses, naming its path and
-    the restore step."""
-    renames, still_tracked = renamed({"a.py": "b.py"}), frozenset(tracked)
+    """FIX-39, TIMEOUT-19: an entry that neither the committed ceiling nor the tracked paths explain refuses, naming its
+    path (a workflow's, when a job entry is the cause) and the restore step."""
+    renames, still_tracked = renamed({"a.py": "b.py", "a.yml": "b.yml"}), frozenset(tracked)
     with pytest.raises(CannotJudge) as refusal:
         follow_renames(held, committed, renames, still_tracked)
     fact = refusal.value.reason.fact
-    assert ({name for name in ("a.py", "b.py", "z.py") if name in fact}, refusal.value.reason.next_steps) == (
+    assert (
+        {name for name in ("a.py", "b.py", "z.py", "a.yml", "b.yml", "z.yml") if name in fact},
+        refusal.value.reason.next_steps,
+    ) == (
         {path},
         (RESTORE_STEP,),
     )

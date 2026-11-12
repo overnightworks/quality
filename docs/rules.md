@@ -180,9 +180,9 @@ It applies these rules:
   reached against the unchanged file (FIX-32). Another area's refusal does not undo a finished fix: the file is written,
   the `✓` row stands, the exit is `2` (FIX-33).
   `--fix` follows renames as the verdict carries them (FIX-34): from the ceiling's last commit it reads what git
-  renamed into the index (`git diff --cached -M50% -l1000`) (FIX-35), moves a renamed file's entries and pairs to the
-  new path at their values (`moved`) (FIX-36) and drops what the ceiling held under that path before the move
-  (`dropped ... left from before the move`) (FIX-37); a ceiling it already moved stays (FIX-38), an entry it cannot
+  renamed into the index (`git diff --cached -M50% -l1000`) (FIX-35), moves a renamed file's entries, pairs and job entries
+  (TIMEOUT-19) to the new path at their values (`moved`) (FIX-36) and drops what the ceiling held under that path
+  before the move (`dropped ... left from before the move`) (FIX-37); a ceiling it already moved stays (FIX-38), an entry it cannot
   place refuses with the restore step (FIX-39), a shallow clone whose ceiling's last commit is its edge, which is
   every depth-1 clone that holds a ceiling, refuses `--fix` with `git fetch --unshallow` (FIX-40), and a move the
   index does not record is not followed (FIX-41). Renames are followed before anything is judged gone, so a renamed
@@ -939,6 +939,17 @@ count no job entry. A baseline that cannot be read makes the rule `cannot judge`
 A renamed workflow carries its base entries to its new path in the verdict as a renamed source file carries its size
 entries, a leftover under the new path and an entry under a path the head still names moving nothing; a job id renamed
 inside a file is a new entry (TIMEOUT-17).
+
+`--fix` follows a renamed workflow for the `[job_minutes]` table as it follows a renamed source file (FIX-34 to FIX-45
+apply). From the ceiling's last commit, the workflow's held job entries move to the new path at their held values
+(`moved`, `job e2e 40 minutes from .github/workflows/old.yml`), what the table held under the new path before the move,
+and the carry of the last commit lacks, is dropped (`dropped`, `job e2e 25 minutes · left from before the move`), and an entry
+the carry already holds, no higher, stays unless a moved entry takes its key; each entry is judged on its own. An entry under a renamed path that the last commit's table does not explain
+refuses with the restore step before anything is written, naming the workflow. Where the last commit holds no
+`[job_minutes]` table the verdict compares nothing (TIMEOUT-18), so held entries under a renamed workflow move, no
+leftover is judged, and only an entry a moved one takes the key of is dropped. A held ceiling without the table stays without it, a held empty table stays held, and entries under
+a path no rename touches are written as they were. A moved job entry counts as moved in the debt row and the verdict
+line (TIMEOUT-19).
 
 A workflow whose YAML or file cannot be read, an alias or a merge key where it can hide the top mapping, `on:`, the
 `push` value, its `branches`, `branches-ignore` or `tags`, or in a judged file `jobs`, a job, a `uses:` or a
