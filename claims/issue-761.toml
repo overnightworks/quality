@@ -1,8 +1,0 @@
-claim_id = "a965941b4c3f496a9b226dcf2d8794fd"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "9ced0f5cee689f2c70fb1467513b943484bd65a5"
-branch = "claude/issue-761-job-timeout"
-scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/checkout.py", "src/quality/cli.py", "src/quality/rules.py", "src/quality/workflow_rules.py", "tests/test_check.py", "tests/test_checkout.py", "tests/test_cli_areas.py", "tests/test_cli_help.py", "tests/test_cli_output.py", "tests/test_fleet_matrix.py", "tests/test_scanners.py", "tests/test_scanners_local_actions.py", "tests/test_scanners_vet.py", "tests/test_workflow_rules.py", "tests/test_workflow_rules_pytest.py", "tests/test_workflow_rules_timeout.py"]
-opened_commit = "52b8da86408bca767a9d2bbb681d78435fd1cd7e"
-whole_reason = "The rule is its reader: a Rule member without the reading is dead code, the reading without its wiring in check.py never runs, and the reach, the push refusals and the cannot-judge classes are what keep it from passing a job silently; the push root and the reach have no caller but this rule, so they cannot land apart from it. Five production files and about 150 lines are one flow that no smaller cut keeps honest."
