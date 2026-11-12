@@ -111,7 +111,7 @@ def _without_comment(line: str) -> str:
 
 
 def segments(text: str) -> list[list[str]]:
-    """The words of a line, split at `&&`, `||`, `;`, `|`, `&`, `(` and `)`, a backtick substitution read as `$(…)`; a word that holds a substitution is split again."""
+    """The words of a line, split at `&&`, `||`, `;`, `|`, `&`, `(` and `)`, a backtick substitution read as `$(…)`; a word that holds a substitution is split again, and a shell's `-c` string is read as segments after them."""
     result: list[list[str]] = []
     for words in _lex(_backticks_as_dollar_substitutions(text), False, [])[0]:
         if words:
