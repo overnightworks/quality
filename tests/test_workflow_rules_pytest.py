@@ -129,6 +129,7 @@ NO_CALL = [
     "xargs",
     "timeout 60",
     "bash run.sh -c 'pytest -q'",
+    "bash -- -c 'pytest -q'",
     "bash script.sh",
     "bash -c",
     "xvfb-run pytest",
@@ -239,6 +240,11 @@ SERIAL_WITHOUT_N = [
     "bash -c -x 'pytest -q'",
     "bash -c -o pipefail 'pytest -q'",
     "bash -c -- 'pytest -q'",
+    'bash -c -- "pytest -q"',
+    'bash -c - "pytest -q"',
+    'bash --login -c "pytest -q"',
+    'bash --rcfile f -c "pytest -q"',
+    'bash +o posix -c "pytest -q"',
 ]
 
 

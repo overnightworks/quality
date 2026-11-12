@@ -54,6 +54,7 @@ WRAPPER_VALUE_FLAGS = {
 }
 WRAPPER_OPERANDS = {"timeout": 1}
 SHELLS = frozenset({"sh", "bash", "dash", "zsh", "ksh"})
+SHELL_LONG_VALUE_FLAGS = frozenset({"--rcfile", "--init-file"})
 SUBSTITUTION = re.compile(r"\$\(")
 LONE_DOLLAR = ["$"]
 
@@ -251,17 +252,27 @@ def _shell_script_segments(words: list[str]) -> list[list[str]]:
 
 
 def _c_string(arguments: list[str]) -> str | None:
-    """The first operand after the `-c` flag of a shell, when that flag stands before the shell's first operand; `-o` and `-O` take their value."""
-    index = 0
+    """The first operand after a shell's flags, when a `-c` flag came before it; a lone `-` or `--` ends the flags, and the word after it is the operand."""
     has_c_flag = False
-    while index < len(arguments):
-        word = arguments[index]
+    index = 0
+    while index < len(arguments) and _is_shell_flag(arguments[index]):
+        has_c_flag = has_c_flag or _is_c_flag(arguments[index])
+        index += 2 if _shell_flag_takes_value(arguments[index]) else 1
+    if index < len(arguments) and arguments[index] in ("-", "--"):
         index += 1
-        if word == "-" or not word.startswith("-"):
-            return word if has_c_flag else None
-        if word.startswith("--"):
-            continue
-        has_c_flag = has_c_flag or "c" in word
-        if word.endswith(("o", "O")):
-            index += 1
-    return None
+    return arguments[index] if has_c_flag and index < len(arguments) else None
+
+
+def _is_shell_flag(word: str) -> bool:
+    """A word that starts with a dash or a plus sign, other than a lone `-` or `--`, which end the flags."""
+    return word.startswith(("-", "+")) and word not in ("-", "--")
+
+
+def _is_c_flag(word: str) -> bool:
+    """A single-dash word that holds the letter `c`, as `-c`, `-ec` and `-lc` do."""
+    return word.startswith("-") and not word.startswith("--") and "c" in word
+
+
+def _shell_flag_takes_value(word: str) -> bool:
+    """`-o`, `+o`, `-O`, `+O` and any single-dash or plus word ending in `o` or `O` take the next word; so do `--rcfile` and `--init-file`."""
+    return word in SHELL_LONG_VALUE_FLAGS or (not word.startswith("--") and word.endswith(("o", "O")))
