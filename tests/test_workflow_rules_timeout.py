@@ -68,11 +68,12 @@ def test_a_job_without_a_limit_is_missing_at_its_id_with_the_fix_to_set_one(buil
     "limit",
     [
         "${{ vars.T }}", "${{ matrix.t }}", "0", "0.0", "-5", "+5", "1e1", "0x10", "ten", "", "~", "null", "[5]", "{a: 1}",
-        '"10"', "'10'", "1_0", ".5", "5.",
+        '"10"', "'10'", "1_0", ".5", "5.", "\u0665",
     ],
     ids=[
         "variable", "matrix expression", "zero", "decimal zero", "negative", "signed", "exponent", "hex", "word", "empty",
         "tilde", "null", "sequence", "mapping", "double quoted", "single quoted", "underscore", "no integer part", "no fraction",
+        "arabic-indic digit",
     ],
 )
 def test_a_limit_that_is_no_plain_number_above_zero_is_invalid_at_the_key_with_the_fix_to_set_one(build_repo, limit):

@@ -388,7 +388,7 @@ def _worker_counts(arguments: list[str]) -> list[str | None]:
 
 MAXIMUM_MINUTES = 15
 TIMEOUT_KEY = "timeout-minutes"
-MINUTES = re.compile(r"[0-9]+(?:\.[0-9]+)?")
+MINUTES = re.compile(r"\d+(?:\.\d+)?", re.ASCII)
 SET_TIMEOUT_FIX = f"set {TIMEOUT_KEY} to a number of at most {MAXIMUM_MINUTES}"
 LOWER_TIMEOUT_FIX = f"lower {TIMEOUT_KEY} to {MAXIMUM_MINUTES} or less"
 PUSH_FILTER_KEYS = ("branches", "branches-ignore", "tags")

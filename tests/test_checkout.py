@@ -719,13 +719,15 @@ def test_a_root_reaches_the_workflows_it_calls_through_a_local_uses_each_once(fi
 )
 def test_a_local_call_the_reach_cannot_follow_is_refused_naming_the_caller_and_the_value(uses):
     """TIMEOUT-3, TIMEOUT-7."""
+    files = {A: calling(uses), B: "jobs: {}\n"}
     with pytest.raises(checkout.UnfollowableCall) as refusal:
-        reached({A: calling(uses), B: "jobs: {}\n"}, [A])
+        reached(files, [A])
     assert (refusal.value.caller, refusal.value.uses) == (A, uses)
 
 
 def test_a_called_workflow_gone_from_the_tree_is_refused():
     """TIMEOUT-3, TIMEOUT-7."""
+    files = {A: calling(f"./{B}"), B: None}
     with pytest.raises(checkout.UnfollowableCall) as refusal:
-        reached({A: calling(f"./{B}"), B: None}, [A])
+        reached(files, [A])
     assert (refusal.value.caller, refusal.value.uses) == (A, f"./{B}")
