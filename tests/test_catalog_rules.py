@@ -394,7 +394,7 @@ def test_a_direct_call_beside_a_non_utf8_makefile_is_no_refusal(build_repo):
     repo = build_repo(
         {
             "pyproject.toml": pyproject(DECLARED),
-            WORKFLOW: workflow("design-catalogs --check"),
+            WORKFLOW: steps_workflow("make lint", "design-catalogs --check"),
             MAKEFILE: COVERED_MAKEFILE,
         }
     )
@@ -459,6 +459,7 @@ def workflow_row(text: str, event: FindingEvent, fact: str, needle: str) -> tupl
         pytest.param('python -m design.catalogs.command "--check', True, id="the module word, unterminated"),
         pytest.param('echo "unterminated', False, id="an unterminated quote without the word"),
         pytest.param('my-design-catalogs "unterminated', False, id="the word inside a longer name"),
+        pytest.param('design-catalogs-extra "unterminated', False, id="the word followed by a longer name"),
     ],
 )
 def test_a_line_the_reader_refuses_is_invalid_only_when_its_own_text_names_the_generator(build_repo, run, invalid):
@@ -563,16 +564,16 @@ def test_an_invalid_line_of_a_workflow_stands_before_one_of_the_makefile(build_r
 
 
 @pytest.mark.parametrize(
-    ("run", "refuses"),
-    [("make lint", True), ("design-catalogs --check", False)],
-    ids=["the goal is the only route", "a direct call beside it"],
+    ("runs", "refuses"),
+    [(("make lint",), True), (("make lint", "design-catalogs --check"), False)],
+    ids=["the goal is the only route", "a direct call beside the goal"],
 )
 def test_a_makefile_symlinked_out_of_the_repository_is_exit_two_only_when_it_is_read(
-    build_repo, elsewhere, capsys, run, refuses
+    build_repo, elsewhere, capsys, runs, refuses
 ):
     """CATALOG-23, CATALOG-24: the file is read only when no counted step calls the check directly; a link out of the
     repository is refused naming `Makefile`."""
-    repo = covered(build_repo, workflow(run), **{MAKEFILE: COVERED_MAKEFILE, CONFIG: ROOT_MAKEFILE_ALLOWANCE})
+    repo = covered(build_repo, steps_workflow(*runs), **{MAKEFILE: COVERED_MAKEFILE, CONFIG: ROOT_MAKEFILE_ALLOWANCE})
     outside = elsewhere / MAKEFILE
     outside.write_text(COVERED_MAKEFILE)
     (repo / MAKEFILE).unlink()
@@ -608,6 +609,11 @@ def test_a_makefile_symlinked_out_of_the_repository_is_exit_two_only_when_it_is_
             id="a job-level if",
         ),
         pytest.param(workflow("design-catalogs --check", "shell: bash"), {}, id="a step shell"),
+        pytest.param(
+            workflow("design-catalogs --check").replace("jobs:\n", "defaults:\n  run:\n    shell: bash\njobs:\n"),
+            {},
+            id="a default shell",
+        ),
         pytest.param(
             workflow("design-catalogs --check").replace(
                 "jobs:\n", "defaults:\n  run:\n    working-directory: sub\njobs:\n"

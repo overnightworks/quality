@@ -999,11 +999,11 @@ rule clean: no row, whatever else the workflows hold. Otherwise each unreadable 
 
 - `! .github/workflows  missing  no workflow step runs design-catalogs --check on a pull request, directly or through make`,
   at the folder with no line (CATALOG-5, CATALOG-25);
-- `! <workflow>:<line>  invalid  command cannot be read to its end`, for a logical line of a counted step's script, or of a
+- `! <workflow or Makefile>:<line>  invalid  command cannot be read to its end`, for a logical line of a counted step's script, or of a
   recipe a counted `make` goal reaches, that the shared reader refuses to its end when the line's own text holds the word
   `design-catalogs` or `design.catalogs.command` as a whole word, not inside a longer name; a refused line without the word
   is no problem and reads as no call (CATALOG-26);
-- `! <workflow>:<line>  invalid  command is built at run time, design-catalogs --check cannot be read`, for a command word
+- `! <workflow or Makefile>:<line>  invalid  command is built at run time, design-catalogs --check cannot be read`, for a command word
   built at run time (a lone `$`, `eval`, a word starting with `$`) in a script, or in the reached recipes, whose text as a
   whole holds either word. A make variable in the command word (`$(UV) run design-catalogs --check`) is such a command; the
   `$(MAKE)` and `${MAKE}` substitutions are not. "The script" is a counted step's `run:`; the reached recipe lines are one

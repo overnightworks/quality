@@ -411,14 +411,9 @@ def test_catalog_check_on_main_reads_whether_the_clone_declares_catalogs(declare
 
 @pytest.mark.parametrize("declares_catalogs", [True, False], ids=["a catalogs declaration", "no declaration"])
 def test_catalog_check_under_a_tag_reads_report_only_until_the_release_names_the_switch(declares_catalogs):
-    """FLEET-98, FLEET-99: a tag at the rule's first release has no switch change that names it, so it only reports."""
+    """CATALOG-30, FLEET-98, FLEET-99: a tag at the rule's first release has no switch change that names it, so it only reports."""
     release = gate_release((gate_call(CATALOG_PIN),), False, CATALOG_TAGS)
     assert rule_cell(CATALOG_CHECK, release, declared(declares_catalogs=declares_catalogs)) == "report-only"
-
-
-def test_the_catalog_switch_has_no_release_until_a_release_pull_request_names_it():
-    """CATALOG-30, FLEET-98, FLEET-99: `None` keeps every tag on `report-only`; the release guard refuses a tag while it stands."""
-    assert CATALOG_CHECK.switched == SwitchChange(None, Switch.CATALOG_DECLARATION)
 
 
 @pytest.mark.parametrize(
