@@ -295,6 +295,8 @@ ANCHORS = "defaults: &defaults\n  runs-on: ubuntu-latest\nlimit: &limit 10\nkey:
         f"{ANCHORS}{ON_PULL_REQUEST}jobs:\n  <<: *defaults\n",
         f"{ANCHORS}{ON_PULL_REQUEST}jobs:\n  j:\n    <<: *defaults\n    timeout-minutes: 10\n",
         f"{ANCHORS}{ON_PULL_REQUEST}jobs:\n  j:\n    timeout-minutes: *limit\n",
+        f"{ANCHORS}{ON_PULL_REQUEST}jobs:\n  j:\n    timeout-minutes:\n      <<: *defaults\n",
+        f"{ANCHORS}{ON_PULL_REQUEST}jobs: *defaults\n",
         f"{ANCHORS}{ON_PULL_REQUEST}jobs:\n  j:\n    *key : 10\n",
         f"{ANCHORS}{ON_PULL_REQUEST}jobs:\n  *key :\n    timeout-minutes: 10\n",
         f"{ANCHORS}on:\n  push: *push\njobs:\n{job(limit='10')}",
@@ -315,7 +317,7 @@ ANCHORS = "defaults: &defaults\n  runs-on: ubuntu-latest\nlimit: &limit 10\nkey:
     ids=[
         "yaml error", "jobs as a list", "a job as a string", "merge key at the top", "alias as on", "alias in the on list",
         "merge key at on", "alias of its own mapping", "alias as a job", "merge key in jobs", "merge key in a job",
-        "alias as the limit", "alias as a key of a job", "alias as a job id", "alias as push", "merge key in push",
+        "alias as the limit", "merge key in the limit", "alias as jobs", "alias as a key of a job", "alias as a job id", "alias as push", "merge key in push",
         "alias as branches", "alias in branches", "alias as branches-ignore", "alias in branches-ignore", "alias as tags",
         "alias in tags", "alias as a key of push", "push as a word", "push as a sequence", "branches as a mapping",
         "branches with a sequence item", "tags as a mapping",
