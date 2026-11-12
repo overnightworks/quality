@@ -341,7 +341,7 @@ def _script(name: str, document: Document, run: yaml.Node) -> yaml.ScalarNode:
 
 def _script_findings(script_rule: ScriptRule, name: str, lines: list[ScriptLine], marked: frozenset[int]) -> Iterator[Finding]:
     reading = script_rule.reading
-    holds_hidden_word = any(reading.holds_hidden_word(line.text) for line in lines)
+    holds_hidden_word = reading.holds_hidden_word("\n".join(line.text for line in lines))
     for line in lines:
         if any(number in marked for number in range(line.first - 1, line.last + 1)):
             continue

@@ -215,10 +215,12 @@ def test_what_the_reader_cannot_read_and_may_hide_an_install_is_invalid(build_re
         (("$(apt-get install -y x)",), [(INSTALLS, 0, "apt-get install")]),
         (('$(echo "apt-get") install x',), [(INVALID, 0, BUILT_AT_RUN_TIME)]),
         (("# apt-get install x", "$TOOL foo"), []),
+        (("PM=apt-get", "sudo $PM install -y x"), [(INVALID, 1, BUILT_AT_RUN_TIME)]),
     ],
     ids=[
         "after an install", "after a playwright install", "after an update", "after another tool", "after a download",
         "a substitution that is itself the install", "a substitution that is not", "install only in a comment",
+        "the manager and its install word on two lines",
     ],
 )
 def test_a_command_built_at_run_time_is_invalid_only_in_a_run_that_holds_an_install_word(build_repo, script, expected):
