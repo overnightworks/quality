@@ -26,7 +26,24 @@ SUDO_VALUE_FLAGS = frozenset({"-u", "-g", "-D", "-C", "-h", "-p", "-r", "-t", "-
 TIMEOUT_VALUE_FLAGS = frozenset({"-k", "-s", "--kill-after", "--signal"})
 NICE_VALUE_FLAGS = frozenset({"-n", "--adjustment"})
 XARGS_VALUE_FLAGS = frozenset(
-    {"-I", "-n", "-P", "-d", "-E", "-L", "-s", "-a", "--replace", "--max-args", "--max-procs", "--delimiter", "--eof", "--max-lines", "--max-chars", "--arg-file"}
+    {
+        "-I",
+        "-n",
+        "-P",
+        "-d",
+        "-E",
+        "-L",
+        "-s",
+        "-a",
+        "--replace",
+        "--max-args",
+        "--max-procs",
+        "--delimiter",
+        "--eof",
+        "--max-lines",
+        "--max-chars",
+        "--arg-file",
+    }
 )
 WRAPPER_VALUE_FLAGS = {
     "env": ENV_VALUE_FLAGS,
