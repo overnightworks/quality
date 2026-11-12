@@ -85,7 +85,8 @@ def _declares_catalogs(root: Path, tracked: list[str]) -> bool:
         document = repository.parse_toml(texts[PYPROJECT])
     except repository.TomlError as error:
         raise Unparsable(f"{PYPROJECT} is not TOML that Python reads ({error})") from error
-    return any(_is_catalogs_declaration(requirement) for requirement in _requirements(_dependency_entries(document)))
+    requirements = list(_requirements(_dependency_entries(document)))
+    return any(_is_catalogs_declaration(requirement) for requirement in requirements)
 
 
 def _judge_generator_call(parts: Sequence[Segment], index: int) -> bool | None:

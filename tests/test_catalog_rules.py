@@ -215,6 +215,11 @@ def test_or_true_still_counts(build_repo):
             "pyproject.toml has an invalid requirement",
             id="invalid requirement",
         ),
+        pytest.param(
+            f'{DECLARED}\n[dependency-groups]\ndev = ["!!bad"]',
+            "pyproject.toml has a requirement quality cannot read",
+            id="invalid requirement after the covered entry",
+        ),
     ],
 )
 def test_a_pyproject_quality_cannot_read_is_exit_two(build_repo, body, reason):
