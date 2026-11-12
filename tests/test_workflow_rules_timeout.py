@@ -6,6 +6,7 @@ import pytest
 from quality.baseline_file import BASELINE_PATH
 from quality.report import FindingEvent
 from quality.rules import Rule
+from tests.support.baselines import rendered
 from tests.support.check import (
     area_finding_rows,
     assert_finding_vocabulary,
@@ -24,6 +25,7 @@ WORKFLOW = ".github/workflows/w.yml"
 CALLED = ".github/workflows/x.yml"
 SET_FIX = "set timeout-minutes to a number of at most 15"
 LOWER_FIX = "lower timeout-minutes to 15 or less"
+RECORD_FIX = f"{LOWER_FIX}, or run quality check --fix to record it"
 CONCURRENCY = (
     "concurrency:\n  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}\n"
     "  cancel-in-progress: ${{ github.event.pull_request.number != null }}\n"
@@ -75,10 +77,10 @@ def test_a_limit_that_is_no_plain_number_above_zero_is_invalid_at_the_key_with_t
 
 @pytest.mark.parametrize("limit", ["16", "15.5", "40", "1000"])
 def test_a_limit_above_fifteen_is_new_debt_naming_the_value_with_the_fix_to_lower_it(build_repo, limit):
-    """TIMEOUT-5, TIMEOUT-6."""
+    """TIMEOUT-5, TIMEOUT-6, TIMEOUT-29: with no ceiling file the fix also names the recording."""
     findings = judged(build_repo, workflow(jobs=job(limit=limit)))
     fact = f"job j has timeout-minutes {limit} · limit 15"
-    assert (shape(findings), [finding.fix for finding in findings]) == ([(NEW_DEBT, WORKFLOW, 6, fact)], [LOWER_FIX])
+    assert (shape(findings), [finding.fix for finding in findings]) == ([(NEW_DEBT, WORKFLOW, 6, fact)], [RECORD_FIX])
 
 
 def test_every_judged_job_is_found_in_the_files_order_and_no_fact_ends_in_a_full_stop(build_repo):
@@ -428,8 +430,8 @@ def outcome(findings):
     return [(finding.event, finding.path, finding.line, finding.fact, finding.fix) for finding in findings]
 
 
-def new_debt(raw: str, path: str = WORKFLOW, line: int = 6):
-    return (NEW_DEBT, path, line, f"job e2e has timeout-minutes {raw} · limit 15", LOWER_FIX)
+def new_debt(raw: str, path: str = WORKFLOW, line: int = 6, fix: str = LOWER_FIX):
+    return (NEW_DEBT, path, line, f"job e2e has timeout-minutes {raw} · limit 15", fix)
 
 
 def grew(raw: str, entry: int, path: str = WORKFLOW, line: int = 6):
@@ -449,10 +451,12 @@ def no_debt(entry: int, path: str = WORKFLOW, job_id: str = "e2e"):
 
 
 def judged_against(build_repo, text: str, entry: int | None | str):
-    """The findings for one workflow `text` whose job `e2e` is held at `entry`: no baseline file (`"no file"`), a table
-    without the job (`None`) or an entry."""
+    """The findings for one workflow `text` whose job `e2e` is held at `entry`: no baseline file (`"no file"`), a file
+    without the table (`"no table"`), a table without the job (`None`) or an entry."""
     files = {WORKFLOW: text}
-    if entry != "no file":
+    if entry == "no table":
+        files[BASELINE_PATH] = "[clones]\n"
+    elif entry != "no file":
         files[BASELINE_PATH] = held({} if entry is None else {WORKFLOW: {"e2e": entry}})
     return outcome(rule_findings(build_repo(files), Rule.JOB_TIMEOUT))
 
@@ -462,6 +466,8 @@ COMPARE = [
     pytest.param("15", 15, [no_debt(15)], id="15, an entry of 15 is read as gone"),
     pytest.param("15", 40, [can_fall("15", 40)], id="15, an entry above"),
     pytest.param("15", 12, [no_debt(12)], id="15, an entry of 12 is gone and never grew"),
+    pytest.param("16", "no file", [new_debt("16", fix=RECORD_FIX)], id="16, no file"),
+    pytest.param("16", "no table", [new_debt("16", fix=RECORD_FIX)], id="16, a file without the table"),
     pytest.param("16", None, [new_debt("16")], id="16, a table without the job"),
     pytest.param("16", 16, [], id="16, an entry equal"),
     pytest.param("16", 20, [can_fall("16", 20)], id="16, an entry above"),
@@ -471,7 +477,7 @@ COMPARE = [
     pytest.param("40", 40, [], id="40, an entry equal"),
     pytest.param("40", 45, [can_fall("40", 45)], id="40, an entry above"),
     pytest.param("40", 35, [grew("40", 35)], id="40, an entry below"),
-    pytest.param("17.5", "no file", [new_debt("17.5")], id="17.5, no file"),
+    pytest.param("17.5", "no file", [new_debt("17.5", fix=RECORD_FIX)], id="17.5, no file"),
     pytest.param("17.5", None, [new_debt("17.5")], id="17.5, a table without the job"),
     pytest.param("17.5", 18, [], id="17.5, an entry of 18 holds it"),
     pytest.param("17.5", 20, [can_fall("17.5", 20)], id="17.5, an entry of 20"),
@@ -485,7 +491,8 @@ COMPARE = [
 
 @pytest.mark.parametrize(("limit", "entry", "expected"), COMPARE)
 def test_a_limit_is_judged_by_its_rounded_up_value_against_the_entry_of_its_file_and_job(build_repo, limit, entry, expected):
-    """TIMEOUT-14, TIMEOUT-15, TIMEOUT-16."""
+    """TIMEOUT-14, TIMEOUT-15, TIMEOUT-16, TIMEOUT-29: a new debt job names the recording as its fix where the file has
+    no table and only the lowered limit where the table is held, an empty one included."""
     assert judged_against(build_repo, workflow(jobs=job("e2e", limit)), entry) == expected
 
 
@@ -621,3 +628,20 @@ def test_a_size_fix_rewrites_the_baseline_with_the_held_job_table_and_a_second_f
     assert (written["function_lines"], written["job_minutes"]) == ({"src/a.py": {"long_one": 62}}, {WORKFLOW: {"e2e": 40}})
     assert door_in(repo, *FIX_WORDS) == 0
     assert (path.read_text(encoding="utf-8"), path.stat().st_mtime_ns) == (first, stamp)
+
+
+ENTRIES = [5, 15, 16, 18, 20, 40]
+LIMITS = [None, "x", "10", "15", "15.5", "16", "17.5", "20", "30", "40", "45", "absent"]
+
+
+@pytest.mark.parametrize("limit", LIMITS, ids=[str(limit) for limit in LIMITS])
+@pytest.mark.parametrize("entry", ENTRIES)
+def test_the_rule_and_the_fix_agree_on_whether_a_held_entry_can_fall(build_repo, entry, limit):
+    """TIMEOUT-32: the rule reports `can fall` for an entry exactly where the fix changes the file, whatever the entry
+    and the job's limit, the job missing from the file included."""
+    jobs = job("other", "10") if limit == "absent" else job("e2e", limit)
+    ceiling = rendered("[clones]\n" + held({WORKFLOW: {"e2e": entry}}))
+    repo = build_repo({WORKFLOW: workflow(jobs=jobs), BASELINE_PATH: ceiling})
+    can_fall = any(finding.event is CAN_FALL for finding in rule_findings(repo, Rule.JOB_TIMEOUT))
+    door_in(repo, *FIX_WORDS)
+    assert ((repo / BASELINE_PATH).read_text() != ceiling) is can_fall

@@ -33,7 +33,7 @@ from quality.config import (
     read_allow_lists,
 )
 from quality.deadline import RunDeadline
-from quality.output import SEPARATOR
+from quality.output import SEPARATOR, counted
 from quality.report import (
     CannotJudge,
     Extent,
@@ -440,16 +440,16 @@ def _require_no_ceiling_in_git(inputs: RunInputs) -> None:
     _require_whole_history(inputs)
 
 
-def _require_no_clones_table_in_git(inputs: RunInputs) -> None:
+def _require_no_table_in_git(inputs: RunInputs, table: str) -> None:
     name = baseline_file.BASELINE_PATH
     revisions = [f":{name}"] if name in inputs.tracked else []
     revisions += checkout.blobs_of(inputs.root, name)
     try:
-        held = any(baseline_file.holds_clones_table(checkout.blob(inputs.root, revision)) for revision in revisions)
+        held = any(baseline_file.holds_table(checkout.blob(inputs.root, revision), table) for revision in revisions)
     except baseline_file.SizeError as error:
         raise CannotJudge(str(error), (ratchet.RESTORE_STEP,)) from error
     if held:
-        raise CannotJudge(f"{name} lost its [clones] table, which git holds", (ratchet.RESTORE_STEP,))
+        raise CannotJudge(f"{name} lost its [{table}] table, which git holds", (ratchet.RESTORE_STEP,))
     _require_whole_history(inputs)
 
 
@@ -503,6 +503,20 @@ def _followed(inputs: RunInputs, held: baseline_file.Baseline) -> ratchet.Ceilin
     return ratchet.CeilingFix(held, ()) if lineage is None else ratchet.follow_renames(held, *lineage, frozenset(inputs.tracked))
 
 
+def _with_recorded_jobs(inputs: RunInputs, made: ratchet.CeilingFix) -> ratchet.CeilingFix:
+    """The fix with the job table recorded where the ceiling has none, git never held one and a judged job is debt;
+    a first recording carries the table in the ceiling alone, which its row counts."""
+    if made.ceiling.job_minutes is not None:
+        return made
+    limits = workflow_rules.recordable_job_limits(inputs.root, inputs.tracked)
+    if not limits:
+        return made
+    _require_no_table_in_git(inputs, baseline_file.JOB_MINUTES)
+    fact = counted(len(limits), baseline_file.JOB_LIMIT)
+    recorded = () if made.first else (Note(baseline_file.BASELINE_PATH, NoteEvent.RECORDED, fact),)
+    return replace(made, ceiling=replace(made.ceiling, job_minutes=limits), changes=(*made.changes, *recorded))
+
+
 def _fix_ceiling(inputs: RunInputs, sources: dict[str, bytes], held: baseline_file.Baseline | None) -> ratchet.CeilingFix:
     """The ceiling lowered, or recorded where git never held one; the caller writes it."""
     tree = ratchet.measure(sources)
@@ -512,16 +526,16 @@ def _fix_ceiling(inputs: RunInputs, sources: dict[str, bytes], held: baseline_fi
     pairs = clones.find_pairs(sources).pairs
     if held is None:
         _require_no_ceiling_in_git(inputs)
-        return ratchet.CeilingFix(baseline_file.Baseline(ratchet.debt(measurements), pairs), (), first=True)
+        return _with_recorded_jobs(inputs, ratchet.CeilingFix(baseline_file.Baseline(ratchet.debt(measurements), pairs), (), first=True))
     if held.clones is None:
-        _require_no_clones_table_in_git(inputs)
+        _require_no_table_in_git(inputs, baseline_file.CLONES)
     followed = _followed(inputs, held)  # renames first, so a renamed file's entries move instead of falling as gone
     gone = ratchet.gone_entries(followed.ceiling.size, measurements, frozenset(inputs.tracked), generated)
     if inputs.fix is Fix.DRY_RUN:
         gone = _with_what_they_held(gone, followed.ceiling.size)
     lowered = ratchet.lower_ceiling(followed.ceiling, measurements, pairs, gone)
     jobs = workflow_rules.lower_job_entries(inputs.root, inputs.tracked, lowered.ceiling)
-    return replace(jobs, changes=(*followed.changes, *lowered.changes, *jobs.changes))
+    return _with_recorded_jobs(inputs, replace(jobs, changes=(*followed.changes, *lowered.changes, *jobs.changes)))
 
 
 def _reported(ceiling: ratchet.CeilingFix | DryRun) -> ratchet.CeilingFix:
