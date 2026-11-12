@@ -1,5 +1,9 @@
+import json
+import tomllib
+
 import pytest
 
+from quality.baseline_file import BASELINE_PATH
 from quality.report import FindingEvent
 from quality.rules import Rule
 from tests.support.check import (
@@ -11,9 +15,10 @@ from tests.support.check import (
     rule_findings,
 )
 from tests.support.check import check_output as run
-from tests.support.door import PinnedJudging, door_in
+from tests.support.door import FIX_WORDS, PinnedJudging, door_in
 
 MISSING, INVALID, NEW_DEBT = FindingEvent.MISSING, FindingEvent.INVALID, FindingEvent.NEW_DEBT
+GREW, CAN_FALL = FindingEvent.GREW, FindingEvent.CAN_FALL
 WORKFLOW = ".github/workflows/w.yml"
 CALLED = ".github/workflows/x.yml"
 ON_PULL_REQUEST = "on: pull_request\n"
@@ -420,3 +425,214 @@ def test_no_key_of_the_configuration_switches_the_rule_off(build_repo, capsys):
     repo = build_repo({WORKFLOW: workflow(), "quality/config.toml": "[job-timeout]\nallow = true\n"})
     code, _ = run(capsys, repo)
     assert (code, shape(rule_findings(repo, Rule.JOB_TIMEOUT))) == (2, [missing()])
+
+
+HAND_FIX = "delete or lower the entry in quality/baseline.toml by hand"
+
+
+def held(entries: dict[str, dict[str, int]]) -> str:
+    """A baseline holding a `[job_minutes]` table with `entries`, a mapping from path to job to minutes."""
+    tables = "".join(
+        f"[job_minutes.{json.dumps(path)}]\n" + "".join(f"{json.dumps(job)} = {minutes}\n" for job, minutes in jobs.items())
+        for path, jobs in entries.items()
+    )
+    return tables or "[job_minutes]\n"
+
+
+def outcome(findings):
+    return [(finding.event, finding.path, finding.line, finding.fact, finding.fix) for finding in findings]
+
+
+def new_debt(raw: str, path: str = WORKFLOW, line: int = 6):
+    return (NEW_DEBT, path, line, f"job e2e has timeout-minutes {raw} · limit 15", LOWER_FIX)
+
+
+def grew(raw: str, entry: int, path: str = WORKFLOW, line: int = 6):
+    return (GREW, path, line, f"job e2e has timeout-minutes {raw} · ceiling {entry}", f"bring it back to {entry} or below")
+
+
+def can_fall(raw: str, entry: int, path: str = WORKFLOW, line: int = 6):
+    return (CAN_FALL, path, line, f"job e2e has timeout-minutes {raw} · ceiling {entry}", HAND_FIX)
+
+
+def gone(entry: int, path: str = WORKFLOW, job_id: str = "e2e"):
+    return (CAN_FALL, path, None, f"job {job_id} is gone · ceiling {entry}", HAND_FIX)
+
+
+def no_debt(entry: int, path: str = WORKFLOW, job_id: str = "e2e"):
+    return (CAN_FALL, path, None, f"job {job_id} has no debt · ceiling {entry}", HAND_FIX)
+
+
+def judged_against(build_repo, text: str, entry: int | None | str):
+    """The findings for one workflow `text` whose job `e2e` is held at `entry`: no baseline file (`"no file"`), a table
+    without the job (`None`) or an entry."""
+    files = {WORKFLOW: text}
+    if entry != "no file":
+        files[BASELINE_PATH] = held({} if entry is None else {WORKFLOW: {"e2e": entry}})
+    return outcome(rule_findings(build_repo(files), Rule.JOB_TIMEOUT))
+
+
+COMPARE = [
+    pytest.param("15", None, [], id="15, a table without the job"),
+    pytest.param("15", 15, [no_debt(15)], id="15, an entry of 15 is read as gone"),
+    pytest.param("15", 40, [can_fall("15", 40)], id="15, an entry above"),
+    pytest.param("15", 12, [no_debt(12)], id="15, an entry of 12 is gone and never grew"),
+    pytest.param("16", None, [new_debt("16")], id="16, a table without the job"),
+    pytest.param("16", 16, [], id="16, an entry equal"),
+    pytest.param("16", 20, [can_fall("16", 20)], id="16, an entry above"),
+    pytest.param("16", 15, [new_debt("16"), no_debt(15)], id="16, an entry of 15 is no entry"),
+    pytest.param("17", 16, [grew("17", 16)], id="17, an entry below"),
+    pytest.param("40", None, [new_debt("40")], id="40, a table without the job"),
+    pytest.param("40", 40, [], id="40, an entry equal"),
+    pytest.param("40", 45, [can_fall("40", 45)], id="40, an entry above"),
+    pytest.param("40", 35, [grew("40", 35)], id="40, an entry below"),
+    pytest.param("17.5", "no file", [new_debt("17.5")], id="17.5, no file"),
+    pytest.param("17.5", None, [new_debt("17.5")], id="17.5, a table without the job"),
+    pytest.param("17.5", 18, [], id="17.5, an entry of 18 holds it"),
+    pytest.param("17.5", 20, [can_fall("17.5", 20)], id="17.5, an entry of 20"),
+    pytest.param("17.5", 17, [grew("17.5", 17)], id="17.5, an entry of 17"),
+    pytest.param("15.5", None, [new_debt("15.5")], id="15.5, a table without the job"),
+    pytest.param("15.5", 16, [], id="15.5, an entry of 16 holds it"),
+    pytest.param("15.5", 20, [can_fall("15.5", 20)], id="15.5, an entry of 20"),
+    pytest.param("15.5", 15, [new_debt("15.5"), no_debt(15)], id="15.5, an entry of 15 is no entry"),
+]
+
+
+@pytest.mark.parametrize(("limit", "entry", "expected"), COMPARE)
+def test_a_limit_is_judged_by_its_rounded_up_value_against_the_entry_of_its_file_and_job(build_repo, limit, entry, expected):
+    """TIMEOUT-14, TIMEOUT-15, TIMEOUT-16."""
+    assert judged_against(build_repo, workflow(jobs=job("e2e", limit)), entry) == expected
+
+
+@pytest.mark.parametrize("entry", ["no file", None, 10, 40], ids=["no file", "no entry", "an entry of 10", "an entry of 40"])
+@pytest.mark.parametrize(
+    ("jobs", "expected"),
+    [
+        (job("e2e", None), missing("e2e")),
+        (job("e2e", "x"), (INVALID, WORKFLOW, 6, "job e2e has a timeout-minutes that is not a number above zero")),
+    ],
+    ids=["missing", "invalid"],
+)
+def test_a_job_without_a_readable_limit_keeps_its_finding_and_its_entry_stands(build_repo, jobs, expected, entry):
+    """TIMEOUT-15, TIMEOUT-16."""
+    findings = judged_against(build_repo, workflow(jobs=jobs), entry)
+    assert [finding[:4] for finding in findings] == [expected]
+
+
+@pytest.mark.parametrize(
+    ("entry", "expected"),
+    [(40, gone(40, job_id="old")), (15, no_debt(15, job_id="old")), (10, no_debt(10, job_id="old"))],
+    ids=["an entry above 15", "an entry of 15", "an entry of 10 has no debt"],
+)
+def test_an_entry_for_a_job_the_file_lacks_is_gone_with_no_line_or_has_no_debt_when_it_is_15_or_less(build_repo, entry, expected):
+    """TIMEOUT-16."""
+    repo = build_repo({WORKFLOW: workflow(jobs=job("e2e", "10")), BASELINE_PATH: held({WORKFLOW: {"old": entry}})})
+    assert outcome(rule_findings(repo, Rule.JOB_TIMEOUT)) == [expected]
+
+
+def test_gone_entries_follow_the_measured_findings_sorted_by_path_then_job(build_repo):
+    """TIMEOUT-16."""
+    entries = {CALLED: {"q": 30}, WORKFLOW: {"z": 20, "a": 25, "e2e": 35}}
+    repo = build_repo({WORKFLOW: workflow(jobs=job("e2e", "40")), BASELINE_PATH: held(entries)})
+    assert outcome(rule_findings(repo, Rule.JOB_TIMEOUT)) == [
+        grew("40", 35),
+        gone(25, job_id="a"),
+        gone(20, job_id="z"),
+        gone(30, CALLED, "q"),
+    ]
+
+
+def test_an_entry_under_a_job_that_calls_a_workflow_is_gone(build_repo):
+    """TIMEOUT-16."""
+    caller = workflow(jobs="  call:\n    uses: ./" + CALLED + "\n")
+    called = "on: workflow_call\njobs:\n" + job("e2e", "10")
+    repo = build_repo({WORKFLOW: caller, CALLED: called, BASELINE_PATH: held({WORKFLOW: {"call": 40}})})
+    assert outcome(rule_findings(repo, Rule.JOB_TIMEOUT)) == [gone(40, job_id="call")]
+
+
+CALLER = workflow(jobs="  call:\n    uses: ./" + CALLED + "\n")
+CALLED_DEBT = "on: workflow_call\njobs:\n" + job("e2e", "40")
+
+
+@pytest.mark.parametrize(
+    ("entries", "expected"),
+    [
+        pytest.param({CALLED: {"e2e": 40}}, [], id="the file's own path holds it"),
+        pytest.param({CALLED: {"e2e": 50}}, [can_fall("40", 50, CALLED, 4)], id="above, by the file's path"),
+        pytest.param({CALLED: {"e2e": 30}}, [grew("40", 30, CALLED, 4)], id="below, by the file's path"),
+        pytest.param({WORKFLOW: {"e2e": 40}}, [new_debt("40", CALLED, 4), gone(40)], id="the root's path holds nothing"),
+        pytest.param({}, [new_debt("40", CALLED, 4)], id="no entry"),
+    ],
+)
+def test_a_job_of_a_called_workflow_is_held_by_the_path_of_the_file_that_defines_it(build_repo, entries, expected):
+    """TIMEOUT-15, TIMEOUT-16."""
+    repo = build_repo({WORKFLOW: CALLER, CALLED: CALLED_DEBT, BASELINE_PATH: held(entries)})
+    assert outcome(rule_findings(repo, Rule.JOB_TIMEOUT)) == expected
+
+
+def test_an_entry_of_a_file_no_root_reaches_any_more_is_gone_whatever_its_value(build_repo):
+    """TIMEOUT-16."""
+    outside = "on: workflow_dispatch\njobs:\n" + job("e2e", "40")
+    repo = build_repo({WORKFLOW: workflow(jobs=job("j", "10")), CALLED: outside, BASELINE_PATH: held({CALLED: {"e2e": 40}})})
+    assert outcome(rule_findings(repo, Rule.JOB_TIMEOUT)) == [gone(40, CALLED)]
+
+
+def test_a_file_no_root_reaches_with_no_entry_is_outside_the_rule(build_repo):
+    """TIMEOUT-15."""
+    outside = "on: workflow_dispatch\njobs:\n" + job("e2e", "40")
+    repo = build_repo({WORKFLOW: workflow(jobs=job("j", "10")), CALLED: outside, BASELINE_PATH: held({})})
+    assert rule_findings(repo, Rule.JOB_TIMEOUT) == []
+
+
+def test_an_entry_of_a_path_the_index_does_not_track_is_gone(build_repo):
+    """TIMEOUT-16."""
+    repo = build_repo({WORKFLOW: workflow(jobs=job("j", "10")), BASELINE_PATH: held({".github/workflows/old.yml": {"e2e": 40}})})
+    assert outcome(rule_findings(repo, Rule.JOB_TIMEOUT)) == [gone(40, ".github/workflows/old.yml")]
+
+
+def test_a_malformed_job_table_makes_the_rule_cannot_judge_naming_the_file_as_size_and_clone_do(build_repo, capsys):
+    """TIMEOUT-15."""
+    repo = build_repo({WORKFLOW: workflow(), BASELINE_PATH: f'[job_minutes."{WORKFLOW}"]\ne2e = 40.5\n'})
+    code, _ = run(capsys, repo)
+    reasons = refusals(repo)
+    assert code == 2
+    assert all(BASELINE_PATH in reasons[rule] for rule in (Rule.JOB_TIMEOUT, Rule.SIZE, Rule.CLONE))
+
+
+def test_a_refused_source_with_a_readable_job_table_leaves_the_job_findings_of_the_debt_area(build_repo, capsys):
+    """TIMEOUT-8, TIMEOUT-15."""
+    files = {WORKFLOW: workflow(jobs=job("e2e", "45")), BASELINE_PATH: held({WORKFLOW: {"e2e": 40}}), "src/bad.py": "def broken(:\n"}
+    code, output = run(capsys, build_repo(files))
+    assert (code, refusal_row("debt") in output) == (2, True)
+    assert [(location, row.event) for location, row in area_finding_rows(output, "debt")] == [(f"{WORKFLOW}:6", GREW)]
+
+
+def test_a_job_above_fifteen_is_new_debt_without_a_ceiling_file_and_the_closing_words_say_so(build_repo, capsys):
+    """TIMEOUT-15."""
+    code, lines = debt_run(capsys, build_repo({WORKFLOW: workflow(jobs=job("e2e", "40"))}))
+    assert (code, lines[-1]) == (1, "! 1 finding in 1 area · debt ceiling measured, not enforced · <1s")
+
+
+def test_the_clean_debt_row_counts_no_job_entry(build_repo, capsys):
+    """TIMEOUT-15."""
+    repo = build_repo({WORKFLOW: workflow(top=CONCURRENCY, jobs=job("e2e", "40")), BASELINE_PATH: "[clones]\n" + held({WORKFLOW: {"e2e": 40}})})
+    code, lines = debt_run(capsys, repo)
+    assert (code, "ceiling held · 0 entries, 0 clone pairs" in debt_words("\n".join(lines))) == (0, True)
+
+
+def test_a_size_fix_rewrites_the_baseline_with_the_held_job_table_and_a_second_fix_leaves_the_file_untouched(build_repo):
+    """TIMEOUT-13, FIX-31: lowering a size entry keeps the job table as held, and a fix that has nothing to change
+    does not write."""
+    files = {
+        WORKFLOW: workflow(top=CONCURRENCY, jobs=job("e2e", "40")),
+        "src/a.py": LONG_FUNCTION,
+        BASELINE_PATH: '[function_lines."src/a.py"]\nlong_one = 70\n\n[clones]\n\n' + held({WORKFLOW: {"e2e": 40}}),
+    }
+    repo = build_repo(files)
+    path = repo / BASELINE_PATH
+    assert door_in(repo, *FIX_WORDS) == 0
+    first, stamp = path.read_text(encoding="utf-8"), path.stat().st_mtime_ns
+    written = tomllib.loads(first)
+    assert (written["function_lines"], written["job_minutes"]) == ({"src/a.py": {"long_one": 62}}, {WORKFLOW: {"e2e": 40}})
+    assert door_in(repo, *FIX_WORDS) == 0
+    assert (path.read_text(encoding="utf-8"), path.stat().st_mtime_ns) == (first, stamp)
