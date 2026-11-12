@@ -8,8 +8,22 @@ from quality.rules import Rule
 from tests.support.check import area_row, check_output, check_result, rule_findings, rule_notes
 
 WORKFLOW = ".github/workflows/ci.yml"
-NOT_CALLED_FACT = (
-    "no workflow step runs design-catalogs --check directly on a pull request; a call through make is not read yet"
+NOT_CALLED_FACT = "no workflow step runs design-catalogs --check on a pull request, directly or through make"
+MAKEFILE = "Makefile"
+GNU_MAKEFILE = "GNUmakefile"
+CONFIG = "quality/config.toml"
+ROOT_MAKEFILE_ALLOWANCE = (
+    '[[root.allow]]\nentry = "Makefile"\nreason = "the root Makefile holds the make goals of the workflows"\n'
+)
+COVERED_MAKEFILE = (
+    ".PHONY: lint wire-check words-check\n"
+    "lint: wire-check words-check\n"
+    "\t$(MAKE) wire-check\n"
+    "\t$(MAKE) words-check\n"
+    "wire-check:\n"
+    "\techo wired\n"
+    "words-check:\n"
+    "\tuv run design-catalogs --check\n"
 )
 NOT_CALLED = Note(".github/workflows", NoteEvent.NOT_CALLED, NOT_CALLED_FACT)
 NOT_CALLED_LINE = f"· .github/workflows not called {NOT_CALLED_FACT}"
@@ -154,7 +168,7 @@ def test_a_direct_call_of_the_check_in_any_reader_form_counts(build_repo, run):
     ],
 )
 def test_no_counting_call_gives_the_note(build_repo, run):
-    """CATALOG-5, CATALOG-7, CATALOG-9: a call through make, a word in an echo, the check without its flag, a script and tox."""
+    """CATALOG-5, CATALOG-7, CATALOG-9: a call through make with no Makefile, a word in an echo, the check without its flag, a script and tox."""
     repo = build_repo({"pyproject.toml": pyproject(DECLARED), WORKFLOW: workflow(run)})
     assert rule_notes(repo, Rule.CATALOG_CHECK) == [NOT_CALLED]
 
@@ -262,3 +276,131 @@ def test_a_covered_repository_with_an_unreadable_workflow_exits_two_through_the_
     repo = build_repo({"pyproject.toml": pyproject(DECLARED), WORKFLOW: "on: [\n"})
     code, _ = check_output(capsys, repo)
     assert code == 2
+
+
+def test_a_make_goal_that_reaches_the_check_in_the_makefile_gets_no_note(build_repo):
+    """CATALOG-5, CATALOG-12, CATALOG-14 to CATALOG-18, CATALOG-21: `lint` reaches `words-check` through `$(MAKE)`, and the
+    check's line is the same reading as a direct call."""
+    repo = build_repo(
+        {"pyproject.toml": pyproject(DECLARED), WORKFLOW: workflow("make lint"), MAKEFILE: COVERED_MAKEFILE}
+    )
+    assert rule_notes(repo, Rule.CATALOG_CHECK) == []
+
+
+@pytest.mark.parametrize(
+    "run",
+    [
+        pytest.param("make test", id="the goal is not in the file"),
+        pytest.param("make -C sub lint", id="make -C reads another directory"),
+        pytest.param("make -j4 lint", id="a flag makes no call of make"),
+    ],
+)
+def test_a_make_goal_that_does_not_reach_the_check_gets_the_note_with_the_new_fact(build_repo, capsys, run):
+    """CATALOG-5, CATALOG-12: a goal that does not reach the check, or a make call with a flag, which is no call of make, gets
+    the note, its fact word for word, and exit 0."""
+    repo = build_repo(
+        {
+            "pyproject.toml": pyproject(DECLARED),
+            WORKFLOW: workflow(run),
+            MAKEFILE: COVERED_MAKEFILE,
+            CONFIG: ROOT_MAKEFILE_ALLOWANCE,
+        }
+    )
+    code, out = check_output(capsys, repo)
+    assert code == 0
+    assert rule_notes(repo, Rule.CATALOG_CHECK) == [NOT_CALLED]
+    assert NOT_CALLED_LINE in normalised(out)
+
+
+def test_a_recipe_line_whose_command_is_built_at_run_time_gets_the_note(build_repo):
+    """CATALOG-5, CATALOG-22: `lint` reaches a line whose command word is a make variable; that line is no call, so the note prints."""
+    repo = build_repo(
+        {
+            "pyproject.toml": pyproject(DECLARED),
+            WORKFLOW: workflow("make lint"),
+            MAKEFILE: "lint:\n\t$(UV) run design-catalogs --check\n",
+        }
+    )
+    assert rule_notes(repo, Rule.CATALOG_CHECK) == [NOT_CALLED]
+
+
+def test_a_gnumakefile_beside_the_makefile_makes_the_whole_reading_no_call(build_repo):
+    """CATALOG-13: make reads `GNUmakefile` first, so a tracked one beside the `Makefile` gives the note."""
+    repo = build_repo(
+        {
+            "pyproject.toml": pyproject(DECLARED),
+            WORKFLOW: workflow("make lint"),
+            MAKEFILE: COVERED_MAKEFILE,
+            GNU_MAKEFILE: "all:\n\tuv run design-catalogs --check\n",
+        }
+    )
+    assert rule_notes(repo, Rule.CATALOG_CHECK) == [NOT_CALLED]
+
+
+def test_an_untracked_makefile_is_no_call(build_repo):
+    """CATALOG-13: only the tracked root `Makefile` is read; one on disk that git does not track gives the note."""
+    repo = build_repo({"pyproject.toml": pyproject(DECLARED), WORKFLOW: workflow("make lint")})
+    (repo / MAKEFILE).write_text(COVERED_MAKEFILE)
+    assert rule_notes(repo, Rule.CATALOG_CHECK) == [NOT_CALLED]
+
+
+def test_a_make_step_with_continue_on_error_gives_the_note(build_repo):
+    """CATALOG-8, CATALOG-21: a step with `continue-on-error: true` does not count, even when its goal reaches the check."""
+    repo = build_repo(
+        {
+            "pyproject.toml": pyproject(DECLARED),
+            WORKFLOW: workflow("make lint", "continue-on-error: true"),
+            MAKEFILE: COVERED_MAKEFILE,
+        }
+    )
+    assert rule_notes(repo, Rule.CATALOG_CHECK) == [NOT_CALLED]
+
+
+def test_a_direct_call_beside_a_non_utf8_makefile_is_no_refusal(build_repo):
+    """CATALOG-23: the Makefile is read only when no counted step calls the generator directly."""
+    repo = build_repo(
+        {
+            "pyproject.toml": pyproject(DECLARED),
+            WORKFLOW: workflow("design-catalogs --check"),
+            MAKEFILE: COVERED_MAKEFILE,
+        }
+    )
+    (repo / MAKEFILE).write_bytes(b"\xff\n")
+    assert catalog_verdict(repo).refusal is None
+    assert rule_notes(repo, Rule.CATALOG_CHECK) == []
+
+
+def test_a_make_goal_beside_a_non_utf8_makefile_is_exit_two_naming_the_makefile(build_repo, capsys):
+    """CATALOG-23: a counted make step with no direct call reads the Makefile; one that is not UTF-8 is exit 2."""
+    repo = build_repo(
+        {"pyproject.toml": pyproject(DECLARED), WORKFLOW: workflow("make lint"), MAKEFILE: COVERED_MAKEFILE}
+    )
+    (repo / MAKEFILE).write_bytes(b"\xff\n")
+    refusal = catalog_verdict(repo).refusal
+    assert refusal is not None
+    assert "Makefile" in str(refusal)
+    code, _ = check_output(capsys, repo)
+    assert code == 2
+
+
+def test_a_non_utf8_makefile_of_an_uncovered_repository_is_no_refusal(build_repo):
+    """CATALOG-3, CATALOG-23: a repository that does not declare the generator reads no Makefile."""
+    repo = build_repo(
+        {"pyproject.toml": pyproject("dependencies = []"), WORKFLOW: workflow("make lint"), MAKEFILE: COVERED_MAKEFILE}
+    )
+    (repo / MAKEFILE).write_bytes(b"\xff\n")
+    assert catalog_verdict(repo).refusal is None
+    assert rule_notes(repo, Rule.CATALOG_CHECK) == []
+
+
+@pytest.mark.parametrize(
+    ("run", "recipe", "rule"),
+    [
+        pytest.param("make test", "\tpytest -q", Rule.PYTEST_WORKERS, id="pytest-workers"),
+        pytest.param("make install", "\tapt-get install -y x", Rule.RUNTIME_INSTALL, id="runtime-install"),
+    ],
+)
+def test_the_other_rules_still_read_a_make_call_as_their_named_gap(build_repo, run, recipe, rule):
+    """CATALOG-21: `make` stays a gap of pytest-workers and runtime-install; their finding is not read from a Makefile recipe."""
+    repo = build_repo({WORKFLOW: workflow(run), MAKEFILE: f"test:\n{recipe}\ninstall:\n{recipe}\n"})
+    assert rule_findings(repo, rule) == []

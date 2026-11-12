@@ -158,7 +158,7 @@ that cannot check is `✗ <area>  not checked  <reason>` ([Refusals](#refusals))
 A note is a `·` row under its area, after the area's findings, aligned with them (ROW-15):
 `· <path[:line]>  <event>  <fact>`, with no `fix:` of its own (ROW-16). Its events are `allowed` (file rules,
 dependencies, secrets and python-print), `not measured` (a Python file the size rule cannot parse, without a ceiling
-file; O22), `not called` (a covered repository with no pull-request step that calls `design-catalogs --check`, at
+file; O22), `not called` (a covered repository with no pull-request step that calls `design-catalogs --check`, directly or through `make`, at
 `.github/workflows`, [rules](rules.md)), `unused` and `warning` (import-contract) and `unused` (secret). An allowed advisory and an honoured output
 owner stand as notes, and the clean row counts them (O15, O49):
 
