@@ -417,8 +417,7 @@ def check_job_timeouts(root: Path, tracked: list[str], baseline: Baseline | None
     documents = {name: parsed.get(name) for name in tracked if checkout.is_workflow(PurePosixPath(name))}
     roots = frozenset(name for name, document in parsed.items() if _is_root(name, document))
     held = (baseline.job_minutes if baseline else None) or {}
-    debt = {key: minutes for key, minutes in held.items() if minutes > MAXIMUM_MINUTES}
-    no_debt = {key: minutes for key, minutes in held.items() if minutes <= MAXIMUM_MINUTES}
+    debt, no_debt = _split_entries(held)
     findings: list[Finding] = []
     readable: dict[JobKey, bool] = {}
     for name in _reached(documents, roots):
@@ -430,6 +429,12 @@ def check_job_timeouts(root: Path, tracked: list[str], baseline: Baseline | None
             findings.extend(job_findings)
     findings.extend(_unheld_entries(debt, no_debt, readable))
     return RuleResult(findings, len(readable), False)
+
+
+def _split_entries(held: dict[JobKey, int]) -> tuple[dict[JobKey, int], dict[JobKey, int]]:
+    """The entries above the maximum, which are debt, and the entries of at most the maximum, which are none."""
+    debt = {key: minutes for key, minutes in held.items() if minutes > MAXIMUM_MINUTES}
+    return debt, {key: minutes for key, minutes in held.items() if key not in debt}
 
 
 def _unheld_entries(debt: dict[JobKey, int], no_debt: dict[JobKey, int], readable: dict[JobKey, bool]) -> Iterator[Finding]:
