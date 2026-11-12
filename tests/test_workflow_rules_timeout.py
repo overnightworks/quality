@@ -1,4 +1,5 @@
 import json
+import tomllib
 
 import pytest
 
@@ -14,7 +15,7 @@ from tests.support.check import (
     rule_findings,
 )
 from tests.support.check import check_output as run
-from tests.support.door import PinnedJudging, door_in
+from tests.support.door import FIX_WORDS, PinnedJudging, door_in
 
 MISSING, INVALID, NEW_DEBT = FindingEvent.MISSING, FindingEvent.INVALID, FindingEvent.NEW_DEBT
 GREW, CAN_FALL = FindingEvent.GREW, FindingEvent.CAN_FALL
@@ -617,3 +618,21 @@ def test_the_clean_debt_row_counts_no_job_entry(build_repo, capsys):
     repo = build_repo({WORKFLOW: workflow(top=CONCURRENCY, jobs=job("e2e", "40")), BASELINE_PATH: "[clones]\n" + held({WORKFLOW: {"e2e": 40}})})
     code, lines = debt_run(capsys, repo)
     assert (code, "ceiling held · 0 entries, 0 clone pairs" in debt_words("\n".join(lines))) == (0, True)
+
+
+def test_a_size_fix_rewrites_the_baseline_with_the_held_job_table_and_a_second_fix_leaves_the_file_untouched(build_repo):
+    """TIMEOUT-13, FIX-31: lowering a size entry keeps the job table as held, and a fix that has nothing to change
+    does not write."""
+    files = {
+        WORKFLOW: workflow(top=CONCURRENCY, jobs=job("e2e", "40")),
+        "src/a.py": LONG_FUNCTION,
+        BASELINE_PATH: '[function_lines."src/a.py"]\nlong_one = 70\n\n[clones]\n\n' + held({WORKFLOW: {"e2e": 40}}),
+    }
+    repo = build_repo(files)
+    path = repo / BASELINE_PATH
+    assert door_in(repo, *FIX_WORDS) == 0
+    first, stamp = path.read_text(encoding="utf-8"), path.stat().st_mtime_ns
+    written = tomllib.loads(first)
+    assert (written["function_lines"], written["job_minutes"]) == ({"src/a.py": {"long_one": 62}}, {WORKFLOW: {"e2e": 40}})
+    assert door_in(repo, *FIX_WORDS) == 0
+    assert (path.read_text(encoding="utf-8"), path.stat().st_mtime_ns) == (first, stamp)
