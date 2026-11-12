@@ -215,6 +215,11 @@ def job_followed_cases():
             [],
             id="a job entry already moved and lowered stays",
         ),
+    ]
+
+
+def job_partial_lineage_cases():
+    return [
         pytest.param(
             timed({booked("a.yml"): 40}),
             timed(None),
@@ -306,7 +311,7 @@ def job_table_cases():
 def follow_cases():
     return pytest.mark.parametrize(
         ("held", "committed", "renames", "expected", "events"),
-        [*moved_entry_cases(), *followed_entry_cases(), *pair_cases(), *job_cases(), *job_followed_cases(), *job_table_cases()],
+        [*moved_entry_cases(), *followed_entry_cases(), *pair_cases(), *job_cases(), *job_followed_cases(), *job_partial_lineage_cases(), *job_table_cases()],
     )
 
 
