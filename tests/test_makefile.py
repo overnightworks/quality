@@ -88,9 +88,43 @@ def test_a_line_that_ends_the_rule_stops_its_recipe():
 
 
 @pytest.mark.parametrize(
+    ("text", "goal", "lines"),
+    [
+        pytest.param(
+            makefile("define-x:", "lint:", f"\t{CHECK}"),
+            "lint",
+            (RecipeLine(CHECK, 3),),
+            id="a rule whose name starts with define",
+        ),
+        pytest.param(
+            makefile("ifdef_x = 1", "lint:", f"\t{CHECK}"),
+            "lint",
+            (RecipeLine(CHECK, 3),),
+            id="a variable whose name starts with ifdef",
+        ),
+        pytest.param(
+            makefile("endif-x:", f"\t{CHECK}"),
+            "endif-x",
+            (RecipeLine(CHECK, 2),),
+            id="a rule whose name starts with endif",
+        ),
+    ],
+)
+def test_a_name_that_starts_with_a_directive_word_is_no_directive(text, goal, lines):
+    """CATALOG-14, CATALOG-16: a directive is its keyword as a word of its own; a rule or an assignment whose name begins with
+    one is read as the rule or the assignment it is."""
+    assert reached_recipe_lines(text, [goal]) == lines
+
+
+@pytest.mark.parametrize(
     ("text", "goals"),
     [
         pytest.param(COVERED, ["nope"], id="a goal the file does not define"),
+        pytest.param(
+            makefile("ifeq (1,1)", "x:", "endif-x:", "\techo", "lint:", f"\t{CHECK}", "endif"),
+            ["lint"],
+            id="a rule whose name starts with endif does not end the conditional",
+        ),
         pytest.param(makefile("words-check:", f"\t-{CHECK}"), ["words-check"], id="a minus prefix ignores the failure"),
         pytest.param(
             makefile("ifeq (1,1)", "words-check:", f"\t{CHECK}", "endif"),
