@@ -1,8 +1,0 @@
-claim_id = "4965e113870f477292b7fb636d7c010b"
-agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
-role = "builder"
-base = "542311a03aa9d9944a5607937304c07aead71e3f"
-branch = "claude/issue-807-catalog-check-note"
-scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/catalog_rules.py", "src/quality/check.py", "src/quality/report.py", "src/quality/rules.py", "src/quality/workflow_rules.py", "tests/test_catalog_rules.py", "tests/test_cli_help.py", "tests/test_fleet_matrix.py"]
-opened_commit = "582980dfc71261e72bb7ed59bd00bae658256ff8"
-whole_reason = "The covered test, the step search and the rule's wiring are one fact: a part alone is dead code, and the layer entry in pyproject.toml and the pinned tests change with the new Rule member."
