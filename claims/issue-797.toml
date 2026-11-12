@@ -1,0 +1,7 @@
+claim_id = "988b46eef8fd4341b60d22a6ee5cffc7"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "9ced0f5cee689f2c70fb1467513b943484bd65a5"
+branch = "claude/issue-797-image-reproducible-layers"
+scope = [".github/workflows/image.yml", "docs/release.md", "tests/workflows/test_image.py"]
+opened_commit = "1bbad9980935b770c1fee91c7156a871504311d7"
