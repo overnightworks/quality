@@ -285,7 +285,9 @@ def test_a_workflow_that_cannot_be_read_refuses_the_whole_fix_while_an_entry_is_
         assert f"✗ debt not fixed cannot read {BROKEN}" in squashed(printed), printed
 
 
+NO_CEILING_FILE = None
 READ_NOWHERE = {
+    "no ceiling file": (NO_CEILING_FILE, ceiling(None, size=70)),
     "no table": (ceiling(None, size=80), ceiling(None, size=70)),
     "an empty table": (ceiling({}, size=80), ceiling({}, size=70)),
 }
@@ -295,10 +297,10 @@ READ_NOWHERE = {
 def test_a_workflow_that_cannot_be_read_does_not_block_the_size_fix_where_no_job_entry_is_held(
     build_repo, capsys, held, written
 ):
-    """TIMEOUT-23, TIMEOUT-26: an absent table and an empty table read no workflow for the fix, so
-    the size entry falls, in the dry run too, and the rule alone reports the file."""
+    """TIMEOUT-23, TIMEOUT-26: a first recording, an absent table and an empty table read no workflow for the fix, so
+    the size file is recorded or lowered, in the dry run too, and the rule alone reports the file."""
     files = {SIZE_FILE: long_function(70), WORKFLOW: workflow(jobs=job("e2e", "20")), **UNREADABLE_WORKFLOWS["no YAML"]}
-    repo = build_repo({**files, BASELINE_PATH: held})
+    repo = build_repo(files if held is NO_CEILING_FILE else {**files, BASELINE_PATH: held})
     run = dry_run_then_fix(capsys, repo)
     assert (run.code, (repo / BASELINE_PATH).read_text(), "not fixed" in run.done, f"cannot read {BROKEN}" in run.done) == (
         2,
