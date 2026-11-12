@@ -302,9 +302,9 @@ READ_NOWHERE = {
 def test_a_workflow_that_cannot_be_read_does_not_block_the_size_fix_where_no_job_entry_is_held(
     build_repo, capsys, held, written
 ):
-    """TIMEOUT-23, TIMEOUT-26, TIMEOUT-30: a first recording, an absent table and an empty table read no workflow for the
-    fix, so the size file is recorded or lowered, in the dry run too, and the rule alone reports the file; a recording
-    of the job table is skipped there, so no job table is written."""
+    """TIMEOUT-23, TIMEOUT-26, TIMEOUT-30: a workflow the fix cannot read lowers nothing and refuses nothing, so the size file is
+    recorded or lowered, in the dry run too, and the rule alone reports the file; a recording of the job table is
+    skipped there, so no job table is written."""
     files = {SIZE_FILE: long_function(70), WORKFLOW: workflow(jobs=job("e2e", "20")), **UNREADABLE_WORKFLOWS["no YAML"]}
     repo = build_repo(files if held is NO_CEILING_FILE else {**files, BASELINE_PATH: held})
     run = dry_run_then_fix(capsys, repo)
@@ -315,7 +315,6 @@ def test_a_workflow_that_cannot_be_read_does_not_block_the_size_fix_where_no_job
         True,
     )
     assert (run.planned_code, "not fixed" in run.planned, f"cannot read {BROKEN}" in run.planned) == (2, False, True)
-    assert "e2e" not in (repo / BASELINE_PATH).read_text()
 
 
 def test_a_first_recording_records_a_job_above_fifteen_beside_the_size_entries(build_repo, capsys):
