@@ -83,11 +83,14 @@ rows, by area:
   holding the audit's URL (O36); a `pr-concurrency` finding is `missing` (`no concurrency`, `no cancel-in-progress`),
   `shared group` (`group is not a listed form`, adding `(falls back to <token>)` where the group holds the commit or a
   ref; `no group` for a `concurrency` without one) or `cancels main` (`cancel-in-progress is not a listed form`), its
-  fix the block to copy ([rules](rules.md)); a `pytest-workers` finding is `serial` (`pytest runs without -n`,
-  `pytest runs with -n 0`) or `invalid` (`-n count is not a number above zero or auto`, `command cannot be read to its
-  end`, `command is built at run time, pytest -n cannot be read`), its fix naming the flag and the marker;
-  an actionlint finding names the scanner and holds its message whole as its one detail line (O37); a row with a
-  finding or a refusal does not say `offline audits only` (O39).
+  fix the block to copy ([rules](rules.md)); a `pytest-workers` finding is `serial` (`pytest runs without -n`, `pytest
+  runs with -n 0`) or `invalid` (`-n count is not a number above zero or auto`, `command cannot be read to its end`,
+  `command is built at run time, pytest -n cannot be read`), its fix naming the flag and the marker; a `runtime-install`
+  finding is `installs` (the manager and the install word, as `apt-get install`, or `a download runs as a shell script`)
+  or `invalid` (`command cannot be read to its end`, `command is built at run time, an install cannot be read`), its fix
+  naming the routes (the lockfile, the runner image, an image pinned by digest) and the marker ([rules](rules.md)); an
+  actionlint finding names the scanner and holds its message whole as its one detail line (O37); a row with a finding or
+  a refusal does not say `offline audits only` (O39).
 - `dependencies`: an advisory is an `affected` row, its fact the package and version, the group's id and where it
   lists them the versions that fix it, its fix per lock kind (O41); the id is the group's first, never an alias (O42);
   a nested lock's fix names its folder (O43); the fix of a pnpm or requirements lock is the same hint for every
