@@ -118,7 +118,8 @@ Ruled by the operator:
 
 - A fall below a metric's threshold drops the entry (`dropped  file 805 → 790 lines · debt from 800 lines`) (FIX-4).
 - A ceiling that can fall stays a finding: `!` and exit 1 (CEILING-6). The dry run `--fix --dry-run` exits 1 while
-  anything can be lowered (FIX-23). Without a ceiling file debt is a grey note with exit 0 (O21).
+  anything can be lowered (FIX-23). Without a ceiling file the size and clone ceilings are a grey note with exit 0
+  (O21); job-timeout is judged with or without a ceiling file.
 
 ## `quality check secrets --staged`
 

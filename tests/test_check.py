@@ -150,7 +150,7 @@ def files(tracked: dict[str, str]):
         (files({**BASELINE, "compose.yaml": "services: [\n", "src/a.py": NEW_DEBT}), 2,
          [f"{refusal_row('files')}cannot read compose.yaml"], ["src/a.py:1"]),
         (files({".env": "A=1\n", **KEPT_CONTRACT, **compose('- "8080:80"')}), 1,
-         ["! 3 findings in 1 area · 5 areas clean · debt measured, not enforced · <1s"], [".env", "compose.yaml"]),
+         ["! 3 findings in 1 area · 5 areas clean · debt ceiling measured, not enforced · <1s"], [".env", "compose.yaml"]),
         (files({"compose-\udcff.yaml": compose('- "8080:80"')["compose.yaml"]}), 1, [], [printable("compose-\udcff.yaml")]),
         (files({**BASELINE, "src/\udcff.py": NEW_DEBT}), 1, [], ["src/\\udcff.py:1"]),
         (files({"src/\udcff.py": "def broken(:\n"}), 2,

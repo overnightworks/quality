@@ -70,6 +70,10 @@ rows, by area:
 - `files`: a fact never restates the path its row shows (O12); a path allowed under two rules and no longer tracked is
   one `unused` row per rule, each fix deleting every entry of the path (O18); `script-name` says `misnamed` where the
   shape breaks, its fact then holding the place too, and `misplaced` where only the place does (O19).
+- `debt`: a `job-timeout` finding is `missing` (`job <id> has no timeout-minutes`, at the job's line), `invalid`
+  (`job <id> has a timeout-minutes that is not a number above zero`) or `new debt` (`job <id> has timeout-minutes
+  <value> · limit 15`), the last two at the `timeout-minutes` line; the fix of the first two is `set timeout-minutes to a
+  number of at most 15`, of the last `lower timeout-minutes to 15 or less` ([rules](rules.md)).
 - `imports`: a broken contract is a `broken` finding; an unmatched ignore is an `unused` finding at `error` and an
   `unused` note at `warn`; a grimp or import-linter warning is a `warning` note (O23); a `broken` finding's detail
   lines are import-linter's own rendering of the contract ([Rows](#rows)).
@@ -185,8 +189,8 @@ A closing line is its glyph and its parts joined by ` · ` (CLOSING-2), each par
 ends with one verdict line on stdout (CLOSING-4): `✓ clean · 7 areas · <1s` (CLOSING-5) or
 `! 5 findings in 3 areas · 4 areas clean · 14s`, where the clean count is left out if no area is clean (CLOSING-6). The
 duration is whole seconds rounded down, `<1s` below one; from 60 seconds on it reads minutes and two-digit seconds,
-`1m00s` (CLOSING-7). Before the duration stands `debt measured, not enforced` when no ceiling file holds the debt
-(CLOSING-8), `debt partly measured, not enforced` when the ceiling file has no `[clones]` table (CLOSING-9), then
+`1m00s` (CLOSING-7). Before the duration stands `debt ceiling measured, not enforced` when no ceiling file holds the debt
+(CLOSING-8), `debt ceiling partly measured, not enforced` when the ceiling file has no `[clones]` table (CLOSING-9), then
 `imports not enforced` when the repository has no import-linter config (CLOSING-10). No `next:` follows a findings
 verdict (CLOSING-11).
 

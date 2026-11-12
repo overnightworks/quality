@@ -26,7 +26,7 @@ QUOTED_LINE = 8
 
 def head(on: str = "push") -> str:
     """A workflow up to its `steps:` key (line 7); the next line is line 8."""
-    return f"name: w\non: {on}\npermissions: {{}}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+    return f"on: {on}\npermissions: {{}}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n"
 
 
 def block_run(*lines: str, on: str = "push") -> str:
@@ -670,7 +670,7 @@ def test_a_marker_is_the_way_out_of_a_serial_run_through_the_door(build_repo, ca
 
 
 ANCHORS = "x-steps: &steps\n  - run: 'true'\nx-job: &job\n  runs-on: ubuntu-latest\nx-run: &run pytest\n"
-JOBS = "jobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+JOBS = "jobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n"
 
 
 @pytest.mark.parametrize(

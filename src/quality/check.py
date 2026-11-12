@@ -46,7 +46,7 @@ from quality.report import (
     Unparsable,
     config_refusal,
 )
-from quality.rules import Area, Rule
+from quality.rules import Area, Rule, Switch
 
 
 def _python_floor_result(root: Path, modes: dict[str, str] | CannotJudge, allow_lists: AllowLists | CannotJudge) -> python_floor.FloorResult:
@@ -263,7 +263,8 @@ class AreaVerdict:
 
     @property
     def measurement(self) -> Measurement:
-        judging = [verdict.measured_only for verdict in self.verdicts if verdict.refusal is None]
+        switched = [verdict for verdict in self.verdicts if verdict.rule.release.switch is not Switch.ALWAYS]
+        judging = [verdict.measured_only for verdict in switched if verdict.refusal is None]
         if judging and all(judging):
             return Measurement.MEASURED_ONLY
         return Measurement.PARTLY_MEASURED_ONLY if any(judging) else Measurement.ENFORCED
@@ -537,7 +538,8 @@ def _judge_debt(inputs: RunInputs) -> AreaVerdict:
     )
     if fixed:
         size = ratchet.after_fix(_required(size), _reported(ceiling))  # the config was read and the tree is complete
-    return _area_verdict(Area.DEBT, {Rule.SIZE: size, Rule.CLONE: clone}, ceiling=ceiling)
+    timeouts = _attempt(lambda: workflow_rules.check_job_timeouts(inputs.root, inputs.tracked))
+    return _area_verdict(Area.DEBT, {Rule.SIZE: size, Rule.CLONE: clone, Rule.JOB_TIMEOUT: timeouts}, ceiling=ceiling)
 
 
 def _judge_imports(inputs: RunInputs) -> AreaVerdict:

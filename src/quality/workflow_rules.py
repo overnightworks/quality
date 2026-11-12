@@ -1,14 +1,18 @@
-"""Two rules over the tracked workflows, each reading a closed list of forms and judging anything outside it a finding.
+"""Three rules over the tracked workflows, each reading a closed list of forms and judging anything outside it a finding.
 
 `pr-concurrency`: a workflow a pull request triggers sets a top-level `concurrency` that groups a pull-request run by its
 number and cancels only pull-request runs; no expression is read.
 
 `pytest-workers`: every pytest call in a `run:` script passes `-n` with more than zero workers or carries a
-`# pytest-workers: <reason>` marker; the script is read as POSIX shell words, never run."""
+`# pytest-workers: <reason>` marker; the script is read as POSIX shell words, never run.
+
+`job-timeout`: every job of a workflow a pull request or a push to main triggers, and of the workflows those call through a
+local `uses:`, declares `timeout-minutes` as a plain number of at most 15."""
 
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path, PurePosixPath
 
 import yaml
@@ -390,3 +394,114 @@ def _worker_counts(arguments: list[str]) -> list[str | None]:
             index += 1
         counts.append(count)
     return counts
+
+
+MAXIMUM_MINUTES = 15
+TIMEOUT_KEY = "timeout-minutes"
+MINUTES = re.compile(r"\d+(?:\.\d+)?", re.ASCII)
+SET_TIMEOUT_FIX = f"set {TIMEOUT_KEY} to a number of at most {MAXIMUM_MINUTES}"
+LOWER_TIMEOUT_FIX = f"lower {TIMEOUT_KEY} to {MAXIMUM_MINUTES} or less"
+
+Job = tuple[str, yaml.ScalarNode, yaml.MappingNode]
+
+
+def check_job_timeouts(root: Path, tracked: list[str]) -> RuleResult:
+    """Every job of a workflow a pull request or a push to main triggers, and of the local workflows those call, judged;
+    the extent is how many jobs there are."""
+    parsed = {name: _root_document(name, text) for name, text in _readable_workflows(root, tracked)}
+    documents = {name: parsed.get(name) for name in tracked if checkout.is_workflow(PurePosixPath(name))}
+    roots = frozenset(name for name, document in parsed.items() if _is_root(name, document))
+    findings: list[Finding] = []
+    judged_jobs = 0
+    for name in _reached(documents, roots):
+        jobs = [job for job in _jobs(name, documents[name]) if "uses" not in checkout.mapping_values(job[2])]
+        judged_jobs += len(jobs)
+        for job in jobs:
+            findings.extend(_limit_findings(name, documents[name], job))
+    return RuleResult(findings, judged_jobs, False)
+
+
+def _root_document(name: str, text: str) -> Document:
+    """The parsed workflow; one whose `push` filters an alias or a merge key could hide cannot be judged."""
+    document = _document(name, text)
+    if _hides_push(document, checkout.mapping_values(document.root).get("on")):
+        raise _hidden(name)
+    return document
+
+
+def _hides_push(document: Document, triggers: yaml.Node | None) -> bool:
+    push = checkout.mapping_values(triggers).get("push")
+    if push is None:
+        return False
+    if document.is_alias(push) or _hides_keys(document, push):
+        return True
+    filters = checkout.mapping_values(push)
+    return any(_hides_items(document, filters[key]) for key in checkout.PUSH_FILTER_KEYS if key in filters)
+
+
+def _hides_items(document: Document, node: yaml.Node) -> bool:
+    items = node.value if isinstance(node, yaml.SequenceNode) else []
+    return document.is_alias(node) or any(document.is_alias(item) for item in items)
+
+
+def _is_root(name: str, document: Document) -> bool:
+    try:
+        pushes = checkout.pushes_to_main(document)
+    except checkout.UnreadableTrigger as error:
+        raise _unreadable(name, error.reason) from error
+    return pushes or bool(checkout.pull_request_events(document))
+
+
+def _reached(documents: dict[str, Document | None], roots: frozenset[str]) -> list[str]:
+    try:
+        return checkout.reached_workflows(documents, roots, lambda name: _called_files(name, documents[name]))
+    except checkout.UnfollowableCall as error:
+        raise _unreadable(error.caller, f"it calls {error.uses}, which {error.because}") from error
+
+
+def _called_files(name: str, document: Document) -> list[str]:
+    calls = (_guarded(name, document, checkout.mapping_values(job).get("uses")) for _, _, job in _jobs(name, document))
+    return [call.value for call in calls if isinstance(call, yaml.ScalarNode)]
+
+
+def _jobs(name: str, document: Document) -> list[Job]:
+    """The entries of `jobs`, which an alias or a merge key could hide, and each of which must be a mapping."""
+    top = _guarded(name, document, document.root)
+    jobs = _guarded(name, document, checkout.mapping_values(top).get("jobs"))
+    if jobs is None:
+        return []
+    if not isinstance(jobs, yaml.MappingNode):
+        raise _unreadable(name, "jobs is not a mapping")
+    entries = []
+    for job_id, (key, job) in checkout.mapping_entries(jobs).items():
+        if not isinstance(_guarded(name, document, job), yaml.MappingNode):
+            raise _unreadable(name, f"job {job_id} is not a mapping")
+        entries.append((job_id, key, job))
+    return entries
+
+
+def _limit_findings(name: str, document: Document, job: Job) -> Iterator[Finding]:
+    job_id, id_key, mapping = job
+
+    def finding(event: FindingEvent, line: int, fact: str, fix: str) -> Finding:
+        return Finding(Rule.JOB_TIMEOUT, name, line, fact, fix, event=event)
+
+    limit = checkout.mapping_entries(mapping).get(TIMEOUT_KEY)
+    if limit is None:
+        yield finding(FindingEvent.MISSING, _line(id_key), f"job {job_id} has no {TIMEOUT_KEY}", SET_TIMEOUT_FIX)
+        return
+    key, value = limit
+    minutes = _minutes(_guarded(name, document, value))
+    if minutes is None:
+        fact = f"job {job_id} has a {TIMEOUT_KEY} that is not a number above zero"
+        yield finding(FindingEvent.INVALID, _line(key), fact, SET_TIMEOUT_FIX)
+    elif minutes > MAXIMUM_MINUTES:
+        fact = f"job {job_id} has {TIMEOUT_KEY} {value.value} · limit {MAXIMUM_MINUTES}"
+        yield finding(FindingEvent.NEW_DEBT, _line(key), fact, LOWER_TIMEOUT_FIX)
+
+
+def _minutes(value: yaml.Node | None) -> Decimal | None:
+    """The limit a plain scalar spells as a decimal number above zero, else None."""
+    if not isinstance(value, yaml.ScalarNode) or value.style or not MINUTES.fullmatch(value.value):
+        return None
+    return Decimal(value.value) or None
