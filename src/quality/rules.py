@@ -12,6 +12,7 @@ class Switch(Enum):
     CLONE_TABLE = "a clone table"
     JUDGED_PROJECT = "a judged project"
     REPORT_ONLY = "report only"
+    CATALOG_DECLARATION = "a catalogs declaration"
 
 
 @dataclass(frozen=True)
@@ -90,7 +91,9 @@ class Rule(StrEnum):
     PR_CONCURRENCY = "pr-concurrency", Area.WORKFLOWS, RELEASE_0_11, Switch.ALWAYS
     PYTEST_WORKERS = "pytest-workers", Area.WORKFLOWS, RELEASE_0_11, Switch.ALWAYS
     RUNTIME_INSTALL = "runtime-install", Area.WORKFLOWS, RELEASE_0_12, Switch.ALWAYS
-    CATALOG_CHECK = "catalog-check", Area.WORKFLOWS, RELEASE_0_12, Switch.REPORT_ONLY
+    CATALOG_CHECK = (
+        "catalog-check", Area.WORKFLOWS, RELEASE_0_12, Switch.REPORT_ONLY, SwitchChange(None, Switch.CATALOG_DECLARATION)
+    )
     ADVISORY = "advisory", Area.DEPENDENCIES, RELEASE_0_3, Switch.ALWAYS
 
     def __new__(

@@ -968,7 +968,7 @@ is reported (its fix is a tracked Dockerfile), while a simple `RUN apt-get insta
 (`apt-get -s install`, `--simulate`, `--dry-run`, and `apt-get --print-uris`, which prints download addresses and
 installs nothing) reads as the real call.
 
-The `catalog-check` rule, in the `workflows` area, reports a covered repository whose pull-request workflows never call the
+The `catalog-check` rule, in the `workflows` area, requires a covered repository's pull-request workflows to call the
 generator's check. A repository is covered when its tracked root `pyproject.toml` declares `overnightworks-design` with the
 extra `catalogs` in `[project] dependencies`, in a group of `[project.optional-dependencies]` or in a group of
 `[dependency-groups]`; the name and the extra are compared canonicalised, a version, a marker or a URL does not count, and
@@ -981,30 +981,64 @@ A covered repository's `run:` steps are read in every workflow a pull request tr
 its script calls `design-catalogs` with `--check` in a form the shared shell reader reads as a call of a named tool, so
 the forms that `pytest-workers` reads stand (CATALOG-7). A call through `make` counts when the goal of a counted step reaches a
 recipe line of the tracked root `Makefile` that calls the check (CATALOG-12, CATALOG-21). The file is read only when no
-counted step calls the check directly, and only when it is a tracked file on disk; a tracked `GNUmakefile` or `makefile`
-makes the reading no call (CATALOG-13). The recipe is followed as make reads a plain file: a goal's recipe, then its
-prerequisites' recipes, then the recipes of the `make` calls in them, each target once (CATALOG-14 to CATALOG-18). A `-`
-prefixed line, a line of a conditional or of a define block, a target whose recipe is given by two rules or by a
-double-colon rule, and a file with `.IGNORE`, `.RECIPEPREFIX`, `.ONESHELL`, an include or a `MAKEFLAGS` assignment are no
-call (CATALOG-16, CATALOG-17, CATALOG-19, CATALOG-20). A `Makefile` that is not UTF-8 is exit `2` naming the file, when a counted step
-has a `make` goal and no step calls the check directly (CATALOG-23). A word in an `echo`, a script, `tox`, `nox`, a
-composite action or a reusable workflow called through `uses:` is no call, and a command built at run time is read as no
-call (CATALOG-9); every other form the reading does not follow is no call too (CATALOG-22). A step with `continue-on-error: true` or with a `working-directory` other than `.` does not
-count. Three named gaps count as calls:
+counted step calls the check directly and a counted step has a `make` goal, and only when it is a tracked file on disk; a
+tracked `GNUmakefile` or `makefile` makes the reading no call (CATALOG-13). A `make` call is followed only with literal
+goal words (a `VAR=x` word is skipped), with no flag at all (so no `-C`, `-f` or `-j`), and with a goal (a `make` call
+with no goal, which builds the default goal, is not followed); target and prerequisite names are literal too, so a rule
+whose name or prerequisite holds `$(VAR)` or `%` defines nothing and is not followed. The recipe is followed as make
+reads a plain file: a goal's recipe, then its prerequisites' recipes, then the recipes of the `make` calls in them, each
+target once (CATALOG-14 to CATALOG-18). A `-` prefixed line, a line of a conditional or of a define block, a target
+whose recipe is given by two rules or by a double-colon rule, and a file with `.IGNORE`, `.RECIPEPREFIX`, `.ONESHELL`,
+an include or a `MAKEFLAGS` assignment are no call (CATALOG-16, CATALOG-17, CATALOG-19, CATALOG-20). A `Makefile` that
+is not UTF-8, or is a symlink that resolves outside the repository, is exit `2` naming the file, when a counted step has
+a `make` goal and no step calls the check directly (CATALOG-23). A word in an `echo`, a script, `tox`, `nox`, a
+composite action or a reusable workflow called through `uses:` is no call (CATALOG-9); every other form the reading does
+not follow is no call too (CATALOG-22). A step with `continue-on-error: true` or with a `working-directory` other than
+`.` does not count. An unreadable workflow, a `run:` that is no string, or an alias or a merge key where it can hide a
+step is exit `2` naming the workflow (CATALOG-11).
 
-- a step with an `if:`;
-- a call ending in `|| true`;
-- a job that is not mandatory.
+A covered repository is judged in this order (CATALOG-24). Any counted step with a call, directly or through `make`, makes the
+rule clean: no row, whatever else the workflows hold. Otherwise each unreadable line and each command built at run time is an
+`invalid` finding. Otherwise the repository gets one `missing` finding, and exit 1 follows either:
 
-A `defaults.run.working-directory` is not read. An unreadable workflow, a `run:` that is no string, or an alias or a
-merge key where it can hide a step is exit `2` naming the workflow (CATALOG-11).
+- `! .github/workflows  missing  no workflow step runs design-catalogs --check on a pull request, directly or through make`,
+  at the folder with no line (CATALOG-5, CATALOG-25);
+- `! <workflow or Makefile>:<line>  invalid  command cannot be read to its end`, for a logical line of a counted step's script, or of a
+  recipe a counted `make` goal reaches, that the shared reader refuses to its end when the line's own text holds the word
+  `design-catalogs` or `design.catalogs.command` as a whole word, not inside a longer name; a refused line without the word
+  is no problem and reads as no call (CATALOG-26);
+- `! <workflow or Makefile>:<line>  invalid  command is built at run time, design-catalogs --check cannot be read`, for a command word
+  built at run time (a lone `$`, `eval`, a word starting with `$`) in a script, or in the reached recipes, whose text as a
+  whole holds either word. A make variable in the command word (`$(UV) run design-catalogs --check`) is such a command; the
+  `$(MAKE)` and `${MAKE}` substitutions are not. "The script" is a counted step's `run:`; the reached recipe lines are one
+  text, so once any of them names the word, every reached line whose command word is a make variable is its own row, even
+  one that does not mention the generator: this reading errs red and is no gap of the list below (CATALOG-27).
 
-A covered repository with no counting step that calls the check gets one note row and exit 0, never a finding, so the `workflows` row stays
-clean: `· .github/workflows  not called  no workflow step runs design-catalogs --check on a pull request, directly or through make`
-(CATALOG-5). A repository that runs the generator without declaring it (`uvx --from
-'overnightworks-design[catalogs]' design-catalogs --check`, uv's legacy `[tool.uv] dev-dependencies`) is not covered and
-sees nothing; that is a named gap. The rule only reports, so no run turns red for it, and its fleet cell reads
-`report-only`. It first ships in v0.12.0, so a dependent meets it at its first bump to that release.
+A workflow row stands at the workflow's path and the first line of the logical line; a recipe row at `Makefile` and the first
+physical line of the joined recipe line. Workflow rows come in the shared walk's order, then the `Makefile` rows in the order
+the scan reaches them (CATALOG-28). Every row has the fix `add a step to a pull-request workflow, or a make target that make
+lint runs: uv run design-catalogs --check, from the repository root` (CATALOG-10).
+
+The reading errs red in every form of the closed make reading that it does not follow: those read as `missing`, or as
+`invalid` when a command word is a make variable. These gaps err green, each reading as a counting call (CATALOG-31):
+
+- a here-document body line, a call inside `if false; then ... fi`, a call behind `cd sub &&`, and `design-catalogs` as an
+  option value of `uv run`, which are properties of the shared reader that `pytest-workers` and `runtime-install` share;
+- a step with an `if:`, a call ending in `|| true` in a step or in a recipe line, and a job that is not mandatory;
+- `pull_request_target` and `pull_request_review` as triggers, trigger filters (`types`, `branches`, `paths`), a job-level
+  `if:`, a step's or a default `shell:`, and `defaults.run.working-directory`;
+- `MAKEFLAGS` from the environment, and a `SHELL` or `.SHELLFLAGS` assignment in the `Makefile`;
+- a followed target that is not `.PHONY` while a file of its name is tracked, and a rule line with a `;` recipe after a tab
+  recipe of the same target.
+- `uv run --directory sub design-catalogs --check`, `uv run --project sub design-catalogs --check` and
+  `uvx design-catalogs --check`, which run in a subproject or without the locked dependency.
+
+A repository that runs the generator without declaring it (`uvx --from 'overnightworks-design[catalogs]' design-catalogs
+--check`, uv's legacy `[tool.uv] dev-dependencies`) is not covered and sees nothing; that is a named gap. No configuration
+switches the rule off. It first ships in v0.12.0, which only reports it: a dependent meets the enforcement at its first bump
+to the release that names the switch, and its fleet cell reads `report-only` until then. On main the cell of the gate's own
+clone reads `enforced` when the clone declares the dependency and `no catalogs declaration` when it does not (FLEET-98,
+FLEET-99).
 
 The `job-timeout` rule, in the `debt` area, judges every job of a workflow that runs on a pull request or on a push to
 main, and of the reusable workflows those call through a local `uses:`. Every tracked workflow is parsed, a root or not,
