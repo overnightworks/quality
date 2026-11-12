@@ -5,6 +5,7 @@ import pytest
 from quality.baseline_file import (
     Baseline,
     ClonePair,
+    JobKey,
     Key,
     Metric,
     Place,
@@ -112,3 +113,12 @@ def test_a_lowered_entry_is_noted_with_its_fall_and_a_dropped_one_with_its_thres
         (NoteEvent.LOWERED, "function work CCN 19 → 17"),
         (NoteEvent.DROPPED, "file 826 → 790 lines · debt from 800 lines"),
     ]
+
+
+@pytest.mark.parametrize("jobs", [None, {}, {JobKey(".github/workflows/ci.yml", "e2e"): 40}], ids=["no table", "an empty table", "an entry"])
+@pytest.mark.parametrize("held_pairs", [None, frozenset()], ids=["no clone table", "a clone table"])
+def test_lowering_size_entries_hands_a_held_job_table_on_unchanged(jobs, held_pairs):
+    """TIMEOUT-17, FIX-31: a fix that lowers, drops or records leaves the job table as it was held."""
+    file = size_key(Metric.FILE_LINES)
+    fix = lower_ceiling(Baseline({file: 826}, held_pairs, jobs), {file: Measured(812, 3)}, frozenset(), {})
+    assert (fix.ceiling.size, fix.ceiling.job_minutes) == ({file: 812}, jobs)

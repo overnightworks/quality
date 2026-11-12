@@ -1,5 +1,6 @@
 """A pure rename is no loosening: the verdict and the door read the files git renamed between the base and the head."""
 
+import json
 import os
 import signal
 import subprocess
@@ -580,3 +581,86 @@ def test_a_rename_list_git_did_not_finish_cannot_be_judged_at_the_door(capsys, t
         2, loosenings_not_judged("cannot list the files git renamed between the pull request's commits"), not_judged_pair(),
     )
     changed_nothing(gh)
+
+
+CI = ".github/workflows/ci.yml"
+CI_MAIN = ".github/workflows/ci-main.yml"
+
+
+def limits(path, minutes, job="e2e"):
+    """A `[job_minutes]` table holding one job of one workflow file."""
+    return f"[job_minutes.{json.dumps(path)}]\n{json.dumps(job)} = {minutes}\n"
+
+
+def raise_line(path, base, head, job="e2e"):
+    return f"job limit baseline raises {path} {job} {base} -> {head}"
+
+
+@pytest.mark.parametrize(
+    ("head", "code", "expected"),
+    [
+        (limits(CI_MAIN, 40), 0, None),
+        (limits(CI_MAIN, 35), 0, None),
+        (limits(CI_MAIN, 45), 1, raise_line(CI_MAIN, 40, 45)),
+        (limits(CI, 40) + limits(CI_MAIN, 40), 1, f"job limit baseline adds {CI_MAIN} e2e 40"),
+    ],
+    ids=["moved and equal", "moved and lowered", "moved and raised", "the head still names the old path"],
+)
+def test_a_renamed_workflow_meets_the_job_limits_of_its_predecessor(capsys, pull_request, head, code, expected):
+    """TIMEOUT-17, BASELINE-12, BASELINE-16: git's pairing moves the base entries to the new path, a raise names the head
+    path, and a head that keeps the old path moves nothing."""
+    moved_in_head(pull_request, limits(CI, 40), head, old=CI, new=CI_MAIN)
+    actual_code, output = verdict_of(pull_request[0], capsys)
+    assert (actual_code, expected is None or expected in output, output.count("\n    ! ")) == (code, True, int(code))
+
+
+def test_a_workflow_rename_git_does_not_pair_leaves_the_old_entries_gone_and_the_new_ones_adds(capsys, pull_request):
+    """TIMEOUT-17, BASELINE-3."""
+    moved_in_head(pull_request, limits(CI, 40), limits(CI_MAIN, 40), new_text=OTHER_FILE, old=CI, new=CI_MAIN)
+    code, output = verdict_of(pull_request[0], capsys)
+    assert (code, f"job limit baseline adds {CI_MAIN} e2e 40" in output) == (1, True)
+
+
+def test_a_job_id_renamed_inside_a_file_is_an_added_entry(capsys, pull_request):
+    """TIMEOUT-17."""
+    repo, commit_base = pull_request
+    commit_base(limits(CI, 40))
+    put(repo / BASELINE_PATH, limits(CI, 40, "e2e-long"))
+    commit_all(repo, "renames the job")
+    code, output = verdict_of(repo, capsys)
+    assert (code, f"job limit baseline adds {CI} e2e-long 40" in output) == (1, True)
+
+
+@pytest.mark.parametrize(("base", "head", "code"), [(40, 45, 1), (45, 40, 0)], ids=["raised", "lowered"])
+def test_a_job_limit_and_its_workflow_changed_together_in_one_commit_is_judged_from_the_baseline_alone(
+    capsys, pull_request, base, head, code
+):
+    """TIMEOUT-18: the raise is read between the base commit's table and the head commit's, the swapped pair is green."""
+    repo, commit_base = pull_request
+    put(repo / CI, f"timeout-minutes: {base}\n")
+    commit_base(limits(CI, base))
+    put(repo / CI, f"timeout-minutes: {head}\n")
+    put(repo / BASELINE_PATH, limits(CI, head))
+    commit_all(repo, "moves the limit")
+    actual_code, output = verdict_of(repo, capsys)
+    assert (actual_code, (raise_line(CI, base, head) in output) == (code == 1)) == (code, True)
+
+
+def test_a_job_raised_over_its_entry_with_no_baseline_change_has_no_loosening_line(capsys, pull_request):
+    """TIMEOUT-18: the verdict reads the baseline only; a job over its entry is the check's finding."""
+    repo, commit_base = pull_request
+    put(repo / CI, "timeout-minutes: 40\n")
+    commit_base(limits(CI, 40))
+    put(repo / CI, "timeout-minutes: 45\n")
+    commit_all(repo, "raises the job only")
+    assert viewed(repo, capsys) == (0, ["✓ green"])
+
+
+def test_a_baseline_file_deleted_in_the_head_removes_the_job_table_with_the_file(capsys, pull_request):
+    """TIMEOUT-18: a deleted file is `quality/baseline.toml removed`, not `job limit baseline removed`."""
+    repo, commit_base = pull_request
+    commit_base(limits(CI, 40))
+    (repo / BASELINE_PATH).unlink()
+    commit_all(repo, "deletes the baseline")
+    code, output = verdict_of(repo, capsys)
+    assert (code, f"    ! {BASELINE_PATH} removed" in output, "job limit baseline removed" in output) == (1, True, False)

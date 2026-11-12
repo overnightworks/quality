@@ -7,8 +7,9 @@ number and cancels only pull-request runs; no expression is read.
 `# pytest-workers: <reason>` marker; the script is read as POSIX shell words, never run.
 
 `job-timeout`: every job of a workflow a pull request or a push to main triggers, and of the workflows those call through a
-local `uses:`, declares `timeout-minutes` as a plain number of at most 15."""
+local `uses:`, declares `timeout-minutes` as a plain number of at most 15, or of the whole minutes its baseline entry holds."""
 
+import math
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from pathlib import Path, PurePosixPath
 import yaml
 
 from quality import checkout
+from quality.baseline_file import BASELINE_PATH, Baseline, JobKey
 from quality.checkout import Document, PullRequestEvent
 from quality.report import CannotJudge, Example, Finding, FindingEvent, Instruction, RuleResult
 from quality.rules import Rule
@@ -401,24 +403,45 @@ TIMEOUT_KEY = "timeout-minutes"
 MINUTES = re.compile(r"\d+(?:\.\d+)?", re.ASCII)
 SET_TIMEOUT_FIX = f"set {TIMEOUT_KEY} to a number of at most {MAXIMUM_MINUTES}"
 LOWER_TIMEOUT_FIX = f"lower {TIMEOUT_KEY} to {MAXIMUM_MINUTES} or less"
+LOWER_ENTRY_FIX = f"delete or lower the entry in {BASELINE_PATH} by hand"
+
+UNREADABLE_LIMIT = frozenset({FindingEvent.MISSING, FindingEvent.INVALID})
 
 Job = tuple[str, yaml.ScalarNode, yaml.MappingNode]
 
 
-def check_job_timeouts(root: Path, tracked: list[str]) -> RuleResult:
-    """Every job of a workflow a pull request or a push to main triggers, and of the local workflows those call, judged;
-    the extent is how many jobs there are."""
+def check_job_timeouts(root: Path, tracked: list[str], baseline: Baseline | None) -> RuleResult:
+    """Every job of a workflow a pull request or a push to main triggers, and of the local workflows those call, judged
+    against the baseline's job limits; the extent is how many jobs there are."""
     parsed = {name: _root_document(name, text) for name, text in _readable_workflows(root, tracked)}
     documents = {name: parsed.get(name) for name in tracked if checkout.is_workflow(PurePosixPath(name))}
     roots = frozenset(name for name, document in parsed.items() if _is_root(name, document))
+    held = (baseline.job_minutes if baseline else None) or {}
     findings: list[Finding] = []
-    judged_jobs = 0
+    readable: dict[JobKey, bool] = {}
     for name in _reached(documents, roots):
         jobs = [job for job in _jobs(name, documents[name]) if "uses" not in checkout.mapping_values(job[2])]
-        judged_jobs += len(jobs)
         for job in jobs:
-            findings.extend(_limit_findings(name, documents[name], job))
-    return RuleResult(findings, judged_jobs, False)
+            key = JobKey(name, job[0])
+            job_findings = list(_limit_findings(name, documents[name], job, held.get(key)))
+            readable[key] = not any(finding.event in UNREADABLE_LIMIT for finding in job_findings)
+            findings.extend(job_findings)
+    findings.extend(_unheld_entries(held, readable))
+    return RuleResult(findings, len(readable), False)
+
+
+def _unheld_entries(held: dict[JobKey, int], readable: dict[JobKey, bool]) -> Iterator[Finding]:
+    """Each entry that can fall with no limit to measure: its job is gone, or its job has a valid limit and the entry
+    is no debt. An entry of a job without a readable limit stands."""
+    for key in sorted(held):
+        if key not in readable:
+            reason = "is gone"
+        elif readable[key] and held[key] <= MAXIMUM_MINUTES:
+            reason = "has no debt"
+        else:
+            continue
+        fact = f"job {key.job} {reason} · ceiling {held[key]}"
+        yield Finding(Rule.JOB_TIMEOUT, key.path, None, fact, LOWER_ENTRY_FIX, event=FindingEvent.CAN_FALL)
 
 
 def _root_document(name: str, text: str) -> Document:
@@ -480,7 +503,8 @@ def _jobs(name: str, document: Document) -> list[Job]:
     return entries
 
 
-def _limit_findings(name: str, document: Document, job: Job) -> Iterator[Finding]:
+def _limit_findings(name: str, document: Document, job: Job, entry: int | None) -> Iterator[Finding]:
+    """The job's finding against its baseline entry; an entry of at most the maximum is no debt and reads as none."""
     job_id, id_key, mapping = job
 
     def finding(event: FindingEvent, line: int, fact: str, fix: str) -> Finding:
@@ -495,9 +519,21 @@ def _limit_findings(name: str, document: Document, job: Job) -> Iterator[Finding
     if minutes is None:
         fact = f"job {job_id} has a {TIMEOUT_KEY} that is not a number above zero"
         yield finding(FindingEvent.INVALID, _line(key), fact, SET_TIMEOUT_FIX)
-    elif minutes > MAXIMUM_MINUTES:
-        fact = f"job {job_id} has {TIMEOUT_KEY} {value.value} · limit {MAXIMUM_MINUTES}"
-        yield finding(FindingEvent.NEW_DEBT, _line(key), fact, LOWER_TIMEOUT_FIX)
+        return
+    ceiling = entry if entry is not None and entry > MAXIMUM_MINUTES else None
+    debt = _debt_minutes(minutes)
+    given = f"job {job_id} has {TIMEOUT_KEY} {value.value}"
+    if ceiling is None and debt > MAXIMUM_MINUTES:
+        yield finding(FindingEvent.NEW_DEBT, _line(key), f"{given} · limit {MAXIMUM_MINUTES}", LOWER_TIMEOUT_FIX)
+    elif ceiling is not None and debt > ceiling:
+        yield finding(FindingEvent.GREW, _line(key), f"{given} · ceiling {ceiling}", f"bring it back to {ceiling} or below")
+    elif ceiling is not None and debt < ceiling:
+        yield finding(FindingEvent.CAN_FALL, _line(key), f"{given} · ceiling {ceiling}", LOWER_ENTRY_FIX)
+
+
+def _debt_minutes(limit: Decimal) -> int:
+    """The whole minutes a limit counts as debt: rounded up, so 17.5 is held by an entry of 18."""
+    return math.ceil(limit)
 
 
 def _minutes(value: yaml.Node | None) -> Decimal | None:

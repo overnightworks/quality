@@ -6,7 +6,9 @@ import datetime
 import pytest
 
 from quality import output, verdict
+from quality.baseline_file import BASELINE_PATH
 from quality.ratchet import NO_RENAMES
+from quality.report import CannotJudge
 from quality.sides import side_of
 from quality.verdict import judge
 from tests.support.advisories import allowance_config
@@ -54,6 +56,14 @@ def pair(first, second):
     return f'[clones."{first[0]}"]\n{first[1]} = [["{second[0]}", "{second[1]}"]]\n'
 
 
+CI = ".github/workflows/ci.yml"
+
+
+def jobs(**limits):
+    """A `[job_minutes]` table holding `limits` for the job ids of one workflow file."""
+    return f'[job_minutes."{CI}"]\n' + "".join(f"{job_id} = {minutes}\n" for job_id, minutes in limits.items())
+
+
 UNDECLARED_KINDS = [
     kind(gate_config("checks", "B"), CHECKS, id="a mandatory job removed"),
     kind(gate_config("checks", legacy="fail"), CHECKS, id="legacy lowered"),
@@ -68,6 +78,9 @@ UNDECLARED_KINDS = [
     kind(CHECKS, CHECKS, (symbol("ccn", "src/a.py", "f", 18), symbol("ccn", "src/a.py", "f", 20)), id="a CCN ceiling raised"),
     kind(CHECKS, CHECKS, (pair(("src/a.py", "f"), ("src/b.py", "g")), ""), id="the clone baseline removed"),
     kind(CHECKS, CHECKS, ("[clones]\n", pair(("src/a.py", "f"), ("src/b.py", "g"))), id="a clone pair added"),
+    kind(CHECKS, CHECKS, (jobs(e2e=40), jobs(e2e=45)), id="a job limit raised"),
+    kind(CHECKS, CHECKS, (jobs(e2e=40), jobs(e2e=40, other=20)), id="a job limit added"),
+    kind(CHECKS, CHECKS, (jobs(e2e=40), ""), id="the job limit baseline removed"),
     kind(CHECKS, CHECKS, imports=(GUARDED, None), id="an import-linter config removed"),
     kind(CHECKS, CHECKS, imports=(GUARDED, contracts_ini({"guarded": FORBIDDEN}, roots=("shop", "extra"))),
          id="a session option changed"),
@@ -97,6 +110,9 @@ PRINTED = {
     "a CCN ceiling raised": ["    ! size baseline raises ccn src/a.py f 18 -> 20"],
     "the clone baseline removed": ["    ! clone baseline removed"],
     "a clone pair added": ["    ! clone baseline adds src/a.py f <-> src/b.py g"],
+    "a job limit raised": [f"    ! job limit baseline raises {CI} e2e 40 -> 45"],
+    "a job limit added": [f"    ! job limit baseline adds {CI} other 20"],
+    "the job limit baseline removed": ["    ! job limit baseline removed"],
     "an import-linter config removed": ["    ! import-linter config in .importlinter removed"],
     "a session option changed": ["    ! import-linter changes root_packages"],
     "a contract removed": ['    ! import contract "guarded" removed'],
@@ -137,3 +153,86 @@ def test_an_allowance_or_generated_text_copied_into_a_declaration_matches_nothin
     what = first.removeprefix("    ! ").rsplit(output.SEPARATOR, 1)[0]
     again = judged(base_config, head_config + declaration(what), baselines, imports)
     assert ([declared.what for declared in again.stale], again.blocked) == ([what], True)
+
+
+@pytest.mark.parametrize(
+    ("baselines", "expected"),
+    [
+        pytest.param(("", jobs(e2e=40)), [], id="a base without the table: adoption"),
+        pytest.param((None, jobs(e2e=40)), [], id="no base file: adoption of the file"),
+        pytest.param((jobs(e2e=40), jobs(e2e=40)), [], id="equal"),
+        pytest.param((jobs(e2e=40), jobs(e2e=35)), [], id="lowered"),
+        pytest.param((jobs(e2e=40, other=20), jobs(e2e=40)), [], id="an entry dropped"),
+        pytest.param(("", ""), [], id="neither side holds the table"),
+        pytest.param(
+            (file_lines("src/a.py", 800), file_lines("src/a.py", 820) + jobs(e2e=40)),
+            ["    ! size baseline raises file_lines src/a.py 800 -> 820"],
+            id="adoption beside a size entry that rises",
+        ),
+        pytest.param(
+            (jobs(e2e=40), "[job_minutes]\n"), [], id="the table held and emptied",
+        ),
+    ],
+)
+def test_a_job_limit_table_adopted_equal_lowered_or_dropped_loosens_nothing(baselines, expected):
+    """TIMEOUT-18, BASELINE-9, BASELINE-10."""
+    assert printed(judged(CHECKS, CHECKS, baselines, (None, None))) == expected
+
+
+@pytest.mark.parametrize(
+    ("baselines", "expected"),
+    [
+        pytest.param(
+            (jobs(e2e=40), jobs(e2e=45)), [f"    ! job limit baseline raises {CI} e2e 40 -> 45"], id="a base without clones, a raise"
+        ),
+        pytest.param(
+            ("[clones]\n" + jobs(e2e=40), pair(("src/a.py", "f"), ("src/b.py", "g")) + jobs(e2e=45)),
+            ["    ! clone baseline adds src/a.py f <-> src/b.py g", f"    ! job limit baseline raises {CI} e2e 40 -> 45"],
+            id="a base with clones, a raise and a clone pair",
+        ),
+        pytest.param(
+            ("[clones]\n" + jobs(e2e=40), "[clones]\n" + jobs(e2e=45)),
+            [f"    ! job limit baseline raises {CI} e2e 40 -> 45"],
+            id="a base with clones, a raise",
+        ),
+        pytest.param(
+            (file_lines("src/a.py", 800) + jobs(e2e=40), file_lines("src/a.py", 820) + jobs(e2e=45)),
+            ["    ! size baseline raises file_lines src/a.py 800 -> 820", f"    ! job limit baseline raises {CI} e2e 40 -> 45"],
+            id="a size raise before a job raise",
+        ),
+        pytest.param(
+            (jobs(e2e=40), ""), ["    ! job limit baseline removed"], id="a base without clones, the table removed"
+        ),
+    ],
+)
+def test_the_job_lines_come_after_the_size_and_clone_lines_whatever_the_base_clone_state_is(baselines, expected):
+    """TIMEOUT-18."""
+    assert printed(judged(CHECKS, CHECKS, baselines, (None, None))) == expected
+
+
+@pytest.mark.parametrize("side", ["base", "head"])
+@pytest.mark.parametrize(
+    "table",
+    [f'[job_minutes."{CI}"]\ne2e = 40.5\n', f'[job_minutes."{CI}"]\ne2e = -3\n', f'[job_minutes."{CI}".e2e]\nx = 3\n', "[job_minutes]\nci = 3\n"],
+    ids=["a float", "a negative", "a table under a job", "a path that is no table"],
+)
+def test_a_malformed_job_table_on_either_side_cannot_be_judged_naming_the_side(side, table):
+    """TIMEOUT-18, BASELINE-20."""
+    with pytest.raises(CannotJudge, match=rf"{BASELINE_PATH} at the {side}: "):
+        side_of(CHECKS, table, f"the {side}")
+
+
+def test_a_job_limit_raise_judged_without_a_base_loosens_nothing():
+    """TIMEOUT-18, BASELINE-27: a push or a merge group has no base, so no loosening is judged."""
+    head = side_of(CHECKS, jobs(e2e=45), "the head")
+    assert judge(head, None, [job(), job("B")], {}, 1, NO_RENAMES).loosenings == ()
+
+
+def test_a_job_limit_typo_in_a_declaration_matches_nothing_and_leaves_the_raise_undeclared():
+    """TIMEOUT-18: the declaration's `what` must equal the printed text."""
+    typo = declaration(f"job limit baseline raises {CI} e2e 40 -> 46")
+    again = judged(CHECKS, CHECKS + typo, (jobs(e2e=40), jobs(e2e=45)), (None, None))
+    assert ([loosening.declaration for loosening in again.loosenings], [stale.what for stale in again.stale]) == (
+        [None],
+        [f"job limit baseline raises {CI} e2e 40 -> 46"],
+    )

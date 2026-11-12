@@ -1,5 +1,5 @@
-"""The baseline file, `quality/baseline.toml`: the data model of what it holds (the size entries and the clone pairs)
-and the text that renders and reads it. The `size` rule measures and compares, and owns what a value means; this
+"""The baseline file, `quality/baseline.toml`: the data model of what it holds (the size entries, the clone pairs and the
+job limits) and the text that renders and reads it. The `size` rule measures and compares, and owns what a value means; this
 module owns the key and the text.
 """
 
@@ -16,6 +16,7 @@ BASELINE_PATH = "quality/baseline.toml"
 FIX_COMMAND = "quality check --fix"
 
 CLONES = "clones"
+JOB_MINUTES = "job_minutes"
 BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 BASELINE_HEADER = f"# Measured by `{FIX_COMMAND}`. Entries only ever go down.\n"
 
@@ -49,6 +50,21 @@ class Place(NamedTuple):
     symbol: str
 
 
+class JobKey(NamedTuple):
+    """One job limit entry: the workflow file that defines the job and the job's id as written in its YAML."""
+
+    path: str
+    job: str
+
+    @property
+    def label(self) -> str:
+        """The entry as a person reads it: its file and its job."""
+        return f"{self.path} {self.job}"
+
+
+JobMinutes = dict[JobKey, int]
+
+
 @dataclass(frozen=True, order=True)
 class ClonePair:
     """Two near-identical functions in two files; `first` sorts before `second`, so a pair has one spelling."""
@@ -68,10 +84,12 @@ class ClonePair:
 
 @dataclass(frozen=True)
 class Baseline:
-    """What `quality/baseline.toml` holds; `clones` is None when the file has no `[clones]` table, so no pair is held."""
+    """What `quality/baseline.toml` holds; `clones` and `job_minutes` are None when the file has no such table, so no pair
+    and no job limit is held."""
 
     size: SizeEntries
     clones: frozenset[ClonePair] | None
+    job_minutes: JobMinutes | None = None
 
 
 class SizeError(Exception):
@@ -97,6 +115,8 @@ def render_baseline(baseline: Baseline) -> str:
         sections.setdefault(header, []).append(f"{_toml_string(name)} = {entries[key]}")
     if baseline.clones is not None:
         sections.update(_clone_sections(baseline.clones))
+    if baseline.job_minutes is not None:
+        sections.update(_job_sections(baseline.job_minutes))
     return BASELINE_HEADER + "".join(f"\n{header}\n" + "".join(f"{line}\n" for line in lines) for header, lines in sections.items())
 
 
@@ -111,6 +131,16 @@ def _clone_sections(pairs: frozenset[ClonePair]) -> dict[str, list[str]]:
     for first, seconds in others.items():
         listed = ", ".join(f"[{_toml_string(second.path)}, {_toml_string(second.symbol)}]" for second in seconds)
         sections.setdefault(f"[{CLONES}.{_toml_string(first.path)}]", []).append(f"{_toml_key(first.symbol)} = [{listed}]")
+    return sections
+
+
+def _job_sections(limits: JobMinutes) -> dict[str, list[str]]:
+    """A table per workflow file, a key per job, both in plain string order."""
+    if not limits:
+        return {f"[{JOB_MINUTES}]": []}
+    sections: dict[str, list[str]] = {}
+    for key in sorted(limits):
+        sections.setdefault(f"[{JOB_MINUTES}.{_toml_string(key.path)}]", []).append(f"{_toml_key(key.job)} = {limits[key]}")
     return sections
 
 
@@ -134,10 +164,13 @@ def load_baseline(text: str) -> Baseline:
     except repository.TomlError as error:
         raise SizeError(f"{BASELINE_PATH} is not valid TOML ({error})") from error
     size: SizeEntries = {}
-    clones = None
+    clones = job_minutes = None
     for table_name, table in document.items():
         if table_name == CLONES:
             clones = _clone_pairs(table)
+            continue
+        if table_name == JOB_MINUTES:
+            job_minutes = _job_minutes(table)
             continue
         metric = _metric_named(table_name)
         for path, entry in _table(table_name, table).items():
@@ -146,7 +179,7 @@ def load_baseline(text: str) -> Baseline:
             else:
                 for symbol, value in _table(f"{table_name}.{path}", entry).items():
                     size[Key(metric, path, symbol)] = _count(f"{table_name}.{path}.{symbol}", value)
-    return Baseline(size, clones)
+    return Baseline(size, clones, job_minutes)
 
 
 def read_baseline(root: Path) -> Baseline | None:
@@ -178,11 +211,19 @@ def _clone_pairs(table: object) -> frozenset[ClonePair]:
     return frozenset(pairs)
 
 
+def _job_minutes(table: object) -> JobMinutes:
+    limits = {}
+    for path, entry in _table(JOB_MINUTES, table).items():
+        for job, minutes in _table(f"{JOB_MINUTES}.{path}", entry).items():
+            limits[JobKey(path, job)] = _count(f"{JOB_MINUTES}.{path}.{job}", minutes)
+    return limits
+
+
 def _metric_named(name: str) -> Metric:
     try:
         return Metric(name)
     except ValueError:
-        known = ", ".join([*(metric.value for metric in Metric), CLONES])
+        known = ", ".join([*(metric.value for metric in Metric), CLONES, JOB_MINUTES])
         raise UnknownTable(f"{BASELINE_PATH} has an unknown table [{name}]; quality {__version__} knows {known}") from None
 
 

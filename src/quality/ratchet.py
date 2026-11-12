@@ -24,6 +24,7 @@ from quality.baseline_file import (
     FIX_COMMAND,
     Baseline,
     ClonePair,
+    JobKey,
     Key,
     Metric,
     SizeEntries,
@@ -297,7 +298,7 @@ def compare(measurements: Measurements, baseline: SizeEntries, gone: Mapping[Key
 class RaisedEntry:
     """A baseline entry the head holds higher than the base; `base` is None when the head adds the entry."""
 
-    key: Key
+    key: Key | JobKey
     base: int | None
     head: int
 
@@ -364,9 +365,10 @@ def _renamed_paths(name_status: bytes) -> Iterator[tuple[bytes, bytes]]:
 
 
 def named_paths(baseline: Baseline) -> frozenset[str]:
-    """Every path a baseline names, by a size entry or a pair side."""
+    """Every path a baseline names, by a size entry, a pair side or a job limit."""
     sides = {place.path for pair in baseline.clones or () for place in (pair.first, pair.second)}
-    return frozenset({key.path for key in baseline.size} | sides)
+    workflows = {key.path for key in baseline.job_minutes or ()}
+    return frozenset({key.path for key in baseline.size} | sides | workflows)
 
 
 def carried_base(base: Baseline, renames: Renames, kept: Collection[str]) -> Baseline:
@@ -384,21 +386,24 @@ def carried_base(base: Baseline, renames: Renames, kept: Collection[str]) -> Bas
         return moves.get(path, path)
 
     size = {key._replace(path=path): value for key, value in base.size.items() if (path := new_path(key.path))}
+    limits = base.job_minutes and {
+        key._replace(path=path): minutes for key, minutes in base.job_minutes.items() if (path := new_path(key.path))
+    }
     if base.clones is None:
-        return Baseline(size, None)
+        return Baseline(size, None, limits)
     pairs = set()
     for pair in base.clones:
         first, second = new_path(pair.first.path), new_path(pair.second.path)
         if first and second:
             pairs.add(ClonePair.of(pair.first._replace(path=first), pair.second._replace(path=second)))
-    return Baseline(size, frozenset(pairs))
+    return Baseline(size, frozenset(pairs), limits)
 
 
-def raised_entries(base: SizeEntries, head: SizeEntries) -> list[RaisedEntry]:
-    """One baseline against another: an entry may fall or go, never rise or appear; a renamed symbol is a new one."""
+def raised_entries[Entry: (Key, JobKey)](base: Mapping[Entry, int], head: Mapping[Entry, int]) -> list[RaisedEntry]:
+    """One baseline against another: an entry may fall or go, never rise or appear; a renamed symbol or job is a new one."""
     return [
         RaisedEntry(key, base.get(key), head[key])
-        for key in sorted(head, key=key_order)
+        for key in sorted(head, key=lambda key: key_order(key) if isinstance(key, Key) else key)
         if key not in base or head[key] > base[key]
     ]
 
@@ -474,9 +479,9 @@ def lower_ceiling(
     changes += [Note(key.path, NoteEvent.DROPPED, gone[key]) for key in sorted(gone, key=key_order)]
     if held.clones is None:
         recorded = Note(BASELINE_PATH, NoteEvent.RECORDED, counted(len(pairs), "clone pair"))
-        return CeilingFix(Baseline(size, pairs), (*changes, recorded))
+        return CeilingFix(Baseline(size, pairs, held.job_minutes), (*changes, recorded))
     changes += [Note(pair.first.path, NoteEvent.DROPPED, f"pair {pair.label} is gone") for pair in sorted(held.clones - pairs)]
-    return CeilingFix(Baseline(size, held.clones & pairs), tuple(changes))
+    return CeilingFix(Baseline(size, held.clones & pairs, held.job_minutes), tuple(changes))
 
 
 def _followed_note(key: Key, value: int, source: str | None, target: str) -> Note:
@@ -525,9 +530,9 @@ def follow_renames(held: Baseline, committed: Baseline, renames: Renames, tracke
         changes += [_followed_note(key, mine[key], source, target) for key in moved_first]
     _require_placed(size, committed.size, tracked)
     if held.clones is None:
-        return CeilingFix(Baseline(size, None), tuple(changes))
+        return CeilingFix(Baseline(size, None, held.job_minutes), tuple(changes))
     pairs, pair_changes = _followed_pairs(held.clones, carried.clones, renames)
-    return CeilingFix(Baseline(size, pairs), (*changes, *pair_changes))
+    return CeilingFix(Baseline(size, pairs, held.job_minutes), (*changes, *pair_changes))
 
 
 def _followed_pairs(
