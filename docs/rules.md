@@ -153,12 +153,13 @@ It applies these rules:
   and the rest still falls (FIX-7). An entry `check` calls gone or left out as generated goes (`dropped  file is gone`),
   counted among the lowered (FIX-8); a held pair the tree lost goes (`dropped`, `pair ... is gone`) (FIX-9), and a new
   pair stays a finding (FIX-10). It
-  records a ceiling (`recorded`, `N entries, M clone pairs · quality/baseline.toml is new`) only where none lies on
+  records a ceiling (`recorded`, `N entries, M clone pairs · quality/baseline.toml is new`, with `, K job limits` after
+  the pairs where it records the job table) only where none lies on
   disk, in the index or in any commit `HEAD` reaches (FIX-11); a ceiling or a `[clones]` table git holds and the tree
-  lacks is `✗ not fixed` with `restore quality/baseline.toml from git, or repair it by hand` (FIX-12) (a version no TOML
+  lacks (a `[job_minutes]` table too, where a job above 15 would be recorded) is `✗ not fixed` with `restore quality/baseline.toml from git, or repair it by hand` (FIX-12) (a version no TOML
   parser reads refuses likewise) (FIX-13), and a shallow clone that cannot prove it names
   `git fetch --unshallow` (FIX-14). A file without `[clones]` that git never held it in records the pairs and keeps its
-  entries (FIX-15). It also rewrites a file whose text is not what it would render (an older header, other blank lines
+  entries (FIX-15); a file without `[job_minutes]` records the jobs above 15 under the same condition (TIMEOUT-27). It also rewrites a file whose text is not what it would render (an older header, other blank lines
   or order, a comment), though no entry changes: `rewritten`, `quality/baseline.toml` (FIX-16), or beside a finding
   `rewritten · quality/baseline.toml` (FIX-17). The verdict line adds `ceiling lowered by N entries`,
   `ceiling recorded`, `ceiling rewritten` or `nothing to lower` (FIX-18). Under `--dry-run` the same ceiling is made,
@@ -992,13 +993,18 @@ defines the job, a reached workflow under its own path, at the `timeout-minutes`
 `missing`, in the listing's order and the file's job order. The facts are `job <id> has no timeout-minutes`, `job <id>
 has a timeout-minutes that is not a number above zero` and `job <id> has timeout-minutes <value> · limit 15`; the fix is
 `set timeout-minutes to a number of at most 15` for the first two and `lower timeout-minutes to 15 or less` for the last
-(TIMEOUT-6).
+(TIMEOUT-6). Where the baseline has no `[job_minutes]` table, no ceiling file included, the last reads `lower
+timeout-minutes to 15 or less, or run quality check --fix to record it`; where it holds the table, an empty one included,
+it stays as it is. `check` reads no git history for these words, so a table git held and the file lost reads as the
+first, and `--fix` refuses it (TIMEOUT-29).
 
 A job above 15 may be held as debt in a `[job_minutes]` table of `quality/baseline.toml`: one subtable per workflow
 file, keyed by the repository-relative path of the file that defines the job, and one key per job id with a positive
 whole number of minutes (`[job_minutes.".github/workflows/ci.yml"]`, then `e2e = 40`). A table with no subtable is held
 and empty; a value that is no positive integer, or a subtable or key that is no table, is a malformed baseline
-(`needs <where> as a positive count, not <value>`, `needs <where> as a table`) (TIMEOUT-12). It renders after the size and
+(`needs <where> as a positive count, not <value>`, `needs <where> as a table`) (TIMEOUT-12), where `<where>` joins the
+table, the path and the job as a TOML dotted key, the path and a job id that is no bare key quoted
+(`job_minutes.".github/workflows/ci.yml".e2e`) (TIMEOUT-33). It renders after the size and
 `[clones]` tables, subtables sorted by path and keys by job id, and a file that already renders so stays untouched by
 `--fix`, and the unknown-table message lists `job_minutes` among the tables quality knows (TIMEOUT-13). An older quality
 refuses the table as unknown. The debt a limit counts as is its rounded-up whole
@@ -1043,10 +1049,30 @@ its entry stays `grew`, a job above 15 without an entry stays `new debt`, and an
 `invalid` limit stands (TIMEOUT-22). Where the table holds an entry and a workflow the rule must read cannot be read
 (TIMEOUT-7), the whole fix is refused with the rule's reason, `✗ not fixed`, exit `2`, and nothing is written, the size
 entries and clone pairs included, since a half-read set of jobs would drop the entries of the jobs it did not see; a
-file without the table, a held empty table and a first recording read no workflow for the fix (TIMEOUT-23). A lowered or
+file without the table, a held empty table and a first recording lower nothing and refuse nothing for a workflow they
+cannot read (TIMEOUT-23). Whether a held entry can fall is decided once, for the rule's `can fall` findings and for
+this lowering alike (TIMEOUT-32). A lowered or
 dropped job entry counts like a size entry in `fell`, the `debt` row and the verdict line, and a `✓` row per entry names
 the workflow (TIMEOUT-25); `--dry-run` makes the same table and words each change as what the fix would do, row for row,
 and refuses where the fix refuses (TIMEOUT-26).
+
+`--fix` records the `[job_minutes]` table where the file has none and no version of it in git's history ever held one,
+when at least one judged job has a readable limit whose rounded-up value is above 15: exactly the judged jobs above 15,
+each at its rounded-up limit under the path of the file that defines it (`17.5` as `18`), and no table, not even an
+empty one, where no job is; a first `--fix` with no ceiling file records it with the size entries and clone pairs
+under the same condition, and a second `--fix` changes nothing (TIMEOUT-27). The question to git is asked only where a
+recording would happen: a ceiling that lost the table although a version of it held one refuses the whole fix as
+`[clones]` does (`quality/baseline.toml lost its [job_minutes] table, which git holds`, exit `2`, the restore step,
+nothing written), and a version no TOML parser reads or a shallow clone that cannot prove the table never held names
+its step, `--dry-run` alike; a table-less file with no job above 15 reads no history for it (TIMEOUT-28). A recording
+is not a raise: after the table exists `--fix` adds no entry to it, so a job above 15 with no entry stays `new debt`
+(TIMEOUT-29). A job whose limit cannot be read is never recorded, and where a workflow the rule must read cannot be
+read no job table is written, not even a partial one, while the size and clone fix proceeds and the rule reports the
+file with exit `2` (TIMEOUT-30). The debt row is `recorded  K job limits · quality/baseline.toml` with a `recorded  K
+job limits` row under it (`1 job limit` for one); beside clone pairs it names both (`M clone pairs, K job limits`), a
+first recording names the job limits last (`N entries, M clone pairs, K job limits · quality/baseline.toml is new`), and
+`--dry-run` words the rows `to record` and `record`; the verdict line is `ceiling recorded`, under the dry run `ceiling
+would be recorded`, and a recording adds nothing to the entries that fell (TIMEOUT-31).
 
 A workflow whose YAML or file cannot be read, an alias or a merge key where it can hide the top mapping, `on:`, the
 `push` value, its `branches`, `branches-ignore` or `tags`, or in a judged file `jobs`, a job, a `uses:` or a

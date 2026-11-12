@@ -335,7 +335,7 @@ NEW_DEBT_STATES = {
 
 
 @pytest.mark.parametrize(("held", "words"), NEW_DEBT_STATES.values(), ids=NEW_DEBT_STATES.keys())
-def test_check_words_a_new_debt_job_by_the_state_of_the_table_and_reads_no_history(build_repo, capsys, held, words):
+def test_check_words_a_new_debt_job_by_the_state_of_the_table(build_repo, capsys, held, words):
     """TIMEOUT-29: where the file has no table the fix names the recording, where it holds one only the lowered limit;
     a table git held and the file lost is the first state."""
     files = {WORKFLOW: workflow(jobs=jobs_of(("e2e", "30"), ("lint", "10")))}
@@ -388,3 +388,10 @@ def test_the_recorded_file_committed_on_a_branch_whose_base_lacks_the_table_is_a
     commit_all(repo, "recorded")
     code, out, err = verdict_streams(repo, capsys)
     assert (code, "✓ green" in out, "job limit baseline" in out, err) == (0, True, False, ""), out
+
+
+def test_check_reads_no_git_history_for_the_words_of_a_new_debt_job(build_repo, elsewhere, capsys):
+    """TIMEOUT-29: a shallow clone, which cannot prove the table was never held, is judged and worded as any other."""
+    clone = a_shallow_clone(build_repo, elsewhere, "30")
+    code, out, _ = fixed(capsys, clone, CHECK_WORD, "debt")
+    assert (code, f"fix: {RECORD_WORDS}" in squashed(out), "shallow" in out) == (1, True, False), out

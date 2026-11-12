@@ -100,13 +100,16 @@ Ruled by the operator:
 `quality check debt --fix` lowers the debt ceiling (`quality/baseline.toml`) where code shrank, or records it where no
 ceiling lies on disk, in the index or in any commit `HEAD` reaches, and then judges the tree against the new file. It
 writes the file when an entry changes and when its bytes are not what the fix would render, an older header included;
-one that renders byte for byte stays untouched. It never raises an entry and never adds one: what grew or is new stays
-a finding, and a raise is a hand edit with a declared loosening ([rules](rules.md)). A file git renamed into the index
+one that renders byte for byte stays untouched. It never raises an entry and never adds one to a table the file holds:
+what grew or is new stays a finding, and a raise is a hand edit with a declared loosening ([rules](rules.md)). A file git renamed into the index
 since the ceiling's last commit takes its entries with it ([rules](rules.md)). An entry whose path the index no longer
 tracks, whose Python function is gone or whose file is declared generated goes; one only missing from disk stands; a
 held pair the tree lost goes. A held `[job_minutes]` entry falls to its job's rounded-up limit or goes where it is no
 debt or its job is gone, and a workflow that cannot be read refuses the whole fix while such an entry is held
-([rules](rules.md)). A ceiling or `[clones]` table git holds and the tree lacks refuses with the restore step, and a
+([rules](rules.md)). Where the file has no `[job_minutes]` table and git never held one, it records the jobs above 15 at
+their rounded-up limits, none where no job is above 15 and none where a workflow cannot be read ([rules](rules.md)). A
+ceiling or `[clones]` table git holds and the tree lacks, or a `[job_minutes]` table where a job above 15 would be
+recorded, refuses with the restore step, and a
 shallow clone that cannot prove a first recording names `git fetch --unshallow` ([rules](rules.md)). It takes no
 `--staged` (HELP-25) and needs `debt` among the named areas (HELP-26), or no area named; either refusal keeps a
 `--dry-run` in its `next:` (HELP-27). `quality check --fix --dry-run` makes, judges and renders the same ceiling,

@@ -75,7 +75,8 @@ rows, by area:
   <value> · limit 15`), `grew` (`job <id> has timeout-minutes <value> · ceiling <entry>`) or `can fall` (the same fact
   at the line, or `job <id> is gone · ceiling <entry>` and `job <id> has no debt · ceiling <entry>` at the file with no
   line), the measured ones at the `timeout-minutes` line; the fix of the first two is `set timeout-minutes to a number
-  of at most 15`, of `new debt` `lower timeout-minutes to 15 or less`, of `grew` `bring it back to <entry> or below` and
+  of at most 15`, of `new debt` `lower timeout-minutes to 15 or less` (`, or run quality check --fix to record it` where
+  the ceiling has no `[job_minutes]` table), of `grew` `bring it back to <entry> or below` and
   of `can fall` `quality check --fix` ([rules](rules.md)).
 - `imports`: a broken contract is a `broken` finding; an unmatched ignore is an `unused` finding at `error` and an
   `unused` note at `warn`; a grimp or import-linter warning is a `warning` note (O23); a `broken` finding's detail
@@ -144,7 +145,8 @@ entries over the thresholds · measured only` (`M clone pairs · partly measured
 `[clones]` table, O21), with `fix: quality check --fix` under it. Under `quality check debt --fix` it is `✓
 debt  lowered  N entries · quality/baseline.toml` with a `✓` row per lowered or dropped entry, `✓ debt  moved  N entries
 · quality/baseline.toml` where it moves entries and lowers none, `✓ debt  recorded  N entries, M clone pairs ·
-quality/baseline.toml is new`, `✓ debt  rewritten  quality/baseline.toml` (entries equal, text not), `! debt  N findings
+quality/baseline.toml is new` (`, K job limits` after the pairs where it records the job table), `✓ debt  recorded  K
+job limits · quality/baseline.toml` with a `✓` row `recorded  K job limits` under it, `✓ debt  rewritten  quality/baseline.toml` (entries equal, text not), `! debt  N findings
 nothing lowered` or `✗ debt  not fixed  <reason>`; under `--dry-run` it is `~ debt  N to lower` (`N to move`, `to
 record`, `to rewrite  text differs · quality/baseline.toml`) with a `~` row per entry.
 Without an import-linter config the imports row is `· imports  not set up  no import-linter config` (ROW-13). An area
