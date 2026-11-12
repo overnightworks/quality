@@ -1,8 +1,11 @@
 """The `catalog-check` rule: a repository whose root `pyproject.toml` declares `overnightworks-design` with the extra
-`catalogs` should call `design-catalogs --check` in a `run:` step of a pull-request workflow, directly or through a `make` goal
-the root Makefile reaches. Until a step does, it gets one note, never a finding, so the rule reports and never turns a run red."""
+`catalogs` must call `design-catalogs --check` in a `run:` step of a pull-request workflow, directly or through a `make` goal
+the root Makefile reaches. Without such a call it gets one `missing` finding, or an `invalid` finding for each line that may
+hold the call and cannot be read."""
 
+import re
 from collections.abc import Iterator, Sequence
+from enum import Enum
 from pathlib import Path
 
 import yaml
@@ -10,9 +13,10 @@ from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 
 from quality import checkout, makefile, repository, workflow_rules
-from quality.report import Note, NoteEvent, RuleResult, Unparsable
+from quality.report import Finding, FindingEvent, RuleResult, Unparsable
+from quality.rules import Rule
 from quality.run_script import LineReading, Segment, Tool, command_words, line_problems, tool_arguments
-from quality.workflow_rules import PullRequestRunStep
+from quality.workflow_rules import UNREADABLE_FACT, PullRequestRunStep
 
 PYPROJECT = "pyproject.toml"
 DESIGN_DISTRIBUTION = "overnightworks-design"
@@ -23,10 +27,27 @@ CHECK_FLAG = "--check"
 CONTINUE_ON_ERROR = "continue-on-error"
 WORKING_DIRECTORY = "working-directory"
 ROOT_DIRECTORY = "."
-NOTE_PATH = ".github/workflows"
+WORKFLOWS_PATH = ".github/workflows"
 MAKEFILE = "Makefile"
 MAKEFILE_ALTERNATIVES = frozenset({"GNUmakefile", "makefile"})
-NOT_CALLED_FACT = "no workflow step runs design-catalogs --check on a pull request, directly or through make"
+GENERATOR_WORD = re.compile(r"(?<![\w.-])(?:design-catalogs|design\.catalogs\.command)(?![\w.-])")
+MISSING_FACT = "no workflow step runs design-catalogs --check on a pull request, directly or through make"
+RUN_TIME_FACT = "command is built at run time, design-catalogs --check cannot be read"
+FIX = (
+    "add a step to a pull-request workflow, or a make target that make lint runs: "
+    "uv run design-catalogs --check, from the repository root"
+)
+
+
+class Problem(Enum):
+    """What a line says about the check: it calls it, it cannot be read to its end, or its command is built at run time."""
+
+    CALL = "call"
+    UNREADABLE = "unreadable"
+    RUN_TIME = "run time"
+
+
+PROBLEM_FACTS = {Problem.UNREADABLE: UNREADABLE_FACT, Problem.RUN_TIME: RUN_TIME_FACT}
 
 
 def _group_values(table: object) -> list[object]:
@@ -74,7 +95,7 @@ def _is_catalogs_declaration(requirement: Requirement) -> bool:
     }
 
 
-def _declares_catalogs(root: Path, tracked: list[str]) -> bool:
+def declares_catalogs(root: Path, tracked: list[str]) -> bool:
     """Whether the tracked root `pyproject.toml` declares the generator's distribution with the extra `catalogs`. The file is
     read whether or not it declares it, so a file that cannot be read refuses in every repository."""
     names = checkout.on_disk(root, [name for name in tracked if name == PYPROJECT])
@@ -89,8 +110,8 @@ def _declares_catalogs(root: Path, tracked: list[str]) -> bool:
     return any(_is_catalogs_declaration(requirement) for requirement in requirements)
 
 
-def _judge_generator_call(parts: Sequence[Segment], index: int) -> bool | None:
-    return True if _is_check_call(command_words(parts[index])) else None
+def _judge_generator_call(parts: Sequence[Segment], index: int) -> Problem | None:
+    return Problem.CALL if _is_check_call(command_words(parts[index])) else None
 
 
 def _is_check_call(command: Sequence[str]) -> bool:
@@ -98,13 +119,12 @@ def _is_check_call(command: Sequence[str]) -> bool:
     return arguments is not None and CHECK_FLAG in arguments
 
 
-# A line the reader refuses, or a command built at run time, reads as no call here (a named gap), so only a call is ever a problem.
-GENERATOR_READING = LineReading[bool](
+GENERATOR_READING = LineReading[Problem](
     judge=_judge_generator_call,
     starts_call=_is_check_call,
-    holds_hidden_word=lambda text: False,
-    unreadable=False,
-    built_at_run_time=False,
+    holds_hidden_word=lambda text: GENERATOR_WORD.search(text) is not None,
+    unreadable=Problem.UNREADABLE,
+    built_at_run_time=Problem.RUN_TIME,
 )
 
 
@@ -121,13 +141,13 @@ def _counts(step: PullRequestRunStep) -> bool:
     )
 
 
-def _calls_generator(step: PullRequestRunStep) -> bool:
-    """Whether a line of the step calls the check directly, with `--check`."""
-    return any(
-        problem
-        for line in step.lines
-        for problem in line_problems(line.text, GENERATOR_READING, script_holds_hidden_word=False)
-    )
+def _read(lines: Sequence[tuple[str, int]]) -> list[tuple[int, Problem]]:
+    """The problems of the lines (text and the file line it starts on) read as one script: each line's own problems, with a
+    command built at run time counted only when the whole text names the generator."""
+    holds_hidden_word = GENERATOR_READING.holds_hidden_word("\n".join(text for text, _ in lines))
+    return [
+        (number, problem) for text, number in lines for problem in line_problems(text, GENERATOR_READING, holds_hidden_word)
+    ]
 
 
 def _makefile_text(root: Path, tracked: list[str]) -> str | None:
@@ -139,26 +159,40 @@ def _makefile_text(root: Path, tracked: list[str]) -> str | None:
     return checkout.read_existing(repository.read_text, root, names).get(MAKEFILE)
 
 
-def _reaches_generator_through_make(root: Path, tracked: list[str], counted: Sequence[PullRequestRunStep]) -> bool:
-    """Whether a `make` goal of a counted step reaches a recipe line of the Makefile that calls the check directly."""
+def _makefile_problems(root: Path, tracked: list[str], counted: Sequence[PullRequestRunStep]) -> list[tuple[str, int, Problem]]:
+    """The problems of the recipe lines that the `make` goals of the counted steps reach in the Makefile, read as one text."""
     goals = tuple(goal for step in counted for line in step.lines for goal in makefile.goals_in_line(line.text))
     text = _makefile_text(root, tracked) if goals else None
     if text is None:
-        return False
-    return any(
-        problem
-        for line in makefile.reached_recipe_lines(text, goals)
-        for problem in line_problems(line.text, GENERATOR_READING, script_holds_hidden_word=False)
-    )
+        return []
+    reached = makefile.reached_recipe_lines(text, goals)
+    return [(MAKEFILE, number, problem) for number, problem in _read([(line.text, line.number) for line in reached])]
+
+
+def _has_call(problems: Sequence[tuple[str, int, Problem]]) -> bool:
+    return any(problem is Problem.CALL for _, _, problem in problems)
+
+
+def _finding(path: str, line: int | None, event: FindingEvent, fact: str) -> Finding:
+    return Finding(Rule.CATALOG_CHECK, path, line, fact, FIX, event=event)
 
 
 def check_catalog_call(root: Path, tracked: list[str]) -> RuleResult:
-    """A note when a covered repository has no counted pull-request workflow step that calls the check, directly or through a
-    `make` goal; its extent is the steps read. The Makefile is read only when no counted step calls the check directly."""
-    if not _declares_catalogs(root, tracked):
+    """A covered repository with a counted pull-request workflow step that calls the check, directly or through a `make` goal,
+    gets no row; else each line that cannot be read as a call is an `invalid` finding, else it gets one `missing` finding. Its
+    extent is the steps read. The Makefile is read only when no counted step calls the check directly."""
+    if not declares_catalogs(root, tracked):
         return RuleResult([], 0, False)
     steps = list(workflow_rules.pull_request_run_steps(root, tracked))
     counted = [step for step in steps if _counts(step)]
-    calls = any(_calls_generator(step) for step in counted) or _reaches_generator_through_make(root, tracked, counted)
-    notes = () if calls else (Note(NOTE_PATH, NoteEvent.NOT_CALLED, NOT_CALLED_FACT),)
-    return RuleResult([], len(steps), False, notes)
+    problems = [
+        (step.workflow, number, problem)
+        for step in counted
+        for number, problem in _read([(line.text, line.first) for line in step.lines])
+    ]
+    if not _has_call(problems):
+        problems += _makefile_problems(root, tracked, counted)
+    if _has_call(problems):
+        return RuleResult([], len(steps), False)
+    invalid = [_finding(path, number, FindingEvent.INVALID, PROBLEM_FACTS[problem]) for path, number, problem in problems]
+    return RuleResult(invalid or [_finding(WORKFLOWS_PATH, None, FindingEvent.MISSING, MISSING_FACT)], len(steps), False)

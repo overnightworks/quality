@@ -26,6 +26,7 @@ from quality import (
     __version__,
     architecture,
     baseline_file,
+    catalog_rules,
     checkout,
     clones,
     config,
@@ -95,6 +96,7 @@ ENFORCED = "enforced"
 REPORT_ONLY = "report-only"
 NO_CONFIG = "no config"
 NO_JUDGED_PROJECT = "no judged project"
+NO_CATALOGS_DECLARATION = "no catalogs declaration"
 RELEASE_UNKNOWN = "release unknown"
 NOT_RELEASED = "not released"
 IMPORT_LINTER_CONFIG = "import-linter config"
@@ -157,13 +159,14 @@ class ReleaseTagsError(Exception):
 @dataclass(frozen=True)
 class Declared:
     """What a clone's own files switch on: the gate settings, a size baseline, a clone table, an import-linter config,
-    a project whose tests the layout rules judge, and the files among them that could not be read."""
+    a project whose tests the layout rules judge, a catalogs declaration, and the files among them that could not be read."""
 
     settings: config.GateSettings | None
     has_baseline: bool
     has_clone_table: bool
     has_import_config: bool
     has_judged_project: bool
+    declares_catalogs: bool
     unreadable: frozenset[str]
 
 
@@ -426,10 +429,15 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
         has_import_config = find_import_config(clone, tracked)
     except (repository.RepositoryFileError, architecture.ContractError):
         unreadable.add(IMPORT_LINTER_CONFIG)
+    try:
+        declares_catalogs = catalog_rules.declares_catalogs(clone, tracked)
+    except report.CannotJudge:
+        declares_catalogs = False
+        unreadable.add(catalog_rules.PYPROJECT)
     has_judged_project = any(project.packages for project in layout.python_projects(tracked)) or bool(
         layout.frontend_projects(tracked)
     )
-    return Declared(settings, has_baseline, has_clone_table, has_import_config, has_judged_project, frozenset(unreadable))
+    return Declared(settings, has_baseline, has_clone_table, has_import_config, has_judged_project, declares_catalogs, frozenset(unreadable))
 
 
 def find_import_config(clone: Path, tracked: list[str]) -> bool:
@@ -632,6 +640,10 @@ def switch_words(switch: Switch, declared: Declared) -> Cell:
         return REPORT_ONLY
     if switch is Switch.JUDGED_PROJECT:
         return ENFORCED if declared.has_judged_project else NO_JUDGED_PROJECT
+    if switch is Switch.CATALOG_DECLARATION:
+        if catalog_rules.PYPROJECT in declared.unreadable:
+            return CannotRead((catalog_rules.PYPROJECT,))
+        return ENFORCED if declared.declares_catalogs else NO_CATALOGS_DECLARATION
     file, present = {
         Switch.SIZE_BASELINE: (baseline_file.BASELINE_PATH, declared.has_baseline),
         Switch.CLONE_TABLE: (baseline_file.BASELINE_PATH, declared.has_clone_table),

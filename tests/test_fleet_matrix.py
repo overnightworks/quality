@@ -260,7 +260,7 @@ CLONE_RELEASES = {**FIRST_RELEASES, "v0.4.0": CLONE_RELEASE, "v0.5.0": CLONE_TAB
 def declared(**fields) -> Declared:
     """A clone that declares nothing, with the given fields set."""
     return Declared(**{"settings": None, "has_baseline": False, "has_clone_table": False, "has_import_config": False, "has_judged_project": False,
-                       "unreadable": frozenset(), **fields})
+                       "declares_catalogs": False, "unreadable": frozenset(), **fields})
 
 
 CLONE = Rule.CLONE.release
@@ -393,9 +393,65 @@ def test_a_rule_without_a_release_is_not_released_on_a_pinned_gate():
     assert rule_cell(unreleased, release, declared()) == "not released"
 
 
-def test_catalog_check_reads_report_only_on_main():
-    """FLEET-98: the rule only reports, so its cell on main is report-only."""
-    assert rule_cell(Rule.CATALOG_CHECK.release, Gate.MAIN, declared()) == "report-only"
+CATALOG_CHECK = Rule.CATALOG_CHECK.release
+CATALOG_RELEASE = CATALOG_CHECK.first_release
+CATALOG_PIN = "9" * 40
+CATALOG_TAGS = {**FIRST_RELEASES, CATALOG_RELEASE: CATALOG_PIN}
+
+
+@pytest.mark.parametrize(
+    ("declares_catalogs", "words"),
+    [(True, "enforced"), (False, "no catalogs declaration")],
+    ids=["a catalogs declaration", "no declaration"],
+)
+def test_catalog_check_on_main_reads_whether_the_clone_declares_catalogs(declares_catalogs, words):
+    """FLEET-98, FLEET-99: on main the cell says what the gate does with the rule, from the clone's declaration."""
+    assert rule_cell(CATALOG_CHECK, Gate.MAIN, declared(declares_catalogs=declares_catalogs)) == words
+
+
+@pytest.mark.parametrize("declares_catalogs", [True, False], ids=["a catalogs declaration", "no declaration"])
+def test_catalog_check_under_a_tag_reads_report_only_until_the_release_names_the_switch(declares_catalogs):
+    """FLEET-98, FLEET-99: a tag at the rule's first release has no switch change that names it, so it only reports."""
+    release = gate_release((gate_call(CATALOG_PIN),), False, CATALOG_TAGS)
+    assert rule_cell(CATALOG_CHECK, release, declared(declares_catalogs=declares_catalogs)) == "report-only"
+
+
+def test_the_catalog_switch_has_no_release_until_a_release_pull_request_names_it():
+    """CATALOG-30, FLEET-98, FLEET-99: `None` keeps every tag on `report-only`; the release guard refuses a tag while it stands."""
+    assert CATALOG_CHECK.switched == SwitchChange(None, Switch.CATALOG_DECLARATION)
+
+
+@pytest.mark.parametrize(
+    ("pin", "words"), [(NEWEST, "not in v0.3.1"), (None, "—"), (UNRELEASED, "release unknown")],
+    ids=["a pin before the rule", "no gate", "no release"],
+)
+def test_catalog_check_reads_the_pin_before_the_declaration(pin, words):
+    """FLEET-18, FLEET-21, FLEET-22: a pin before v0.12.0, no gate and an unknown release answer as for every rule."""
+    release = gate_release(() if pin is None else (gate_call(pin),), False, CATALOG_TAGS)
+    assert rule_cell(CATALOG_CHECK, release, declared(declares_catalogs=True)) == words
+
+
+@pytest.mark.parametrize(
+    ("files", "words"),
+    [
+        ({"pyproject.toml": '[project]\ndependencies = ["overnightworks-design[catalogs]>=1"]\n'}, "enforced"),
+        ({"pyproject.toml": '[project]\ndependencies = ["overnightworks-design>=1"]\n'}, "no catalogs declaration"),
+        ({}, "no catalogs declaration"),
+    ],
+    ids=["a catalogs declaration", "the dependency without the extra", "no pyproject.toml"],
+)
+def test_the_gates_own_clone_reads_the_catalog_cell_from_its_pyproject(fleet_report, gate_clone, files, words):
+    """CATALOG-29, FLEET-98, FLEET-99: the clone's tracked `pyproject.toml` decides the cell, on the gate's own repository."""
+    result, output = fleet_report(gate_clone({**caller("./.github/workflows/gate.yml"), **files}), tags=first_releases())
+    assert (result, cell(output, GATE_REPOSITORY, "catalog-check")) == (0, words), output
+
+
+def test_a_malformed_pyproject_makes_the_gates_own_clone_cell_unreadable_and_the_run_red(fleet_report, gate_clone):
+    """CATALOG-29, FLEET-24, FLEET-26, FLEET-100: the cell owns the failure, as for the baseline."""
+    broken = {**caller("./.github/workflows/gate.yml"), "pyproject.toml": "[project\n"}
+    result, output = fleet_report(gate_clone(broken), tags=first_releases())
+    assert result == 2, output
+    assert cell(output, GATE_REPOSITORY, "catalog-check") == "cannot read pyproject.toml"
 
 
 @pytest.mark.parametrize(
