@@ -76,7 +76,7 @@ rows, by area:
   at the line, or `job <id> is gone · ceiling <entry>` and `job <id> has no debt · ceiling <entry>` at the file with no
   line), the measured ones at the `timeout-minutes` line; the fix of the first two is `set timeout-minutes to a number
   of at most 15`, of `new debt` `lower timeout-minutes to 15 or less`, of `grew` `bring it back to <entry> or below` and
-  of `can fall` `delete or lower the entry in quality/baseline.toml by hand` ([rules](rules.md)).
+  of `can fall` `quality check --fix` ([rules](rules.md)).
 - `imports`: a broken contract is a `broken` finding; an unmatched ignore is an `unused` finding at `error` and an
   `unused` note at `warn`; a grimp or import-linter warning is a `warning` note (O23); a `broken` finding's detail
   lines are import-linter's own rendering of the contract ([Rows](#rows)).

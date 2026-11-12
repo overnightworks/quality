@@ -16,16 +16,18 @@ local `uses:`, declares `timeout-minutes` as a plain number of at most 15, or of
 import math
 import re
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from pathlib import Path, PurePosixPath
 
 import yaml
 
 from quality import checkout
-from quality.baseline_file import BASELINE_PATH, Baseline, JobKey
+from quality.baseline_file import FIX_COMMAND, Baseline, JobKey
 from quality.checkout import Document, PullRequestEvent
-from quality.report import CannotJudge, Example, Finding, FindingEvent, Instruction, RuleResult
+from quality.output import SEPARATOR
+from quality.ratchet import CeilingFix
+from quality.report import CannotJudge, Example, Finding, FindingEvent, Instruction, Note, NoteEvent, RuleResult
 from quality.rules import Rule
 from quality.run_script import (
     C_STRING_OPENER,
@@ -505,7 +507,6 @@ TIMEOUT_KEY = "timeout-minutes"
 MINUTES = re.compile(r"\d+(?:\.\d+)?", re.ASCII)
 SET_TIMEOUT_FIX = f"set {TIMEOUT_KEY} to a number of at most {MAXIMUM_MINUTES}"
 LOWER_TIMEOUT_FIX = f"lower {TIMEOUT_KEY} to {MAXIMUM_MINUTES} or less"
-LOWER_ENTRY_FIX = f"delete or lower the entry in {BASELINE_PATH} by hand"
 
 UNREADABLE_LIMIT = frozenset({FindingEvent.MISSING, FindingEvent.INVALID})
 
@@ -515,22 +516,68 @@ Job = tuple[str, yaml.ScalarNode, yaml.MappingNode]
 def check_job_timeouts(root: Path, tracked: list[str], baseline: Baseline | None) -> RuleResult:
     """Every job of a workflow a pull request or a push to main triggers, and of the local workflows those call, judged
     against the baseline's job limits; the extent is how many jobs there are."""
-    parsed = {name: _root_document(name, text) for name, text in _readable_workflows(root, tracked)}
-    documents = {name: parsed.get(name) for name in tracked if checkout.is_workflow(PurePosixPath(name))}
-    roots = frozenset(name for name, document in parsed.items() if _is_root(name, document))
     held = (baseline.job_minutes if baseline else None) or {}
     debt, no_debt = _split_entries(held)
     findings: list[Finding] = []
     readable: dict[JobKey, bool] = {}
-    for name in _reached(documents, roots):
-        jobs = [job for job in _jobs(name, documents[name]) if "uses" not in checkout.mapping_values(job[2])]
-        for job in jobs:
-            key = JobKey(name, job[0])
-            job_findings = list(_limit_findings(name, documents[name], job, debt.get(key)))
-            readable[key] = not any(finding.event in UNREADABLE_LIMIT for finding in job_findings)
-            findings.extend(job_findings)
+    for name, document, job in _judged_jobs(root, tracked):
+        key = JobKey(name, job[0])
+        job_findings = list(_limit_findings(name, document, job, debt.get(key)))
+        readable[key] = not any(finding.event in UNREADABLE_LIMIT for finding in job_findings)
+        findings.extend(job_findings)
     findings.extend(_unheld_entries(debt, no_debt, readable))
     return RuleResult(findings, len(readable), False)
+
+
+def lower_job_entries(root: Path, tracked: list[str], held: Baseline) -> CeilingFix:
+    """The held job entries lowered to their jobs' rounded-up limits and dropped where they are no debt or their job is
+    gone, from the jobs the rule judges; an entry whose job's limit cannot be read stands, and nothing rises or enters.
+    A table with no entry reads no workflow."""
+    entries = held.job_minutes
+    if not entries:
+        return CeilingFix(held, ())
+    limits = {JobKey(name, job[0]): _job_debt(name, document, job) for name, document, job in _judged_jobs(root, tracked)}
+    kept, changes = dict(entries), []
+    for key in sorted(entries):
+        fall = _entry_fall(key, entries[key], limits)
+        if fall is not None:
+            note, lowered = fall
+            changes.append(note)
+            if lowered is None:
+                del kept[key]
+            else:
+                kept[key] = lowered
+    return CeilingFix(replace(held, job_minutes=kept), tuple(changes))
+
+
+def _entry_fall(key: JobKey, entry: int, limits: dict[JobKey, int | None]) -> tuple[Note, int | None] | None:
+    """The note of an entry that falls and the value it falls to, None where it goes; None where it stands."""
+    if key in limits and limits[key] is None:
+        return None
+    if entry <= MAXIMUM_MINUTES:
+        return Note(key.path, NoteEvent.DROPPED, f"job {key.job} has no debt · was {entry} minutes"), None
+    if key not in limits:
+        return Note(key.path, NoteEvent.DROPPED, f"job {key.job} is gone · was {entry} minutes"), None
+    limit = limits[key]
+    if limit >= entry:
+        return None
+    fall = f"job {key.job} {entry} → {limit} minutes"
+    if limit > MAXIMUM_MINUTES:
+        return Note(key.path, NoteEvent.LOWERED, fall), limit
+    return Note(key.path, NoteEvent.DROPPED, SEPARATOR.join((fall, f"debt from {MAXIMUM_MINUTES + 1} minutes"))), None
+
+
+def _judged_jobs(root: Path, tracked: list[str]) -> list[tuple[str, Document, Job]]:
+    """Each job the rule judges with its file's document: the jobs of the roots and of what they call that are no call."""
+    parsed = {name: _root_document(name, text) for name, text in _readable_workflows(root, tracked)}
+    documents = {name: parsed.get(name) for name in tracked if checkout.is_workflow(PurePosixPath(name))}
+    roots = frozenset(name for name, document in parsed.items() if _is_root(name, document))
+    return [
+        (name, documents[name], job)
+        for name in _reached(documents, roots)
+        for job in _jobs(name, documents[name])
+        if "uses" not in checkout.mapping_values(job[2])
+    ]
 
 
 def _split_entries(held: dict[JobKey, int]) -> tuple[dict[JobKey, int], dict[JobKey, int]]:
@@ -547,7 +594,7 @@ def _unheld_entries(debt: dict[JobKey, int], no_debt: dict[JobKey, int], readabl
     for key in sorted(reasons):
         reason, minutes = reasons[key]
         fact = f"job {key.job} {reason} · ceiling {minutes}"
-        yield Finding(Rule.JOB_TIMEOUT, key.path, None, fact, LOWER_ENTRY_FIX, event=FindingEvent.CAN_FALL)
+        yield Finding(Rule.JOB_TIMEOUT, key.path, None, fact, FIX_COMMAND, event=FindingEvent.CAN_FALL)
 
 
 def _root_document(name: str, text: str) -> Document:
@@ -616,12 +663,11 @@ def _limit_findings(name: str, document: Document, job: Job, ceiling: int | None
     def finding(event: FindingEvent, line: int, fact: str, fix: str) -> Finding:
         return Finding(Rule.JOB_TIMEOUT, name, line, fact, fix, event=event)
 
-    limit = checkout.mapping_entries(mapping).get(TIMEOUT_KEY)
+    limit, minutes = _read_limit(name, document, mapping)
     if limit is None:
         yield finding(FindingEvent.MISSING, _line(id_key), f"job {job_id} has no {TIMEOUT_KEY}", SET_TIMEOUT_FIX)
         return
     key, value = limit
-    minutes = _minutes(_guarded(name, document, value))
     if minutes is None:
         fact = f"job {job_id} has a {TIMEOUT_KEY} that is not a number above zero"
         yield finding(FindingEvent.INVALID, _line(key), fact, SET_TIMEOUT_FIX)
@@ -633,7 +679,19 @@ def _limit_findings(name: str, document: Document, job: Job, ceiling: int | None
     elif ceiling is not None and debt > ceiling:
         yield finding(FindingEvent.GREW, _line(key), f"{given} · ceiling {ceiling}", f"bring it back to {ceiling} or below")
     elif ceiling is not None and debt < ceiling:
-        yield finding(FindingEvent.CAN_FALL, _line(key), f"{given} · ceiling {ceiling}", LOWER_ENTRY_FIX)
+        yield finding(FindingEvent.CAN_FALL, _line(key), f"{given} · ceiling {ceiling}", FIX_COMMAND)
+
+
+def _read_limit(name: str, document: Document, mapping: yaml.MappingNode) -> tuple[tuple[yaml.Node, yaml.Node] | None, Decimal | None]:
+    """The job's `timeout-minutes` key and value, and the minutes the value spells, each None where there is none."""
+    limit = checkout.mapping_entries(mapping).get(TIMEOUT_KEY)
+    return limit, None if limit is None else _minutes(_guarded(name, document, limit[1]))
+
+
+def _job_debt(name: str, document: Document, job: Job) -> int | None:
+    """The whole minutes the job's limit counts as debt, None where the limit is missing or invalid."""
+    minutes = _read_limit(name, document, job[2])[1]
+    return None if minutes is None else _debt_minutes(minutes)
 
 
 def _debt_minutes(limit: Decimal) -> int:

@@ -243,7 +243,12 @@ class AreaVerdict:
 
     @property
     def only_the_fix_refused(self) -> bool:
-        return isinstance(self.ceiling, CannotJudge) and all(verdict.refusal is None for verdict in self.verdicts)
+        """The fix refused and no rule refused but the job timeouts with the fix's own reason: the fix reads the workflows
+        through that rule, so the one unreadable file stops the fix and not only the check."""
+        return isinstance(self.ceiling, CannotJudge) and all(
+            verdict.refusal is None or (verdict.rule is Rule.JOB_TIMEOUT and verdict.refusal.reason == self.ceiling.reason)
+            for verdict in self.verdicts
+        )
 
     @property
     def findings(self) -> tuple[Finding, ...]:
@@ -514,7 +519,8 @@ def _fix_ceiling(inputs: RunInputs, sources: dict[str, bytes], held: baseline_fi
     if inputs.fix is Fix.DRY_RUN:
         gone = _with_what_they_held(gone, followed.ceiling.size)
     lowered = ratchet.lower_ceiling(followed.ceiling, measurements, pairs, gone)
-    return replace(lowered, changes=(*followed.changes, *lowered.changes))
+    jobs = workflow_rules.lower_job_entries(inputs.root, inputs.tracked, lowered.ceiling)
+    return replace(jobs, changes=(*followed.changes, *lowered.changes, *jobs.changes))
 
 
 def _reported(ceiling: ratchet.CeilingFix | DryRun) -> ratchet.CeilingFix:
