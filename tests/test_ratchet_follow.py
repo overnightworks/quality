@@ -19,6 +19,10 @@ def sized(path, symbol="f"):
     return Key(Metric.CCN, path, symbol)
 
 
+def lined(path):
+    return Key(Metric.FILE_LINES, path)
+
+
 def booked(path, job="e2e"):
     return JobKey(path, job)
 
@@ -369,6 +373,20 @@ def test_a_followed_job_entry_is_named_by_its_new_path_in_the_file_order_with_th
             {"b.py"},
             "z.py",
             id="untracked and not committed",
+        ),
+        pytest.param(
+            Baseline({lined("b.py"): 900, sized("a.py"): 20}, None),
+            Baseline({lined("a.py"): 900, sized("a.py"): 20}, None),
+            {"b.py"},
+            "b.py",
+            id="size entries half moved by hand are one group",
+        ),
+        pytest.param(
+            Baseline({sized("a.py"): 16, sized("b.py", "g"): 17}, None),
+            Baseline({sized("a.py"): 16, sized("a.py", "g"): 17}, None),
+            {"b.py"},
+            "b.py",
+            id="size entries neither committed nor carried as a group",
         ),
         pytest.param(
             timed({booked("b.yml", "lint"): 5}),

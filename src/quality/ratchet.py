@@ -502,16 +502,13 @@ def _unexplained(path: str) -> CannotJudge:
 
 @dataclass(frozen=True)
 class EntryKind[Entry: (Key, JobKey)]:
-    """How one table of the ceiling lists its entries and words a held one when a rename moves it."""
+    """How one table of the ceiling words a held entry when a rename moves it, and which entries of a rename it moves."""
 
-    order: Callable[[Iterable[Entry]], list[Entry]]
     held: Callable[[Entry, int], str]
-
-
-SIZE_ENTRIES = EntryKind(
-    lambda keys: sorted(keys, key=key_order), lambda key, value: f"{_subject(key)} {describe_value(key.metric, value)}"
-)
-JOB_ENTRIES = EntryKind(list, lambda key, value: f"job {key.job} {value} minutes")
+    to_move: Callable[
+        [Mapping[Entry, int], Mapping[Entry, int] | None, Mapping[Entry, int] | None, str | None, str],
+        tuple[dict[Entry, int], dict[Entry, int]],
+    ]
 
 
 def _require_placed[Entry: (Key, JobKey)](
@@ -528,8 +525,23 @@ def _holds[Entry: (Key, JobKey)](table: Mapping[Entry, int] | None, key: Entry, 
     return table is not None and key in table and value <= table[key]
 
 
+def _group_to_move(
+    held: Mapping[Key, int], committed: Mapping[Key, int], carried: Mapping[Key, int], source: str | None, target: str
+) -> tuple[dict[Key, int], dict[Key, int]]:
+    """The size entries under a rename's source and target, judged as one group: all of them stay when the carry holds
+    them, no higher; otherwise the source's move and the target's go, and an entry the committed table does not explain
+    refuses."""
+    mine = {key: value for key, value in held.items() if key.path in (source, target)}
+    if not raised_entries(carried, mine):
+        return {}, {}
+    if outside := raised_entries(committed, mine):
+        raise _unexplained(outside[0].key.path)
+    source_first = sorted(mine, key=lambda key: (key.path != source, key_order(key)))
+    moving = {key: mine[key] for key in source_first if key.path == source}
+    return moving, {key: mine[key] for key in source_first if key.path != source}
+
+
 def _entries_to_move[Entry: (Key, JobKey)](
-    kind: EntryKind[Entry],
     held: Mapping[Entry, int],
     committed: Mapping[Entry, int] | None,
     carried: Mapping[Entry, int] | None,
@@ -543,8 +555,7 @@ def _entries_to_move[Entry: (Key, JobKey)](
     here = {key: value for key, value in held.items() if key.path in (source, target)}
     moving: dict[Entry, int] = {}
     leftovers: dict[Entry, int] = {}
-    for key in kind.order(here):
-        value = here[key]
+    for key, value in here.items():
         carried_already = key.path == target and _holds(carried, key, value)
         if committed is not None and not carried_already and not _holds(committed, key, value):
             raise _unexplained(key.path)
@@ -557,6 +568,10 @@ def _entries_to_move[Entry: (Key, JobKey)](
     return moving, leftovers
 
 
+SIZE_ENTRIES = EntryKind(lambda key, value: f"{_subject(key)} {describe_value(key.metric, value)}", _group_to_move)
+JOB_ENTRIES = EntryKind(lambda key, value: f"job {key.job} {value} minutes", _entries_to_move)
+
+
 def _followed_entries[Entry: (Key, JobKey)](
     kind: EntryKind[Entry],
     held: Mapping[Entry, int],
@@ -565,16 +580,15 @@ def _followed_entries[Entry: (Key, JobKey)](
     renames: Renames,
     tracked: frozenset[str],
 ) -> tuple[dict[Entry, int], list[Note]]:
-    """Per rename, held entries still in the committed form leave their source for its target, and the target's
-    leftovers go; entries the carry already holds, no higher, stay. Anything else under a renamed path, and an entry the
-    committed table lacks under a path git no longer tracks, has no lineage git can show: the fix refuses before it
-    writes. Without a committed table the verdict compares nothing, so the source's entries move and no leftover is
-    judged."""
+    """Per rename, the table's reading picks the held entries that leave the source for the target and the target's
+    leftovers that go; the rest stay. Anything it cannot explain from the committed table, and an entry that table lacks
+    under a path git no longer tracks, has no lineage git can show: the fix refuses before it writes. Without a
+    committed table the verdict compares nothing, so the source's entries move and no leftover is judged."""
     sources = {target: source for source, target in renames.moves.items()}
     entries, changes = dict(held), []
     for target in sorted(renames.targets):
         source = sources.get(target)
-        moving, leftovers = _entries_to_move(kind, held, committed, carried, source, target)
+        moving, leftovers = kind.to_move(held, committed, carried, source, target)
         for key in (*moving, *leftovers):
             del entries[key]
         entries.update({key._replace(path=target): value for key, value in moving.items()})
