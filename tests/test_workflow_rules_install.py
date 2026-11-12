@@ -292,6 +292,11 @@ def test_a_marker_on_the_run_line_of_a_block_covers_its_first_line_only(build_re
     assert shape(judged(build_repo, text)) == [(INSTALLS, BLOCK_LINE + 1, "apt-get install")]
 
 
+def test_a_marker_on_the_dash_line_clears_the_plain_run_on_the_next_line(build_repo):
+    """RUNTIME-7."""
+    assert judged(build_repo, steps_of() + f"      - {MARKER}\n        run: apt-get install -y x\n") == []
+
+
 def test_a_marker_between_the_name_and_the_run_clears_nothing(build_repo):
     """RUNTIME-7."""
     text = steps_of() + f"      - name: t\n        {MARKER}\n        run: |\n          apt-get install -y x\n"
