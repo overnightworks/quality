@@ -420,8 +420,11 @@ def _matches_default_branch(pattern: str) -> bool:
     return fnmatch.fnmatchcase(DEFAULT_BRANCH, pattern.replace("**", "*"))
 
 
+PUSH_FILTER_KEYS = ("branches", "branches-ignore", "tags")
+
+
 def _filters_admit_default_branch(filters: Mapping[str, yaml.Node]) -> bool:
-    branches, ignored, tags = (_patterns(filters, key) for key in ("branches", "branches-ignore", "tags"))
+    branches, ignored, tags = (_patterns(filters, key) for key in PUSH_FILTER_KEYS)
     if branches is not None:
         return any(_matches_default_branch(pattern) for pattern in branches if not pattern.startswith("!"))
     if ignored is not None:

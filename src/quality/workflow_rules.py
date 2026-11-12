@@ -391,7 +391,6 @@ TIMEOUT_KEY = "timeout-minutes"
 MINUTES = re.compile(r"\d+(?:\.\d+)?", re.ASCII)
 SET_TIMEOUT_FIX = f"set {TIMEOUT_KEY} to a number of at most {MAXIMUM_MINUTES}"
 LOWER_TIMEOUT_FIX = f"lower {TIMEOUT_KEY} to {MAXIMUM_MINUTES} or less"
-PUSH_FILTER_KEYS = ("branches", "branches-ignore", "tags")
 
 Job = tuple[str, yaml.ScalarNode, yaml.MappingNode]
 
@@ -427,7 +426,7 @@ def _hides_push(document: Document, triggers: yaml.Node | None) -> bool:
     if document.is_alias(push) or _hides_keys(document, push):
         return True
     filters = checkout.mapping_values(push)
-    return any(_hides_items(document, filters[key]) for key in PUSH_FILTER_KEYS if key in filters)
+    return any(_hides_items(document, filters[key]) for key in checkout.PUSH_FILTER_KEYS if key in filters)
 
 
 def _hides_items(document: Document, node: yaml.Node) -> bool:
