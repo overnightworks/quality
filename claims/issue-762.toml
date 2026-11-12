@@ -3,6 +3,6 @@ agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
 role = "builder"
 base = "2ef93af31753d5b9da0abb6adcf9b3b29e81cef1"
 branch = "claude/issue-762-job-minutes-read"
-scope = ["docs/output.md", "docs/rules.md", "src/quality/baseline_file.py", "src/quality/check.py", "src/quality/ratchet.py", "src/quality/verdict.py", "src/quality/workflow_rules.py", "tests/test_baseline_file.py", "tests/test_ratchet.py", "tests/test_ratchet_fix.py", "tests/test_verdict_loosenings.py", "tests/test_verdict_renames.py", "tests/test_workflow_rules_timeout.py"]
+scope = ["docs/output.md", "docs/rules.md", "src/quality/baseline_file.py", "src/quality/check.py", "src/quality/ratchet.py", "src/quality/verdict.py", "src/quality/workflow_rules.py", "tests/test_baseline_file.py", "tests/test_clones_baseline.py", "tests/test_ratchet.py", "tests/test_ratchet_fix.py", "tests/test_verdict_loosenings.py", "tests/test_verdict_renames.py", "tests/test_workflow_rules_timeout.py"]
 opened_commit = "96fd6f3b4a32e1db87e0ac470b4d0a098387aab3"
 whole_reason = "The table is useful only as a whole: a model without its pass-throughs lets a rename read as an added entry and a lowering drop the table, the compare without the loosening line lets a raise pass unseen, and the loosening line without the model has nothing to compare. Four production files and about 140 lines are one flow."
