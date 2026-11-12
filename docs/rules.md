@@ -819,19 +819,34 @@ quotes ends the command text; a pair of backticks that no quote or backslash pro
 last backtick left without a partner on the line is read as `$(` when a word follows it (a substitution that spans
 lines) and dropped otherwise; the words are split by Python's `shlex`, and `&&`, `||`, `;`, `|`, `&`, `(` and `)`,
 also one glued to `<` or `>`, end a segment. A word that holds `$(` is split again the same way,
-so `"$(pytest -q)"` reads as `$(pytest -q)` (PYTEST-2).
+so `"$(pytest -q)"` reads as `$(pytest -q)` (PYTEST-2). The string after the `-c` flag of `sh`, `bash`, `dash`, `zsh` or
+`ksh` is read as a script of its own by the same reader, and its segments stand after the shell's. The shell's flags are
+read only before its first operand: a flag is a word that starts with a dash or a plus sign, and `-o`, `+o`, `-O`, `+O`
+and `--rcfile` and `--init-file` take the next word as their value (so does any flag that ends in `o` or `O`, as `-eo`).
+A lone `-` or `--` ends the flags, and the word after it is the first operand. A `-c` flag is a single-dash word that
+holds the letter `c`, so `-c`, `-ec` and `-lc` count, and the first operand after one is the string. A string the reader
+cannot split to its end is `invalid` where the run holds the word `pytest` (PYTEST-6); `bash run.sh -c 'pytest -q'`
+reads no code, since its first operand is the script's name, and `bash -- -c 'pytest -q'` reads none either, since its
+first operand is `-c` (PYTEST-2).
 
-A segment is a pytest call when its command word, after assignments (`VAR=value`), `env` and `sudo` with their flags,
-`time`, `exec`, `command`, `nohup` and the shell keywords `if`, `then`, `elif`, `else`, `do`, `while`, `until`, `!` and
-`{`, is `pytest` or `py.test`; a Python interpreter (`python`, `python3`, `python3.<n>`, `python3.<n>t`, `pypy`,
-`pypy3`, `pypy3.<n>`) with only flags before `-m pytest`, where `-W`, `-X` and `--check-hash-based-pycs` take a value;
-or a runner (`uv run`, `uvx`, `poetry run`, `pipenv run`, `pdm run`, `hatch run`, `coverage run`) that starts either,
-past its flags and their values (PYTEST-3). The flags that take a value are `env` `-u`, `--unset`, `-C`, `--chdir`, `-a`
-and `--argv0`, and `sudo` `-u`, `-g`, `-D`, `-C`, `-h`, `-p`, `-r`, `-t`, `-T`, `-U` and `-R`, when the value follows as
-its own word; a long `sudo` flag with its value after a space is a named gap. The value of `env -S` (also `-S'…'` and
-`--split-string=…`) is read as the words it splits into, in its place (PYTEST-3). The word `pytest` anywhere else is
-no call: `pip install pytest`, `echo "run pytest"`, a path, a comment. A script, `make`, `tox`, `nox`, `timeout`,
-`xvfb-run` or `docker run` starting pytest is the rule's named gap and reads as no call (PYTEST-4).
+A segment is a pytest call when its command word, after assignments (`VAR=value`), `env`, `sudo`, `timeout`, `nice` and
+`xargs` with their flags and operands, `time`, `exec`, `command`, `nohup` and the shell keywords `if`, `then`, `elif`,
+`else`, `do`, `while`, `until`, `!` and `{`, is `pytest` or `py.test`; a Python interpreter (`python`, `python3`,
+`python3.<n>`, `python3.<n>t`, `pypy`, `pypy3`, `pypy3.<n>`) with only flags before `-m pytest`, where `-W`, `-X` and
+`--check-hash-based-pycs` take a value; or a runner (`uv run`, `uvx`, `poetry run`, `pipenv run`, `pdm run`,
+`hatch run`, `coverage run`) that starts either, past its flags and their values (PYTEST-3). The flags that take a value
+are `env` `-u`, `--unset`, `-C`, `--chdir`, `-a` and `--argv0`, and `sudo` `-u`, `-g`, `-D`, `-C`, `-h`, `-p`, `-r`,
+`-t`, `-T`, `-U` and `-R`, when the value follows as its own word; a long `sudo` flag with its value after a space is a
+named gap. The wrappers `timeout`, `nice` and `xargs` are read through with their flags: `timeout` takes `-k`, `-s`,
+`--kill-after` and `--signal` with a value as the next word, then one duration word; `nice` takes `-n` and
+`--adjustment`; `xargs` takes `-I`, `-n`, `-P`, `-d`, `-E`, `-L`, `-s`, `-a` and the long forms `--replace`,
+`--max-args`, `--max-procs`, `--delimiter`, `--eof`, `--max-lines`, `--max-chars` and `--arg-file`, each with its value
+as the next word when that is separate. Only the words on the line are read: `echo x | xargs apt-get install` is a call
+of `apt-get install`, and `xargs` with no command word behind its flags is no call. The tool word after `uvx` loses a
+trailing `@version`, so `uvx pytest@8 -q` reads as `uvx pytest -q` (PYTEST-3). The value of `env -S` (also `-S'…'` and
+`--split-string=…`) is read as the words it splits into, in its place (PYTEST-3). The word `pytest` anywhere else is no
+call: `pip install pytest`, `echo "run pytest"`, a path, a comment. A script, `make`, `tox`, `nox`, `xvfb-run` or
+`docker run` starting pytest is the rule's named gap and reads as no call (PYTEST-4).
 
 The last of `-n N`, `-nN`, `-n=N`, `--numprocesses N` and `--numprocesses=N` counts, as argparse reads repeated flags.
 `N` is `auto`, `logical` or a whole number above zero: the call passes. No such flag, `-n 0` (`00` too), an abbreviated

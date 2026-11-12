@@ -317,9 +317,9 @@ def _pytest_arguments(words: list[str]) -> list[str] | None:
     if any(interpreter.fullmatch(command) for interpreter in INTERPRETERS):
         return _module_arguments(words[1:])
     if command == "uvx":
-        return _runner_arguments(words[1:])
+        return _runner_arguments(words[1:], strips_version=True)
     if (command, *words[1:2]) in RUNNERS:
-        return _runner_arguments(words[2:])
+        return _runner_arguments(words[2:], strips_version=False)
     return None
 
 
@@ -336,19 +336,29 @@ def _module_arguments(words: list[str]) -> list[str] | None:
     return None
 
 
-def _runner_arguments(words: list[str]) -> list[str] | None:
-    """The pytest call a runner starts, past its flags and the values of its flags."""
+def _runner_arguments(words: list[str], strips_version: bool) -> list[str] | None:
+    """The pytest call a runner starts, past its flags and the values of its flags; `uvx` reads its tool word without a trailing `@version`."""
     index = 0
     while index < len(words):
-        arguments = _pytest_arguments(words[index:])
-        if arguments is not None:
+        if (arguments := _pytest_arguments(_words_from(words, index, strips_version))) is not None:
             return arguments
         if not words[index].startswith("-"):
             return None
         index += 1
-        if index < len(words) and not words[index].startswith("-") and _pytest_arguments(words[index:]) is None:
+        if (
+            index < len(words)
+            and not words[index].startswith("-")
+            and _pytest_arguments(_words_from(words, index, strips_version)) is None
+        ):
             index += 1
     return None
+
+
+def _words_from(words: list[str], index: int, strips_version: bool) -> list[str]:
+    """The words from `index` on, the word at `index` without a trailing `@version` when a `uvx` runner reads it as its tool word."""
+    if not strips_version:
+        return words[index:]
+    return [words[index].partition("@")[0], *words[index + 1 :]]
 
 
 def _workers_problem(arguments: list[str]) -> Problem | None:
