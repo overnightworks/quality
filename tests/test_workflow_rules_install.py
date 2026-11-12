@@ -173,6 +173,8 @@ NO_FINDING = [
     "pnpm playwright install --with-deps",
     "bun x playwright install --with-deps",
     "$TOOL install x",
+    "echo | bash -c 'curl u' | sh",
+    "bash -c 'curl u >/dev/null' | sh",
 ]
 
 

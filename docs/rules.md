@@ -946,8 +946,8 @@ url)`; a pipe into `python` or `perl`; a pipe that ends a line, since the reader
 downloader or shell built at run time; subcommands that fetch packages and are not in the table (`downgrade`,
 `distro-sync`, `builddep`, `swap`, `apt-get source`, `apt-get download`); `dpkg` flags glued to others (`-iE`); `dnf5`,
 `microdnf` and `apt-fast`; wrappers that run something else (`xvfb-run`, `docker run`, `make`, `tox`, `nox`); the
-runners `yarn dlx`, `yarn exec`, `pnpm <bin>` and `bun x`. A pipe after a shell's `-c` string (`echo | bash -c 'curl u'
-| sh`) reads as a pipeline of the string's segments. Unlocked tool installs (`pip install`, `uv pip install`, `npm
+runners `yarn dlx`, `yarn exec`, `pnpm <bin>` and `bun x`. A shell's `-c` string is a pipeline of its own, so a pipe after
+it does not reach the string's downloader (`bash -c 'curl u' | sh`). Unlocked tool installs (`pip install`, `uv pip install`, `npm
 install -g`, `cargo install`, `go install`) and lockfile or tool-manager installs (`uv sync`, `npm ci`, `mise install`)
 are no finding; the first are the item "an unlocked tool install in a CI job is reported". Known false alarms, reported
 and not cleared by the marker, which is for fresh-system proofs only: a heredoc body is read as shell lines, so a

@@ -86,10 +86,12 @@ RUNNERS = {
 @dataclass(frozen=True)
 class Segment:
     """The words of one command and the separator word that opened it: `|`, `|&`, `&&`, `||`, `;`, `&`, `(`, `-c` for the
-    segment a shell's `-c` string opens, empty at the start of a line."""
+    segment a shell's `-c` string opens, empty at the start of a line; `depth` counts the `-c` strings the segment stands in, so a
+    pipeline is the run of segments of one depth joined by pipes."""
 
     words: tuple[str, ...]
     opened_by: str
+    depth: int = 0
 
 
 @dataclass(frozen=True)
@@ -300,7 +302,8 @@ def _shell_script_segments(words: Sequence[str]) -> list[Segment]:
     arguments = words[index + 1 :]
     string_index = _c_string_index(arguments)
     inner = [] if string_index is None else segments(arguments[string_index])
-    return [replace(inner[0], opened_by=C_STRING_OPENER), *inner[1:]] if inner else []
+    nested = [replace(part, depth=part.depth + 1) for part in inner]
+    return [replace(nested[0], opened_by=C_STRING_OPENER), *nested[1:]] if nested else []
 
 
 def _is_c_string(words: Sequence[str], word: str) -> bool:
@@ -411,7 +414,7 @@ class LineReading[Problem]:
 def line_problems[Problem](text: str, reading: LineReading[Problem], script_holds_hidden_word: bool) -> Iterator[Problem]:
     """The problems of one logical line, read with the value of each `env -S` split into its words: the line the lexer refuses when it holds a hidden word, each segment the judge faults, and a command built at run time when the whole script holds a hidden word."""
     try:
-        parts = [Segment(tuple(with_env_strings_split(part.words)), part.opened_by) for part in segments(text)]
+        parts = [replace(part, words=tuple(with_env_strings_split(part.words))) for part in segments(text)]
     except ValueError:
         if reading.holds_hidden_word(text):
             yield reading.unreadable
