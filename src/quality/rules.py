@@ -37,6 +37,7 @@ RELEASE_0_1 = "v0.1.0"
 RELEASE_0_3 = "v0.3.0"
 RELEASE_0_7 = "v0.7.0"
 RELEASE_0_11 = "v0.11.0"
+RELEASE_0_12 = "v0.12.0"
 
 
 class Area(StrEnum):
@@ -70,7 +71,7 @@ class Rule(StrEnum):
     COMPOSE_PORT = "compose-port", Area.FILES, RELEASE_0_1, Switch.ALWAYS
     SIZE = "size", Area.DEBT, RELEASE_0_3, Switch.SIZE_BASELINE
     CLONE = "clone", Area.DEBT, "v0.4.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE)
-    JOB_TIMEOUT = "job-timeout", Area.DEBT, None, Switch.ALWAYS
+    JOB_TIMEOUT = "job-timeout", Area.DEBT, RELEASE_0_12, Switch.ALWAYS
     IMPORT_CONTRACT = "import-contract", Area.IMPORTS, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
     CLAUDE_MD = "claude-md", Area.FILES, RELEASE_0_3, Switch.ALWAYS
     AGENTS_MD = "agents-md", Area.FILES, RELEASE_0_11, Switch.ALWAYS
@@ -88,8 +89,8 @@ class Rule(StrEnum):
     WORKFLOW_SECURITY = "workflow-security", Area.WORKFLOWS, RELEASE_0_1, Switch.ALWAYS
     PR_CONCURRENCY = "pr-concurrency", Area.WORKFLOWS, RELEASE_0_11, Switch.ALWAYS
     PYTEST_WORKERS = "pytest-workers", Area.WORKFLOWS, RELEASE_0_11, Switch.ALWAYS
-    RUNTIME_INSTALL = "runtime-install", Area.WORKFLOWS, None, Switch.ALWAYS
-    CATALOG_CHECK = "catalog-check", Area.WORKFLOWS, None, Switch.REPORT_ONLY
+    RUNTIME_INSTALL = "runtime-install", Area.WORKFLOWS, RELEASE_0_12, Switch.ALWAYS
+    CATALOG_CHECK = "catalog-check", Area.WORKFLOWS, RELEASE_0_12, Switch.REPORT_ONLY
     ADVISORY = "advisory", Area.DEPENDENCIES, RELEASE_0_3, Switch.ALWAYS
 
     def __new__(

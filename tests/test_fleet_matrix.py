@@ -468,10 +468,19 @@ def test_a_malformed_size_baseline_is_named_in_the_size_cell_only_where_the_cell
     assert cell(output, "o/sized", "size") == size
 
 
-def test_the_job_timeout_column_reads_not_released_on_a_pinned_gate(fleet_report, public):
-    """TIMEOUT-11, FLEET-19: no release carries the rule yet."""
-    _, output = fleet_report(public("pinned", pinned_gate(NEWEST)), tags=first_releases())
-    assert cell(output, "o/pinned", "job-timeout") == "not released"
+FIRST_RELEASE_COMMIT = "f" * 40
+
+
+@pytest.mark.parametrize(
+    ("pin", "words"),
+    [(NEWEST, "not in v0.3.1"), (FIRST_RELEASE_COMMIT, "enforced")],
+    ids=["an older tag", "the rule's first release"],
+)
+def test_the_job_timeout_column_reads_the_pin_against_the_rules_first_release(fleet_report, public, pin, words):
+    """TIMEOUT-11, FLEET-18: a pin before the rule's first release says so, and that release enforces it."""
+    tags = {**FIRST_RELEASES, Rule.JOB_TIMEOUT.release.first_release: FIRST_RELEASE_COMMIT}
+    _, output = fleet_report(public("pinned", pinned_gate(pin)), tags=first_releases(tags))
+    assert cell(output, "o/pinned", "job-timeout") == words
 
 
 def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces(fleet_report, public):
