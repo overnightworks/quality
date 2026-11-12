@@ -168,18 +168,23 @@ def load_baseline(text: str) -> Baseline:
     for table_name, table in document.items():
         if table_name == CLONES:
             clones = _clone_pairs(table)
-            continue
-        if table_name == JOB_MINUTES:
+        elif table_name == JOB_MINUTES:
             job_minutes = _job_minutes(table)
-            continue
-        metric = _metric_named(table_name)
-        for path, entry in _table(table_name, table).items():
-            if metric is Metric.FILE_LINES:
-                size[Key(metric, path)] = _count(f"{table_name}.{path}", entry)
-            else:
-                for symbol, value in _table(f"{table_name}.{path}", entry).items():
-                    size[Key(metric, path, symbol)] = _count(f"{table_name}.{path}.{symbol}", value)
+        else:
+            size.update(_size_entries(table_name, table))
     return Baseline(size, clones, job_minutes)
+
+
+def _size_entries(table_name: str, table: object) -> SizeEntries:
+    metric = _metric_named(table_name)
+    entries: SizeEntries = {}
+    for path, entry in _table(table_name, table).items():
+        if metric is Metric.FILE_LINES:
+            entries[Key(metric, path)] = _count(f"{table_name}.{path}", entry)
+        else:
+            for symbol, value in _table(f"{table_name}.{path}", entry).items():
+                entries[Key(metric, path, symbol)] = _count(f"{table_name}.{path}.{symbol}", value)
+    return entries
 
 
 def read_baseline(root: Path) -> Baseline | None:
