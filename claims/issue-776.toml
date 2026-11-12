@@ -1,0 +1,8 @@
+claim_id = "8bb274d150db47d9b60f4557c3a585f9"
+agent = "Claude 633bab9e-3ef1-4f3c-a25b-f09f605c4d01"
+role = "builder"
+base = "9ced0f5cee689f2c70fb1467513b943484bd65a5"
+branch = "claude/issue-776-reader-wrappers"
+scope = ["docs/rules.md", "src/quality/run_script.py", "src/quality/workflow_rules.py", "tests/test_workflow_rules_pytest.py"]
+opened_commit = "8f1d22b5413a15c3f03825f8d6f770a34272b240"
+whole_reason = "Two production files of one reading (the wrappers and the -c string in run_script.py, the version strip in workflow_rules.py), about 45 lines, with the rule's document block and its one test file"
