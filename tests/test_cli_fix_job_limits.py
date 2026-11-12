@@ -203,6 +203,15 @@ def test_every_lowered_and_dropped_entry_counts_with_the_size_entries_in_the_cei
     assert (repo / BASELINE_PATH).read_text() == ceiling({"a": 30}, size=70)
 
 
+def test_a_dry_run_counts_every_job_entry_it_would_lower_or_drop_with_the_size_entries(build_repo, capsys):
+    """TIMEOUT-25, TIMEOUT-26."""
+    files = {SIZE_FILE: long_function(70), WORKFLOW: workflow_of(a="30", b="12")}
+    repo = build_repo({**files, BASELINE_PATH: ceiling({"a": 40, "b": 40}, size=80)})
+    code, out, _ = fixed(capsys, repo, *DRY_RUN_WORDS)
+    printed = squashed(out)
+    assert (code, "debt 3 to lower" in printed, "3 ceiling entries would fall" in printed) == (1, True, True), out
+
+
 def test_dropping_the_last_entry_leaves_the_table_held_and_empty(build_repo, capsys):
     """TIMEOUT-21."""
     repo = held_repo(build_repo, {WORKFLOW: workflow_of(e2e="12")}, (), {"e2e": 40})

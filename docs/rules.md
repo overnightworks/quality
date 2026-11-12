@@ -1008,12 +1008,12 @@ Against the table a judged job with a readable limit is compared by its rounded-
 ceiling file. An entry of 15 or less is no debt and reads as no entry. With no entry and `d` above 15 the job is `new
 debt`; an entry above 15 and `d` above it is `grew` (`job e2e has timeout-minutes 45 · ceiling 40`, fix: bring it back
 to 40 or below); an entry above 15 and `d` below it, or `d` of 15 or less, is `can fall` (`job e2e has timeout-minutes
-20 · ceiling 40`, fix: delete or lower the entry in quality/baseline.toml by hand); `d` equal to the entry, and no entry
+20 · ceiling 40`, fix: quality check --fix); `d` equal to the entry, and no entry
 with `d` of 15 or less, are green. A job without a readable limit keeps its `missing` or `invalid` finding and its entry
 stands (TIMEOUT-15). After the measured findings, sorted by path and job and with no line, each entry that can fall with
 nothing to measure is `can fall`: its path is not tracked or no root reaches the file any more, the file has no such job
 or the job calls a workflow (`job e2e is gone · ceiling 40`), or the entry is of 15 or less (`job e2e has no debt ·
-ceiling 10`) (TIMEOUT-16). The rule's extent and a clean `debt` row's words (`ceiling held · N entries, M clone pairs`)
+ceiling 10`) (TIMEOUT-16); the fix of each `can fall` form is `quality check --fix` (TIMEOUT-24). The rule's extent and a clean `debt` row's words (`ceiling held · N entries, M clone pairs`)
 count no job entry. A baseline that cannot be read makes the rule `cannot judge` and names the baseline, as it does for
 `size` and `clone`; one that is absent leaves the rule judging with no entry.
 
@@ -1031,6 +1031,22 @@ refuses with the restore step before anything is written, naming the workflow. W
 leftover is judged, and only an entry a moved one takes the key of is dropped. A held ceiling without the table stays without it, a held empty table stays held, and entries under
 a path no rename touches are written as they were. A moved job entry counts as moved in the debt row and the verdict
 line (TIMEOUT-19).
+
+`--fix` then lowers and drops the held job entries, from the jobs the rule judges (TIMEOUT-1 to TIMEOUT-4) under the paths it
+followed. An entry above 15 falls to its job's rounded-up limit when that is above 15 and below the entry (`lowered`, `job
+e2e 40 → 18 minutes` for `timeout-minutes: 17.5`) (TIMEOUT-20). An entry that is no debt is dropped (`dropped`) when the
+job's rounded-up limit is 15 or less (`job e2e 40 → 12 minutes · debt from 16 minutes`), when the entry itself is 15 or
+less (`job e2e has no debt · was 10 minutes`), and when its job is gone, because its workflow is not tracked or no root
+reaches it, the file has no such job or the job calls a workflow (`job e2e is gone · was 40 minutes`); dropping the last
+entry leaves a held empty table (TIMEOUT-21). Nothing rises and nothing enters: a job above its entry stays `grew`, a job
+above 15 without an entry stays `new debt`, and an entry whose job has a `missing` or `invalid` limit stands
+(TIMEOUT-22). Where the table holds an entry and a workflow the rule must read cannot be read (TIMEOUT-7), the whole fix
+is refused with the rule's reason, exit `2`, and nothing is written, the size entries and clone pairs included, since a
+half-read set of jobs would drop the entries of the jobs it did not see; a file without the table, a held empty table
+and a first recording read no workflow for the fix (TIMEOUT-23). A lowered or dropped job entry counts like a size entry
+in `fell`, the `debt` row and the verdict line, and a `✓` row per entry names the workflow (TIMEOUT-25); `--dry-run`
+makes the same table and words each change as what the fix would do, row for row, and refuses where the fix refuses
+(TIMEOUT-26).
 
 A workflow whose YAML or file cannot be read, an alias or a merge key where it can hide the top mapping, `on:`, the
 `push` value, its `branches`, `branches-ignore` or `tags`, or in a judged file `jobs`, a job, a `uses:` or a

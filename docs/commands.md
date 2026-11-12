@@ -104,7 +104,8 @@ one that renders byte for byte stays untouched. It never raises an entry and nev
 a finding, and a raise is a hand edit with a declared loosening ([rules](rules.md)). A file git renamed into the index
 since the ceiling's last commit takes its entries with it ([rules](rules.md)). An entry whose path the index no longer
 tracks, whose Python function is gone or whose file is declared generated goes; one only missing from disk stands; a
-held pair the tree lost goes. A ceiling or `[clones]` table git holds and the tree lacks refuses with the restore step,
+held pair the tree lost goes. A held `[job_minutes]` entry falls to its job's rounded-up limit or goes where it is no debt or
+its job is gone, and a workflow that cannot be read refuses the whole fix while such an entry is held ([rules](rules.md)). A ceiling or `[clones]` table git holds and the tree lacks refuses with the restore step,
 and a shallow clone that cannot prove a first recording names `git fetch --unshallow` ([rules](rules.md)). It takes no
 `--staged` (HELP-25) and needs `debt` among the named areas (HELP-26), or no area named; either refusal keeps a
 `--dry-run` in its `next:` (HELP-27). `quality check --fix --dry-run` makes, judges and renders the same ceiling,
