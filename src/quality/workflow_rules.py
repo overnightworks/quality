@@ -461,7 +461,7 @@ def _is_download_into_shell(parts: Sequence[Segment], index: int) -> bool:
 def _is_piped_from_downloader(parts: Sequence[Segment], index: int) -> bool:
     """Whether a segment of the pipeline of the segment at `index` is a downloader; the segments of a shell's `-c` string stand in a pipeline of their own."""
     depth = parts[index].depth
-    while parts[index].opened_by in PIPES:
+    while parts[index].opened_by in PIPES and index > 0:
         index -= 1
         while parts[index].depth > depth:
             index -= 1

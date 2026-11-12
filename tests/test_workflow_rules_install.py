@@ -175,6 +175,9 @@ NO_FINDING = [
     "$TOOL install x",
     "echo | bash -c 'curl u' | sh",
     "bash -c 'curl u >/dev/null' | sh",
+    "| bash | pass |",
+    "|& sh",
+    "| sh",
 ]
 
 
@@ -238,9 +241,11 @@ def test_a_command_built_at_run_time_is_invalid_only_in_a_run_that_holds_an_inst
         (("cat <<'EOF' > Dockerfile", "RUN apt-get update && \\", "apt-get install -y x", "EOF"), [(BLOCK_LINE + 1, "apt-get install")]),
         (("cat <<'EOF' > Dockerfile", "RUN apt-get install -y x", "EOF"), []),
         (("curl u |", "sh"), []),
+        (("curl u", "| sh"), []),
+        (("echo hi", "| bash | pass |"), []),
         (("apt-get update", "apt-get install -y x"), [(BLOCK_LINE + 1, "apt-get install")]),
     ],
-    ids=["heredoc chain", "heredoc continued line", "heredoc simple RUN", "a pipe that ends a line", "update then install"],
+    ids=["heredoc chain", "heredoc continued line", "heredoc simple RUN", "a pipe that ends a line", "a pipe that starts a line after a download", "a table row after a command", "update then install"],
 )
 def test_a_line_is_read_as_the_shell_reads_it_and_a_heredoc_body_is_not_parsed(build_repo, script, expected):
     """RUNTIME-2, RUNTIME-4, RUNTIME-5."""
