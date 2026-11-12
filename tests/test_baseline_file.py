@@ -130,5 +130,6 @@ def test_a_held_job_table_renders_and_an_absent_one_does_not_and_the_rendering_r
 
 def test_a_job_name_that_is_not_valid_utf8_cannot_be_rendered():
     """TIMEOUT-13."""
+    baseline = Baseline({}, None, {JobKey(CI, "\ud800"): 40})
     with pytest.raises(SizeError, match="is not valid UTF-8"):
-        render_baseline(Baseline({}, None, {JobKey(CI, "\ud800"): 40}))
+        render_baseline(baseline)
