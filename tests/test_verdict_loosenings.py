@@ -203,6 +203,11 @@ def test_a_job_limit_table_adopted_equal_lowered_or_dropped_loosens_nothing(base
         pytest.param(
             (jobs(e2e=40), ""), ["    ! job limit baseline removed"], id="a base without clones, the table removed"
         ),
+        pytest.param(
+            (jobs(z=10, a=10), jobs(z=20, a=20)),
+            [f"    ! job limit baseline raises {CI} z 10 -> 20", f"    ! job limit baseline raises {CI} a 10 -> 20"],
+            id="job raises in the head file's order",
+        ),
     ],
 )
 def test_the_job_lines_come_after_the_size_and_clone_lines_whatever_the_base_clone_state_is(baselines, expected):

@@ -10,7 +10,7 @@ import ast
 import io
 import tokenize
 from collections import Counter
-from collections.abc import Collection, Iterator, Mapping
+from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from enum import Enum
 from operator import attrgetter
@@ -25,6 +25,7 @@ from quality.baseline_file import (
     Baseline,
     ClonePair,
     JobKey,
+    JobMinutes,
     Key,
     Metric,
     SizeEntries,
@@ -399,13 +400,18 @@ def carried_base(base: Baseline, renames: Renames, kept: Collection[str]) -> Bas
     return Baseline(size, frozenset(pairs), limits)
 
 
-def raised_entries[Entry: (Key, JobKey)](base: Mapping[Entry, int], head: Mapping[Entry, int]) -> list[RaisedEntry]:
-    """One baseline against another: an entry may fall or go, never rise or appear; a renamed symbol or job is a new one."""
-    return [
-        RaisedEntry(key, base.get(key), head[key])
-        for key in sorted(head, key=lambda key: key_order(key) if isinstance(key, Key) else key)
-        if key not in base or head[key] > base[key]
-    ]
+def raised_entries(base: SizeEntries, head: SizeEntries) -> list[RaisedEntry]:
+    """One baseline against another: an entry may fall or go, never rise or appear; a renamed symbol is a new one."""
+    return _raised(base, head, sorted(head, key=key_order))
+
+
+def raised_job_limits(base: JobMinutes, head: JobMinutes) -> list[RaisedEntry]:
+    """The same for job limits, in the order the head file holds them; a renamed job is a new one."""
+    return _raised(base, head, head)
+
+
+def _raised[Entry: (Key, JobKey)](base: Mapping[Entry, int], head: Mapping[Entry, int], order: Iterable[Entry]) -> list[RaisedEntry]:
+    return [RaisedEntry(key, base.get(key), head[key]) for key in order if key not in base or head[key] > base[key]]
 
 
 def added_pairs(base: frozenset[ClonePair], head: frozenset[ClonePair]) -> list[ClonePair]:

@@ -19,7 +19,7 @@ from quality.config import (
     LegacyMode,
 )
 from quality.output import SEPARATOR, Glyph, Row, SubLine, counted, format_duration
-from quality.ratchet import Renames, added_pairs, carried_base, named_paths, raised_entries
+from quality.ratchet import Renames, added_pairs, carried_base, named_paths, raised_entries, raised_job_limits
 from quality.report import (
     FIX_THEN_RERUN,
     PUSH_THE_FIX,
@@ -338,7 +338,7 @@ def _job_loosenings(base: Baseline, head: Baseline) -> list[str]:
         return []
     if head.job_minutes is None:
         return ["job limit baseline removed"]
-    return [f"job limit baseline {entry.describe()}" for entry in raised_entries(base.job_minutes, head.job_minutes)]
+    return [f"job limit baseline {entry.describe()}" for entry in raised_job_limits(base.job_minutes, head.job_minutes)]
 
 
 def _judge_job(name: str, jobs: list[Job], current_attempt: int) -> tuple[JobOutcome, Unsettled | None]:
