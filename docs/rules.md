@@ -944,10 +944,10 @@ inside a file is a new entry (TIMEOUT-17).
 apply). From the ceiling's last commit, the workflow's held job entries move to the new path at their held values
 (`moved`, `job e2e 40 minutes from .github/workflows/old.yml`), what the table held under the new path before the move,
 and the carry of the last commit lacks, is dropped (`dropped`, `job e2e 25 minutes · left from before the move`), and an entry
-the carry already holds, no higher, stays. An entry under a renamed path that the last commit's table does not explain
+the carry already holds, no higher, stays unless a moved entry takes its key; each entry is judged on its own. An entry under a renamed path that the last commit's table does not explain
 refuses with the restore step before anything is written, naming the workflow. Where the last commit holds no
-`[job_minutes]` table the verdict compares nothing (TIMEOUT-18), so held entries under a renamed workflow move and no
-leftover is judged. A held ceiling without the table stays without it, a held empty table stays held, and entries under
+`[job_minutes]` table the verdict compares nothing (TIMEOUT-18), so held entries under a renamed workflow move, no
+leftover is judged, and only an entry a moved one takes the key of is dropped. A held ceiling without the table stays without it, a held empty table stays held, and entries under
 a path no rename touches are written as they were. A moved job entry counts as moved in the debt row and the verdict
 line (TIMEOUT-19).
 
