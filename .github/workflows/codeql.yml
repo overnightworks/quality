@@ -7,6 +7,11 @@ on:
         description: JSON list of the CodeQL languages to analyse, for example '["actions", "python"]'
         type: string
         required: true
+      config-file:
+        description: Path in the caller's checkout of a CodeQL configuration file, for example '.github/codeql/codeql-config.yml'; empty runs CodeQL's defaults
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -35,6 +40,7 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: none
+          config-file: ${{ inputs.config-file }}
 
       - name: Analyze
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
