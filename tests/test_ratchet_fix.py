@@ -3,7 +3,6 @@
 import pytest
 
 from quality.baseline_file import (
-    Baseline,
     ClonePair,
     JobKey,
     Key,
@@ -14,6 +13,7 @@ from quality.baseline_file import (
 )
 from quality.ratchet import Measured, lower_ceiling
 from quality.report import Note, NoteEvent
+from tests.support.baselines import ceiling
 
 
 def size_key(metric: Metric, symbol: str = "") -> Key:
@@ -26,7 +26,7 @@ def pair(first: str, second: str) -> ClonePair:
 
 def fixed(held: dict[Key, int], measured: dict[Key, int | None], pairs=frozenset(), held_pairs=frozenset(), gone=None):
     measurements = {key: Measured(value, 3) for key, value in measured.items() if value is not None}
-    return lower_ceiling(Baseline(held, held_pairs), measurements, pairs, gone or {})
+    return lower_ceiling(ceiling(held, held_pairs), measurements, pairs, gone or {})
 
 
 @pytest.mark.parametrize(
@@ -100,7 +100,7 @@ def test_a_pair_the_tree_lost_goes_and_a_new_one_stays_out():
 
 def test_a_file_without_clones_records_its_pairs():
     """FIX-15: a file without `[clones]` records its pairs and notes the recording."""
-    fix = lower_ceiling(Baseline({}, None), {}, frozenset({pair("work", "b")}), {})
+    fix = lower_ceiling(ceiling({}, None), {}, frozenset({pair("work", "b")}), {})
     assert fix.ceiling.clones == frozenset({pair("work", "b")})
     assert [change.event for change in fix.changes] == [NoteEvent.RECORDED]
 
@@ -120,5 +120,5 @@ def test_a_lowered_entry_is_noted_with_its_fall_and_a_dropped_one_with_its_thres
 def test_lowering_size_entries_hands_a_held_job_table_on_unchanged(jobs, held_pairs):
     """TIMEOUT-17, FIX-31: a fix that lowers, drops or records leaves the job table as it was held."""
     file = size_key(Metric.FILE_LINES)
-    fix = lower_ceiling(Baseline({file: 826}, held_pairs, jobs), {file: Measured(812, 3)}, frozenset(), {})
+    fix = lower_ceiling(ceiling({file: 826}, held_pairs, jobs), {file: Measured(812, 3)}, frozenset(), {})
     assert (fix.ceiling.size, fix.ceiling.job_minutes) == ({file: 812}, jobs)

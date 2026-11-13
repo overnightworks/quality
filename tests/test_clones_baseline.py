@@ -9,7 +9,6 @@ import pytest
 from quality import cli
 from quality.baseline_file import (
     BASELINE_PATH,
-    Baseline,
     ClonePair,
     Key,
     Metric,
@@ -21,6 +20,7 @@ from quality.baseline_file import (
 from quality.check import RuleVerdict
 from quality.report import Finding, FindingEvent, printable
 from quality.rules import Area, Rule
+from tests.support.baselines import ceiling
 from tests.support.check import (
     area_fact,
     area_finding_rows,
@@ -121,14 +121,14 @@ def test_the_clone_baseline_only_falls_against_the_base(pull_request, capsys, ba
 def test_a_pair_is_held_under_the_path_its_file_was_renamed_from(pull_request, capsys, moved_symbol, expected):
     """BASELINE-4, BASELINE-12, BASELINE-17: the moved side keeps its symbol, so only a renamed function makes a new
     pair."""
-    head = render_baseline(Baseline({}, frozenset({ClonePair.of(Place("tests/test_e.py", moved_symbol), Place("tests/test_b.py", "check"))})))
+    head = render_baseline(ceiling({}, frozenset({ClonePair.of(Place("tests/test_e.py", moved_symbol), Place("tests/test_b.py", "check"))})))
     moved_in_head(pull_request, FIRST, head, old="tests/test_a.py", new="tests/test_e.py")
     _, output = verdict_of(pull_request[0], capsys)
     assert expected in output
 
 
 def pairs_text(*pairs):
-    return render_baseline(Baseline({}, frozenset(pairs)))
+    return render_baseline(ceiling({}, frozenset(pairs)))
 
 
 MOVED_PAIR = ClonePair.of(Place("tests/test_e.py", "run"), Place("tests/test_b.py", "check"))
@@ -326,14 +326,14 @@ def test_a_fix_over_a_file_without_a_clone_table_records_the_pairs_and_keeps_the
     """FIX-15: a ceiling git never held a `[clones]` table in takes the pairs and no new entry."""
     repo = build_repo({"src/a.py": long_function(70), **TWO_FILES, BASELINE_PATH: LONG_ONE})
     assert written(capsys, repo)[0] == 0
-    assert load_baseline(baseline_text(repo)) == Baseline({Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 70}, frozenset({FIRST_PAIR}))
+    assert load_baseline(baseline_text(repo)) == ceiling({Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 70}, frozenset({FIRST_PAIR}))
 
 
 def test_a_pair_the_tree_lost_leaves_the_ceiling_and_no_new_pair_enters(build_repo, capsys):
     """FIX-9, FIX-10: a held pair the tree lost goes, and a pair the tree gained stays a finding, not in the ceiling."""
     repo = build_repo({**THREE_FILES, BASELINE_PATH: FIRST + SECOND})
     assert written(capsys, repo)[0] == 1
-    assert load_baseline(baseline_text(repo)) == Baseline({}, frozenset({FIRST_PAIR}))
+    assert load_baseline(baseline_text(repo)) == ceiling({}, frozenset({FIRST_PAIR}))
 
 
 def test_the_written_file_loads_back_with_each_pair_once_under_its_first_side_sorted(build_repo, capsys):
@@ -348,7 +348,7 @@ def test_the_written_file_loads_back_with_each_pair_once_under_its_first_side_so
         ClonePair.of(Place("tests/test_a.py", "run"), Place("tests/test_c.py", "walk")),
         ClonePair.of(Place("tests/test_b.py", "check"), Place("tests/test_c.py", "walk")),
     })
-    assert load_baseline(first) == Baseline({}, pairs)
+    assert load_baseline(first) == ceiling({}, pairs)
     assert written(capsys, repo)[0] == 0
     assert baseline_text(repo) == first
 
@@ -356,17 +356,17 @@ def test_the_written_file_loads_back_with_each_pair_once_under_its_first_side_so
 def test_a_reversed_or_repeated_hand_written_pair_loads_as_its_one_identity():
     """A hand-written pair listed reversed or twice loads as the one pair."""
     repeated = REVERSED + '[clones."tests/test_a.py"]\nrun = [["tests/test_b.py", "check"], ["tests/test_b.py", "check"]]\n'
-    assert load_baseline(REVERSED) == Baseline({}, frozenset({FIRST_PAIR}))
-    assert load_baseline(repeated) == Baseline({}, frozenset({FIRST_PAIR}))
+    assert load_baseline(REVERSED) == ceiling({}, frozenset({FIRST_PAIR}))
+    assert load_baseline(repeated) == ceiling({}, frozenset({FIRST_PAIR}))
     assert render_baseline(load_baseline(repeated)).endswith("\n" + FIRST)
 
 
 def test_an_empty_clone_table_is_the_empty_set_and_renders_back_as_the_table(build_repo, capsys):
     """An empty `[clones]` table loads as the empty set, not as an absent one, and a first recording of a tree with
     no pair renders it back."""
-    assert load_baseline(EMPTY_CLONES) == Baseline({}, frozenset())
-    assert load_baseline("") == Baseline({}, None)
-    assert render_baseline(Baseline({}, frozenset())).endswith("\n" + EMPTY_CLONES)
+    assert load_baseline(EMPTY_CLONES) == ceiling({}, frozenset())
+    assert load_baseline("") == ceiling({}, None)
+    assert render_baseline(ceiling({}, frozenset())).endswith("\n" + EMPTY_CLONES)
     repo = build_repo({"src/a.py": "x = 1\n"})
     assert written(capsys, repo)[0] == 0
     assert baseline_text(repo).endswith("\n" + EMPTY_CLONES)
@@ -389,7 +389,7 @@ def test_symbols_and_paths_that_need_quotes_round_trip_through_the_write(build_r
         ClonePair.of(Place(class_path, "Holder.méthode"), Place(functions_path, "f")),
         ClonePair.of(Place(class_path, "Holder.méthode"), Place(functions_path, "f#2")),
     })
-    assert load_baseline(first) == Baseline({}, pairs)
+    assert load_baseline(first) == ceiling({}, pairs)
     assert written(capsys, repo)[0] == 0
     assert baseline_text(repo) == first
 
@@ -399,12 +399,12 @@ def test_a_pair_across_production_and_tests_round_trips(build_repo, capsys):
     repo = build_repo({"src/shop.py": clone_function("price", "a", "b"), "tests/test_shop.py": clone_function("cost", "c", "d")})
     assert written(capsys, repo)[0] == 0
     pair = ClonePair.of(Place("src/shop.py", "price"), Place("tests/test_shop.py", "cost"))
-    assert load_baseline(baseline_text(repo)) == Baseline({}, frozenset({pair}))
+    assert load_baseline(baseline_text(repo)) == ceiling({}, frozenset({pair}))
 
 
 def test_a_size_entry_and_a_pair_load_into_one_baseline():
     key = Key(Metric.FUNCTION_LINES, "src/quality/cli.py", "main")
-    assert load_baseline(SIZE + FIRST) == Baseline({key: 82}, frozenset({FIRST_PAIR}))
+    assert load_baseline(SIZE + FIRST) == ceiling({key: 82}, frozenset({FIRST_PAIR}))
 
 
 def enforced(capsys, build_repo, files, table=EMPTY_CLONES):
@@ -588,7 +588,7 @@ def test_a_control_character_in_a_held_pair_prints_escaped(build_repo, capsys):
     """CLONE-7, MASK-2, MASK-6: a held pair whose path holds a control character is gone, and its location and fact
     print escaped."""
     pair = ClonePair.of(Place("src/a\x01.py", "run"), Place("src/b.py", "check"))
-    stale = render_baseline(Baseline({}, frozenset({pair})))
+    stale = render_baseline(ceiling({}, frozenset({pair})))
     repo, code, output = enforced(capsys, build_repo, {"src/c.py": "x = 1\n"}, stale)
     (finding,) = clone_findings(repo)
     assert code == 1, output

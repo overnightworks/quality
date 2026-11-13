@@ -10,10 +10,11 @@ import time
 import pytest
 
 from quality import sides
-from quality.baseline_file import BASELINE_PATH, Baseline, Key, Metric, render_baseline
+from quality.baseline_file import BASELINE_PATH, Key, Metric, render_baseline
 from quality.config import CONFIG_PATH
 from quality.ratchet import Renames, renames_of
 from quality.report import CannotJudge
+from tests.support.baselines import ceiling
 from tests.support.door import RELEASE_ROW
 from tests.support.git_repositories import head_commit, put
 from tests.support.merge import (
@@ -34,7 +35,7 @@ OTHER_FILE = "".join(f"nothing like the movable file, row {number}\n" for number
 
 
 def metric_baseline(metric, path, size):
-    return render_baseline(Baseline({Key(Metric(metric), path, "" if metric == "file_lines" else "f"): size}, None))
+    return render_baseline(ceiling({Key(Metric(metric), path, "" if metric == "file_lines" else "f"): size}, None))
 
 
 def metric_label(metric, path):

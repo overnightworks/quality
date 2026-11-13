@@ -527,7 +527,7 @@ def _fix_ceiling(inputs: RunInputs, sources: dict[str, bytes], held: baseline_fi
     pairs = clones.find_pairs(sources).pairs
     if held is None:
         _require_no_ceiling_in_git(inputs)
-        return _with_recorded_jobs(inputs, ratchet.CeilingFix(baseline_file.Baseline(ratchet.debt(measurements), pairs), (), first=True))
+        return _with_recorded_jobs(inputs, ratchet.CeilingFix(baseline_file.Baseline(ratchet.debt(measurements), pairs, literal_texts=None), (), first=True))
     if held.clones is None:
         _require_no_table_in_git(inputs, baseline_file.CLONES)
     followed = _followed(inputs, held)  # renames first, so a renamed file's entries move instead of falling as gone

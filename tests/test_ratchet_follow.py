@@ -2,7 +2,7 @@
 
 import pytest
 
-from quality.baseline_file import Baseline, ClonePair, JobKey, Key, Metric, Place
+from quality.baseline_file import ClonePair, JobKey, Key, Metric, Place
 from quality.ratchet import (
     RESTORE_STEP,
     Renames,
@@ -13,6 +13,7 @@ from quality.ratchet import (
     raised_job_limits,
 )
 from quality.report import CannotJudge, Note, NoteEvent
+from tests.support.baselines import ceiling
 
 
 def sized(path, symbol="f"):
@@ -29,7 +30,7 @@ def booked(path, job="e2e"):
 
 def timed(entries):
     """A ceiling that holds only job entries, none when `entries` is None."""
-    return Baseline({}, None, entries)
+    return ceiling({}, None, entries)
 
 
 def paired(first, second):
@@ -48,34 +49,34 @@ def tracked_after(held, committed, renames):
 def moved_entry_cases():
     return [
         pytest.param(
-            Baseline({sized("a.py"): 16}, None),
-            Baseline({sized("a.py"): 16}, None),
+            ceiling({sized("a.py"): 16}, None),
+            ceiling({sized("a.py"): 16}, None),
             renamed({"a.py": "b.py"}),
-            Baseline({sized("b.py"): 16}, None),
+            ceiling({sized("b.py"): 16}, None),
             [NoteEvent.MOVED],
             id="as committed moves",
         ),
         pytest.param(
-            Baseline({sized("a.py"): 15}, None),
-            Baseline({sized("a.py"): 16}, None),
+            ceiling({sized("a.py"): 15}, None),
+            ceiling({sized("a.py"): 16}, None),
             renamed({"a.py": "b.py"}),
-            Baseline({sized("b.py"): 15}, None),
+            ceiling({sized("b.py"): 15}, None),
             [NoteEvent.MOVED],
             id="held lower than committed moves lower",
         ),
         pytest.param(
-            Baseline({sized("a.py"): 100, sized("b.py"): 200}, None),
-            Baseline({sized("a.py"): 100, sized("b.py"): 200}, None),
+            ceiling({sized("a.py"): 100, sized("b.py"): 200}, None),
+            ceiling({sized("a.py"): 100, sized("b.py"): 200}, None),
             renamed({"a.py": "b.py"}),
-            Baseline({sized("b.py"): 100}, None),
+            ceiling({sized("b.py"): 100}, None),
             [NoteEvent.MOVED, NoteEvent.DROPPED],
             id="the stale leftover goes",
         ),
         pytest.param(
-            Baseline({sized("a.py"): 100, sized("b.py", "g"): 200}, None),
-            Baseline({sized("a.py"): 100, sized("b.py", "g"): 200}, None),
+            ceiling({sized("a.py"): 100, sized("b.py", "g"): 200}, None),
+            ceiling({sized("a.py"): 100, sized("b.py", "g"): 200}, None),
             renamed({"a.py": "b.py"}),
-            Baseline({sized("b.py"): 100}, None),
+            ceiling({sized("b.py"): 100}, None),
             [NoteEvent.MOVED, NoteEvent.DROPPED],
             id="a leftover the source lacks",
         ),
@@ -85,42 +86,42 @@ def moved_entry_cases():
 def followed_entry_cases():
     return [
         pytest.param(
-            Baseline({sized("b.py"): 16}, None),
-            Baseline({sized("a.py"): 16}, None),
+            ceiling({sized("b.py"): 16}, None),
+            ceiling({sized("a.py"): 16}, None),
             renamed({"a.py": "b.py"}),
-            Baseline({sized("b.py"): 16}, None),
+            ceiling({sized("b.py"): 16}, None),
             [],
             id="already followed stays",
         ),
         pytest.param(
-            Baseline({sized("b.py"): 15}, None),
-            Baseline({sized("a.py"): 16}, None),
+            ceiling({sized("b.py"): 15}, None),
+            ceiling({sized("a.py"): 16}, None),
             renamed({"a.py": "b.py"}),
-            Baseline({sized("b.py"): 15}, None),
+            ceiling({sized("b.py"): 15}, None),
             [],
             id="already followed and lowered stays",
         ),
         pytest.param(
-            Baseline({}, None),
-            Baseline({sized("a.py"): 16}, None),
+            ceiling({}, None),
+            ceiling({sized("a.py"): 16}, None),
             renamed({"a.py": "b.py"}),
-            Baseline({}, None),
+            ceiling({}, None),
             [],
             id="nothing held stays empty",
         ),
         pytest.param(
-            Baseline({sized("b.py"): 200}, None),
-            Baseline({sized("b.py"): 200}, None),
+            ceiling({sized("b.py"): 200}, None),
+            ceiling({sized("b.py"): 200}, None),
             renamed({}, unnamed_sources=["b.py"]),
-            Baseline({}, None),
+            ceiling({}, None),
             [NoteEvent.DROPPED],
             id="a source that is not UTF-8 drops the leftover",
         ),
         pytest.param(
-            Baseline({sized("a.py"): 16, sized("c.py"): 17}, None),
-            Baseline({sized("a.py"): 16, sized("c.py"): 17}, None),
+            ceiling({sized("a.py"): 16, sized("c.py"): 17}, None),
+            ceiling({sized("a.py"): 16, sized("c.py"): 17}, None),
             renamed({"a.py": "b.py"}),
-            Baseline({sized("b.py"): 16, sized("c.py"): 17}, None),
+            ceiling({sized("b.py"): 16, sized("c.py"): 17}, None),
             [NoteEvent.MOVED],
             id="an untouched entry stays",
         ),
@@ -130,34 +131,34 @@ def followed_entry_cases():
 def pair_cases():
     return [
         pytest.param(
-            Baseline({}, frozenset({paired("a.py", "z.py")})),
-            Baseline({}, frozenset({paired("a.py", "z.py")})),
+            ceiling({}, frozenset({paired("a.py", "z.py")})),
+            ceiling({}, frozenset({paired("a.py", "z.py")})),
             renamed({"a.py": "b.py"}),
-            Baseline({}, frozenset({paired("b.py", "z.py")})),
+            ceiling({}, frozenset({paired("b.py", "z.py")})),
             [NoteEvent.MOVED],
             id="a pair moves",
         ),
         pytest.param(
-            Baseline({}, frozenset({paired("a.py", "z.py"), paired("b.py", "y.py")})),
-            Baseline({}, frozenset({paired("a.py", "z.py"), paired("b.py", "y.py")})),
+            ceiling({}, frozenset({paired("a.py", "z.py"), paired("b.py", "y.py")})),
+            ceiling({}, frozenset({paired("a.py", "z.py"), paired("b.py", "y.py")})),
             renamed({"a.py": "b.py"}),
-            Baseline({}, frozenset({paired("b.py", "z.py")})),
+            ceiling({}, frozenset({paired("b.py", "z.py")})),
             [NoteEvent.MOVED, NoteEvent.DROPPED],
             id="a leftover pair goes",
         ),
         pytest.param(
-            Baseline({}, frozenset({paired("a.py", "z.py")})),
-            Baseline({}, None),
+            ceiling({}, frozenset({paired("a.py", "z.py")})),
+            ceiling({}, None),
             renamed({"a.py": "b.py"}),
-            Baseline({}, frozenset({paired("b.py", "z.py")})),
+            ceiling({}, frozenset({paired("b.py", "z.py")})),
             [NoteEvent.MOVED],
             id="pairs without a committed table move",
         ),
         pytest.param(
-            Baseline({}, frozenset({paired("a.py", "b.py")})),
-            Baseline({}, frozenset({paired("a.py", "b.py")})),
+            ceiling({}, frozenset({paired("a.py", "b.py")})),
+            ceiling({}, frozenset({paired("a.py", "b.py")})),
             renamed({"a.py": "c.py", "b.py": "d.py"}),
-            Baseline({}, frozenset({paired("c.py", "d.py")})),
+            ceiling({}, frozenset({paired("c.py", "d.py")})),
             [NoteEvent.MOVED],
             id="a pair touching two renames",
         ),
@@ -302,10 +303,10 @@ def job_table_cases():
             id="a workflow no rename touches is handed on",
         ),
         pytest.param(
-            Baseline({sized("a.py"): 16}, None, {booked("a.yml"): 40}),
-            Baseline({sized("a.py"): 16}, None, {booked("a.yml"): 40}),
+            ceiling({sized("a.py"): 16}, None, {booked("a.yml"): 40}),
+            ceiling({sized("a.py"): 16}, None, {booked("a.yml"): 40}),
             renamed({"a.py": "b.py", "a.yml": "b.yml"}),
-            Baseline({sized("b.py"): 16}, None, {booked("b.yml"): 40}),
+            ceiling({sized("b.py"): 16}, None, {booked("b.yml"): 40}),
             [NoteEvent.MOVED, NoteEvent.MOVED],
             id="a source file and a workflow move together",
         ),
@@ -354,36 +355,36 @@ def test_a_followed_job_entry_is_named_by_its_new_path_in_the_file_order_with_th
     ("held", "committed", "tracked", "path"),
     [
         pytest.param(
-            Baseline({sized("b.py", "g"): 5}, None),
-            Baseline({sized("a.py"): 100}, None),
+            ceiling({sized("b.py", "g"): 5}, None),
+            ceiling({sized("a.py"): 100}, None),
             {"b.py"},
             "b.py",
             id="neither form",
         ),
         pytest.param(
-            Baseline({sized("a.py"): 150}, None),
-            Baseline({sized("a.py"): 100}, None),
+            ceiling({sized("a.py"): 150}, None),
+            ceiling({sized("a.py"): 100}, None),
             {"b.py"},
             "a.py",
             id="a hand raise under a renamed file",
         ),
         pytest.param(
-            Baseline({sized("b.py"): 16, sized("z.py"): 30}, None),
-            Baseline({sized("a.py"): 16}, None),
+            ceiling({sized("b.py"): 16, sized("z.py"): 30}, None),
+            ceiling({sized("a.py"): 16}, None),
             {"b.py"},
             "z.py",
             id="untracked and not committed",
         ),
         pytest.param(
-            Baseline({lined("b.py"): 900, sized("a.py"): 20}, None),
-            Baseline({lined("a.py"): 900, sized("a.py"): 20}, None),
+            ceiling({lined("b.py"): 900, sized("a.py"): 20}, None),
+            ceiling({lined("a.py"): 900, sized("a.py"): 20}, None),
             {"b.py"},
             "b.py",
             id="size entries half moved by hand are one group",
         ),
         pytest.param(
-            Baseline({sized("a.py"): 16, sized("b.py", "g"): 17}, None),
-            Baseline({sized("a.py"): 16, sized("a.py", "g"): 17}, None),
+            ceiling({sized("a.py"): 16, sized("b.py", "g"): 17}, None),
+            ceiling({sized("a.py"): 16, sized("a.py", "g"): 17}, None),
             {"b.py"},
             "b.py",
             id="size entries neither committed nor carried as a group",

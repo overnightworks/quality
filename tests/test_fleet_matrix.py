@@ -21,6 +21,7 @@ from quality.fleet import (
 )
 from quality.rules import Rule, RuleRelease, Switch, SwitchChange
 from tests.support.architecture import FORBIDDEN, toml
+from tests.support.baselines import ceiling
 from tests.support.fleet import NEWEST, OLDER, RELEASES, row
 from tests.support.git_repositories import GIT_IDENTITY, head_commit
 
@@ -222,7 +223,7 @@ def unreadable_tags() -> dict[str, str]:
 
 @pytest.mark.parametrize(
     ("files", "size"),
-    [({baseline_file.BASELINE_PATH: baseline_file.render_baseline(baseline_file.Baseline({}, None))}, "enforced"), ({}, "report-only")],
+    [({baseline_file.BASELINE_PATH: baseline_file.render_baseline(ceiling({}, None))}, "enforced"), ({}, "report-only")],
     ids=["a baseline", "no baseline"],
 )
 def test_the_size_cell_is_enforced_with_a_baseline_and_report_only_without(fleet_report, public, files, size):
