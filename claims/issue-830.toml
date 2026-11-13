@@ -1,0 +1,7 @@
+claim_id = "f01ddc1da30843c6ae4f6163a32c996e"
+agent = "Claude 3cb16e78-3ea2-405c-947b-02cb3fc89cde"
+role = "builder"
+base = "eb140c397e83b8ec4e9ee849453d14efeef4e787"
+branch = "claude/issue-830-codeql-config-file"
+scope = [".github/workflows/codeql.yml", "docs/codeql.md", "tests/workflows/test_codeql.py"]
+opened_commit = "5ae513ff0947e3c241a66f3cb59909050e312e67"
