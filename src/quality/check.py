@@ -23,6 +23,7 @@ from quality import (
     python_floor,
     python_lint,
     ratchet,
+    render_pass,
     repository,
     root_layout,
     scanners,
@@ -31,7 +32,8 @@ from quality import (
 from quality.config import (
     AllowLists,
     ConfigError,
-    read_allow_lists,
+    Declarations,
+    read_declarations,
 )
 from quality.deadline import RunDeadline
 from quality.output import SEPARATOR, counted
@@ -58,10 +60,10 @@ def _python_floor_result(root: Path, modes: dict[str, str] | CannotJudge, allow_
     return python_floor.check_python_floor(checkout.read_existing(repository.read_bytes, root, present), _required(allow_lists).python)
 
 
-def _read_allow_lists(root: Path) -> AllowLists:
+def _read_declarations(root: Path) -> Declarations:
     """The repository's declarations; a config that cannot be read cannot be judged."""
     try:
-        return read_allow_lists(root)
+        return read_declarations(root)
     except ConfigError as error:
         raise config_refusal(error) from error
 
@@ -398,8 +400,12 @@ class RunInputs:
     cache: Path | None  # quality's user cache directory, where the advisory databases are kept
 
     @cached_property
+    def declarations(self) -> Declarations | CannotJudge:
+        return _attempt(lambda: _read_declarations(self.root))
+
+    @property
     def allow_lists(self) -> AllowLists | CannotJudge:
-        return _attempt(lambda: _read_allow_lists(self.root))
+        return self.declarations if isinstance(self.declarations, CannotJudge) else self.declarations.allow_lists
 
     @cached_property
     def modes(self) -> dict[str, str] | CannotJudge:
@@ -622,6 +628,7 @@ def _judge_workflows(inputs: RunInputs) -> AreaVerdict:
     judged[Rule.PYTEST_WORKERS] = _attempt(lambda: workflow_rules.check_pytest_workers(inputs.root, inputs.tracked))
     judged[Rule.RUNTIME_INSTALL] = _attempt(lambda: workflow_rules.check_runtime_install(inputs.root, inputs.tracked))
     judged[Rule.CATALOG_CHECK] = _attempt(lambda: catalog_rules.check_catalog_call(inputs.root, inputs.tracked))
+    judged[Rule.RENDER_PASS] = _attempt(lambda: render_pass.check_render_pass(inputs.root, inputs.tracked, lambda: _required(inputs.declarations)))
     return _area_verdict(Area.WORKFLOWS, judged, runs)
 
 

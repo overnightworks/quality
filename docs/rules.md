@@ -1055,6 +1055,37 @@ reads `report-only`; from v0.13.0 on the cell reads as on main). On main the cel
 clone reads `enforced` when the clone declares the dependency and `no catalogs declaration` when it does not (FLEET-98,
 FLEET-99).
 
+The `render-pass` rule, in the `workflows` area, requires a covered repository that tracks two or more catalogs to name the
+job that renders each page once per language. It judges presence and gating, never what the job does; the three assertions
+of the pass (no key shown as text, `lang` equal to the language, no overflow) stay the app's test.
+
+- **Who is judged (RENDER-1).** A repository covered as for `catalog-check` (CATALOG-1) that tracks two or more catalogs. A
+  repository that is not covered, or has fewer than two catalogs, sees no row and no exit `2` from this rule, and no
+  workflow is read for it.
+- **Where the catalogs lie (RENDER-2).** The directory is `[tool.design-catalogs] catalogs` in the tracked root
+  `pyproject.toml`, else `frontend/src/lib/catalogs`, design's default (`design/catalogs/declaration.py` owns it). It is read
+  only when the repository is covered, and follows design's rules: normalised with `os.path.normpath`; a path that is
+  absolute, has no parts (`""` and `"."`) or starts with `..` is exit `2` naming `pyproject.toml`, and so is a value that is
+  no string and a `tool.design-catalogs` that is no table. A catalog is a tracked file `<directory>/<name>.po` directly in
+  that directory; a `.po` file elsewhere does not count.
+- **The declaration (RENDER-3).** `quality/config.toml` takes the optional table `[languages]` with the one key
+  `render_pass`, the name of a job as `mandatory_jobs` names it (the job's `name:`, else its id; a `name:` that holds an
+  expression is no name). Another key, or a value that is not a non-empty string, is exit `2`. A quality older than the
+  release that ships the table refuses it as an unknown table.
+
+Each finding is `missing` at `quality/config.toml` with no line, and the first that applies stops the rule:
+
+- `! quality/config.toml  missing  N catalogs and no render pass declared`, fix `name the job that renders each page once per
+  language in [languages] render_pass` (also where the file is missing);
+- `! quality/config.toml  missing  render pass "x" is no job of a tracked workflow`, fix `name a job a tracked workflow holds`;
+- `! quality/config.toml  missing  render pass "x" is not a mandatory job`, fix `add "x" to [gate] mandatory_jobs`.
+
+With all three held the rule has no row. Any tracked workflow counts, a root or not. Named gaps: a matrix render pass cannot
+be green, since the file names the job `render` and the run lists its legs as `render (de)`; a job of a called workflow is
+listed as `caller / job`; pointing `render_pass` at any other mandatory job passes; a nested project's catalogs do not count
+(CATALOG-6). No configuration switches the rule off. It is on main only, so its fleet cell reads `not released` under a tag
+and, on main, `enforced` where the clone declares the catalogs and `no catalogs declaration` where it does not (FLEET-99).
+
 The `literal-text` rule, in the `debt` area, counts the literal texts of a covered repository's pages: the texts a person
 reads that the markup holds itself instead of taking them from a catalog. A repository is covered as for `catalog-check`
 (the same read of the root `pyproject.toml`, CATALOG-1), so a repository that is not covered sees no row and no new

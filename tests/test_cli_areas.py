@@ -133,7 +133,7 @@ def test_a_named_area_starts_no_shared_read_it_does_not_need(build_repo, served_
     def never_read(*_arguments, **_keywords):
         pytest.fail("a read this area does not need was started")
 
-    reads = {"allow_lists": (check, "read_allow_lists"), "modes": (checkout, "index_modes"), "sources": (ratchet, "read_sources")}
+    reads = {"allow_lists": (check, "read_declarations"), "modes": (checkout, "index_modes"), "sources": (ratchet, "read_sources")}
     for name in unneeded:
         monkeypatch.setattr(*reads[name], never_read)
     keywords, _ = recording_scanners(served_scanners, elsewhere)

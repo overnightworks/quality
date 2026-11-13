@@ -765,3 +765,18 @@ def _minutes(value: yaml.Node | None) -> Decimal | None:
     if not isinstance(value, yaml.ScalarNode) or value.style or not MINUTES.fullmatch(value.value):
         return None
     return Decimal(value.value) or None
+
+
+def job_names(root: Path, tracked: list[str]) -> frozenset[str]:
+    """The names the run lists for the jobs of every tracked workflow: a job's `name:` when it is a plain string, else its id.
+    A `name:` that holds an expression is no name the run lists, so it adds none."""
+    names: set[str] = set()
+    for name, text in _readable_workflows(root, tracked):
+        document = _document(name, text)
+        for job_id, _, job in _jobs(name, document):
+            label = _guarded(name, document, checkout.mapping_values(job).get("name"))
+            if label is None:
+                names.add(job_id)
+            elif isinstance(label, yaml.ScalarNode) and label.value and "${{" not in label.value:
+                names.add(label.value)
+    return frozenset(names)

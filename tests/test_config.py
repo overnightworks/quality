@@ -17,6 +17,7 @@ from quality.config import (
     LayoutAllowance,
     LegacyMode,
     load_allow_lists,
+    load_declarations,
     load_gate_settings,
     load_staged_secret_allowances,
     read_allow_lists,
@@ -706,3 +707,32 @@ def test_a_bare_unknown_key_stands_unquoted_and_any_other_stands_as_a_toml_strin
     with pytest.raises(ConfigError) as refused:
         load_allow_lists('[root]\nAb_9-z = 1\n"" = 2\n')
     assert refused.value.fact.startswith(f'{CONFIG_PATH} has unknown keys "", Ab_9-z - ')
+
+
+def test_the_languages_table_names_the_render_pass_job_beside_the_mandatory_jobs():
+    """RENDER-3: the one validated document hands the check the declared job and the gate's mandatory jobs."""
+    render_pass = load_declarations(f'{GATE_WITH_CHECKS}\n[languages]\nrender_pass = "render"\n').render_pass
+    assert (render_pass.job, render_pass.mandatory_jobs) == ("render", ("checks",))
+
+
+@pytest.mark.parametrize("text", [None, GATE_WITH_CHECKS], ids=["no config", "no table"])
+def test_a_config_without_the_languages_table_declares_no_render_pass(text):
+    """RENDER-3."""
+    assert load_declarations(text).render_pass.job is None
+
+
+@pytest.mark.parametrize(
+    "languages",
+    ['render_pass = ""', 'render_pass = "  "', "render_pass = 1", "render_pass = true", 'render_pass = ["render"]', 'other = "render"'],
+    ids=["empty", "blank", "number", "boolean", "list", "unknown key"],
+)
+def test_the_languages_table_refuses_another_key_and_a_value_that_is_no_job_name(languages):
+    """RENDER-3: exit 2 the way other config errors are."""
+    with pytest.raises(ConfigError, match=r"quality/config.toml .*render_pass"):
+        load_declarations(f"{GATE_WITH_CHECKS}\n[languages]\n{languages}\n")
+
+
+def test_a_languages_entry_that_is_no_table_is_refused():
+    """RENDER-3."""
+    with pytest.raises(ConfigError, match=r"\[languages\] as a value, not a table"):
+        load_declarations('languages = "x"\n')

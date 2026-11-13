@@ -3,10 +3,12 @@
 the root Makefile reaches. Without such a call it gets one `missing` finding, or an `invalid` finding for each line that may
 hold the call and cannot be read."""
 
+import os
 import re
 from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import yaml
 from packaging.requirements import InvalidRequirement, Requirement
@@ -21,6 +23,9 @@ from quality.workflow_rules import UNREADABLE_FACT, PullRequestRunStep
 PYPROJECT = "pyproject.toml"
 DESIGN_DISTRIBUTION = "overnightworks-design"
 CATALOGS_EXTRA = "catalogs"
+CATALOGS_TABLE = "design-catalogs"
+CATALOGS_KEY = "catalogs"
+DEFAULT_CATALOGS = PurePosixPath("frontend/src/lib/catalogs")
 INCLUDE_GROUP = "include-group"
 GENERATOR = Tool(commands=frozenset({"design-catalogs"}), module="design.catalogs.command")
 CHECK_FLAG = "--check"
@@ -95,19 +100,60 @@ def _is_catalogs_declaration(requirement: Requirement) -> bool:
     }
 
 
-def declares_catalogs(root: Path, tracked: list[str]) -> bool:
-    """Whether the tracked root `pyproject.toml` declares the generator's distribution with the extra `catalogs`. The file is
-    read whether or not it declares it, so a file that cannot be read refuses in every repository."""
+@dataclass(frozen=True)
+class Catalogs:
+    """A covered repository's `[tool.design-catalogs] catalogs` value as the file spells it, None where it is not set."""
+
+    declared: object
+
+    def directory(self) -> PurePosixPath:
+        """The catalogs directory, validated as design validates it (`design/catalogs/declaration.py`, `_path`) and
+        defaulting to its `DEFAULT.catalogs`, the one copy of that default here."""
+        value = self.declared
+        if value is None:
+            return DEFAULT_CATALOGS
+        if not isinstance(value, str):
+            raise Unparsable(f"{PYPROJECT} [tool.{CATALOGS_TABLE}] {CATALOGS_KEY} must be a string")
+        path = PurePosixPath(os.path.normpath(value))
+        if path.is_absolute() or not path.parts or path.parts[0] == "..":
+            raise Unparsable(
+                f"{PYPROJECT} [tool.{CATALOGS_TABLE}] {CATALOGS_KEY} must be a path inside the repository, not {value!r}"
+            )
+        return path
+
+
+def _declared_catalogs(document: dict) -> object:
+    tool = document.get("tool")
+    table = tool.get(CATALOGS_TABLE) if isinstance(tool, dict) else None
+    if table is None:
+        return None
+    if not isinstance(table, dict):
+        raise Unparsable(f"{PYPROJECT} [tool.{CATALOGS_TABLE}] is no table")
+    return table.get(CATALOGS_KEY)
+
+
+def read_catalogs(root: Path, tracked: list[str]) -> Catalogs | None:
+    """The catalogs declaration of the tracked root `pyproject.toml`, None where it does not declare the generator's
+    distribution with the extra `catalogs`. The file is read whether or not it declares it, so a file that cannot be read
+    refuses in every repository; only `Catalogs.directory` validates the path, so a covered repository's bad path refuses
+    its own rule alone."""
     names = checkout.on_disk(root, [name for name in tracked if name == PYPROJECT])
     texts = checkout.read_existing(repository.read_text, root, names)
     if PYPROJECT not in texts:
-        return False
+        return None
     try:
         document = repository.parse_toml(texts[PYPROJECT])
     except repository.TomlError as error:
         raise Unparsable(f"{PYPROJECT} is not TOML that Python reads ({error})") from error
     requirements = list(_requirements(_dependency_entries(document)))
-    return any(_is_catalogs_declaration(requirement) for requirement in requirements)
+    if not any(_is_catalogs_declaration(requirement) for requirement in requirements):
+        return None
+    return Catalogs(_declared_catalogs(document))
+
+
+def declares_catalogs(root: Path, tracked: list[str]) -> bool:
+    """Whether the tracked root `pyproject.toml` declares the generator's distribution with the extra `catalogs`."""
+    return read_catalogs(root, tracked) is not None
 
 
 def _judge_generator_call(parts: Sequence[Segment], index: int) -> Problem | None:

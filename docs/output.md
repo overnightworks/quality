@@ -101,7 +101,10 @@ rows, by area:
   a refusal does not say `offline audits only` (O39); a `catalog-check` finding is `missing`
   at `.github/workflows` with no line (`no workflow step runs design-catalogs --check on a pull request, directly or through
   make`) or `invalid` at a workflow or the `Makefile` and a line (`command cannot be read to its end`, `command is built at
-  run time, design-catalogs --check cannot be read`), its fix naming the step or the make target ([rules](rules.md)).
+  run time, design-catalogs --check cannot be read`), its fix naming the step or the make target ([rules](rules.md)); a
+  `render-pass` finding is `missing` at `quality/config.toml` with no line (`N catalogs and no render pass declared`,
+  `render pass "x" is no job of a tracked workflow`, `render pass "x" is not a mandatory job`), its fix naming the
+  declaration, a job a workflow holds or the `[gate] mandatory_jobs` entry ([rules](rules.md)).
 - `dependencies`: an advisory is an `affected` row, its fact the package and version, the group's id and where it
   lists them the versions that fix it, its fix per lock kind (O41); the id is the group's first, never an alias (O42);
   a nested lock's fix names its folder (O43); the fix of a pnpm or requirements lock is the same hint for every
