@@ -19,6 +19,7 @@ CLONES = "clones"
 JOB_MINUTES = "job_minutes"
 LITERAL_TEXT = "literal_text"
 JOB_LIMIT = "job limit"
+LITERAL_TEXT_NOUN = "literal text"
 BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 BASELINE_HEADER = f"# Measured by `{FIX_COMMAND}`. Entries only ever go down.\n"
 

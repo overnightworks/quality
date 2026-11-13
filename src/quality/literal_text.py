@@ -11,7 +11,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 from quality import catalog_rules, checkout, repository
-from quality.baseline_file import FIX_COMMAND, Baseline, LiteralTexts, PageKey
+from quality.baseline_file import FIX_COMMAND, LITERAL_TEXT_NOUN, Baseline, LiteralTexts, PageKey
 from quality.output import SEPARATOR, counted
 from quality.ratchet import CeilingFix
 from quality.report import Finding, FindingEvent, LiteralExtent, Note, NoteEvent, RuleResult, Unparsable
@@ -30,7 +30,6 @@ RAW_TEXT_TAGS = CODE_TAGS | {"textarea", "title", "iframe", "xmp", "noembed", "n
 UNCLOSED_HOLE = "has a { that is never closed, so the markup after it cannot be read"
 UNCLOSED_ELEMENT = "has a <{tag}> that is opened and never closed, so the markup after it cannot be read"
 NEW_DEBT_FIX = "read each text through the generated module and keep it in the catalog"
-TEXT = "literal text"
 
 
 class UnreadablePage(ValueError):
@@ -174,7 +173,7 @@ def _covered_counts(root: Path, tracked: list[str]) -> dict[str, int] | None:
 
 def table_words(texts: int, pages: int) -> str:
     """What a `[literal_text]` table holds, as a row names it."""
-    return f"{counted(texts, TEXT)} on {counted(pages, 'page')}"
+    return f"{counted(texts, LITERAL_TEXT_NOUN)} on {counted(pages, 'page')}"
 
 
 def recordable_counts(root: Path, tracked: list[str]) -> LiteralTexts | None:
@@ -195,7 +194,7 @@ def lower_literal_entries(root: Path, tracked: list[str], held: Baseline) -> Cei
     for key in sorted(entries):
         ceiling = entries[key]
         if key.path not in tracked:
-            changes.append(Note(key.path, NoteEvent.DROPPED, SEPARATOR.join(("file is gone", f"was {counted(ceiling, TEXT)}"))))
+            changes.append(Note(key.path, NoteEvent.DROPPED, SEPARATOR.join(("file is gone", f"was {counted(ceiling, LITERAL_TEXT_NOUN)}"))))
             del kept[key]
         elif (measured := counts.get(key.path, ceiling)) < ceiling:
             fall = f"{ceiling} → {measured} literal texts"
@@ -215,7 +214,7 @@ def _findings(counts: dict[str, int], table: LiteralTexts, tracked: frozenset[st
         if held is None and count:
             findings.append(_finding(name, count, FindingEvent.NEW_DEBT, "ceiling none", NEW_DEBT_FIX))
         elif held is not None and count > held:
-            fix = f"bring it back to {counted(held, TEXT)} or fewer"
+            fix = f"bring it back to {counted(held, LITERAL_TEXT_NOUN)} or fewer"
             findings.append(_finding(name, count, FindingEvent.GREW, f"ceiling {held}", fix))
         elif held is not None and count < held:
             findings.append(_finding(name, count, FindingEvent.CAN_FALL, f"ceiling {held}", FIX_COMMAND))
@@ -227,7 +226,7 @@ def _findings(counts: dict[str, int], table: LiteralTexts, tracked: frozenset[st
 
 
 def _finding(name: str, count: int, event: FindingEvent, ceiling: str, fix: str) -> Finding:
-    return Finding(Rule.LITERAL_TEXT, name, None, SEPARATOR.join((counted(count, TEXT), ceiling)), fix, event=event)
+    return Finding(Rule.LITERAL_TEXT, name, None, SEPARATOR.join((counted(count, LITERAL_TEXT_NOUN), ceiling)), fix, event=event)
 
 
 def check_literal_text(root: Path, tracked: list[str], read_ceiling: Callable[[], Baseline | None]) -> RuleResult | None:

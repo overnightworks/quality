@@ -22,6 +22,7 @@ from quality import checkout, repository
 from quality.baseline_file import (
     BASELINE_PATH,
     FIX_COMMAND,
+    LITERAL_TEXT_NOUN,
     Baseline,
     ClonePair,
     JobKey,
@@ -582,7 +583,7 @@ def _entries_to_move[Entry: (Key, JobKey, PageKey)](
 
 SIZE_ENTRIES = EntryKind(lambda key, value: f"{_subject(key)} {describe_value(key.metric, value)}", _group_to_move)
 JOB_ENTRIES = EntryKind(lambda key, value: f"job {key.job} {value} minutes", _entries_to_move)
-PAGE_ENTRIES = EntryKind(lambda key, value: counted(value, "literal text"), _entries_to_move)
+PAGE_ENTRIES = EntryKind(lambda key, value: counted(value, LITERAL_TEXT_NOUN), _entries_to_move)
 
 
 def _followed_entries[Entry: (Key, JobKey, PageKey)](

@@ -414,7 +414,7 @@ def measure_repository(name: str) -> Row:
 
 
 def read_declared(clone: Path, tracked: list[str]) -> Declared:
-    """The clone's gate settings, size baseline, clone table and import-linter config; a file that cannot be read is named."""
+    """The clone's gate settings, size baseline, clone table, literal-text table and import-linter config; a file that cannot be read is named."""
     unreadable: set[str] = set()
     settings, has_baseline, has_clone_table, has_literal_table, has_import_config = None, False, False, False, False
     try:

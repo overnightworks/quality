@@ -551,7 +551,7 @@ def _debt_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) ->
     entries, pairs = counted(extents[Rule.SIZE], "entry", "entries"), counted(extents[Rule.CLONE], CLONE_PAIR)
     literal = extents.get(Rule.LITERAL_TEXT)
     measured = {judged.rule for judged in verdict.verdicts if judged.measured_only}
-    read = [] if literal is None else [f"{counted(literal.texts, 'literal text')} in {counted(literal.files, 'file')}"]
+    read = [] if literal is None else [f"{counted(literal.texts, baseline_file.LITERAL_TEXT_NOUN)} in {counted(literal.files, 'file')}"]
     held = [] if literal is None else [literal_text.table_words(literal.texts, literal.files)]
     match verdict.measurement:
         case Measurement.MEASURED_ONLY:
