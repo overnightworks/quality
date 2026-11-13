@@ -213,9 +213,16 @@ class TestFixLowersAndNeverRaises:
         code, _ = judged(capsys, repo, *FIX_WORDS)
         assert (code, table_of(repo)) == (1, kept)
 
-    def test_a_page_the_scan_cannot_read_refuses_the_fix_and_writes_nothing(self, build_repo, capsys):
+    @pytest.mark.parametrize(
+        "held",
+        [
+            pytest.param(ceiling(literal_table(A=2)), id="a held entry"),
+            pytest.param(ceiling("[literal_text]\n", clones=False), id="an empty table beside a clone table to record"),
+        ],
+    )
+    def test_a_page_the_scan_cannot_read_refuses_the_fix_and_writes_nothing(self, build_repo, capsys, held):
         """LITERAL-7, LITERAL-9: exit 2 naming the page."""
-        repo = build_repo({**COVERED, PAGE_A: "<p>{ never</p>\n", BASELINE_PATH: ceiling(literal_table(A=2))})
+        repo = build_repo({**COVERED, PAGE_A: "<p>{ never</p>\n", BASELINE_PATH: held})
         before = tree_of(repo)
         code, out = judged(capsys, repo, *FIX_WORDS)
         assert (code, "frontend/src/lib/A.svelte has a { that is never closed" in out, tree_of(repo)) == (2, True, before)

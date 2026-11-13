@@ -185,11 +185,11 @@ def recordable_counts(root: Path, tracked: list[str]) -> LiteralTexts | None:
 
 def lower_literal_entries(root: Path, tracked: list[str], held: Baseline) -> CeilingFix:
     """The held page counts lowered to what their pages measure and dropped where a page measures none or is gone;
-    nothing rises or enters. A page the tree tracks but the disk lacks keeps its entry. A table with no entry, or a
-    repository that is not covered, reads no page."""
+    nothing rises or enters. A page the tree tracks but the disk lacks keeps its entry. A ceiling without the table, or a
+    repository that is not covered, reads no page; a table with no entry reads them all, so an unreadable page refuses."""
     entries = held.literal_texts
-    counts = _covered_counts(root, tracked) if entries else None
-    if counts is None:
+    counts = None if entries is None else _covered_counts(root, tracked)
+    if entries is None or counts is None:
         return CeilingFix(held, ())
     kept, changes = dict(entries), []
     for key in sorted(entries):
