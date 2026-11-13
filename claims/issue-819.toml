@@ -1,8 +1,0 @@
-claim_id = "56865ee027cf4b7dbc05306737ad810c"
-agent = "Claude 3cb16e78-3ea2-405c-947b-02cb3fc89cde"
-role = "builder"
-base = "b36a09f9977e63f9a1d6791bfaf0a170a473cbe2"
-branch = "claude/issue-819-literal-text-measures"
-scope = ["docs/VISION.md", "docs/commands.md", "docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/check.py", "src/quality/cli.py", "src/quality/literal_text.py", "src/quality/report.py", "src/quality/rules.py", "tests/test_check.py", "tests/test_cli_help.py", "tests/test_fleet_matrix.py", "tests/test_literal_text.py", "tests/test_literal_text_rule.py"]
-opened_commit = "05f058b6e3d439ab95316bd3bb0357a44e6f6682"
-whole_reason = "The rule, its row, the exit 2 cases and the VISION edit are one change of what the debt area says about a covered repository; a split leaves a scan that cannot read holes or values, or a module with no caller, and the row, the fix-line condition and the refusal of an uncovered repository's read are one change of what the debt area says."
