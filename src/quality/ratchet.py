@@ -376,6 +376,13 @@ def named_paths(baseline: Baseline) -> frozenset[str]:
     return frozenset({key.path for key in baseline.size} | sides | workflows | pages)
 
 
+def _rekeyed[Entry: (Key, JobKey, PageKey)](
+    entries: dict[Entry, int], new_path: Callable[[str], str | None]
+) -> dict[Entry, int]:
+    """The entries with each key under the path `new_path` gives it; an entry whose path it drops is dropped."""
+    return {key._replace(path=path): value for key, value in entries.items() if (path := new_path(key.path))}
+
+
 def carried_base(base: Baseline, renames: Renames, kept: Collection[str]) -> Baseline:
     """The base as `renames` read it.
 
@@ -390,13 +397,9 @@ def carried_base(base: Baseline, renames: Renames, kept: Collection[str]) -> Bas
             return None
         return moves.get(path, path)
 
-    size = {key._replace(path=path): value for key, value in base.size.items() if (path := new_path(key.path))}
-    limits = base.job_minutes and {
-        key._replace(path=path): minutes for key, minutes in base.job_minutes.items() if (path := new_path(key.path))
-    }
-    pages = base.literal_texts and {
-        key._replace(path=path): count for key, count in base.literal_texts.items() if (path := new_path(key.path))
-    }
+    size = _rekeyed(base.size, new_path)
+    limits = base.job_minutes and _rekeyed(base.job_minutes, new_path)
+    pages = base.literal_texts and _rekeyed(base.literal_texts, new_path)
     pairs = base.clones and {
         ClonePair.of(pair.first._replace(path=first), pair.second._replace(path=second))
         for pair in base.clones
