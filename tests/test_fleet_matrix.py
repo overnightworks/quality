@@ -260,7 +260,7 @@ CLONE_RELEASES = {**FIRST_RELEASES, "v0.4.0": CLONE_RELEASE, "v0.5.0": CLONE_TAB
 
 def declared(**fields) -> Declared:
     """A clone that declares nothing, with the given fields set."""
-    return Declared(**{"settings": None, "has_baseline": False, "has_clone_table": False, "has_import_config": False, "has_judged_project": False,
+    return Declared(**{"settings": None, "has_baseline": False, "has_clone_table": False, "has_literal_table": False, "has_import_config": False, "has_judged_project": False,
                        "declares_catalogs": False, "unreadable": frozenset(), **fields})
 
 
@@ -445,9 +445,17 @@ LITERAL_TEXT = Rule.LITERAL_TEXT.release
 
 
 @pytest.mark.parametrize("declares_catalogs", [True, False], ids=["a catalogs declaration", "no declaration"])
-def test_literal_text_reads_report_only_on_main_whatever_the_clone_declares(declares_catalogs):
-    """FLEET-101: the cell says what the gate does with the rule, which only measures, never who is covered."""
-    assert rule_cell(LITERAL_TEXT, Gate.MAIN, declared(declares_catalogs=declares_catalogs)) == "report-only"
+@pytest.mark.parametrize(("has_literal_table", "words"), [(True, "enforced"), (False, "report-only")], ids=["a table", "no table"])
+def test_literal_text_reads_the_table_on_main_whatever_the_clone_declares(declares_catalogs, has_literal_table, words):
+    """FLEET-101, FLEET-102: the cell says what the gate does with the rule, which the table switches on, never who is
+    covered."""
+    declaration = declared(declares_catalogs=declares_catalogs, has_literal_table=has_literal_table)
+    assert rule_cell(LITERAL_TEXT, Gate.MAIN, declaration) == words
+
+
+def test_literal_text_reads_report_only_at_its_first_release_whatever_the_clone_holds():
+    """FLEET-102: until a release names the switch, a tag only measures."""
+    assert rule_cell(LITERAL_TEXT, LITERAL_TEXT.first_release, declared(has_literal_table=True)) == "report-only"
 
 
 @pytest.mark.parametrize(
@@ -475,6 +483,22 @@ def test_the_gates_own_clone_reads_the_catalog_cell_from_its_pyproject(fleet_rep
     """CATALOG-29, FLEET-98, FLEET-99: the clone's tracked `pyproject.toml` decides the cell, on the gate's own repository."""
     result, output = fleet_report(gate_clone({**caller("./.github/workflows/gate.yml"), **files}), tags=first_releases())
     assert (result, cell(output, GATE_REPOSITORY, "catalog-check")) == (0, words), output
+
+
+@pytest.mark.parametrize(
+    ("files", "words"),
+    [
+        ({baseline_file.BASELINE_PATH: "[literal_text]\n"}, "enforced"),
+        ({baseline_file.BASELINE_PATH: "[clones]\n"}, "report-only"),
+        ({}, "report-only"),
+        ({baseline_file.BASELINE_PATH: "[literal_text\n"}, "cannot read quality/baseline.toml"),
+    ],
+    ids=["a literal text table", "a baseline without the table", "no baseline", "an unreadable baseline"],
+)
+def test_the_gates_own_clone_reads_the_literal_text_cell_from_its_ceiling_file(fleet_report, gate_clone, files, words):
+    """FLEET-102: the `[literal_text]` table in the clone's ceiling file switches the cell on main."""
+    _, output = fleet_report(gate_clone({**caller("./.github/workflows/gate.yml"), **files}), tags=first_releases())
+    assert cell(output, GATE_REPOSITORY, "literal-text") == words, output
 
 
 def test_a_malformed_pyproject_makes_the_gates_own_clone_cell_unreadable_and_the_run_red(fleet_report, gate_clone):

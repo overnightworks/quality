@@ -2,7 +2,7 @@
 
 import pytest
 
-from quality.baseline_file import ClonePair, JobKey, Key, Metric, Place
+from quality.baseline_file import ClonePair, JobKey, Key, Metric, PageKey, Place
 from quality.ratchet import (
     RESTORE_STEP,
     Renames,
@@ -11,6 +11,7 @@ from quality.ratchet import (
     named_paths,
     raised_entries,
     raised_job_limits,
+    raised_literal_texts,
 )
 from quality.report import CannotJudge, Note, NoteEvent
 from tests.support.baselines import ceiling
@@ -26,6 +27,11 @@ def lined(path):
 
 def booked(path, job="e2e"):
     return JobKey(path, job)
+
+
+def paged(entries):
+    """A ceiling that holds only page counts, none when `entries` is None."""
+    return ceiling({}, None, None, entries)
 
 
 def timed(entries):
@@ -276,6 +282,51 @@ def job_partial_lineage_cases():
     ]
 
 
+def page_cases():
+    return [
+        pytest.param(
+            paged({PageKey("a.svelte"): 3}),
+            paged({PageKey("a.svelte"): 3}),
+            renamed({"a.svelte": "b.svelte"}),
+            paged({PageKey("b.svelte"): 3}),
+            [NoteEvent.MOVED],
+            id="a page entry moves with its page",
+        ),
+        pytest.param(
+            paged({PageKey("a.svelte"): 3, PageKey("b.svelte"): 2}),
+            paged({PageKey("a.svelte"): 3, PageKey("b.svelte"): 2}),
+            renamed({"a.svelte": "b.svelte"}),
+            paged({PageKey("b.svelte"): 3}),
+            [NoteEvent.MOVED, NoteEvent.DROPPED],
+            id="a page entry the target held goes",
+        ),
+        pytest.param(
+            paged(None),
+            paged({PageKey("a.svelte"): 3}),
+            renamed({"a.svelte": "b.svelte"}),
+            paged(None),
+            [],
+            id="a held ceiling without the page table stays without it",
+        ),
+        pytest.param(
+            paged({}),
+            paged({PageKey("a.svelte"): 3}),
+            renamed({"a.svelte": "b.svelte"}),
+            paged({}),
+            [],
+            id="a held empty page table stays held",
+        ),
+        pytest.param(
+            ceiling({sized("a.py"): 16}, None, {booked("a.yml"): 40}, {PageKey("a.svelte"): 3}),
+            ceiling({sized("a.py"): 16}, None, {booked("a.yml"): 40}, {PageKey("a.svelte"): 3}),
+            renamed({"a.py": "b.py", "a.yml": "b.yml", "a.svelte": "b.svelte"}),
+            ceiling({sized("b.py"): 16}, None, {booked("b.yml"): 40}, {PageKey("b.svelte"): 3}),
+            [NoteEvent.MOVED, NoteEvent.MOVED, NoteEvent.MOVED],
+            id="a source file, a workflow and a page move together",
+        ),
+    ]
+
+
 def job_table_cases():
     return [
         pytest.param(
@@ -316,7 +367,7 @@ def job_table_cases():
 def follow_cases():
     return pytest.mark.parametrize(
         ("held", "committed", "renames", "expected", "events"),
-        [*moved_entry_cases(), *followed_entry_cases(), *pair_cases(), *job_cases(), *job_followed_cases(), *job_partial_lineage_cases(), *job_table_cases()],
+        [*moved_entry_cases(), *followed_entry_cases(), *pair_cases(), *job_cases(), *job_followed_cases(), *job_partial_lineage_cases(), *job_table_cases(), *page_cases()],
     )
 
 
@@ -336,6 +387,8 @@ def test_the_verdict_names_nothing_the_fix_carried(held, committed, renames, exp
     assert raised_entries(carried.size, result.size) == []
     tables = (carried.job_minutes, result.job_minutes)
     assert None in tables or raised_job_limits(*tables) == []
+    pages = (carried.literal_texts, result.literal_texts)
+    assert None in pages or raised_literal_texts(*pages) == []
 
 
 def test_a_followed_job_entry_is_named_by_its_new_path_in_the_file_order_with_the_leftover_last():

@@ -14,6 +14,7 @@ from quality.baseline_file import (
     JobKey,
     Key,
     Metric,
+    PageKey,
     Place,
     load_baseline,
     render_baseline,
@@ -26,6 +27,7 @@ from quality.ratchet import (
     follow_renames,
     named_paths,
     raised_entries,
+    raised_literal_texts,
 )
 from quality.report import FindingEvent, NoteEvent
 from quality.rules import Rule
@@ -585,6 +587,38 @@ def test_a_head_pair_keeps_the_old_path_occupied_for_size_entries_too():
 def test_a_base_without_a_clone_table_stays_without_one():
     """BASELINE-9: a base without a clone table is still without one after its renames are carried."""
     assert carried_base(ceiling({sized("a.py"): 16}, None), renamed({"a.py": "b.py"}), named_paths(ceiling({sized("b.py"): 16}, None))).clones is None
+
+
+def page_counts(counts):
+    return {PageKey(path): count for path, count in counts.items()}
+
+
+def test_a_base_with_a_page_table_and_no_clone_table_keeps_its_table_through_the_rename_carry():
+    """LITERAL-5: the carry rebuilds nothing it does not touch, so a page table survives a base without `[clones]`, and
+    its entry follows the rename."""
+    base = ceiling({}, None, None, {PageKey("a.svelte"): 3, PageKey("z.svelte"): 1})
+    carried = carried_base(base, renamed({"a.svelte": "b.svelte"}), named_paths(ceiling({}, None, None, {PageKey("b.svelte"): 3})))
+    assert (carried.clones, carried.literal_texts) == (None, {PageKey("b.svelte"): 3, PageKey("z.svelte"): 1})
+
+
+def test_a_page_entry_is_a_path_the_baseline_names():
+    """LITERAL-13: a rename of a page is followed because the baseline names its path."""
+    assert named_paths(ceiling({}, None, None, {PageKey("a.svelte"): 3})) == {"a.svelte"}
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "expected"),
+    [
+        ({"a.svelte": 3}, {"a.svelte": 3}, []),
+        ({"a.svelte": 3}, {"a.svelte": 2}, []),
+        ({"a.svelte": 3}, {"a.svelte": 5}, [RaisedEntry(PageKey("a.svelte"), 3, 5)]),
+        ({"a.svelte": 3}, {"a.svelte": 3, "b.svelte": 1}, [RaisedEntry(PageKey("b.svelte"), None, 1)]),
+    ],
+    ids=["equal", "lowered", "raised", "added"],
+)
+def test_a_page_count_may_fall_but_never_rise_or_appear(base, head, expected):
+    """LITERAL-8: the raised entries of one page table against another."""
+    assert raised_literal_texts(page_counts(base), page_counts(head)) == expected
 
 
 def booked(path, job="e2e"):

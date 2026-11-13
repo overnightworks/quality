@@ -10,7 +10,7 @@ import time
 import pytest
 
 from quality import sides
-from quality.baseline_file import BASELINE_PATH, Key, Metric, render_baseline
+from quality.baseline_file import BASELINE_PATH, Key, Metric, PageKey, render_baseline
 from quality.config import CONFIG_PATH
 from quality.ratchet import Renames, renames_of
 from quality.report import CannotJudge
@@ -706,3 +706,48 @@ def test_the_door_refuses_an_undeclared_job_limit_loosening_and_merges_a_declare
     gh = pulled(tmp_path, base, head, **options)
     assert drive(gh)[0] == (0 if is_declared else 1)
     assert (f"    ! {what}" in capsys.readouterr().out, len(gh.merge_calls)) == (True, int(is_declared))
+
+
+def literal_baseline(counts, clones=None):
+    return render_baseline(ceiling({}, clones, None, {PageKey(path): count for path, count in counts.items()}))
+
+
+@pytest.mark.parametrize(
+    ("change", "code"), [(0, 0), (-1, 0), (1, 1)], ids=["equal", "lower", "raised"],
+)
+def test_a_moved_page_is_held_against_its_predecessor(capsys, pull_request, change, code):
+    """LITERAL-13, BASELINE-12: a page git moved carries its count, so equal and lower are green and a raise names the
+    head path and the base's count."""
+    moved_in_head(
+        pull_request, literal_baseline({"src/old.svelte": 3}), literal_baseline({"src/new.svelte": 3 + change}),
+        old="src/old.svelte", new="src/new.svelte",
+    )
+    actual_code, output = verdict_of(pull_request[0], capsys)
+    assert (actual_code, "Traceback" in output) == (code, False)
+    assert ("literal text baseline raises src/new.svelte 3 -> 4" in output) == (change == 1)
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "code", "expected"),
+    [
+        pytest.param("", literal_baseline({"a.svelte": 3}), 0, "✓ green", id="adoption: a base without the table"),
+        pytest.param(literal_baseline({"a.svelte": 3}), "", 1, "literal text baseline removed", id="the table removed in the head"),
+        pytest.param(
+            literal_baseline({"a.svelte": 3}), literal_baseline({"a.svelte": 5}), 1, "literal text baseline raises a.svelte 3 -> 5",
+            id="a base with the table and no clone table, a raise",
+        ),
+        pytest.param(
+            literal_baseline({"a.svelte": 3}), literal_baseline({"a.svelte": 3}, frozenset()), 0, "✓ green",
+            id="a clone table added beside an untouched page table",
+        ),
+    ],
+)
+def test_the_page_table_is_judged_by_the_verdict_whatever_the_clone_table_holds(capsys, pull_request, base, head, code, expected):
+    """LITERAL-8, LITERAL-5: an adoption is green, a removed table or a raised entry is red, and a base with
+    `[literal_text]` and no `[clones]` is judged on its page entries."""
+    repo, commit_base = pull_request
+    commit_base(base)
+    put(repo / BASELINE_PATH, head)
+    commit_all(repo, "head edits the baseline")
+    actual_code, out, err = verdict_streams(repo, capsys)
+    assert (actual_code, expected in out, err) == (code, True, "")
