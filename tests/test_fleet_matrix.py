@@ -409,11 +409,24 @@ def test_catalog_check_on_main_reads_whether_the_clone_declares_catalogs(declare
     assert rule_cell(CATALOG_CHECK, Gate.MAIN, declared(declares_catalogs=declares_catalogs)) == words
 
 
-@pytest.mark.parametrize("declares_catalogs", [True, False], ids=["a catalogs declaration", "no declaration"])
-def test_catalog_check_under_a_tag_reads_report_only_until_the_release_names_the_switch(declares_catalogs):
-    """CATALOG-30, FLEET-98, FLEET-99: a tag at the rule's first release has no switch change that names it, so it only reports."""
-    release = gate_release((gate_call(CATALOG_PIN),), False, CATALOG_TAGS)
-    assert rule_cell(CATALOG_CHECK, release, declared(declares_catalogs=declares_catalogs)) == "report-only"
+CATALOG_SWITCH_PIN = "8" * 40
+
+
+@pytest.mark.parametrize(
+    ("pin", "declares_catalogs", "words"),
+    [
+        (CATALOG_PIN, True, "report-only"),
+        (CATALOG_PIN, False, "report-only"),
+        (CATALOG_SWITCH_PIN, True, "enforced"),
+        (CATALOG_SWITCH_PIN, False, "no catalogs declaration"),
+    ],
+    ids=["first release with a declaration", "first release with none", "switch release with a declaration", "switch release with none"],
+)
+def test_catalog_check_under_a_tag_reads_report_only_until_the_release_names_the_switch(pin, declares_catalogs, words):
+    """CATALOG-30, FLEET-98, FLEET-99: a tag before the switch change only reports; from it the cell reads as on main."""
+    tags = {**CATALOG_TAGS, CATALOG_CHECK.switched.release: CATALOG_SWITCH_PIN}
+    release = gate_release((gate_call(pin),), False, tags)
+    assert rule_cell(CATALOG_CHECK, release, declared(declares_catalogs=declares_catalogs)) == words
 
 
 @pytest.mark.parametrize(
@@ -426,6 +439,7 @@ def test_catalog_check_reads_the_pin_before_the_declaration(pin, words):
     assert rule_cell(CATALOG_CHECK, release, declared(declares_catalogs=True)) == words
 
 
+FIRST_RELEASE_COMMIT = "f" * 40
 LITERAL_TEXT = Rule.LITERAL_TEXT.release
 
 
@@ -435,10 +449,16 @@ def test_literal_text_reads_report_only_on_main_whatever_the_clone_declares(decl
     assert rule_cell(LITERAL_TEXT, Gate.MAIN, declared(declares_catalogs=declares_catalogs)) == "report-only"
 
 
-def test_literal_text_is_not_released_on_a_pinned_gate(fleet_report, public):
-    """FLEET-101, FLEET-19: no tag carries the rule yet, so a pinned gate does not have it."""
-    _, output = fleet_report(public("pinned", pinned_gate(NEWEST)), tags=first_releases())
-    assert cell(output, "o/pinned", "literal-text") == "not released"
+@pytest.mark.parametrize(
+    ("pin", "words"),
+    [(NEWEST, "not in v0.3.1"), (FIRST_RELEASE_COMMIT, "report-only")],
+    ids=["an older tag", "the rule's first release"],
+)
+def test_literal_text_reads_the_pin_against_the_rules_first_release(fleet_report, public, pin, words):
+    """FLEET-101, FLEET-18: a pin before the rule's first release says so, and that release only reports it."""
+    tags = {**FIRST_RELEASES, LITERAL_TEXT.first_release: FIRST_RELEASE_COMMIT}
+    _, output = fleet_report(public("pinned", pinned_gate(pin)), tags=first_releases(tags))
+    assert cell(output, "o/pinned", "literal-text") == words
 
 
 @pytest.mark.parametrize(
@@ -532,9 +552,6 @@ def test_a_malformed_size_baseline_is_named_in_the_size_cell_only_where_the_cell
     result, output = fleet_report(public("sized", broken), tags=first_releases())
     assert result == code, output
     assert cell(output, "o/sized", "size") == size
-
-
-FIRST_RELEASE_COMMIT = "f" * 40
 
 
 @pytest.mark.parametrize(

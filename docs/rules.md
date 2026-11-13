@@ -1039,7 +1039,8 @@ The reading errs red in every form of the closed make reading that it does not f
 A repository that runs the generator without declaring it (`uvx --from 'overnightworks-design[catalogs]' design-catalogs
 --check`, uv's legacy `[tool.uv] dev-dependencies`) is not covered and sees nothing; that is a named gap. No configuration
 switches the rule off. It first ships in v0.12.0, which only reports it: a dependent meets the enforcement at its first bump
-to the release that names the switch, and its fleet cell reads `report-only` until then. On main the cell of the gate's own
+to v0.13.0, the release that names the switch, and its fleet cell reads `report-only` until then (a gate pinned at v0.12.0
+reads `report-only`; from v0.13.0 on the cell reads as on main). On main the cell of the gate's own
 clone reads `enforced` when the clone declares the dependency and `no catalogs declaration` when it does not (FLEET-98,
 FLEET-99).
 
@@ -1079,8 +1080,8 @@ Exit `2` names the file: a page that is not UTF-8; a `<script>`, `<style>`, `<te
 and every text after it would be missed in silence; and a `{` hole that is never closed, an unbalanced `{` in an HTML comment
 included. The first page in the tracked order that cannot be read to its end stops the rule, so one fact prints, a page that is not UTF-8 is named before any other, and the fold runs
 before the parser, so an unclosed hole is named before an unclosed element. A missing directory, no Svelte file and a
-tracked page deleted from the tree are no finding (LITERAL-9). It ships on main only: its fleet cell reads `report-only` on
-main and `not released` under a tag (FLEET-101). No configuration switches it off.
+tracked page deleted from the tree are no finding (LITERAL-9). It first ships in v0.13.0, so a gate pinned below that release shows `not in <tag>`
+in the fleet matrix's column, and the cell reads `report-only` from that release on (FLEET-101). No configuration switches it off.
 
 The `job-timeout` rule, in the `debt` area, judges every job of a workflow that runs on a pull request or on a push to
 main, and of the reusable workflows those call through a local `uses:`. Every tracked workflow is parsed, a root or not,
