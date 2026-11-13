@@ -133,7 +133,8 @@ An area row is `✓ <area>  clean  <extent>`, also when nothing was found (ROW-9
 findings (ROW-10); the extent of a clean row is:
 
 - `files`: `N rules · M files`, M the distinct paths git tracks (O16).
-- `debt`: `ceiling held · N entries, M clone pairs`, what the ceiling file holds (ROW-18).
+- `debt`: `ceiling held · N entries, M clone pairs`, what the ceiling file holds (ROW-18); a covered repository never has
+  this row, because its literal texts only measure (LITERAL-10).
 - `imports`: `N contracts` (ROW-11).
 - `secrets`: `N commits` (O30), because gitleaks reads committed history only; `staged change · N files` for a staged
   run.
@@ -145,7 +146,14 @@ findings (ROW-10); the extent of a clean row is:
 With ` · K allowed` appended where files were allowed, leaks were allowed (secrets), advisories were allowed
 (dependencies) or output owners were honoured (code). Without a ceiling file the debt row is `· debt  not recorded  N
 entries over the thresholds · measured only` (`M clone pairs · partly measured only` when the ceiling file has no
-`[clones]` table, O21), with `fix: quality check --fix` under it. Under `quality check debt --fix` it is `✓
+`[clones]` table, O21), with `fix: quality check --fix` under it. A covered repository's row adds its literal texts
+(LITERAL-10): `N entries over the thresholds, K literal texts in F files · measured only` without a ceiling file, `M clone
+pairs, K literal texts in F files · partly measured only` with a ceiling file that has no `[clones]` table, and
+`K literal texts in F files · partly measured only` with one that has it, so the recorded pairs are never called not
+recorded. The `fix:` line stays unless the literal texts are all that is not recorded, since `quality check --fix`
+records none of them. A ceiling file that holds only a `[clones]` table, with no size entry, has that last row for a
+covered repository, where an uncovered repository's row names the pairs. A count reads `1 literal text in 1 file`
+(LITERAL-4). Under `quality check debt --fix` it is `✓
 debt  lowered  N entries · quality/baseline.toml` with a `✓` row per lowered or dropped entry, `✓ debt  moved  N entries
 · quality/baseline.toml` where it moves entries and lowers none, `✓ debt  recorded  N entries, M clone pairs ·
 quality/baseline.toml is new` (`, K job limits` after the pairs where it records the job table), `✓ debt  recorded  K
@@ -201,7 +209,7 @@ ends with one verdict line on stdout (CLOSING-4): `✓ clean · 7 areas · <1s` 
 `! 5 findings in 3 areas · 4 areas clean · 14s`, where the clean count is left out if no area is clean (CLOSING-6). The
 duration is whole seconds rounded down, `<1s` below one; from 60 seconds on it reads minutes and two-digit seconds,
 `1m00s` (CLOSING-7). Before the duration stands `debt ceiling measured, not enforced` when no ceiling file holds the debt
-(CLOSING-8), `debt ceiling partly measured, not enforced` when the ceiling file has no `[clones]` table (CLOSING-9), then
+(CLOSING-8), `debt ceiling partly measured, not enforced` when the ceiling file has no `[clones]` table or records everything but a covered repository's literal texts, which only measure (CLOSING-9), then
 `imports not enforced` when the repository has no import-linter config (CLOSING-10). No `next:` follows a findings
 verdict (CLOSING-11).
 
@@ -245,7 +253,10 @@ next:
 ```
 
 A fact of a few words says what is missing (`mise could not locate gitleaks 8.30.1`, true for every non-zero answer of
-mise). A reason that several rules of one area share stands once (REFUSAL-4); distinct reasons make the row say
+mise). The `debt` area refuses with the fact of a page the literal-text scan cannot read to its end, which names the page:
+`<file> has a <script> that is opened and never closed, so the markup after it cannot be read` (the element as written in
+lower case) or `<file> has a { that is never closed, so the markup after it cannot be read`, and with the shared reader's
+`cannot read <file>` for a page that is not UTF-8 (LITERAL-9). A reason that several rules of one area share stands once (REFUSAL-4); distinct reasons make the row say
 `N reasons` (REFUSAL-5) and stand on `✗` lines below it (REFUSAL-6), and a reason counts once. Findings of an area
 that also cannot check stay under its `✗` row (REFUSAL-7) and are counted in [the error line](#the-closing-line).
 

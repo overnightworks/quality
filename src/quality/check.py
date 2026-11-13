@@ -18,6 +18,7 @@ from quality import (
     compose,
     env_file,
     layout,
+    literal_text,
     process,
     python_floor,
     python_lint,
@@ -336,7 +337,7 @@ def _rule_verdict(rule: Rule, judged: Judged) -> RuleVerdict:
 def _area_verdict(
     area: Area, judged: Mapping[Rule, Judged], runs: Sequence[ScannerRun] = (), ceiling: ratchet.CeilingFix | DryRun | CannotJudge | None = None
 ) -> AreaVerdict:
-    return AreaVerdict(area, tuple(_rule_verdict(rule, judged[rule]) for rule in Rule if rule.area is area), tuple(runs), ceiling)
+    return AreaVerdict(area, tuple(_rule_verdict(rule, judged[rule]) for rule in Rule if rule.area is area and rule in judged), tuple(runs), ceiling)
 
 
 def _run_log(verbose: bool) -> tuple[list[ScannerRun], scanners.ScannerLog]:
@@ -562,7 +563,10 @@ def _judge_debt(inputs: RunInputs) -> AreaVerdict:
     timeouts = _attempt(
         lambda: workflow_rules.check_job_timeouts(inputs.root, inputs.tracked, made.ceiling if fixed else judged_baseline(inputs.root))
     )
-    return _area_verdict(Area.DEBT, {Rule.SIZE: size, Rule.CLONE: clone, Rule.JOB_TIMEOUT: timeouts}, ceiling=ceiling)
+    judged: dict[Rule, Judged] = {Rule.SIZE: size, Rule.CLONE: clone, Rule.JOB_TIMEOUT: timeouts}
+    if (literal := _attempt(lambda: literal_text.check_literal_text(inputs.root, inputs.tracked))) is not None:
+        judged[Rule.LITERAL_TEXT] = literal
+    return _area_verdict(Area.DEBT, judged, ceiling=ceiling)
 
 
 def _judge_imports(inputs: RunInputs) -> AreaVerdict:

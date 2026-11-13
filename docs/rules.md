@@ -113,7 +113,8 @@ It applies these rules:
   ([lizard's issue tracker](https://github.com/terryyin/lizard/issues/521)). Functions are named by their qualified
   symbol (`Class.method`); a second one of the same name, such as a property setter, is `Class.method#2` (SIZE-5).
   Without `quality/baseline.toml` the [debt row](output.md#area-rows) is
-  `· debt  not recorded  N entries over the thresholds · measured only`, N the size entries over the thresholds that
+  `· debt  not recorded  N entries over the thresholds · measured only` (a covered repository's row adds `, K literal
+  texts in F files`, LITERAL-10), N the size entries over the thresholds that
   quality measured (a declared file left out); it equals what a first `quality check --fix` records only when every
   Python file parses, otherwise that fix refuses (SIZE-6). The size debt leaves the exit unchanged (SIZE-7). The
   per-class and language counts leave `check`; the report keeps them.
@@ -142,7 +143,8 @@ It applies these rules:
   (`file is gone · ceiling 802 lines`, `function total is gone · ceiling CCN 19`, fix: `quality check --fix`)
   (CEILING-7); an entry with no measurement otherwise (a tracked file missing from disk, a function entry under a file
   of another language) stands (CEILING-8) and counts in the [clean row](output.md#area-rows)'s
-  `ceiling held · N entries, M clone pairs`.
+  `ceiling held · N entries, M clone pairs`; a covered repository has no clean `debt` row, only the note row of
+  LITERAL-10.
   [`quality check debt --fix`](commands.md#quality-check---fix) (`--fix` takes no `--staged` and needs `debt` among the
   named areas, or none named; `--dry-run` needs `--fix`; no workflow runs either) changes `quality/baseline.toml` at the
   top of the repository it is started in (a stray `src/quality/baseline.toml` is neither read nor removed) (FIX-1) and
@@ -198,7 +200,8 @@ It applies these rules:
   path and qualified symbol of both sides, as `size` names a function (CLONE-2); a pair counts as tests only when both
   files are tests (CLONE-3). Without a `[clones]` table in `quality/baseline.toml` the rule only measures (CLONE-5):
   where the file exists, the pairs stand in the [partly row](output.md#area-rows)
-  (`· debt  not recorded  2 clone pairs · partly measured only`). With one, even an empty one, a new pair is a
+  (`· debt  not recorded  2 clone pairs · partly measured only`; a covered repository's row adds its literal texts, or
+  names them alone where the table exists, LITERAL-10). With one, even an empty one, a new pair is a
   `near copy` row at its second side (`function check and tests/test_a.py run`, fix: give the shared body one owner and
   call it, or make the cases one parametrized test) (CLONE-6) and so is a held pair the tree lost, even when a side
   was deleted (`can fall` at its first side: `pair tests/test_a.py run <-> tests/test_b.py check is gone`, fix:
@@ -1040,6 +1043,45 @@ to the release that names the switch, and its fleet cell reads `report-only` unt
 clone reads `enforced` when the clone declares the dependency and `no catalogs declaration` when it does not (FLEET-98,
 FLEET-99).
 
+The `literal-text` rule, in the `debt` area, counts the literal texts of a covered repository's pages: the texts a person
+reads that the markup holds itself instead of taking them from a catalog. A repository is covered as for `catalog-check`
+(the same read of the root `pyproject.toml`, CATALOG-1), so a repository that is not covered sees no row and no new
+verdict, and its `debt` area holds exactly the verdicts of `size`, `clone` and `job-timeout`; the one change for it is that
+a root `pyproject.toml` that cannot be read refuses the `debt` area too, as it refuses `workflows`, where `quality check
+debt` alone went from exit `0` to `2` (LITERAL-12). The rule reads every tracked `*.svelte` file the tree holds, with the
+standard library's `html.parser` and a fold of the `{...}` holes; a `.vue`, `.jsx`, `.tsx` or `.html` file is not read
+(LITERAL-1).
+
+A text counts once per text node and once per attribute value, not per word: the text nodes of a page, the values of
+`title`, `placeholder`, `aria-label`, `alt`, `label`, `aria-description`, `aria-roledescription` and `aria-valuetext`, a
+`value` on an `<input>` whose `type` is `submit`, `button` or `reset` and on a `<button>` whose `type` is `submit` or absent,
+and `content` on `<meta name="description">`, on elements and on components alike (the parser lowercases names, so
+`<Dialog title="x">` is read like `<dialog title="x">` and a prop written `Label="x"` counts) (LITERAL-2). Not text: a
+`<script>` or `<style>` block, a hole that is not a bare string literal, a logic block or a hole starting with `#`, `:`, `/`
+or `@` (`{@html '...'}` included), and any content with no letter. A hole that is one string literal, or a template literal
+without a substitution, counts as the text it holds, in a text position and as a whole attribute value; there is no
+exemption mechanism, a brand name lives in the catalog (LITERAL-3). The extent is the total and the number of files read, so a
+repository with no Svelte file reads `0 literal texts in 0 files` (LITERAL-4). The rule only measures: it has no finding and
+no note, and the row names the count and the mode `partly measured only` or `measured only` with exit `0`, as
+[the debt row](output.md#area-rows) says (LITERAL-10). `quality check debt --fix` records none of the literal texts.
+
+Named gaps, each a fact of the parser or of the scan: a literal inside a larger expression (`{ok ? 'Saved' : x}`) is not
+counted; a component prop outside the attribute list (`<Hero heading="Welcome" />`) is not counted; a string in a `<script>`
+is not counted, and the scheduled audit finds those under LANG-24; an unpaired quote in a hole swallows the markup up to the
+next quote (`{x // don't}` followed by `<b>Real text</b>` and a hole with another apostrophe counts nothing), and with one
+apostrophe only the hole never closes (exit `2`); `a < b` reads two text nodes; `title="{n} items"` counts the fragment
+`items`, because the fold leaves the literal part beside a hole. Python 3.14's parser reads the body of `title`, `textarea`,
+`iframe`, `xmp`, `noembed` and `noframes` as one text up to the end tag, whatever the case, so `<Title><b>One</b><i>Two</i></Title>`
+is one text and a self-closing `<Title />` holds none.
+
+Exit `2` names the file: a page that is not UTF-8; a `<script>`, `<style>`, `<textarea>`, `<title>`, `<iframe>`, `<xmp>`,
+`<noembed>` or `<noframes>` that is opened and never closed, because the parser then reads the rest of the page as one text
+and every text after it would be missed in silence; and a `{` hole that is never closed, an unbalanced `{` in an HTML comment
+included. The pages are read in the tracked order and the first refusal stops the rule, so one fact prints, and the fold runs
+before the parser, so an unclosed hole is named before an unclosed element. A missing directory, no Svelte file and a
+tracked page deleted from the tree are no finding (LITERAL-9). It ships on main only: its fleet cell reads `report-only` on
+main and `not released` under a tag (FLEET-101). No configuration switches it off.
+
 The `job-timeout` rule, in the `debt` area, judges every job of a workflow that runs on a pull request or on a push to
 main, and of the reusable workflows those call through a local `uses:`. Every tracked workflow is parsed, a root or not,
 because a root is known only after the parse; a tracked file gone from the tree is skipped and a composite action is not
@@ -1152,8 +1194,9 @@ A workflow whose YAML or file cannot be read, an alias or a merge key where it c
 that is no mapping, a local call in a judged file that names no tracked workflow of the workflow folder, and a called
 workflow gone from the tree are exit `2` naming the file; the other rules still judge. A workflow with no `jobs:` has no
 job (TIMEOUT-7). The rule is judged beside `size` and `clone` and independent of both, and the debt area counts only the
-rules a ceiling file switches as measured, so the verdict reads `debt ceiling measured, not enforced` where no ceiling
-file holds the debt, even when `job-timeout` finds (TIMEOUT-8). A clean `debt` row keeps its words, and no configuration
+rules a ceiling file switches as measured, and the literal-text rule of a covered repository, which no ceiling file
+switches, so the verdict reads `debt ceiling measured, not enforced` where no ceiling file holds the debt, even when
+`job-timeout` finds (TIMEOUT-8). A clean `debt` row keeps its words, and no configuration
 switches the rule off (TIMEOUT-10). It first ships in v0.12.0, so a gate pinned below that release shows `not in <tag>`
 in the fleet matrix's column (TIMEOUT-11). A repeated job id or a repeated `timeout-minutes` key is read as the loader
 reads it, the last winning; actionlint, which `workflow-lint` runs, refuses the repetition. Named gaps: `merge_group`
