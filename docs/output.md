@@ -78,6 +78,10 @@ rows, by area:
   of at most 15`, of `new debt` `lower timeout-minutes to 15 or less` (`, or run quality check --fix to record it` where
   the ceiling has no `[job_minutes]` table), of `grew` `bring it back to <entry> or below` and
   of `can fall` `quality check --fix` ([rules](rules.md)).
+  A covered repository with a `[literal_text]` table also has `literal-text` findings at the page, no line: `new debt` (`N literal
+  texts · ceiling none`, fix: read each text through the generated module and keep it in the catalog), `grew` (`N literal
+  texts · ceiling <entry>`, fix: bring it back to <entry> literal texts or fewer) and `can fall` (`N literal texts · ceiling
+  <entry>`, or `file is gone · ceiling <entry>`, fix: `quality check --fix`) ([rules](rules.md)).
 - `imports`: a broken contract is a `broken` finding; an unmatched ignore is an `unused` finding at `error` and an
   `unused` note at `warn`; a grimp or import-linter warning is a `warning` note (O23); a `broken` finding's detail
   lines are import-linter's own rendering of the contract ([Rows](#rows)).
@@ -133,8 +137,9 @@ An area row is `✓ <area>  clean  <extent>`, also when nothing was found (ROW-9
 findings (ROW-10); the extent of a clean row is:
 
 - `files`: `N rules · M files`, M the distinct paths git tracks (O16).
-- `debt`: `ceiling held · N entries, M clone pairs`, what the ceiling file holds (ROW-18); a covered repository never has
-  this row, because its literal texts only measure (LITERAL-10).
+- `debt`: `ceiling held · N entries, M clone pairs`, what the ceiling file holds (ROW-18); a covered repository has this row
+  only with a `[literal_text]` table, and it then ends `, K literal texts on P pages`, the texts and pages the table holds
+  (LITERAL-10).
 - `imports`: `N contracts` (ROW-11).
 - `secrets`: `N commits` (O30), because gitleaks reads committed history only; `staged change · N files` for a staged
   run.
@@ -150,16 +155,20 @@ entries over the thresholds · measured only` (`M clone pairs · partly measured
 (LITERAL-10): `N entries over the thresholds, K literal texts in F files · measured only` without a ceiling file, `M clone
 pairs, K literal texts in F files · partly measured only` with a ceiling file that has no `[clones]` table, and
 `K literal texts in F files · partly measured only` with one that has it, so the recorded pairs are never called not
-recorded. The `fix:` line stays unless the literal texts are all that is not recorded, since `quality check --fix`
-records none of them. A ceiling file that holds only a `[clones]` table, with no size entry, has that last row for a
-covered repository, where an uncovered repository's row names the pairs. A count reads `1 literal text in 1 file`
-(LITERAL-4). Under `quality check debt --fix` it is `✓
+recorded, and a covered repository's row names only the parts still unrecorded. The `fix:` line stays while any part is
+unrecorded, the literal texts included, since `quality check --fix` records them. A ceiling file that holds only a
+`[clones]` table, with no size entry, has that last row for a covered repository, where an uncovered repository's row
+names the pairs. A count reads `1 literal text in 1 file` (LITERAL-4), a table's `1 literal text on 1 page`. Under `quality check debt --fix` it is `✓
 debt  lowered  N entries · quality/baseline.toml` with a `✓` row per lowered or dropped entry, `✓ debt  moved  N entries
 · quality/baseline.toml` where it moves entries and lowers none, `✓ debt  recorded  N entries, M clone pairs ·
-quality/baseline.toml is new` (`, K job limits` after the pairs where it records the job table), `✓ debt  recorded  K
-job limits · quality/baseline.toml` with a `✓` row `recorded  K job limits` under it (it names the clone pairs recorded beside, and stands in place of the lowered or moved row where entries fall or move in the same fix), `✓ debt  rewritten  quality/baseline.toml` (entries equal, text not), `! debt  N findings
+quality/baseline.toml is new` (`, K job limits` after the pairs where it records the job table, `, K literal texts on P pages`
+last for a covered repository), `✓ debt  recorded  K job limits · quality/baseline.toml` with a `✓` row `recorded  K job limits` under
+it (it names the clone pairs recorded beside, and stands in place of the lowered or moved row where entries fall or move in
+the same fix), `✓ debt  recorded  K literal texts on P pages · quality/baseline.toml` where it records the literal-text table in
+a ceiling file that exists (beside the other recorded parts, in the order they stand), `✓ debt  rewritten  quality/baseline.toml` (entries equal, text not), `! debt  N findings
 nothing lowered` or `✗ debt  not fixed  <reason>`; under `--dry-run` it is `~ debt  N to lower` (`N to move`, `to
-record`, `to rewrite  text differs · quality/baseline.toml`) with a `~` row per entry.
+record`, `to rewrite  text differs · quality/baseline.toml`; the first recording is `~ debt  to record  N entries, M clone pairs, K
+literal texts on P pages · quality/baseline.toml would be new`) with a `~` row per entry.
 Without an import-linter config the imports row is `· imports  not set up  no import-linter config` (ROW-13). An area
 that cannot check is `✗ <area>  not checked  <reason>` ([Refusals](#refusals)).
 
@@ -209,7 +218,7 @@ ends with one verdict line on stdout (CLOSING-4): `✓ clean · 7 areas · <1s` 
 `! 5 findings in 3 areas · 4 areas clean · 14s`, where the clean count is left out if no area is clean (CLOSING-6). The
 duration is whole seconds rounded down, `<1s` below one; from 60 seconds on it reads minutes and two-digit seconds,
 `1m00s` (CLOSING-7). Before the duration stands `debt ceiling measured, not enforced` when no ceiling file holds the debt
-(CLOSING-8), `debt ceiling partly measured, not enforced` when the ceiling file has no `[clones]` table or records everything but a covered repository's literal texts, which only measure (CLOSING-9), then
+(CLOSING-8), `debt ceiling partly measured, not enforced` when the ceiling file has no `[clones]` table, or a covered repository's has no `[literal_text]` table (CLOSING-9), then
 `imports not enforced` when the repository has no import-linter config (CLOSING-10). No `next:` follows a findings
 verdict (CLOSING-11).
 
