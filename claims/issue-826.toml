@@ -1,7 +1,0 @@
-claim_id = "2cf8a53c4e794ce096956943cc8a4389"
-agent = "Claude 3cb16e78-3ea2-405c-947b-02cb3fc89cde"
-role = "builder"
-base = "0880614da1ac00ef3063ec63a8f1bc6b23640e59"
-branch = "claude/issue-826-image-runner-input"
-scope = [".github/workflows/image.yml", "docs/release.md", "tests/workflows/test_image.py"]
-opened_commit = "b2d9797541bbba933950eac88e35d51c83f6b069"
