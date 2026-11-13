@@ -234,6 +234,14 @@ class TestFixLowersAndNeverRaises:
         assert judged(capsys, repo, *FIX_WORDS)[0] == 0
         assert (repo / BASELINE_PATH).read_text() == ceiling(table, clones=True)
 
+    def test_a_clone_lowering_leaves_the_literal_table_byte_for_byte(self, build_repo, capsys):
+        """LITERAL-5: dropping a held clone pair the tree lost rebuilds no other table."""
+        held = '[clones."src/a.py"]\nrun = [["src/gone.py", "run"]]\n\n' + literal_table(A=3)
+        repo = build_repo({**COVERED, "src/a.py": "x = 1\n", PAGE_A: page(3), BASELINE_PATH: rendered(held)})
+        assert judged(capsys, repo, *FIX_WORDS)[0] == 0
+        assert load_baseline((repo / BASELINE_PATH).read_text()).clones == frozenset()
+        assert (repo / BASELINE_PATH).read_text() == ceiling(literal_table(A=3), clones=True)
+
 
 class TestFixFollowsRenames:
     def test_a_renamed_page_carries_its_entry(self, build_repo, capsys):
