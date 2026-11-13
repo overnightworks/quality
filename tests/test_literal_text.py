@@ -10,9 +10,19 @@ COMPONENT_NAMES = ["title", "textarea", "iframe", "xmp", "noembed", "noframes"]
     ("page", "count"),
     [
         pytest.param(
-            "<script>const a = 'Hello world';</script><style>.a { content: 'x'; }</style>"
-            "<p class=\"{kind}\">{words.title}</p><p>{#if ok}{:else}{/if}{@render row()}</p>"
-            "<p>{count + 1}</p><p>{ok ? 'Saved' : label}</p>",
+            '<script lang="ts">\n'
+            "  let { data } = $props();\n"
+            "  const label = 'Not shown';\n"
+            "</script>\n"
+            "<svelte:head><title>{data.words.title}</title></svelte:head>\n"
+            "<SignInPage appName={data.words.wordmark}"
+            " state={{ page: 'signed-out', signInHref: data.start }}"
+            " words={data.kitWords} />\n"
+            "<button aria-label={data.words.close}>{data.words.close}</button>\n"
+            "{#if data.open}<p>{data.words.open}</p>"
+            "{:else}<p>{data.words.shut}</p>{/if}\n"
+            "<p>{`${data.words.greeting}, ${data.name}`}</p>\n"
+            "<style>.hero { color: red; }</style>\n",
             0,
             id="expressions-blocks-script-and-style-pass",
         ),
@@ -44,6 +54,10 @@ COMPONENT_NAMES = ["title", "textarea", "iframe", "xmp", "noembed", "noframes"]
         pytest.param('<p title="{n} items"></p>', 1, id="a-literal-piece-next-to-a-hole-in-an-attribute-counts"),
         pytest.param("<p>a < b and c</p>", 2, id="a-bare-less-than-splits-a-text-in-two"),
         pytest.param("", 0, id="an-empty-page-has-no-text"),
+        pytest.param("<p>{'a\\'b'}</p>", 1, id="a-backslash-escapes-a-quote-in-a-hole"),
+        pytest.param("<p x={{ a: 1 }}>Text</p>", 1, id="a-nested-hole-closes-at-its-outer-brace"),
+        pytest.param("<script>Hello world</script foo><p>x1</p>", 1, id="a-script-body-is-ignored-until-its-end-tag"),
+        pytest.param("<script>if (a) {</script><p>Text</p>", 1, id="a-brace-in-a-closed-script-is-no-hole"),
     ],
 )
 def test_the_reference_cases_give_the_same_counts(page, count):

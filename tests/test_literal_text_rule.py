@@ -4,13 +4,14 @@ from quality.baseline_file import BASELINE_PATH
 from quality.output import SEPARATOR
 from quality.report import LiteralExtent
 from quality.rules import Area, Rule
-from tests.support.check import area_fact, area_row, check_result, refusal_row
+from tests.support.check import area_fact, area_row, check_output, check_result, refusal_row
 from tests.support.door import CHECK_WORD, FIX_WORDS, door_in
 
 COVERED = {
     "pyproject.toml": '[project]\nname = "app"\nversion = "0.1"\ndependencies = ["overnightworks-design[catalogs]>=1"]\n'
 }
 UNCOVERED = {"pyproject.toml": '[project]\nname = "app"\nversion = "0.1"\ndependencies = ["overnightworks-design>=1"]\n'}
+RAW_TEXT_TAGS = ["script", "style", "textarea", "title", "iframe", "xmp", "noembed", "noframes"]
 PAGES = {
     "frontend/src/a.svelte": "<h1>Log in</h1>\n<button aria-label={'Close'}>{words.close}</button>\n",
     "frontend/src/b.svelte": "<p>Welcome back</p>\n",
@@ -108,11 +109,15 @@ def test_a_covered_repository_judges_the_literal_rule_with_its_extent_and_no_fin
 
 
 def test_a_malformed_pyproject_refuses_the_debt_area_with_exit_two(build_repo, capsys):
-    """LITERAL-12: the covered test reads the root `pyproject.toml` in every repository."""
-    code, out = debt_run(capsys, build_repo({"pyproject.toml": "[project\n"}))
-    assert code == 2
+    """LITERAL-12: the covered test reads the root `pyproject.toml` in every repository, so `debt` alone and a full run
+    refuse it, and a full run refuses `workflows` beside it."""
+    repo = build_repo({"pyproject.toml": "[project\n"})
+    code, out = debt_run(capsys, repo)
+    full_code, full = check_output(capsys, repo)
+    assert (code, full_code) == (2, 2)
     assert refusal_row(Area.DEBT) in out
     assert area_row(out, Area.DEBT).glyph == "✗"
+    assert [refusal_row(area) in full for area in (Area.DEBT, Area.WORKFLOWS)] == [True, True]
 
 
 @pytest.mark.parametrize(
@@ -153,12 +158,12 @@ def test_a_tracked_page_deleted_from_disk_is_not_read(build_repo, capsys):
     [
         *[
             (f"<{tag}>\n<p>Hello</p>\n", f"frontend/src/a.svelte has a <{tag}> that is opened and never closed, so the markup after it cannot be read")
-            for tag in ["script", "style", "textarea", "title", "iframe", "xmp", "noembed", "noframes"]
+            for tag in RAW_TEXT_TAGS
         ],
         ("<p>{ never</p>\n", "frontend/src/a.svelte has a { that is never closed, so the markup after it cannot be read"),
         ("<script>\n<p>{ never</p>\n", "frontend/src/a.svelte has a { that is never closed, so the markup after it cannot be read"),
     ],
-    ids=lambda value: value[:12] if isinstance(value, str) else None,
+    ids=[*(f"unclosed-{tag}" for tag in RAW_TEXT_TAGS), "unclosed-hole", "unclosed-hole-after-unclosed-script"],
 )
 def test_a_page_the_scan_cannot_read_to_its_end_refuses_the_debt_area_naming_it(build_repo, capsys, page, fact):
     """LITERAL-9: an unclosed raw-text element or hole is exit 2, naming the file; the unclosed hole is named first."""

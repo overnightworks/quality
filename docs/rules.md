@@ -1077,7 +1077,7 @@ is one text and a self-closing `<Title />` holds none.
 Exit `2` names the file: a page that is not UTF-8; a `<script>`, `<style>`, `<textarea>`, `<title>`, `<iframe>`, `<xmp>`,
 `<noembed>` or `<noframes>` that is opened and never closed, because the parser then reads the rest of the page as one text
 and every text after it would be missed in silence; and a `{` hole that is never closed, an unbalanced `{` in an HTML comment
-included. The pages are read in the tracked order and the first refusal stops the rule, so one fact prints, and the fold runs
+included. The first page in the tracked order that cannot be read to its end stops the rule, so one fact prints, a page that is not UTF-8 is named before any other, and the fold runs
 before the parser, so an unclosed hole is named before an unclosed element. A missing directory, no Svelte file and a
 tracked page deleted from the tree are no finding (LITERAL-9). It ships on main only: its fleet cell reads `report-only` on
 main and `not released` under a tag (FLEET-101). No configuration switches it off.

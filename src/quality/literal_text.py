@@ -147,18 +147,16 @@ def count_literal_texts(source: str) -> int:
 
 
 def _pages_read(root: Path, tracked: list[str]) -> tuple[int, int]:
-    """The literal texts and the pages the tree holds, read in the tracked order; the first page that cannot be read stops it."""
-    texts = pages = 0
-    for name in checkout.on_disk(root, [name for name in tracked if name.endswith(SVELTE_SUFFIX)]):
-        source = checkout.judged(repository.read_text, root, name)
-        if source is None:
-            continue
+    """The literal texts and the pages the tree holds; the first page in the tracked order that cannot be read to its end stops it."""
+    names = checkout.on_disk(root, [name for name in tracked if name.endswith(SVELTE_SUFFIX)])
+    sources = checkout.read_existing(repository.read_text, root, names)
+    texts = 0
+    for name, source in sources.items():
         try:
             texts += count_literal_texts(source)
         except UnreadablePage as error:
             raise Unparsable(f"{name} {error}") from error
-        pages += 1
-    return texts, pages
+    return texts, len(sources)
 
 
 def check_literal_text(root: Path, tracked: list[str]) -> RuleResult | None:
@@ -167,4 +165,3 @@ def check_literal_text(root: Path, tracked: list[str]) -> RuleResult | None:
         return None
     texts, pages = _pages_read(root, tracked)
     return RuleResult([], LiteralExtent(texts, pages), True)
-
