@@ -7,6 +7,7 @@ The other languages are counted by lines only: lizard misplaces their function b
 """
 
 import ast
+import copy
 import io
 import tokenize
 from collections import Counter
@@ -405,7 +406,9 @@ def carried_base(base: Baseline, renames: Renames, kept: Collection[str]) -> Bas
         for pair in base.clones
         if (first := new_path(pair.first.path)) and (second := new_path(pair.second.path))
     }
-    return Baseline(size, None if pairs is None else frozenset(pairs), limits, literal_texts=pages)
+    return copy.replace(
+        base, size=size, job_minutes=limits, literal_texts=pages, clones=None if pairs is None else frozenset(pairs)
+    )
 
 
 def raised_entries(base: SizeEntries, head: SizeEntries) -> list[RaisedEntry]:
