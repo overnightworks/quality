@@ -47,12 +47,12 @@ def test_a_covered_repository_without_a_ceiling_file_counts_its_literal_texts_as
 
 
 @pytest.mark.parametrize("ceiling", [CLONES_TABLE, '[file_lines]\n[clones]\n'], ids=["only a clones table", "an empty size table"])
-def test_a_covered_repository_with_a_clones_table_names_only_the_literal_part_and_has_no_fix_line(build_repo, capsys, ceiling):
-    """LITERAL-10, LITERAL-4: recorded pairs are never called not recorded, and `--fix` has nothing to record."""
+def test_a_covered_repository_with_a_clones_table_names_the_literal_part_and_the_fix_that_records_it(build_repo, capsys, ceiling):
+    """LITERAL-10, LITERAL-4: recorded pairs are never called not recorded, and `--fix` records the literal texts."""
     tracked = {**COVERED, **PAGES, "frontend/src/d.svelte": "<p>{words.none}</p>\n", BASELINE_PATH: ceiling}
     code, out = debt_run(capsys, build_repo(tracked))
     assert (code, area_fact(out, Area.DEBT)) == (0, f"3 literal texts in 4 files{SEPARATOR}{PARTLY}")
-    assert fix_line(out) == []
+    assert fix_line(out) == [f"fix: {FIX_COMMAND}"]
     assert "debt ceiling partly measured, not enforced" in verdict_line(out)
 
 
@@ -190,9 +190,12 @@ def test_the_first_page_the_scan_cannot_read_stops_it(build_repo, capsys):
     assert "b.svelte" not in out
 
 
-def test_fixing_the_debt_ceiling_of_a_covered_repository_records_no_literal_texts(build_repo, capsys):
-    """LITERAL-10: `quality check debt --fix` writes the ceiling it always wrote, with nothing of the literal texts."""
+def test_fixing_the_debt_ceiling_of_a_covered_repository_records_its_literal_texts(build_repo, capsys):
+    """LITERAL-10, LITERAL-7: `quality check debt --fix` writes the literal-text table, and the row then reads enforced."""
     repo = build_repo({**COVERED, **PAGES, BASELINE_PATH: CLONES_TABLE})
     assert door_in(repo, *FIX_WORDS) == 0
     capsys.readouterr()
-    assert "literal" not in (repo / BASELINE_PATH).read_text()
+    assert "[literal_text]" in (repo / BASELINE_PATH).read_text()
+    code, out = debt_run(capsys, repo)
+    assert (code, fix_line(out)) == (0, [])
+    assert "ceiling held" in area_fact(out, Area.DEBT)

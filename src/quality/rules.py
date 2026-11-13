@@ -10,6 +10,7 @@ class Switch(Enum):
     SIZE_BASELINE = "a size baseline"
     IMPORT_LINTER_CONFIG = "an import-linter config"
     CLONE_TABLE = "a clone table"
+    LITERAL_TABLE = "a literal text table"
     JUDGED_PROJECT = "a judged project"
     REPORT_ONLY = "report only"
     CATALOG_DECLARATION = "a catalogs declaration"
@@ -74,7 +75,9 @@ class Rule(StrEnum):
     SIZE = "size", Area.DEBT, RELEASE_0_3, Switch.SIZE_BASELINE
     CLONE = "clone", Area.DEBT, "v0.4.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE)
     JOB_TIMEOUT = "job-timeout", Area.DEBT, RELEASE_0_12, Switch.ALWAYS
-    LITERAL_TEXT = "literal-text", Area.DEBT, RELEASE_0_13, Switch.REPORT_ONLY
+    LITERAL_TEXT = (
+        "literal-text", Area.DEBT, RELEASE_0_13, Switch.REPORT_ONLY, SwitchChange(None, Switch.LITERAL_TABLE)
+    )
     IMPORT_CONTRACT = "import-contract", Area.IMPORTS, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
     CLAUDE_MD = "claude-md", Area.FILES, RELEASE_0_3, Switch.ALWAYS
     AGENTS_MD = "agents-md", Area.FILES, RELEASE_0_11, Switch.ALWAYS

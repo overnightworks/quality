@@ -108,8 +108,11 @@ held pair the tree lost goes. A held `[job_minutes]` entry falls to its job's ro
 debt or its job is gone, and a workflow that cannot be read refuses the whole fix while such an entry is held
 ([rules](rules.md)). Where the file has no `[job_minutes]` table and git never held one, it records the jobs above 15 at
 their rounded-up limits, none where no job is above 15 and none where a workflow cannot be read ([rules](rules.md)). A
+held `[literal_text]` count falls to its page's measured count or goes where the page measures none or is gone, and a
+covered repository whose file has no such table, with git never having held one, records the measured counts, an empty
+table where no page holds a text ([rules](rules.md)). A
 ceiling or `[clones]` table git holds and the tree lacks, or a `[job_minutes]` table where a job above 15 would be
-recorded, refuses with the restore step, and a
+recorded, or a covered repository's `[literal_text]` table, refuses with the restore step, and a
 shallow clone that cannot prove a first recording names `git fetch --unshallow` ([rules](rules.md)). It takes no
 `--staged` (HELP-25) and needs `debt` among the named areas (HELP-26), or no area named; either refusal keeps a
 `--dry-run` in its `next:` (HELP-27). `quality check --fix --dry-run` makes, judges and renders the same ceiling,
@@ -242,7 +245,7 @@ repository a token can list is dropped without a trace (FLEET-72).
   sentence under the heading (FLEET-14). A rule cell says what the pinned gate does with the rule, never whether the
   repository passes it: `enforced`, `report-only` (`size` without `quality/baseline.toml` (FLEET-15), `import-contract`
   without an import-linter config (FLEET-16), `clone` on v0.4.0 and, from v0.5.0 on, without a `[clones]` table in
-  `quality/baseline.toml` (FLEET-17), `catalog-check` under a tag, which only reports it (FLEET-98), `literal-text`, which only measures (FLEET-101)),
+  `quality/baseline.toml` (FLEET-17), `catalog-check` under a tag, which only reports it (FLEET-98), `literal-text` under a tag, which only measures, and on main without a `[literal_text]` table (FLEET-101, FLEET-102)),
   `not in <tag>` when the pinned release predates the rule (FLEET-18),
   `not released` when only main has the rule (FLEET-19), `no catalogs declaration` (`catalog-check` on main, in the gate's own
   repository, when the clone's `pyproject.toml` does not declare `overnightworks-design[catalogs]`; `enforced` when it does)

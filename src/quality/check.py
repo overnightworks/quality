@@ -518,6 +518,21 @@ def _with_recorded_jobs(inputs: RunInputs, made: ratchet.CeilingFix) -> ratchet.
     return replace(made, ceiling=replace(made.ceiling, job_minutes=limits), changes=(*made.changes, *recorded))
 
 
+def _with_recorded_literal_texts(inputs: RunInputs, made: ratchet.CeilingFix) -> ratchet.CeilingFix:
+    """The fix with the literal-text table recorded where the ceiling has none, git never held one and the repository is
+    covered, even when no page holds a text: the table's presence enforces the rule. A first recording carries the table
+    in the ceiling alone, which its row counts."""
+    if made.ceiling.literal_texts is not None:
+        return made
+    counts = literal_text.recordable_counts(inputs.root, inputs.tracked)
+    if counts is None:
+        return made
+    _require_no_table_in_git(inputs, baseline_file.LITERAL_TEXT)
+    fact = literal_text.table_words(sum(counts.values()), len(counts))
+    recorded = () if made.first else (Note(baseline_file.BASELINE_PATH, NoteEvent.RECORDED, fact),)
+    return replace(made, ceiling=replace(made.ceiling, literal_texts=counts), changes=(*made.changes, *recorded))
+
+
 def _fix_ceiling(inputs: RunInputs, sources: dict[str, bytes], held: baseline_file.Baseline | None) -> ratchet.CeilingFix:
     """The ceiling lowered, or recorded where git never held one; the caller writes it."""
     tree = ratchet.measure(sources)
@@ -527,7 +542,8 @@ def _fix_ceiling(inputs: RunInputs, sources: dict[str, bytes], held: baseline_fi
     pairs = clones.find_pairs(sources).pairs
     if held is None:
         _require_no_ceiling_in_git(inputs)
-        return _with_recorded_jobs(inputs, ratchet.CeilingFix(baseline_file.Baseline(ratchet.debt(measurements), pairs), (), first=True))
+        first = ratchet.CeilingFix(baseline_file.Baseline(ratchet.debt(measurements), pairs, literal_texts=None), (), first=True)
+        return _with_recorded_literal_texts(inputs, _with_recorded_jobs(inputs, first))
     if held.clones is None:
         _require_no_table_in_git(inputs, baseline_file.CLONES)
     followed = _followed(inputs, held)  # renames first, so a renamed file's entries move instead of falling as gone
@@ -536,7 +552,9 @@ def _fix_ceiling(inputs: RunInputs, sources: dict[str, bytes], held: baseline_fi
         gone = _with_what_they_held(gone, followed.ceiling.size)
     lowered = ratchet.lower_ceiling(followed.ceiling, measurements, pairs, gone)
     jobs = workflow_rules.lower_job_entries(inputs.root, inputs.tracked, lowered.ceiling)
-    return _with_recorded_jobs(inputs, replace(jobs, changes=(*followed.changes, *lowered.changes, *jobs.changes)))
+    pages = literal_text.lower_literal_entries(inputs.root, inputs.tracked, jobs.ceiling)
+    changes = (*followed.changes, *lowered.changes, *jobs.changes, *pages.changes)
+    return _with_recorded_literal_texts(inputs, _with_recorded_jobs(inputs, replace(pages, changes=changes)))
 
 
 def _reported(ceiling: ratchet.CeilingFix | DryRun) -> ratchet.CeilingFix:
@@ -564,7 +582,12 @@ def _judge_debt(inputs: RunInputs) -> AreaVerdict:
         lambda: workflow_rules.check_job_timeouts(inputs.root, inputs.tracked, made.ceiling if fixed else judged_baseline(inputs.root))
     )
     judged: dict[Rule, Judged] = {Rule.SIZE: size, Rule.CLONE: clone, Rule.JOB_TIMEOUT: timeouts}
-    if (literal := _attempt(lambda: literal_text.check_literal_text(inputs.root, inputs.tracked))) is not None:
+    literal = _attempt(
+        lambda: literal_text.check_literal_text(
+            inputs.root, inputs.tracked, lambda: made.ceiling if fixed else judged_baseline(inputs.root)
+        )
+    )
+    if literal is not None:
         judged[Rule.LITERAL_TEXT] = literal
     return _area_verdict(Area.DEBT, judged, ceiling=ceiling)
 

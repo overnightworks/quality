@@ -8,13 +8,14 @@ import pytest
 from quality import __version__
 from quality.baseline_file import (
     BASELINE_HEADER,
-    Baseline,
     JobKey,
+    PageKey,
     SizeError,
     holds_table,
     load_baseline,
     render_baseline,
 )
+from tests.support.baselines import ceiling
 
 SPELLINGS = [
     pytest.param("[{name}]\n", True, id="a header"),
@@ -51,11 +52,11 @@ def test_a_version_no_parser_reads_shows_nothing(version, name):
         holds_table(version, name)
 
 
-def test_an_unknown_table_names_the_tool_version_and_every_known_table_with_clones_and_job_minutes():
-    """TIMEOUT-13, CEILING-3: an unknown table is named with the tool's version and every table it knows, `clones` and
-    `job_minutes` among them."""
+def test_an_unknown_table_names_the_tool_version_and_every_known_table_with_clones_job_minutes_and_literal_text():
+    """TIMEOUT-13, CEILING-3, LITERAL-5: an unknown table is named with the tool's version and every table it knows,
+    `clones`, `job_minutes` and `literal_text` among them."""
     with pytest.raises(
-        SizeError, match=rf"unknown table \[future\]; quality {re.escape(__version__)} knows ccn, .*, clones, job_minutes$"
+        SizeError, match=rf"unknown table \[future\]; quality {re.escape(__version__)} knows ccn, .*, clones, job_minutes, literal_text$"
     ):
         load_baseline("[future]\n")
 
@@ -141,6 +142,55 @@ def test_a_held_job_table_renders_and_an_absent_one_does_not_and_the_rendering_r
 
 def test_a_job_name_that_is_not_valid_utf8_cannot_be_rendered():
     """TIMEOUT-13."""
-    baseline = Baseline({}, None, {JobKey(CI, "\ud800"): 40})
+    baseline = ceiling({}, None, {JobKey(CI, "\ud800"): 40})
     with pytest.raises(SizeError, match="is not valid UTF-8"):
         render_baseline(baseline)
+
+
+PAGE = "frontend/src/lib/A.svelte"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        pytest.param("", None, id="no table"),
+        pytest.param("[literal_text]\n", {}, id="an empty table"),
+        pytest.param(f'[literal_text]\n"{PAGE}" = 3\n', {PageKey(PAGE): 3}, id="one page"),
+        pytest.param('[literal_text]\n"b.svelte" = 1\n"a.svelte" = 2\n', {PageKey("b.svelte"): 1, PageKey("a.svelte"): 2}, id="two pages"),
+    ],
+)
+def test_the_literal_text_table_loads_as_one_count_per_page_and_an_absent_one_as_none(text, expected):
+    """LITERAL-5: `[literal_text]` holds a count per quoted page path; no table is None, an empty table is empty."""
+    assert load_baseline(text).literal_texts == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "held"),
+    [("", False), ("[literal_text]\n", True), (f'[literal_text]\n"{PAGE}" = 3\n', True)],
+    ids=["no table", "a held empty table", "one entry"],
+)
+def test_a_held_literal_text_table_renders_and_an_absent_one_does_not_and_the_rendering_reads_back_byte_for_byte(text, held):
+    """LITERAL-5: an empty table renders as `[literal_text]` alone, and a file that renders reads back to the same text."""
+    rendered = render_baseline(load_baseline(text))
+    assert ("literal_text" in rendered, render_baseline(load_baseline(rendered))) == (held, rendered)
+
+
+def test_the_literal_text_table_renders_sorted_by_page_after_the_job_table():
+    """LITERAL-5: entries are sorted by path and the table follows `[job_minutes]`."""
+    baseline = ceiling({}, None, {JobKey(CI, "e2e"): 40}, {PageKey("b.svelte"): 1, PageKey("a.svelte"): 2})
+    assert render_baseline(baseline) == (
+        f'{BASELINE_HEADER}\n[job_minutes."{CI}"]\ne2e = 40\n\n[literal_text]\n"a.svelte" = 2\n"b.svelte" = 1\n'
+    )
+
+
+@pytest.mark.parametrize("count", ["0", '"3"', "-1", "true", "1.5"])
+def test_a_literal_text_count_that_is_not_a_positive_integer_is_refused_naming_the_entry(count):
+    """LITERAL-5, LITERAL-11: a zero, a string or a boolean is no count."""
+    with pytest.raises(SizeError, match=r'needs literal_text\."a.svelte" as a positive count, not'):
+        load_baseline(f'[literal_text]\n"a.svelte" = {count}\n')
+
+
+def test_a_literal_text_table_that_is_not_a_table_is_refused():
+    """LITERAL-5."""
+    with pytest.raises(SizeError, match=r"needs literal_text as a table"):
+        load_baseline("literal_text = 3\n")

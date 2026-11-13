@@ -64,6 +64,14 @@ def jobs(**limits):
     return f'[job_minutes."{CI}"]\n' + "".join(f"{job_id} = {minutes}\n" for job_id, minutes in limits.items())
 
 
+PAGE = "frontend/src/lib/A.svelte"
+
+
+def pages(**counts):
+    """A `[literal_text]` table holding `counts` for page paths under `frontend/src/lib`, named `A` to `C`."""
+    return "[literal_text]\n" + "".join(f'"frontend/src/lib/{name}.svelte" = {count}\n' for name, count in counts.items())
+
+
 UNDECLARED_KINDS = [
     kind(gate_config("checks", "B"), CHECKS, id="a mandatory job removed"),
     kind(gate_config("checks", legacy="fail"), CHECKS, id="legacy lowered"),
@@ -81,6 +89,9 @@ UNDECLARED_KINDS = [
     kind(CHECKS, CHECKS, (jobs(e2e=40), jobs(e2e=45)), id="a job limit raised"),
     kind(CHECKS, CHECKS, (jobs(e2e=40), jobs(e2e=40, other=20)), id="a job limit added"),
     kind(CHECKS, CHECKS, (jobs(e2e=40), ""), id="the job limit baseline removed"),
+    kind(CHECKS, CHECKS, (pages(A=3), pages(A=5)), id="a literal text count raised"),
+    kind(CHECKS, CHECKS, (pages(A=3), pages(A=3, B=1)), id="a literal text page added"),
+    kind(CHECKS, CHECKS, (pages(A=3), ""), id="the literal text baseline removed"),
     kind(CHECKS, CHECKS, imports=(GUARDED, None), id="an import-linter config removed"),
     kind(CHECKS, CHECKS, imports=(GUARDED, contracts_ini({"guarded": FORBIDDEN}, roots=("shop", "extra"))),
          id="a session option changed"),
@@ -113,6 +124,9 @@ PRINTED = {
     "a job limit raised": [f"    ! job limit baseline raises {CI} e2e 40 -> 45"],
     "a job limit added": [f"    ! job limit baseline adds {CI} other 20"],
     "the job limit baseline removed": ["    ! job limit baseline removed"],
+    "a literal text count raised": [f"    ! literal text baseline raises {PAGE} 3 -> 5"],
+    "a literal text page added": ["    ! literal text baseline adds frontend/src/lib/B.svelte 1"],
+    "the literal text baseline removed": ["    ! literal text baseline removed"],
     "an import-linter config removed": ["    ! import-linter config in .importlinter removed"],
     "a session option changed": ["    ! import-linter changes root_packages"],
     "a contract removed": ['    ! import contract "guarded" removed'],
@@ -241,3 +255,63 @@ def test_a_job_limit_typo_in_a_declaration_matches_nothing_and_leaves_the_raise_
         [None],
         [f"job limit baseline raises {CI} e2e 40 -> 46"],
     )
+
+
+@pytest.mark.parametrize(
+    ("baselines", "expected"),
+    [
+        pytest.param(("", pages(A=3)), [], id="a base without the table: adoption"),
+        pytest.param((None, pages(A=3)), [], id="no base file: adoption of the file"),
+        pytest.param((pages(A=3), pages(A=3)), [], id="equal"),
+        pytest.param((pages(A=3), pages(A=2)), [], id="lowered"),
+        pytest.param((pages(A=3, B=1), pages(A=3)), [], id="an entry dropped"),
+        pytest.param((pages(A=3), "[literal_text]\n"), [], id="the table held and emptied"),
+        pytest.param(("", ""), [], id="neither side holds the table"),
+    ],
+)
+def test_a_literal_text_table_adopted_equal_lowered_or_dropped_loosens_nothing(baselines, expected):
+    """LITERAL-8: a head table against a base without one is an adoption; a lowered or dropped entry is no loosening."""
+    assert printed(judged(CHECKS, CHECKS, baselines, (None, None))) == expected
+
+
+@pytest.mark.parametrize(
+    ("baselines", "expected"),
+    [
+        pytest.param(
+            (pages(A=3), pages(A=5)), [f"    ! literal text baseline raises {PAGE} 3 -> 5"], id="a base without clones, a raise"
+        ),
+        pytest.param(
+            ("[clones]\n" + pages(A=3), pair(("src/a.py", "f"), ("src/b.py", "g")) + pages(A=5)),
+            ["    ! clone baseline adds src/a.py f <-> src/b.py g", f"    ! literal text baseline raises {PAGE} 3 -> 5"],
+            id="a base with clones, a raise and a clone pair",
+        ),
+        pytest.param(
+            (jobs(e2e=40) + pages(A=3), jobs(e2e=45) + pages(A=5)),
+            [f"    ! job limit baseline raises {CI} e2e 40 -> 45", f"    ! literal text baseline raises {PAGE} 3 -> 5"],
+            id="a job raise before a literal raise",
+        ),
+        pytest.param(
+            (file_lines("src/a.py", 800) + pages(A=3), file_lines("src/a.py", 820) + pages(A=5)),
+            ["    ! size baseline raises file_lines src/a.py 800 -> 820", f"    ! literal text baseline raises {PAGE} 3 -> 5"],
+            id="a size raise before a literal raise",
+        ),
+        pytest.param(
+            (jobs(e2e=40), jobs(e2e=40) + pages(A=3)), [], id="the table adopted beside a held job table"
+        ),
+        pytest.param(
+            (pages(A=3) + jobs(e2e=40), jobs(e2e=40)), ["    ! literal text baseline removed"], id="the literal table removed beside a job table"
+        ),
+    ],
+)
+def test_the_tables_are_judged_apart_whatever_the_base_holds(baselines, expected):
+    """LITERAL-5, LITERAL-8: a base with `[literal_text]` and no `[clones]` is judged on its literal entries, and the
+    literal lines come last."""
+    assert printed(judged(CHECKS, CHECKS, baselines, (None, None))) == expected
+
+
+@pytest.mark.parametrize("side", ["base", "head"])
+@pytest.mark.parametrize("table", ['[literal_text]\n"a.svelte" = 0\n', '[literal_text]\n"a.svelte" = "3"\n'], ids=["a zero", "a string"])
+def test_a_malformed_literal_text_table_on_either_side_cannot_be_judged_naming_the_side(side, table):
+    """LITERAL-5, BASELINE-20."""
+    with pytest.raises(CannotJudge, match=rf"{BASELINE_PATH} at the {side}: "):
+        side_of(CHECKS, table, f"the {side}")

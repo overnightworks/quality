@@ -10,11 +10,11 @@ import pytest
 from quality import __version__, cli
 from quality.baseline_file import (
     BASELINE_PATH,
-    Baseline,
     ClonePair,
     JobKey,
     Key,
     Metric,
+    PageKey,
     Place,
     load_baseline,
     render_baseline,
@@ -27,9 +27,11 @@ from quality.ratchet import (
     follow_renames,
     named_paths,
     raised_entries,
+    raised_literal_texts,
 )
 from quality.report import FindingEvent, NoteEvent
 from quality.rules import Rule
+from tests.support.baselines import ceiling
 from tests.support.check import (
     area_fact,
     assert_finding_vocabulary,
@@ -546,7 +548,7 @@ def paired(first, second):
 def test_the_base_allowance_moves_to_a_rename_target_and_leftovers_there_do_not_count(renames, base, head, expected):
     """BASELINE-12, BASELINE-13, BASELINE-16: the old entry leaves its path unless the head still names it; an entry
     under the target never counts."""
-    assert carried_base(Baseline(base, None), renamed(renames), named_paths(Baseline(head, None))).size == expected
+    assert carried_base(ceiling(base, None), renamed(renames), named_paths(ceiling(head, None))).size == expected
 
 
 @pytest.mark.parametrize(
@@ -564,27 +566,59 @@ def test_the_base_allowance_moves_to_a_rename_target_and_leftovers_there_do_not_
 def test_a_clone_pair_moves_with_its_files_by_the_same_rules(renames, base, head, expected):
     """BASELINE-12, BASELINE-13, BASELINE-16, BASELINE-17: a pair whose sides only moved is the same pair, the sides
     re-sort through ClonePair.of, and a side the head still names does not move."""
-    carried = carried_base(Baseline({}, frozenset(base)), renamed(renames), named_paths(Baseline({}, frozenset(head))))
+    carried = carried_base(ceiling({}, frozenset(base)), renamed(renames), named_paths(ceiling({}, frozenset(head))))
     assert carried.clones == frozenset(expected)
 
 
 def test_a_target_whose_source_cannot_be_named_is_cleared_and_nothing_moves_to_it():
     """BASELINE-14: a rename from a path that is not UTF-8 still drops the leftovers under its target."""
-    base = Baseline({sized("new.py"): 200}, frozenset({paired("new.py", "z.py")}))
-    carried = carried_base(base, renamed({}, unnamed_sources=["new.py"]), named_paths(Baseline({sized("new.py"): 150}, frozenset())))
-    assert carried == Baseline({}, frozenset())
+    base = ceiling({sized("new.py"): 200}, frozenset({paired("new.py", "z.py")}))
+    carried = carried_base(base, renamed({}, unnamed_sources=["new.py"]), named_paths(ceiling({sized("new.py"): 150}, frozenset())))
+    assert carried == ceiling({}, frozenset())
 
 
 def test_a_head_pair_keeps_the_old_path_occupied_for_size_entries_too():
     """BASELINE-16: the head holds the old path through a size entry or a pair side, either blocks the move."""
-    base = Baseline({sized("a.py"): 16}, frozenset({paired("a.py", "z.py")}))
-    head = Baseline({sized("b.py"): 16}, frozenset({paired("a.py", "z.py"), paired("b.py", "z.py")}))
-    assert carried_base(base, renamed({"a.py": "b.py"}), named_paths(head)) == Baseline({sized("a.py"): 16}, frozenset({paired("a.py", "z.py")}))
+    base = ceiling({sized("a.py"): 16}, frozenset({paired("a.py", "z.py")}))
+    head = ceiling({sized("b.py"): 16}, frozenset({paired("a.py", "z.py"), paired("b.py", "z.py")}))
+    assert carried_base(base, renamed({"a.py": "b.py"}), named_paths(head)) == ceiling({sized("a.py"): 16}, frozenset({paired("a.py", "z.py")}))
 
 
 def test_a_base_without_a_clone_table_stays_without_one():
     """BASELINE-9: a base without a clone table is still without one after its renames are carried."""
-    assert carried_base(Baseline({sized("a.py"): 16}, None), renamed({"a.py": "b.py"}), named_paths(Baseline({sized("b.py"): 16}, None))).clones is None
+    assert carried_base(ceiling({sized("a.py"): 16}, None), renamed({"a.py": "b.py"}), named_paths(ceiling({sized("b.py"): 16}, None))).clones is None
+
+
+def page_counts(counts):
+    return {PageKey(path): count for path, count in counts.items()}
+
+
+def test_a_base_with_a_page_table_and_no_clone_table_keeps_its_table_through_the_rename_carry():
+    """LITERAL-5: the carry rebuilds nothing it does not touch, so a page table survives a base without `[clones]`, and
+    its entry follows the rename."""
+    base = ceiling({}, None, None, {PageKey("a.svelte"): 3, PageKey("z.svelte"): 1})
+    carried = carried_base(base, renamed({"a.svelte": "b.svelte"}), named_paths(ceiling({}, None, None, {PageKey("b.svelte"): 3})))
+    assert (carried.clones, carried.literal_texts) == (None, {PageKey("b.svelte"): 3, PageKey("z.svelte"): 1})
+
+
+def test_a_page_entry_is_a_path_the_baseline_names():
+    """LITERAL-13: a rename of a page is followed because the baseline names its path."""
+    assert named_paths(ceiling({}, None, None, {PageKey("a.svelte"): 3})) == {"a.svelte"}
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "expected"),
+    [
+        ({"a.svelte": 3}, {"a.svelte": 3}, []),
+        ({"a.svelte": 3}, {"a.svelte": 2}, []),
+        ({"a.svelte": 3}, {"a.svelte": 5}, [RaisedEntry(PageKey("a.svelte"), 3, 5)]),
+        ({"a.svelte": 3}, {"a.svelte": 3, "b.svelte": 1}, [RaisedEntry(PageKey("b.svelte"), None, 1)]),
+    ],
+    ids=["equal", "lowered", "raised", "added"],
+)
+def test_a_page_count_may_fall_but_never_rise_or_appear(base, head, expected):
+    """LITERAL-8: the raised entries of one page table against another."""
+    assert raised_literal_texts(page_counts(base), page_counts(head)) == expected
 
 
 def booked(path, job="e2e"):
@@ -592,7 +626,7 @@ def booked(path, job="e2e"):
 
 
 def job_baseline(entries, size=None):
-    return Baseline(size or {}, None, entries)
+    return ceiling(size or {}, None, entries)
 
 
 @pytest.mark.parametrize(
@@ -628,7 +662,7 @@ def test_a_path_only_a_job_limit_names_is_a_path_the_baseline_names():
 @pytest.mark.parametrize("pairs", [None, frozenset()], ids=["no clone table", "an empty clone table"])
 def test_a_carried_base_keeps_the_job_table_beside_the_size_entries_and_pairs(pairs):
     """TIMEOUT-17: the size entries move with a rename and the job table is handed on, whatever the clone table is."""
-    base = Baseline({sized("a.py"): 16}, pairs, {booked("ci.yml"): 40})
+    base = ceiling({sized("a.py"): 16}, pairs, {booked("ci.yml"): 40})
     carried = carried_base(base, renamed({"a.py": "b.py"}), frozenset())
     assert (carried.size, carried.job_minutes) == ({sized("b.py"): 16}, {booked("ci.yml"): 40})
 
@@ -637,8 +671,8 @@ def test_a_carried_base_keeps_the_job_table_beside_the_size_entries_and_pairs(pa
 @pytest.mark.parametrize("jobs", [None, {}, {booked("ci.yml"): 40}], ids=["no job table", "an empty job table", "an entry"])
 def test_following_renames_hands_a_held_job_table_on_unchanged(pairs, jobs):
     """TIMEOUT-17, FIX-31: the fix that moves size entries rewrites the job table byte for byte and never drops it."""
-    committed = Baseline({sized("a.py"): 16}, pairs, jobs)
-    held = Baseline({sized("b.py"): 16}, pairs and frozenset({paired("b.py", "z.py")}), jobs)
+    committed = ceiling({sized("a.py"): 16}, pairs, jobs)
+    held = ceiling({sized("b.py"): 16}, pairs and frozenset({paired("b.py", "z.py")}), jobs)
     fix = follow_renames(held, committed, renamed({"a.py": "b.py"}), frozenset({"b.py"}))
     assert fix.ceiling.job_minutes == jobs
 
@@ -647,9 +681,9 @@ def test_a_key_with_quotes_or_unicode_matches_itself_exactly():
     """BASELINE-2, BASELINE-7: a key with quotes or unicode is the same entry on both sides, so equal is no raise and a
     raise on it is found."""
     key = Key(Metric.CCN, QUOTED_PATH, 'Holder."méthode"')
-    base = load_baseline(render_baseline(Baseline({key: 16}, None))).size
-    assert raised_entries(base, load_baseline(render_baseline(Baseline({key: 16}, None))).size) == []
-    assert raised_entries(base, load_baseline(render_baseline(Baseline({key: 17}, None))).size) == [RaisedEntry(key, 16, 17)]
+    base = load_baseline(render_baseline(ceiling({key: 16}, None))).size
+    assert raised_entries(base, load_baseline(render_baseline(ceiling({key: 16}, None))).size) == []
+    assert raised_entries(base, load_baseline(render_baseline(ceiling({key: 17}, None))).size) == [RaisedEntry(key, 16, 17)]
 
 
 @pytest.fixture

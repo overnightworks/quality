@@ -158,12 +158,14 @@ class ReleaseTagsError(Exception):
 
 @dataclass(frozen=True)
 class Declared:
-    """What a clone's own files switch on: the gate settings, a size baseline, a clone table, an import-linter config,
-    a project whose tests the layout rules judge, a catalogs declaration, and the files among them that could not be read."""
+    """What a clone's own files switch on: the gate settings, a size baseline, a clone table, a literal-text table, an
+    import-linter config, a project whose tests the layout rules judge, a catalogs declaration, and the files among them
+    that could not be read."""
 
     settings: config.GateSettings | None
     has_baseline: bool
     has_clone_table: bool
+    has_literal_table: bool
     has_import_config: bool
     has_judged_project: bool
     declares_catalogs: bool
@@ -412,9 +414,9 @@ def measure_repository(name: str) -> Row:
 
 
 def read_declared(clone: Path, tracked: list[str]) -> Declared:
-    """The clone's gate settings, size baseline, clone table and import-linter config; a file that cannot be read is named."""
+    """The clone's gate settings, size baseline, clone table, literal-text table and import-linter config; a file that cannot be read is named."""
     unreadable: set[str] = set()
-    settings, has_baseline, has_clone_table, has_import_config = None, False, False, False
+    settings, has_baseline, has_clone_table, has_literal_table, has_import_config = None, False, False, False, False
     try:
         settings = config.read_gate_settings(clone) if config.CONFIG_PATH in tracked else None
     except config.ConfigError:
@@ -423,6 +425,7 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
         baseline = baseline_file.read_baseline(clone)
         has_baseline = baseline is not None
         has_clone_table = baseline is not None and baseline.clones is not None
+        has_literal_table = baseline is not None and baseline.literal_texts is not None
     except (report.CannotJudge, baseline_file.SizeError):
         unreadable.add(baseline_file.BASELINE_PATH)
     try:
@@ -437,7 +440,10 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
     has_judged_project = any(project.packages for project in layout.python_projects(tracked)) or bool(
         layout.frontend_projects(tracked)
     )
-    return Declared(settings, has_baseline, has_clone_table, has_import_config, has_judged_project, declares_catalogs, frozenset(unreadable))
+    return Declared(
+        settings, has_baseline, has_clone_table, has_literal_table, has_import_config, has_judged_project, declares_catalogs,
+        frozenset(unreadable),
+    )
 
 
 def find_import_config(clone: Path, tracked: list[str]) -> bool:
@@ -647,6 +653,7 @@ def switch_words(switch: Switch, declared: Declared) -> Cell:
     file, present = {
         Switch.SIZE_BASELINE: (baseline_file.BASELINE_PATH, declared.has_baseline),
         Switch.CLONE_TABLE: (baseline_file.BASELINE_PATH, declared.has_clone_table),
+        Switch.LITERAL_TABLE: (baseline_file.BASELINE_PATH, declared.has_literal_table),
         Switch.IMPORT_LINTER_CONFIG: (IMPORT_LINTER_CONFIG, declared.has_import_config),
     }[switch]
     if file in declared.unreadable:

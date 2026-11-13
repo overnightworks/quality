@@ -17,6 +17,7 @@ from quality import (
     baseline_file,
     fleet,
     installation,
+    literal_text,
     pin,
     process,
     ratchet,
@@ -422,10 +423,13 @@ def _lowered_fact(ceiling: ratchet.CeilingFix | DryRun) -> str:
 
 
 def _recorded_extent(fix: ratchet.CeilingFix) -> str:
-    """What a first recording holds: its entries and clone pairs, and its job limits when it holds a job table."""
+    """What a first recording holds: its entries and clone pairs, its job limits when it holds a job table and its literal
+    texts when the repository is covered."""
     parts = [counted(len(fix.ceiling.size), "entry", "entries"), counted(len(fix.ceiling.clones), CLONE_PAIR)]
     if fix.ceiling.job_minutes:
         parts.append(counted(len(fix.ceiling.job_minutes), baseline_file.JOB_LIMIT))
+    if (pages := fix.ceiling.literal_texts) is not None:
+        parts.append(literal_text.table_words(sum(pages.values()), len(pages)))
     return ", ".join(parts)
 
 
@@ -499,13 +503,12 @@ def _finding_row(verdict: AreaVerdict, extent: str) -> Row:
 
 
 def _measured_row(verdict: AreaVerdict, extent: str) -> Row:
-    """The note row of an area whose rules only measured; its fix is the one that records, so a literal count alone has none."""
+    """The note row of an area whose rules only measured; its fix is the one that records."""
     if MEASURED_ONLY_EVENT[verdict.area] is AreaEvent.NOT_SET_UP:
         return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_SET_UP, extent)
     partly = "" if verdict.measurement is Measurement.MEASURED_ONLY else "partly "
     mode = f"{partly}{Outcome.MEASURED_ONLY.value}"
-    unrecorded = any(judged.measured_only for judged in verdict.verdicts if judged.rule is not Rule.LITERAL_TEXT)
-    fix = baseline_file.FIX_COMMAND if unrecorded else ""
+    fix = baseline_file.FIX_COMMAND if any(judged.measured_only for judged in verdict.verdicts) else ""
     return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_RECORDED, SEPARATOR.join(filter(None, (extent, mode))), fix=fix)
 
 
@@ -547,15 +550,16 @@ def _dependencies_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | N
 def _debt_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
     entries, pairs = counted(extents[Rule.SIZE], "entry", "entries"), counted(extents[Rule.CLONE], CLONE_PAIR)
     literal = extents.get(Rule.LITERAL_TEXT)
-    texts = [] if literal is None else [f"{counted(literal.texts, 'literal text')} in {counted(literal.files, 'file')}"]
-    clone_measured = next(judged.measured_only for judged in verdict.verdicts if judged.rule is Rule.CLONE)
+    measured = {judged.rule for judged in verdict.verdicts if judged.measured_only}
+    read = [] if literal is None else [f"{counted(literal.texts, baseline_file.LITERAL_TEXT_NOUN)} in {counted(literal.files, 'file')}"]
+    held = [] if literal is None else [literal_text.table_words(literal.texts, literal.files)]
     match verdict.measurement:
         case Measurement.MEASURED_ONLY:
-            return ", ".join([f"{entries} over the thresholds", *texts])
+            return ", ".join([f"{entries} over the thresholds", *read])
         case Measurement.PARTLY_MEASURED_ONLY:
-            return ", ".join(([pairs] if clone_measured or literal is None else []) + texts)
+            return ", ".join(([pairs] if Rule.CLONE in measured else []) + (read if Rule.LITERAL_TEXT in measured else []))
         case Measurement.ENFORCED:
-            return f"{CEILING_HELD}{SEPARATOR}{entries}, {pairs}"
+            return f"{CEILING_HELD}{SEPARATOR}{', '.join([entries, pairs, *held])}"
 
 
 def _workflows_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
