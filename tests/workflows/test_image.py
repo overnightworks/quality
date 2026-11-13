@@ -26,7 +26,7 @@ def run_job_step(image: dict, name: str, directory, **scenario: str):
 
 
 def test_the_call_takes_exactly_the_image_interface(image):
-    """IMAGE-2, IMAGE-4, IMAGE-5, IMAGE-6, IMAGE-11, IMAGE-12, IMAGE-13, IMAGE-16."""
+    """IMAGE-2, IMAGE-4, IMAGE-5, IMAGE-6, IMAGE-11, IMAGE-12, IMAGE-13, IMAGE-16, IMAGE-18."""
     call = image[True]["workflow_call"]
     assert {
         name: (spec["type"], spec.get("required", False), spec.get("default")) for name, spec in call["inputs"].items()
@@ -41,6 +41,7 @@ def test_the_call_takes_exactly_the_image_interface(image):
         "cache": ("boolean", False, False),
         "submodules": ("boolean", False, False),
         "reproducible-layers": ("boolean", False, False),
+        "runner": ("string", False, "ubuntu-latest"),
     }
     assert {name: spec["required"] for name, spec in call["secrets"].items()} == {"build-secrets": False}
     assert {name: spec["value"] for name, spec in call["outputs"].items()} == {
@@ -56,9 +57,9 @@ def test_the_call_takes_exactly_the_image_interface(image):
 
 
 def test_the_job_runs_hosted_with_the_inputs_in_its_environment(image):
-    """IMAGE-7, IMAGE-15."""
+    """IMAGE-7, IMAGE-15, IMAGE-18."""
     job = image["jobs"]["image"]
-    assert job["runs-on"] == "ubuntu-latest"
+    assert job["runs-on"] == "${{ inputs.runner }}"
     assert job["timeout-minutes"] == 60
     assert job["env"] == {
         "IMAGE": "${{ inputs.image }}",

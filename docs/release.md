@@ -155,6 +155,8 @@ The secret's name is illustrative.
   `secrets: inherit`.
 - The image is built for `linux/amd64` on a GitHub-hosted runner (IMAGE-7), from the dispatched commit
   (IMAGE-8), the one the gate judged.
+- `runner` (default `ubuntu-latest`) names the GitHub-hosted runner the image job runs on: a larger one for an image a
+  standard runner's disk cannot hold (IMAGE-18).
 - BuildKit adds its provenance (`mode=max`) and an SBOM to the image (IMAGE-9); with `push`, `actions/attest` adds a signed
   SLSA build provenance, signed by `image.yml` (IMAGE-10). A consumer verifies it with `gh attestation verify oci://<ref> --repo
   <owner>/<repository> --signer-workflow overnightworks/quality/.github/workflows/image.yml --source-ref refs/heads/main
