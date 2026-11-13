@@ -405,10 +405,7 @@ def carried_base(base: Baseline, renames: Renames, kept: Collection[str]) -> Bas
         for pair in base.clones
         if (first := new_path(pair.first.path)) and (second := new_path(pair.second.path))
     }
-    carried: Baseline = replace(
-        base, size=size, job_minutes=limits, literal_texts=pages, clones=None if pairs is None else frozenset(pairs)
-    )
-    return carried
+    return Baseline(size, None if pairs is None else frozenset(pairs), limits, literal_texts=pages)
 
 
 def raised_entries(base: SizeEntries, head: SizeEntries) -> list[RaisedEntry]:
