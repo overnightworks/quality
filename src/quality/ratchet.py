@@ -397,15 +397,15 @@ def carried_base(base: Baseline, renames: Renames, kept: Collection[str]) -> Bas
     pages = base.literal_texts and {
         key._replace(path=path): count for key, count in base.literal_texts.items() if (path := new_path(key.path))
     }
-    carried = replace(base, size=size, job_minutes=limits, literal_texts=pages)
-    if base.clones is None:
-        return carried
-    pairs = set()
-    for pair in base.clones:
-        first, second = new_path(pair.first.path), new_path(pair.second.path)
-        if first and second:
-            pairs.add(ClonePair.of(pair.first._replace(path=first), pair.second._replace(path=second)))
-    return replace(carried, clones=frozenset(pairs))
+    pairs = base.clones and {
+        ClonePair.of(pair.first._replace(path=first), pair.second._replace(path=second))
+        for pair in base.clones
+        if (first := new_path(pair.first.path)) and (second := new_path(pair.second.path))
+    }
+    carried: Baseline = replace(
+        base, size=size, job_minutes=limits, literal_texts=pages, clones=None if pairs is None else frozenset(pairs)
+    )
+    return carried
 
 
 def raised_entries(base: SizeEntries, head: SizeEntries) -> list[RaisedEntry]:
