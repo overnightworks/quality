@@ -40,11 +40,16 @@ jobs:
     uses: overnightworks/quality/.github/workflows/codeql.yml@<commit sha> # v<tag>
     with:
       languages: '["actions", "python"]'
+      config-file: .github/codeql/codeql-config.yml # optional
 ```
 
-- **`languages`:** the one input, required, a string (CODEQL-1) holding a JSON list; `'python'` or `'[]'` fails the run. List every
+- **`languages`:** required, a string (CODEQL-1) holding a JSON list; `'python'` or `'[]'` fails the run. List every
   category the repository already analyses (aco also has `javascript-typescript`, which a list copied from the example
   above would drop).
+- **`config-file`:** optional, a string, empty by default (CODEQL-3). A path in the caller's checkout, handed to
+  `codeql-action/init` as its `config-file`, in the form [CodeQL documents](https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/customizing-your-advanced-setup-for-code-scanning).
+  A CodeQL exception lives in that file, with its reason in a comment beside it, in the narrowest form: `paths-ignore`
+  for the one file, not a directory and not a query across the repository. Empty, the run uses CodeQL's defaults.
 - **Permissions:** the caller grants `security-events: write`, `contents: read` and `actions: read`, and the workflow
   asks for no more. A caller without `security-events: write` is refused at startup ([Startup failures](gate.md#startup-failures)).
 - **Updates:** pin a release's commit sha with its tag in a comment; Dependabot's `github-actions` ecosystem bumps both.
