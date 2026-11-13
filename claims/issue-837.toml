@@ -1,0 +1,8 @@
+claim_id = "9e667b6506e3405faa8131a032b9d133"
+agent = "Claude 3cb16e78-3ea2-405c-947b-02cb3fc89cde"
+role = "builder"
+base = "18bccfc9a03f9ac5f42d9f8787bcdee8edb1e075"
+branch = "claude/issue-837-release-v0-16-0"
+scope = [".github/workflows/gate.yml", "docs/commands.md", "docs/rules.md", "src/quality/rules.py", "tests/test_fleet_matrix.py"]
+opened_commit = "f2449321df72fd439d3ba5970d74c2cd3873071a"
+whole_reason = "One constant, one release name, three refs and two document sentences that name one release, with the test file that pins a rule's release by name."
