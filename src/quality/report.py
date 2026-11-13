@@ -284,7 +284,15 @@ class StagedExtent:
     files: int
 
 
-type Extent = int | LockExtent | StagedExtent
+@dataclass(frozen=True)
+class LiteralExtent:
+    """How much the literal-text rule read: the literal texts it counted, in the pages the tree holds."""
+
+    texts: int
+    files: int
+
+
+type Extent = int | LockExtent | StagedExtent | LiteralExtent
 
 
 @dataclass(frozen=True)

@@ -426,6 +426,21 @@ def test_catalog_check_reads_the_pin_before_the_declaration(pin, words):
     assert rule_cell(CATALOG_CHECK, release, declared(declares_catalogs=True)) == words
 
 
+LITERAL_TEXT = Rule.LITERAL_TEXT.release
+
+
+@pytest.mark.parametrize("declares_catalogs", [True, False], ids=["a catalogs declaration", "no declaration"])
+def test_literal_text_reads_report_only_on_main_whatever_the_clone_declares(declares_catalogs):
+    """FLEET-101: the cell says what the gate does with the rule, which only measures, never who is covered."""
+    assert rule_cell(LITERAL_TEXT, Gate.MAIN, declared(declares_catalogs=declares_catalogs)) == "report-only"
+
+
+def test_literal_text_is_not_released_on_a_pinned_gate(fleet_report, public):
+    """FLEET-101, FLEET-19: no tag carries the rule yet, so a pinned gate does not have it."""
+    _, output = fleet_report(public("pinned", pinned_gate(NEWEST)), tags=first_releases())
+    assert cell(output, "o/pinned", "literal-text") == "not released"
+
+
 @pytest.mark.parametrize(
     ("files", "words"),
     [
@@ -539,7 +554,7 @@ def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces
     _, output = fleet_report(public("any", {}), tags=first_releases())
     assert "Every gate release enforces env-file, compose-port, secret, workflow-lint and workflow-security." in output
     assert MATRIX_COLUMNS[5:] == (
-        "size", "clone", "job-timeout", "import-contract", "claude-md", "agents-md", "root-layout", "file-suffix",
+        "size", "clone", "job-timeout", "literal-text", "import-contract", "claude-md", "agents-md", "root-layout", "file-suffix",
         "script-name", "script-header", "test-layout", "test-import", "python-floor",
         "python-security", "python-print", "pr-concurrency", "pytest-workers", "runtime-install", "catalog-check", "advisory",
     )

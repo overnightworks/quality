@@ -498,6 +498,17 @@ def _finding_row(verdict: AreaVerdict, extent: str) -> Row:
     return Row(Glyph.NEEDS_YOU, verdict.area, AreaEvent.FINDING, fact, count=len(verdict.findings))
 
 
+def _measured_row(verdict: AreaVerdict, extent: str) -> Row:
+    """The note row of an area whose rules only measured; its fix is the one that records, so a literal count alone has none."""
+    if MEASURED_ONLY_EVENT[verdict.area] is AreaEvent.NOT_SET_UP:
+        return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_SET_UP, extent)
+    partly = "" if verdict.measurement is Measurement.MEASURED_ONLY else "partly "
+    mode = f"{partly}{Outcome.MEASURED_ONLY.value}"
+    unrecorded = any(judged.measured_only for judged in verdict.verdicts if judged.rule is not Rule.LITERAL_TEXT)
+    fix = baseline_file.FIX_COMMAND if unrecorded else ""
+    return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_RECORDED, SEPARATOR.join(filter(None, (extent, mode))), fix=fix)
+
+
 def area_row(verdict: AreaVerdict, extent: str) -> Row:
     facts = tuple(dict.fromkeys(reason.fact for reason in verdict.reasons))
     if facts:
@@ -507,11 +518,7 @@ def area_row(verdict: AreaVerdict, extent: str) -> Row:
     if isinstance(verdict.ceiling, ratchet.CeilingFix | DryRun) and (row := _ceiling_row(verdict.area, verdict.ceiling)):
         return row
     if verdict.outcome is Outcome.MEASURED_ONLY:
-        if MEASURED_ONLY_EVENT[verdict.area] is AreaEvent.NOT_SET_UP:
-            return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_SET_UP, extent)
-        partly = "" if verdict.measurement is Measurement.MEASURED_ONLY else "partly "
-        mode = f"{partly}{Outcome.MEASURED_ONLY.value}"
-        return Row(Glyph.NOTE, verdict.area, AreaEvent.NOT_RECORDED, SEPARATOR.join(filter(None, (extent, mode))), fix=baseline_file.FIX_COMMAND)
+        return _measured_row(verdict, extent)
     allowed = sum(note.event is NoteEvent.ALLOWED for note in verdict.notes)
     facts = [extent, f"{allowed} {NoteEvent.ALLOWED}" if allowed else ""]
     return Row(Glyph.CLEAN, verdict.area, AreaEvent.CLEAN, SEPARATOR.join(fact for fact in facts if fact))
@@ -539,11 +546,14 @@ def _dependencies_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | N
 
 def _debt_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
     entries, pairs = counted(extents[Rule.SIZE], "entry", "entries"), counted(extents[Rule.CLONE], CLONE_PAIR)
+    literal = extents.get(Rule.LITERAL_TEXT)
+    texts = [] if literal is None else [f"{counted(literal.texts, 'literal text')} in {counted(literal.files, 'file')}"]
+    clone_measured = next(judged.measured_only for judged in verdict.verdicts if judged.rule is Rule.CLONE)
     match verdict.measurement:
         case Measurement.MEASURED_ONLY:
-            return f"{entries} over the thresholds"
+            return ", ".join([f"{entries} over the thresholds", *texts])
         case Measurement.PARTLY_MEASURED_ONLY:
-            return pairs
+            return ", ".join(([pairs] if clone_measured or literal is None else []) + texts)
         case Measurement.ENFORCED:
             return f"{CEILING_HELD}{SEPARATOR}{entries}, {pairs}"
 
