@@ -1,8 +1,0 @@
-claim_id = "38fe5f9ed23a4c92bd93dc3b66afe5cb"
-agent = "Claude 3cb16e78-3ea2-405c-947b-02cb3fc89cde"
-role = "builder"
-base = "b146df997c73dc328e358e1bfb5b7d43a1b2ca6c"
-branch = "claude/issue-823-release-pull-request-for-v0-13-0-name-th"
-scope = [".github/workflows/gate.yml", "docs/rules.md", "src/quality/rules.py", "tests/test_fleet_matrix.py"]
-opened_commit = "0bc041b0b06c2a89b5c923f233150538860accb0"
-whole_reason = "One constant, two release names, three refs and two document sentences that name one release, with the test file that pins a rule's release by name."
