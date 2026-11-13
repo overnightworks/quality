@@ -128,7 +128,7 @@ def test_a_repository_without_the_table_measures_only_and_names_the_fix_that_rec
     assert "fix: quality check --fix" in out
 
 
-def test_a_covered_repository_with_every_table_recorded_names_no_part_as_unrecorded(build_repo, capsys):
+def test_a_covered_repository_with_the_literal_table_but_no_clone_table_names_only_the_clone_part_as_unrecorded(build_repo, capsys):
     """LITERAL-10: the partly row names only the parts still unrecorded."""
     repo = build_repo({**COVERED, PAGE_A: page(3), BASELINE_PATH: ceiling("[literal_text]\n" + f'"{PAGE_A}" = 3\n', clones=False)})
     _, out = judged(capsys, repo)
