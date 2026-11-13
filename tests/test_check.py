@@ -193,12 +193,18 @@ def test_a_python_file_with_a_non_utf8_name_the_size_rule_cannot_parse_is_one_es
     assert [(row.event, row.fact) for row in note_rows(output, note.location)] == [(note.event, note.fact)], output
 
 
+def uncovered_rules() -> list[Rule]:
+    """The rules a run judges in a repository that is not covered, in run order: all but the literal-text rule."""
+    return [rule for rule in sorted(Rule, key=lambda rule: list(Area).index(rule.area)) if rule is not Rule.LITERAL_TEXT]
+
+
 def test_a_run_without_flags_judges_every_rule(build_repo, capsys):
-    """CHECK-3: no scan is ever skipped, so a plain run judges every rule in run order."""
+    """CHECK-3, LITERAL-12: no scan is ever skipped, so a plain run judges every rule in run order, the literal-text rule
+    of a repository that is not covered excepted."""
     verdicts = check_result(build_repo({}), installed_ruff, never_located).verdicts
     assert ([verdict.rule for verdict in verdicts], [verdict.refusal for verdict in verdicts]) == (
-        sorted(Rule, key=lambda rule: list(Area).index(rule.area)),
-        [None] * len(Rule),
+        uncovered_rules(),
+        [None] * len(uncovered_rules()),
     )
 
 
@@ -370,7 +376,7 @@ def test_a_run_holds_one_area_verdict_per_area_in_area_order(build_repo):
     """ROW-8: a run holds one area verdict per area, in the order the rows stand."""
     result = check_result(build_repo({}), installed_ruff, never_located)
     assert [verdict.area for verdict in result.areas] == list(Area)
-    assert [rule for area in result.areas for rule in (v.rule for v in area.verdicts)] == sorted(Rule, key=lambda rule: list(Area).index(rule.area))
+    assert [rule for area in result.areas for rule in (v.rule for v in area.verdicts)] == uncovered_rules()
 
 
 def test_the_run_hands_each_area_to_its_reporter_once_in_row_order(build_repo):
