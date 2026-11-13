@@ -1113,8 +1113,9 @@ and every text after it would be missed in silence; and a `{` hole that is never
 included. The first page in the tracked order that cannot be read to its end stops the rule, so one fact prints, a page that is not UTF-8 is named before any other, and the fold runs
 before the parser, so an unclosed hole is named before an unclosed element. A missing directory, no Svelte file and a
 tracked page deleted from the tree are no finding (LITERAL-9). It first ships in v0.13.0, so a gate pinned below that release shows `not in <tag>`
-in the fleet matrix's column, and the cell reads `report-only` at a tag from that release on (FLEET-101) and, on main, `enforced` where `quality/baseline.toml`
-holds `[literal_text]` and `report-only` where it does not, until a release names the switch (FLEET-102). No
+in the fleet matrix's column. v0.16.0 is the release that names the switch (FLEET-102): a gate pinned at v0.13.0 to v0.15.0
+reads `report-only` (FLEET-101), and from v0.16.0 on the cell reads as on main, `enforced` where `quality/baseline.toml`
+holds `[literal_text]` and `report-only` where it does not. No
 configuration switches it off.
 
 The `job-timeout` rule, in the `debt` area, judges every job of a workflow that runs on a pull request or on a push to

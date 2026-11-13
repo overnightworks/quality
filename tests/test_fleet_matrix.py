@@ -453,9 +453,24 @@ def test_literal_text_reads_the_table_on_main_whatever_the_clone_declares(declar
     assert rule_cell(LITERAL_TEXT, Gate.MAIN, declaration) == words
 
 
-def test_literal_text_reads_report_only_at_its_first_release_whatever_the_clone_holds():
-    """FLEET-102: until a release names the switch, a tag only measures."""
-    assert rule_cell(LITERAL_TEXT, LITERAL_TEXT.first_release, declared(has_literal_table=True)) == "report-only"
+LITERAL_SWITCH_PIN = "7" * 40
+
+
+@pytest.mark.parametrize(
+    ("pin", "has_literal_table", "words"),
+    [
+        (FIRST_RELEASE_COMMIT, True, "report-only"),
+        (FIRST_RELEASE_COMMIT, False, "report-only"),
+        (LITERAL_SWITCH_PIN, True, "enforced"),
+        (LITERAL_SWITCH_PIN, False, "report-only"),
+    ],
+    ids=["first release with a table", "first release with none", "switch release with a table", "switch release with none"],
+)
+def test_literal_text_under_a_tag_reads_report_only_until_the_release_names_the_switch(pin, has_literal_table, words):
+    """FLEET-102: a tag before the switch change only measures; from it the cell reads as on main."""
+    tags = {**FIRST_RELEASES, LITERAL_TEXT.first_release: FIRST_RELEASE_COMMIT, LITERAL_TEXT.switched.release: LITERAL_SWITCH_PIN}
+    release = gate_release((gate_call(pin),), False, tags)
+    assert rule_cell(LITERAL_TEXT, release, declared(has_literal_table=has_literal_table)) == words
 
 
 @pytest.mark.parametrize(

@@ -41,6 +41,7 @@ RELEASE_0_7 = "v0.7.0"
 RELEASE_0_11 = "v0.11.0"
 RELEASE_0_12 = "v0.12.0"
 RELEASE_0_13 = "v0.13.0"
+RELEASE_0_16 = "v0.16.0"
 
 
 class Area(StrEnum):
@@ -76,7 +77,7 @@ class Rule(StrEnum):
     CLONE = "clone", Area.DEBT, "v0.4.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE)
     JOB_TIMEOUT = "job-timeout", Area.DEBT, RELEASE_0_12, Switch.ALWAYS
     LITERAL_TEXT = (
-        "literal-text", Area.DEBT, RELEASE_0_13, Switch.REPORT_ONLY, SwitchChange(None, Switch.LITERAL_TABLE)
+        "literal-text", Area.DEBT, RELEASE_0_13, Switch.REPORT_ONLY, SwitchChange(RELEASE_0_16, Switch.LITERAL_TABLE)
     )
     IMPORT_CONTRACT = "import-contract", Area.IMPORTS, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
     CLAUDE_MD = "claude-md", Area.FILES, RELEASE_0_3, Switch.ALWAYS
