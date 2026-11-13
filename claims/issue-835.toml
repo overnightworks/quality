@@ -1,0 +1,8 @@
+claim_id = "93c8eded6d6a4f97bbdc31cbe760d81a"
+agent = "Claude 3cb16e78-3ea2-405c-947b-02cb3fc89cde"
+role = "builder"
+base = "f3857b5e71a16a6ab88a628257c635086ddfff86"
+branch = "claude/issue-835-literal-text-ceiling-table"
+scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/baseline_file.py", "src/quality/check.py", "src/quality/cli.py", "src/quality/fleet.py", "src/quality/literal_text.py", "src/quality/ratchet.py", "src/quality/rules.py", "src/quality/verdict.py", "tests/support/baselines.py", "tests/test_baseline_file.py", "tests/test_clones_baseline.py", "tests/test_fleet_matrix.py", "tests/test_literal_text_baseline.py", "tests/test_literal_text_rule.py", "tests/test_ratchet.py", "tests/test_ratchet_fix.py", "tests/test_ratchet_follow.py", "tests/test_verdict_loosenings.py", "tests/test_verdict_renames.py"]
+opened_commit = "bd2c11052ef2b09d3abd511b775f67801eac6876"
+whole_reason = "The table, its judgement, --fix and the verdict are one change of what a ceiling file holds: a table the verdict loads is judged by the verdict in the same change (#767), a table with no --fix cannot be recorded, and a judged table without rename following turns every git mv of a page red; the test builder is the same change, because the field without a default breaks every positional test construction the moment it lands."
