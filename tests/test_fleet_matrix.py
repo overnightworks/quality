@@ -453,10 +453,19 @@ def test_render_pass_on_main_reads_whether_the_clone_declares_catalogs(declares_
     assert rule_cell(RENDER_PASS, Gate.MAIN, declared(declares_catalogs=declares_catalogs)) == words
 
 
-def test_render_pass_under_a_tag_is_not_released_until_a_release_names_it():
-    """RENDER-1: the rule has no first release, so a pinned gate does not judge it."""
-    release = gate_release((gate_call(NEWEST),), False, FIRST_RELEASES)
-    assert rule_cell(RENDER_PASS, release, declared(declares_catalogs=True)) == "not released"
+RENDER_PASS_RELEASE_PIN = "8" * 40
+
+
+@pytest.mark.parametrize(
+    ("pin", "words"),
+    [(NEWEST, "not in v0.3.1"), (RENDER_PASS_RELEASE_PIN, "enforced")],
+    ids=["a tag below the first release", "the rule's first release"],
+)
+def test_render_pass_under_a_tag_reads_the_pin_against_the_rules_first_release(pin, words):
+    """RENDER-1, FLEET-18: a pin before the rule's first release says so, and that release reads as main does."""
+    tags = {**FIRST_RELEASES, RENDER_PASS.first_release: RENDER_PASS_RELEASE_PIN}
+    release = gate_release((gate_call(pin),), False, tags)
+    assert rule_cell(RENDER_PASS, release, declared(declares_catalogs=True)) == words
 
 
 FIRST_RELEASE_COMMIT = "f" * 40
