@@ -1,0 +1,7 @@
+claim_id = "168eb5bd0b7e45c88e092209ac48185c"
+agent = "Claude 3cb16e78-3ea2-405c-947b-02cb3fc89cde"
+role = "builder"
+base = "853a9545c26aaa884896223b87a2505d2b918e31"
+branch = "docs/agents-release-on-green"
+scope = ["AGENTS.md", "docs/release.md"]
+opened_commit = "e3eb9bb9b22f8890be1fa2a5367d360ea957b303"
