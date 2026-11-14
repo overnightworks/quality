@@ -1,8 +1,0 @@
-claim_id = "0561c28b1c704c5c9730fd8a3fa5cf49"
-agent = "Claude 3cb16e78-3ea2-405c-947b-02cb3fc89cde"
-role = "builder"
-base = "24c8484f86eccd5da41f9e7177ebabe52ccf3fd1"
-branch = "claude/issue-839-render-pass"
-scope = ["docs/commands.md", "docs/gate.md", "docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/catalog_rules.py", "src/quality/check.py", "src/quality/config.py", "src/quality/render_pass.py", "src/quality/rules.py", "src/quality/workflow_rules.py", "tests/support/config_refusals.py", "tests/test_cli_areas.py", "tests/test_cli_fix_dry_run.py", "tests/test_cli_help.py", "tests/test_config.py", "tests/test_fleet_matrix.py", "tests/test_literal_text_rule.py", "tests/test_render_pass.py"]
-opened_commit = "ca9f615f8e136df3e0dc90adfa506718fa08cdc6"
-whole_reason = "One rule with its config table, its catalogs read and its job-name lookup; the parts are only testable together, through the rule's entry."
