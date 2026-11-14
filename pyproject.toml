@@ -10,7 +10,7 @@ dependencies = [
     "lizard>=1.24.1,<1.25",
     "packaging>=24",
     "ruff==0.17.3",
-    "zizmor==1.31.1",
+    "zizmor==1.32.0",
 ]
 
 [project.scripts]
