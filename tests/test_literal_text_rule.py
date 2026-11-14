@@ -199,3 +199,13 @@ def test_fixing_the_debt_ceiling_of_a_covered_repository_records_its_literal_tex
     code, out = debt_run(capsys, repo)
     assert (code, fix_line(out)) == (0, [])
     assert "ceiling held" in area_fact(out, Area.DEBT)
+
+
+@pytest.mark.parametrize(
+    "table", ["[tool]\ndesign-catalogs = 1\n", '[tool.design-catalogs]\ncatalogs = "/abs"\n'], ids=["no table", "bad path"]
+)
+def test_a_bad_catalogs_declaration_leaves_the_literal_texts_of_a_covered_repository_counted(build_repo, capsys, table):
+    """RENDER-2: the catalogs directory is read only for the render pass, so the literal-text rule counts as before."""
+    pyproject = COVERED["pyproject.toml"] + table
+    code, out = debt_run(capsys, build_repo({"pyproject.toml": pyproject, **PAGES}))
+    assert (code, area_fact(out, Area.DEBT)) == (0, f"0 entries over the thresholds, 3 literal texts in 3 files{SEPARATOR}measured only")

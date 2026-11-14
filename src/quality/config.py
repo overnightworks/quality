@@ -20,7 +20,8 @@ LAYOUT_KEYS = {"allow"}
 PYTHON_KEYS = {"allow"}
 COMPOSE_KEYS = {"allow"}
 SIZE_KEYS = {"generated"}
-TABLES = {"gate", "secrets", "advisories", "root", "layout", "python", "compose", "size"}
+LANGUAGES_KEYS = {"render_pass"}
+TABLES = {"gate", "secrets", "advisories", "root", "layout", "python", "compose", "size", "languages"}
 ALLOWANCE_KEYS = {"rule", "file", "secret_sha256", "reason"}
 DECLARATION_KEYS = {"what", "item", "date", "reason"}
 ROOT_ALLOWANCE_KEYS = {"entry", "reason"}
@@ -48,8 +49,10 @@ LAYOUT_ALLOWANCE_HEADING = "[[layout.allow]]"
 PYTHON_ALLOWANCE_HEADING = "[[python.allow]]"
 COMPOSE_ALLOWANCE_HEADING = "[[compose.allow]]"
 GENERATED_FILE_HEADING = "[[size.generated]]"
+LANGUAGES_HEADING = "[languages]"
 EXAMPLE: ExampleLines = (GATE_HEADING, 'mandatory_jobs = ["checks"]')
 LEGACY_EXAMPLE: ExampleLines = (GATE_HEADING, 'legacy = "fail"')
+LANGUAGES_EXAMPLE: ExampleLines = (LANGUAGES_HEADING, 'render_pass = "render"')
 SONAR_EXAMPLE: ExampleLines = (GATE_HEADING, "sonar = false")
 SONAR_OFF_EXAMPLE: ExampleLines = (GATE_HEADING, 'legacy = "report"', "sonar = false")
 ALLOWANCE_EXAMPLE: ExampleLines = (
@@ -251,12 +254,30 @@ class AllowLists:
 
 
 @dataclass(frozen=True)
+class RenderPass:
+    """The job `[languages] render_pass` names (None where the key is absent) and the gate's mandatory jobs, read
+    leniently: a malformed `mandatory_jobs` lists none."""
+
+    job: str | None = None
+    mandatory_jobs: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Declarations:
+    """What the check reads from one validated config: the allow lists and the render-pass declaration."""
+
+    allow_lists: AllowLists = field(default_factory=AllowLists)
+    render_pass: RenderPass = field(default_factory=RenderPass)
+
+
+@dataclass(frozen=True)
 class _Document:
     """The whole config, validated once: the [gate] table, its declarations, and every allow list."""
 
     gate: dict
     declarations: tuple[Declaration, ...]
     allow_lists: AllowLists
+    render_pass: RenderPass
 
 
 def secret_allowance_entry(allowance: Allowance) -> ExampleLines:
@@ -332,7 +353,15 @@ def _refuse_unknown_secrets_keys(secrets: dict) -> None:
 
 
 def _refuse_unknown_keys(
-    document: dict, gate: dict, advisories: dict, root: dict, layout: dict, python: dict, compose: dict, size: dict
+    document: dict,
+    gate: dict,
+    advisories: dict,
+    root: dict,
+    layout: dict,
+    python: dict,
+    compose: dict,
+    size: dict,
+    languages: dict,
 ) -> None:
     unknown = (
         (set(document) - TABLES)
@@ -343,6 +372,7 @@ def _refuse_unknown_keys(
         | (set(python) - PYTHON_KEYS)
         | (set(compose) - COMPOSE_KEYS)
         | (set(size) - SIZE_KEYS)
+        | (set(languages) - LANGUAGES_KEYS)
     )
     if unknown:
         example = None
@@ -352,12 +382,13 @@ def _refuse_unknown_keys(
             (python, PYTHON_KEYS, PYTHON_ALLOWANCE_EXAMPLE),
             (compose, COMPOSE_KEYS, COMPOSE_ALLOWANCE_EXAMPLE),
             (size, SIZE_KEYS, GENERATED_FILE_EXAMPLE),
+            (languages, LANGUAGES_KEYS, LANGUAGES_EXAMPLE),
         ):
             example = table_example if set(table) - keys else example
         raise ConfigError(
             f"{CONFIG_PATH} has {_unknown_keys(unknown)} - only [gate] mandatory_jobs, [gate] legacy, [gate] sonar, "
             "[[gate.loosened]], [secrets] allow, [[advisories.allow]], [[root.allow]], [[layout.allow]], "
-            "[[python.allow]], [[compose.allow]] and [[size.generated]] exist",
+            "[[python.allow]], [[compose.allow]], [[size.generated]] and [languages] render_pass exist",
             example,
         )
 
@@ -372,7 +403,8 @@ def _validated_document(text: str) -> _Document:
     python = _table(document, "python", PYTHON_ALLOWANCE_EXAMPLE)
     compose = _table(document, "compose", COMPOSE_ALLOWANCE_EXAMPLE)
     size = _table(document, "size", GENERATED_FILE_EXAMPLE)
-    _refuse_unknown_keys(document, gate, advisories, root, layout, python, compose, size)
+    languages = _table(document, "languages", LANGUAGES_EXAMPLE)
+    _refuse_unknown_keys(document, gate, advisories, root, layout, python, compose, size, languages)
     return _Document(
         gate,
         _declarations(gate),
@@ -385,7 +417,16 @@ def _validated_document(text: str) -> _Document:
             _compose_allowances(compose),
             _generated_files(size, gate),
         ),
+        RenderPass(_render_pass_job(languages), _job_names(gate)),
     )
+
+
+def _render_pass_job(languages: dict) -> str | None:
+    """The job named by `[languages] render_pass`, None when the key is absent."""
+    job = languages.get("render_pass")
+    if job is not None and not (isinstance(job, str) and job.strip()):
+        raise ConfigError(f"{CONFIG_PATH} needs [languages] render_pass as the non-empty name of a job", LANGUAGES_EXAMPLE)
+    return job
 
 
 def _job_names(gate: dict) -> tuple[str, ...]:
@@ -689,17 +730,20 @@ def runs_sonar(repo: Path) -> bool:
     return True if text is None else load_gate_settings(text).sonar
 
 
-def load_allow_lists(text: str | None) -> AllowLists:
-    """Every list the repository allows or declares; a missing config allows nothing.
+def load_declarations(text: str | None) -> Declarations:
+    """Every list the repository allows or declares and its render-pass declaration; a missing config declares nothing.
 
     The whole document is validated, as the gate does: the check and the verdict refuse an unknown key and a malformed
     entry alike.
     """
-    return AllowLists() if text is None else _validated_document(text).allow_lists
+    if text is None:
+        return Declarations()
+    document = _validated_document(text)
+    return Declarations(document.allow_lists, document.render_pass)
 
 
-def read_allow_lists(repo: Path) -> AllowLists:
-    return load_allow_lists(_read_config_text(repo))
+def read_declarations(repo: Path) -> Declarations:
+    return load_declarations(_read_config_text(repo))
 
 
 def load_staged_secret_allowances(text: str | None) -> dict[Allowance, str]:

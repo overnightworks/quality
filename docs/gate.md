@@ -154,6 +154,12 @@ answers late per job; a job still listed as running after the last read is exit 
 Three defaults the operator never answered: the verdict says in a first line that it read again (READ-4), reads a 5xx
 again (READ-5), and adds the permission hint only after a 403 or 404 (READ-6).
 
+The optional `[languages]` table beside `[gate]` holds one key, `render_pass`, a non-empty job name as `mandatory_jobs` names
+it. It is read by the `render-pass` rule under `quality check` ([rules](rules.md)), not by the verdict: the verdict does not
+load it, so removing the declaration or pointing it at a job that is not mandatory turns the head red through that rule, and
+no loosening event exists for it. Any other key, or a value that is not a non-empty string, is exit `2` in the door
+(RENDER-3).
+
 ### Declared loosenings
 
 A pull request that loosens the gate as the operator ruled declares each loosening in its `quality/config.toml`, one

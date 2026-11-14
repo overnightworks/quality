@@ -54,7 +54,7 @@ class Area(StrEnum):
     DEBT = "debt", "size, near copies, literal text and job time limits against the debt ceiling (quality/baseline.toml)"
     IMPORTS = "imports", "the import contracts"
     SECRETS = "secrets", "secrets in the committed history"
-    WORKFLOWS = "workflows", "GitHub workflows: lint, security, concurrency, pytest -n, run-time installs, the languages standard's check"
+    WORKFLOWS = "workflows", "GitHub workflows: lint, security, concurrency, pytest -n, run-time installs, the languages standard's catalog-check and render-pass"
     DEPENDENCIES = "dependencies", "known advisories in the lockfiles"
     CODE = "code", "Python source: security findings and print calls"
 
@@ -100,6 +100,7 @@ class Rule(StrEnum):
     CATALOG_CHECK = (
         "catalog-check", Area.WORKFLOWS, RELEASE_0_12, Switch.REPORT_ONLY, SwitchChange(RELEASE_0_13, Switch.CATALOG_DECLARATION)
     )
+    RENDER_PASS = "render-pass", Area.WORKFLOWS, None, Switch.CATALOG_DECLARATION
     ADVISORY = "advisory", Area.DEPENDENCIES, RELEASE_0_3, Switch.ALWAYS
 
     def __new__(

@@ -21,7 +21,7 @@ FILE_PATH_NEED = "path as the exact tracked path of one file: no folder, pattern
 LAYOUT_RULE_NEED = "rule as one of agents-md, file-suffix, script-header, script-name, test-import, test-layout"
 KNOWN_KEYS = (
     "only [gate] mandatory_jobs, [gate] legacy, [gate] sonar, [[gate.loosened]], [secrets] allow, [[advisories.allow]], "
-    "[[root.allow]], [[layout.allow]], [[python.allow]], [[compose.allow]] and [[size.generated]] exist"
+    "[[root.allow]], [[layout.allow]], [[python.allow]], [[compose.allow]], [[size.generated]] and [languages] render_pass exist"
 )
 
 

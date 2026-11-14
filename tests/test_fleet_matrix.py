@@ -440,6 +440,25 @@ def test_catalog_check_reads_the_pin_before_the_declaration(pin, words):
     assert rule_cell(CATALOG_CHECK, release, declared(declares_catalogs=True)) == words
 
 
+RENDER_PASS = Rule.RENDER_PASS.release
+
+
+@pytest.mark.parametrize(
+    ("declares_catalogs", "words"),
+    [(True, "enforced"), (False, "no catalogs declaration")],
+    ids=["a catalogs declaration", "no declaration"],
+)
+def test_render_pass_on_main_reads_whether_the_clone_declares_catalogs(declares_catalogs, words):
+    """RENDER-1: on main the cell reads as catalog-check's does."""
+    assert rule_cell(RENDER_PASS, Gate.MAIN, declared(declares_catalogs=declares_catalogs)) == words
+
+
+def test_render_pass_under_a_tag_is_not_released_until_a_release_names_it():
+    """RENDER-1: the rule has no first release, so a pinned gate does not judge it."""
+    release = gate_release((gate_call(NEWEST),), False, FIRST_RELEASES)
+    assert rule_cell(RENDER_PASS, release, declared(declares_catalogs=True)) == "not released"
+
+
 FIRST_RELEASE_COMMIT = "f" * 40
 LITERAL_TEXT = Rule.LITERAL_TEXT.release
 
@@ -613,5 +632,5 @@ def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces
     assert MATRIX_COLUMNS[5:] == (
         "size", "clone", "job-timeout", "literal-text", "import-contract", "claude-md", "agents-md", "root-layout", "file-suffix",
         "script-name", "script-header", "test-layout", "test-import", "python-floor",
-        "python-security", "python-print", "pr-concurrency", "pytest-workers", "runtime-install", "catalog-check", "advisory",
+        "python-security", "python-print", "pr-concurrency", "pytest-workers", "runtime-install", "catalog-check", "render-pass", "advisory",
     )
