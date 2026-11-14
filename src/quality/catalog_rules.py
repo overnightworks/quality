@@ -102,14 +102,18 @@ def _is_catalogs_declaration(requirement: Requirement) -> bool:
 
 @dataclass(frozen=True)
 class Catalogs:
-    """A covered repository's `[tool.design-catalogs] catalogs` value as the file spells it, None where it is not set."""
+    """A covered repository's `[tool.design-catalogs]` table as the file spells it, None where it is not set."""
 
     declared: object
 
     def directory(self) -> PurePosixPath:
         """The catalogs directory, validated as design validates it (`design/catalogs/declaration.py`, `_path`) and
         defaulting to its `DEFAULT.catalogs`, the one copy of that default here."""
-        value = self.declared
+        if self.declared is None:
+            return DEFAULT_CATALOGS
+        if not isinstance(self.declared, dict):
+            raise Unparsable(f"{PYPROJECT} [tool.{CATALOGS_TABLE}] is no table")
+        value = self.declared.get(CATALOGS_KEY)
         if value is None:
             return DEFAULT_CATALOGS
         if not isinstance(value, str):
@@ -120,16 +124,6 @@ class Catalogs:
                 f"{PYPROJECT} [tool.{CATALOGS_TABLE}] {CATALOGS_KEY} must be a path inside the repository, not {value!r}"
             )
         return path
-
-
-def _declared_catalogs(document: dict) -> object:
-    tool = document.get("tool")
-    table = tool.get(CATALOGS_TABLE) if isinstance(tool, dict) else None
-    if table is None:
-        return None
-    if not isinstance(table, dict):
-        raise Unparsable(f"{PYPROJECT} [tool.{CATALOGS_TABLE}] is no table")
-    return table.get(CATALOGS_KEY)
 
 
 def read_catalogs(root: Path, tracked: list[str]) -> Catalogs | None:
@@ -148,7 +142,8 @@ def read_catalogs(root: Path, tracked: list[str]) -> Catalogs | None:
     requirements = list(_requirements(_dependency_entries(document)))
     if not any(_is_catalogs_declaration(requirement) for requirement in requirements):
         return None
-    return Catalogs(_declared_catalogs(document))
+    tool = document.get("tool")
+    return Catalogs(tool.get(CATALOGS_TABLE) if isinstance(tool, dict) else None)
 
 
 def declares_catalogs(root: Path, tracked: list[str]) -> bool:
