@@ -746,14 +746,6 @@ def read_declarations(repo: Path) -> Declarations:
     return load_declarations(_read_config_text(repo))
 
 
-def load_allow_lists(text: str | None) -> AllowLists:
-    return load_declarations(text).allow_lists
-
-
-def read_allow_lists(repo: Path) -> AllowLists:
-    return read_declarations(repo).allow_lists
-
-
 def load_staged_secret_allowances(text: str | None) -> dict[Allowance, str]:
     """The allow list as the commit hook reads it: only [secrets].
 
