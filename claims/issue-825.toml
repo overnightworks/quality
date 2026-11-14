@@ -1,8 +1,0 @@
-claim_id = "e4bb4020f55b44618fa4c27ae7592815"
-agent = "Claude 3cb16e78-3ea2-405c-947b-02cb3fc89cde"
-role = "builder"
-base = "853a9545c26aaa884896223b87a2505d2b918e31"
-branch = "claude/issue-825-merge-door-fresh-base"
-scope = ["docs/ARCHITECTURE.md", "docs/commands.md", "docs/runbooks/merge.md", "pyproject.toml", "src/quality/base_branch.py", "src/quality/merge.py", "tests/support/merge.py", "tests/test_merge.py", "tests/test_merge_attempt.py", "tests/test_merge_dry_run.py", "tests/test_merge_landing.py", "tests/test_merge_prompt.py", "tests/test_merge_rows.py", "tests/test_verdict_renames.py"]
-opened_commit = "156a77804169e0972405e5e3254bd9eb41508dec"
-whole_reason = "One door change: the freshness read and its binding, and the merge request that cannot queue, with the base-branch facts moved out of merge.py so it stays under the size ratchet."
