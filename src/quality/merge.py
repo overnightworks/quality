@@ -732,12 +732,12 @@ def run_merge(
     if not confirmed(ask, pull_request):
         write_pair(f"not confirmed{SEPARATOR}{NOTHING_CHANGED}", (Command(merge_command(repository, pull_request)),), channels.err)
         return EXIT_REFUSED
+    started = clock()
     again = Instruction(f"fix what the ✗ row names, then run {merge_command(repository, pull_request)} again")
     try:
         judged("base", lambda: read_base_unmoved(gh, door), (REFUSED_ERROR, ()), again, show=lambda rows: None)
     except Stopped as stop:
         return end_at(stop, out.show, channels)
-    started = clock()
     attempt = switch_off_merge_switch_on(gh, door, out)
     comment = log_comment(login, now(), door, attempt)
     posted = post_log_comment(gh, door, comment, out)

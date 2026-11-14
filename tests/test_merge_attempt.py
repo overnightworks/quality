@@ -225,11 +225,13 @@ def test_the_attempt_names_the_pull_request_asked_for(gh_kwargs, code, out, err,
 
 
 def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
-    """MERGE-36: the closing line counts the seconds from the answer."""
+    """MERGE-36: the closing line counts the seconds from the answer, the base comparison after it included."""
     gh = FakeGh()
     seconds = [0.0]
 
     def merging(arguments, stdin=None):
+        if "/compare/" in " ".join(arguments) and seconds[0] == 100.0:
+            seconds[0] = 110.0
         if list(arguments)[:3] == ["api", "-X", "PUT"]:
             seconds[0] = 114.0
         return gh(arguments, stdin)
