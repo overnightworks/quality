@@ -6,6 +6,7 @@ from tests.support.merge import (
     ABSENT,
     SHA,
     FakeGh,
+    base_row,
     changed_nothing,
     drive,
     landing_pair,
@@ -79,14 +80,13 @@ def test_the_merge_commit_ends_with_the_bodys_one_classification_line(body, mess
     trailer form, after a blank line."""
     gh = FakeGh(body=body)
     assert (drive(gh)[0], gh.merge_messages) == (0, [message])
-    assert gh.merge_calls[0][-2:] == ("--body-file", "-")
 
 
 def test_a_squash_ends_with_the_same_line():
     """MERGE-69: a squash ends with the same line."""
     gh = FakeGh(body="Work-Item: #9\n\nWhy.", settings={"allow_merge_commit": False, "allow_squash_merge": True, "allow_rebase_merge": False})
     assert (drive(gh)[0], gh.merge_messages) == (0, ["Why.\n\nWork-Item: #9"])
-    assert gh.merge_calls[0][5:] == ("--squash", "--match-head-commit", SHA, "--body-file", "-")
+    assert [(body["merge_method"], body["sha"]) for body in gh.merge_bodies] == [("squash", SHA)]
 
 
 @pytest.mark.parametrize(
@@ -165,7 +165,7 @@ def test_the_last_row_before_the_question_is_what_the_merge_commit_ends_with(bod
     shown = []
     drive(FakeGh(body=body), when_asked=lambda: shown.append(capsys.readouterr()))
     assert (shown[0].out, shown[0].err) == (
-        (f"{RELEASE_ROW}{pull_row()}  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
+        (f"{RELEASE_ROW}{pull_row()}{base_row()}  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
         f"  ✓ loosenings    none\n  ! sonar         4 legacy findings on main\n  · merge         merge commit   allowed on main\n  · landing       {row}\n"),
         prompt(),
     )

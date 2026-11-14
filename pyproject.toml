@@ -71,7 +71,7 @@ layers = [
     "cli",
     "cli_help",
     "merge",
-    "landing",
+    "landing | base_branch",
     "verdict",
     "sides | gh",
     "sonar_properties | sonar_scanner",

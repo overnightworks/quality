@@ -23,12 +23,14 @@ from tests.support.merge import (
     SONAR_GREEN,
     TWO_JOBS,
     FakeGh,
+    base_row,
     changed_nothing,
     closing_line,
     declaring,
     door_ports,
     drive,
     landing_row,
+    merge_request,
     not_judged_pair,
     prompt,
     pull_row,
@@ -383,10 +385,10 @@ def test_a_declared_loosening_merges_through_the_door_without_sonar(
     code = cli.main(["merge", f"{REPO}#7"], gh=gh, transport=transport, terminal=cli.Terminal(read_line, lambda: True), ports=door_ports())
     assert (code, transport.sent, gh.sequence) == (0, [], ["gate false", "merge", "gate true", "comment"])
     assert (shown[0].out, shown[0].err) == (
-        RELEASE_ROW + pull_row() + checks_row("quality / verdict is") + rows + merge_row() + landing_row("#9"),
+        RELEASE_ROW + pull_row() + base_row() + checks_row("quality / verdict is") + rows + merge_row() + landing_row("#9"),
         prompt(),
     )
-    assert gh.merge_calls == [("pr", "merge", "7", "--repo", REPO, "--merge", "--match-head-commit", SHA, "--body-file", "-")]
+    assert gh.merge_calls == [merge_request()[0]]
     assert "merges with a merge commit; quality_gate off → merge → on." in gh.comments[0]
     assert all(f"declared loosening ({ruling}): {what} - reason: {reason}" in gh.comments[0] for what, ruling, reason in declared)
 
@@ -411,7 +413,7 @@ def test_legacy_findings_and_a_declared_loosening_merge_in_one_run(capsys):
     shown = []
     assert drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))[0] == 0
     assert (shown[0].out, shown[0].err) == (
-        RELEASE_ROW + pull_row() + checks_row() + declared_row(1) + removed_b_lines() + legacy_row() + merge_row()
+        RELEASE_ROW + pull_row() + base_row() + checks_row() + declared_row(1) + removed_b_lines() + legacy_row() + merge_row()
         + landing_row(),
         prompt(),
     )
@@ -462,33 +464,29 @@ def test_the_operator_reads_the_method_before_the_question_and_the_log_comment_n
     gh, shown = FakeGh(**gh_kwargs), []
     drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))
     assert (shown[0].out, shown[0].err) == (
-        RELEASE_ROW + pull_row() + checks_row() + loosenings_none() + legacy_row() + merge_row(event) + landing_row(),
+        RELEASE_ROW + pull_row() + base_row() + checks_row() + loosenings_none() + legacy_row() + merge_row(event) + landing_row(),
         prompt(),
     )
     assert f"; {sentence}; " in gh.comments[0]
 
 
-def merge_call(flag):
-    return ("pr", "merge", "7", "--repo", REPO, flag, "--match-head-commit", SHA, "--body-file", "-")
-
-
 @pytest.mark.parametrize(
-    ("gh_kwargs", "flag"),
+    ("gh_kwargs", "method"),
     [
-        ({}, "--merge"),
-        ({"rules": [[pull_request_rule("squash")]]}, "--squash"),
-        ({"rules": [[LINEAR_HISTORY]]}, "--squash"),
-        ({"settings": settings_allowing("squash", "rebase")}, "--squash"),
-        ({"rules": [[pull_request_rule("merge", "squash"), pull_request_rule("squash", "rebase")]]}, "--squash"),
-        ({"rules": [[UNRELATED_RULE]]}, "--merge"),
-        ({"rules": [[]]}, "--merge"),
-        ({"rules": [[{"type": "pull_request", "parameters": {}}]]}, "--merge"),
-        ({"rules": [[{"type": "pull_request"}]]}, "--merge"),
-        ({"rules": [[UNRELATED_RULE, LINEAR_HISTORY]]}, "--squash"),
-        ({"rules": [[pull_request_rule("merge", "squash")], [LINEAR_HISTORY]]}, "--squash"),
-        ({"base_ref": "release/1", "rules": [[pull_request_rule("squash")]]}, "--squash"),
-        ({"base_ref": "rel#x", "rules": [[pull_request_rule("squash")]]}, "--squash"),
-        ({"settings": settings_allowing("merge"), "rules": [[pull_request_rule("merge", "rebase")]]}, "--merge"),
+        ({}, "merge"),
+        ({"rules": [[pull_request_rule("squash")]]}, "squash"),
+        ({"rules": [[LINEAR_HISTORY]]}, "squash"),
+        ({"settings": settings_allowing("squash", "rebase")}, "squash"),
+        ({"rules": [[pull_request_rule("merge", "squash"), pull_request_rule("squash", "rebase")]]}, "squash"),
+        ({"rules": [[UNRELATED_RULE]]}, "merge"),
+        ({"rules": [[]]}, "merge"),
+        ({"rules": [[{"type": "pull_request", "parameters": {}}]]}, "merge"),
+        ({"rules": [[{"type": "pull_request"}]]}, "merge"),
+        ({"rules": [[UNRELATED_RULE, LINEAR_HISTORY]]}, "squash"),
+        ({"rules": [[pull_request_rule("merge", "squash")], [LINEAR_HISTORY]]}, "squash"),
+        ({"base_ref": "release/1", "rules": [[pull_request_rule("squash")]]}, "squash"),
+        ({"base_ref": "rel#x", "rules": [[pull_request_rule("squash")]]}, "squash"),
+        ({"settings": settings_allowing("merge"), "rules": [[pull_request_rule("merge", "rebase")]]}, "merge"),
     ],
     ids=[
         "both sources allow a merge commit", "a rule allows only squash", "linear history",
@@ -497,12 +495,12 @@ def merge_call(flag):
         "a non-default base branch", "a base branch with a hash", "a merge commit where only it and rebase are allowed",
     ],
 )
-def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwargs, flag):
+def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwargs, method):
     """MERGE-30, MERGE-31: the door merges with the first of a merge commit and a squash that the settings and every
     rule allow, and pins the head."""
     gh = FakeGh(**gh_kwargs)
     assert drive(gh)[0] == 0
-    assert gh.merge_calls == [merge_call(flag)]
+    assert (gh.merge_calls, [body["merge_method"] for body in gh.merge_bodies]) == ([merge_request()[0]], [method])
     rules_read = next(call for call in gh.calls if "/rules/branches/" in " ".join(call))
     assert rules_read == ("api", "--paginate", "--slurp", f"repos/{REPO}/rules/branches/{quote(gh.base_ref, safe='/')}?per_page=100")
 
@@ -556,7 +554,7 @@ def test_the_door_refuses_before_the_gate_when_no_method_is_usable(gh_kwargs, li
     streams = capsys.readouterr()
     assert (code, streams.out, streams.err, answers) == (
         2,
-        RELEASE_ROW + pull_row() + checks_row() + loosenings_none() + legacy_row() + f"  ✗ merge         not judged     {line}\n",
+        RELEASE_ROW + pull_row() + base_row() + checks_row() + loosenings_none() + legacy_row() + f"  ✗ merge         not judged     {line}\n",
         not_judged_pair(),
         [],
     )
@@ -568,5 +566,5 @@ def test_a_method_github_refuses_at_merge_time_leaves_the_gate_on_and_the_pull_r
     the pull request unmerged."""
     gh = FakeGh(rules=[[pull_request_rule("squash")]], fail_on=["merge"])
     assert drive(gh)[0] == 2
-    assert (gh.merge_calls, gh.gate_values) == ([merge_call("--squash")], ["false", "true"])
+    assert (gh.merge_calls, gh.gate_values) == ([merge_request(method="squash")[0]], ["false", "true"])
     assert "not merged" in capsys.readouterr().out

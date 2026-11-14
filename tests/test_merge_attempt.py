@@ -11,7 +11,6 @@ from tests.support.merge import (
     MERGE_SHA,
     ONE_JOB,
     REPO,
-    SHA,
     SONAR_GREEN,
     TWO_JOBS,
     FakeGh,
@@ -21,6 +20,7 @@ from tests.support.merge import (
     declaring,
     drive,
     log_body,
+    merge_request,
     prompt,
     restore_line,
     rows_before_the_prompt,
@@ -139,14 +139,14 @@ def requests_of_the_attempt(gh, repository=REPO):
 
 
 @pytest.mark.parametrize(
-    ("settings", "flag", "method"),
+    ("settings", "merge_method", "method"),
     [
-        ({}, "--merge", "merge commit"),
-        ({"allow_merge_commit": False, "allow_squash_merge": True}, "--squash", "squash"),
+        ({}, "merge", "merge commit"),
+        ({"allow_merge_commit": False, "allow_squash_merge": True}, "squash", "squash"),
     ],
     ids=["a merge commit", "a squash"],
 )
-def test_a_merge_that_goes_through_is_four_rows_and_the_closing_line(settings, flag, method, capsys):
+def test_a_merge_that_goes_through_is_four_rows_and_the_closing_line(settings, merge_method, method, capsys):
     """MERGE-29, MERGE-30, MERGE-31, MERGE-33, MERGE-34, MERGE-35, MERGE-36, MERGE-46, MERGE-47, MERGE-48, MERGE-50:
     a merge that goes through switches the gate off, merges, switches it on and logs, as four rows and the closing
     line."""
@@ -158,7 +158,7 @@ def test_a_merge_that_goes_through_is_four_rows_and_the_closing_line(settings, f
         "",
         [
             gate_request(REPO, "false"),
-            (("pr", "merge", "7", "--repo", REPO, flag, "--match-head-commit", SHA, "--body-file", "-"), "Closes #3\n\nWork-Item: #3"),
+            merge_request(method=merge_method),
             gate_request(REPO, "true"),
             (("api", "-X", "POST", "repos/acme/widgets/issues/7/comments", "-f", log_body(method=method)), None),
         ],
@@ -169,7 +169,7 @@ def gadgets_requests(outcome, restored, *between_restore_and_comment):
     findings = 'declared loosening (overnightworks/songmaker#1345 of 2026-10-20): mandatory job "B" removed - reason: ruled'
     return [
         gate_request("acme/gadgets", "false"),
-        (("pr", "merge", "12", "--repo", "acme/gadgets", "--merge", "--match-head-commit", SHA, "--body-file", "-"), "Closes #3\n\nWork-Item: #3"),
+        merge_request(12, "acme/gadgets"),
         gate_request("acme/gadgets", "true"),
         *between_restore_and_comment,
         (
@@ -227,7 +227,7 @@ def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
     seconds = [0.0]
 
     def merging(arguments, stdin=None):
-        if list(arguments)[:2] == ["pr", "merge"]:
+        if list(arguments)[:3] == ["api", "-X", "PUT"]:
             seconds[0] = 114.0
         return gh(arguments, stdin)
 

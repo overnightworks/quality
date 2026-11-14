@@ -92,19 +92,23 @@ def declaring(what, reason="ruled"):
 
 
 class FakeGh:
-    """Answers the gh calls the command makes and records every one; `fail_on` names a call to break."""
+    """Answers the gh calls the command makes and records every one; `fail_on` names a call to break. `base_sha` is the
+    live tip of the base branch, `pull_base_sha` the base sha the pull request still names (the tip when None), and
+    `later_compare` the (tip, behind_by) the comparison answers from its second read on."""
 
     def __init__(
         self, admin=True, checks=None, statuses=None, state="open", fail_on=(), interrupt_on=(), merge_lands=False,
         head_config=GATE_CONFIG, base_config=GATE_CONFIG, merge_config=None, merge_sha=MERGE_SHA,
         base_baseline=None, merge_baseline=None, base_sha=BASE_SHA, remote=None, extra_runs=(), settings=None, rules=((),), base_ref="main", rules_error=None, rules_raw=None,
         body="Work-Item: #3\n\nCloses #3", later_body=None, draft=False, raw_answers=None, workflows=None, listing=None,
+        behind_by=0, pull_base_sha=None, later_compare=None,
     ):
         self.admin, self.state, self.fail_on, self.merge_lands = admin, state, set(fail_on), merge_lands
         self.interrupt_on = list(interrupt_on)
         self.settings = ALL_METHODS_ALLOWED if settings is None else settings
         self.rules, self.base_ref, self.rules_error, self.rules_raw = rules, base_ref, rules_error, rules_raw
         self.merge_sha, self.base_sha, self.remote = merge_sha, base_sha, remote
+        self.behind_by, self.pull_base_sha, self.later_compare, self.compares_read = behind_by, pull_base_sha or base_sha, later_compare, 0
         self.files = {
             (CONFIG_PATH, SHA): head_config,
             (CONFIG_PATH, base_sha): base_config,
@@ -140,8 +144,11 @@ class FakeGh:
         return self.answer(step, arguments, stdin, moment)
 
     def moment_of(self, arguments, stdin):
-        """The step a call belongs to, a gate request switching it on `restore` and a pull read after a merge `read back`."""
+        """The step a call belongs to, a gate request switching it on `restore`, a pull read after a merge `read back` and a
+        comparison after the first `recheck`."""
         step = self.step_of(arguments)
+        if step == "compare" and self.compares_read:
+            return "recheck"
         if step == "gate" and json.loads(stdin)["properties"][0]["value"] == "true":
             return "restore"
         if step == "pull" and self.merge_calls:
@@ -154,8 +161,8 @@ class FakeGh:
         if "/contents/.github/workflows" in text:
             return "listing" if "/contents/.github/workflows?" in text else "workflow"
         for marker, step in (
-            ("check-runs", "checks"), ("/status", "statuses"), ("contents/", "config"), ("/pulls/", "pull"),
-            ("/rules/branches/", "rules"), ("properties/values", "gate"), ("pr merge", "merge"), ("/comments", "comment"),
+            ("/compare/", "compare"), ("-X PUT", "merge"), ("check-runs", "checks"), ("/status", "statuses"), ("contents/", "config"), ("/pulls/", "pull"),
+            ("/rules/branches/", "rules"), ("properties/values", "gate"), ("/comments", "comment"),
         ):
             if marker in text:
                 return step
@@ -186,6 +193,11 @@ class FakeGh:
             return json.dumps({"default_branch": "main", "permissions": {"admin": self.admin}, **self.settings})
         if step == "rules":
             return self.rules_answer()
+        if step == "compare":
+            return self.compare_answer()
+        if step == "merge":
+            self.record(step, arguments, stdin)
+            return json.dumps({"merged": True, "sha": self.merge_sha, "message": "Pull Request successfully merged"})
         if step == "login":
             return "felix\n"
         self.record(step, arguments, stdin)
@@ -223,11 +235,16 @@ class FakeGh:
     def pull_answer(self):
         body = self.later_body if self.pulls_read and self.later_body is not None else self.body
         self.pulls_read += 1
-        pull = {"state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": self.base_sha, "ref": self.base_ref}, "merge_commit_sha": self.merge_sha}
+        pull = {"state": self.state, "merged": self.merged, "head": {"sha": SHA}, "base": {"sha": self.pull_base_sha, "ref": self.base_ref}, "merge_commit_sha": self.merge_sha}
         for name, value in (("body", body), ("draft", self.draft)):
             if value is not ABSENT:
                 pull[name] = value
         return json.dumps(pull)
+
+    def compare_answer(self):
+        tip, behind_by = self.later_compare if self.compares_read and self.later_compare else (self.base_sha, self.behind_by)
+        self.compares_read += 1
+        return json.dumps({"status": "behind" if behind_by else "ahead", "behind_by": behind_by, "base_commit": {"sha": tip}})
 
     def rules_answer(self):
         if self.rules_error:
@@ -239,7 +256,7 @@ class FakeGh:
     def record(self, step, arguments, stdin):
         if step == "merge":
             self.merged = True
-            self.merge_messages.append(stdin)
+            self.merge_messages.append(json.loads(stdin)["commit_message"])
             self.sequence.append("merge")
         if step == "gate":
             self.gate_values.append(json.loads(stdin)["properties"][0]["value"])
@@ -254,7 +271,12 @@ class FakeGh:
 
     @property
     def merge_calls(self):
-        return [call for call in self.calls if call[:2] == ("pr", "merge")]
+        return [call for call in self.calls if call[:3] == ("api", "-X", "PUT")]
+
+    @property
+    def merge_bodies(self):
+        """The JSON each merge request sent on its stdin."""
+        return [json.loads(stdin) for argv, stdin in self.requests if argv[:3] == ("api", "-X", "PUT")]
 
 
 def no_network(repository):
@@ -280,8 +302,18 @@ def sonar(new=0, legacy=4, main_analysed=True, analysed=SHA, unreachable=False, 
     return transport
 
 
+def merge_request(pull_request=7, repository=REPO, method="merge", message="Closes #3\n\nWork-Item: #3"):
+    """The merge request the door sends: gh's arguments and the JSON on its stdin."""
+    argv = ("api", "-X", "PUT", f"repos/{repository}/pulls/{pull_request}/merge", "--input", "-")
+    return argv, json.dumps({"sha": SHA, "merge_method": method, "commit_message": message}, separators=(",", ":"))
+
+
 def pull_row():
     return "  · #7            open           head aaaaaaa · into main\n"
+
+
+def base_row(tip=BASE_SHA, base="main"):
+    return f"  ✓ base          up to date     {base} at {tip[:7]}\n"
 
 
 def landing_row(item="#3"):
@@ -293,6 +325,7 @@ def rows_before_the_prompt():
     return (
         RELEASE_ROW
         + pull_row()
+        + base_row()
         + "  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
         + "  ✓ loosenings    none\n"
         + "  ! sonar         4 legacy findings on main\n"
