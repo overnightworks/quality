@@ -41,7 +41,7 @@ the blocks, and `quality check` enforces it: a module imports only from the laye
 ```mermaid
 flowchart TB
     cli["cli.py: the one door; arguments, exit code"]
-    door["merge.py: the operator's door"]
+    door["merge.py, base_branch.py: the operator's door and what GitHub says about its base branch"]
     verdict["verdict.py, sides.py: the pull request's verdict and the two sides it compares"]
     reports["sonar_properties.py, sonar.py, fleet.py: SonarCloud scan wiring and findings, fleet report"]
     check["check.py, staged.py: areas in order, the commit hook"]

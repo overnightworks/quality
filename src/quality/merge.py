@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, StrEnum
 from functools import partial
-from urllib.parse import quote
 
 from quality import architecture, checkout
+from quality.base_branch import MergeMethod, choose_merge_method, compare_with_tip
 from quality.baseline_file import BASELINE_PATH
 from quality.config import CONFIG_PATH, Declaration, GateSettings, LegacyMode
 from quality.gh import GhFailed, GhRunner, file_at, workflow_texts_at
@@ -88,34 +88,6 @@ class Refused(Exception):
         self.lines = lines
 
 
-class MergeMethod(Enum):
-    """The methods the door lands with, in its order of preference; the values are the pull request rule's method names
-    and the `gh pr merge` flag. A merge commit keeps the judged head as a parent and a squash lands the judged merge
-    ref's tree; a rebase replays commits, so the door never uses it."""
-
-    MERGE = "merge"
-    SQUASH = "squash"
-
-    @property
-    def settings_key(self) -> str:
-        return {"merge": "allow_merge_commit", "squash": "allow_squash_merge"}[self.value]
-
-    @property
-    def description(self) -> str:
-        return {"merge": "merges with a merge commit", "squash": "merges with a squash"}[self.value]
-
-    @property
-    def flag(self) -> str:
-        return f"--{self.value}"
-
-    @property
-    def event(self) -> DoorEvent:
-        return {"merge": DoorEvent.MERGE_COMMIT, "squash": DoorEvent.SQUASH}[self.value]
-
-
-RULE_METHOD_NAMES = ("merge", "squash", "rebase")
-
-
 class DoorEvent(StrEnum):
     """What a row of the operator's door says."""
 
@@ -123,6 +95,9 @@ class DoorEvent(StrEnum):
     DRAFT = "draft"
     CLOSED = "closed"
     OK = "ok"
+    UP_TO_DATE = "up to date"
+    BEHIND = "behind"
+    MOVED = "moved"
     RED = "red"
     RUNNING = "running"
     REFUSED = "refused"
@@ -145,6 +120,8 @@ class DoorEvent(StrEnum):
     NOT_POSTED = "not posted"
 
 
+METHOD_EVENTS = {MergeMethod.MERGE: DoorEvent.MERGE_COMMIT, MergeMethod.SQUASH: DoorEvent.SQUASH}
+
 NOTHING_CHANGED = "nothing changed"
 NOT_JUDGED_ERROR = f"could not judge{SEPARATOR}{NOTHING_CHANGED}"
 
@@ -158,7 +135,7 @@ LANDING = "landing"
 
 type Pair = tuple[str, tuple[Step, ...]]
 type Judged[T] = tuple[T, tuple[Row, ...]]
-Show = Callable[[tuple[Row, ...]], None]
+Show = Callable[[tuple[Row, ...]], object]
 
 
 class Stopped(Exception):
@@ -207,12 +184,14 @@ def described(declaration: Declaration) -> str:
 
 @dataclass(frozen=True)
 class Door:
-    """What the door settled before the word: the pull request, its declared loosenings, the legacy count where Sonar
-    failed, the method and the landing."""
+    """What the door settled before the word: the pull request, the base branch and the tip the verdict compared, its
+    declared loosenings, the legacy count where Sonar failed, the method and the landing."""
 
     repository: str
     pull_request: int
     head_sha: str
+    base: str
+    tip: str
     declared: tuple[Declaration, ...]
     legacy: int | None
     merge_method: MergeMethod
@@ -329,64 +308,17 @@ def judge_legacy(settings: GateSettings, count: Callable[[], int]) -> int:
     return legacy
 
 
-def methods_the_settings_allow(repository_facts: Mapping[str, object]) -> frozenset[MergeMethod]:
-    allowed = {method: repository_facts.get(method.settings_key) for method in MergeMethod}
-    if not all(isinstance(value, bool) for value in allowed.values()):
-        raise CannotJudge("the repository settings withhold or malform which merge methods they allow")
-    return frozenset(method for method, value in allowed.items() if value)
-
-
-def methods_the_rule_allows(rule: object, base: str) -> frozenset[MergeMethod] | None:
-    """The methods one branch rule leaves open, None where it restricts none."""
-    malformed = CannotJudge(f"the branch rules of {base} are malformed")
-    if not isinstance(rule, Mapping) or not isinstance(rule.get("type"), str):
-        raise malformed
-    if "parameters" in rule and not isinstance(rule["parameters"], Mapping):
-        raise malformed
-    if rule["type"] == "required_linear_history":
-        return frozenset(MergeMethod) - {MergeMethod.MERGE}
-    if rule["type"] != "pull_request" or "parameters" not in rule:
-        return None
-    parameters = rule["parameters"]
-    if "allowed_merge_methods" not in parameters:
-        return None
-    named = parameters["allowed_merge_methods"]
-    if not isinstance(named, list) or not all(isinstance(name, str) and name in {*RULE_METHOD_NAMES} for name in named):
-        raise malformed
-    return frozenset(method for method in MergeMethod if method.value in named)
-
-
-def read_branch_rules(gh: GhRunner, repository: str, base: str) -> list[object]:
-    malformed = CannotJudge(f"the branch rules of {base} are malformed")
-    try:
-        listed = gh(["api", "--paginate", "--slurp", f"repos/{repository}/rules/branches/{quote(base, safe='/')}?per_page=100"], None)
-    except GhFailed as error:
-        raise CannotJudge(f"cannot read the branch rules of {base}: {error}") from error
-    try:
-        pages = json.loads(listed)
-    except ValueError as error:
-        raise malformed from error
-    if not isinstance(pages, list) or not all(isinstance(page, list) for page in pages):
-        raise malformed
-    return [rule for page in pages for rule in page]
-
-
-def choose_merge_method(gh: GhRunner, repository: str, repository_facts: Mapping[str, object], base: str) -> MergeMethod:
-    """The door's method: a merge commit, else a squash, among those the settings and every rule on `base` allow."""
-    allowed = methods_the_settings_allow(repository_facts)
-    for rule in read_branch_rules(gh, repository, base):
-        left_open = methods_the_rule_allows(rule, base)
-        allowed = allowed if left_open is None else allowed & left_open
-    chosen = next((method for method in MergeMethod if method in allowed), None)
-    if chosen is None:
-        raise CannotJudge("the repository and its branch rules allow no merge method the door uses (a merge commit or a squash)")
-    return chosen
-
-
 def gate_request(repository: str, enabled: bool) -> tuple[list[str], str]:
     """The request that switches the gate: gh's arguments and the body on its stdin."""
     body = {"properties": [{"property_name": GATE_PROPERTY, "value": str(enabled).lower()}]}
     return ["api", "-X", "PATCH", f"repos/{repository}/properties/values", "--input", "-"], json.dumps(body, separators=(",", ":"))
+
+
+def merge_request(door: Door) -> tuple[list[str], str]:
+    """The request that merges: gh's arguments and the body on its stdin. It takes the head sha and the landing's message
+    as they are and has no merge queue or auto-merge path."""
+    body = {"sha": door.head_sha, "merge_method": door.merge_method.value, "commit_message": door.landing.message}
+    return ["api", "-X", "PUT", f"repos/{door.repository}/pulls/{door.pull_request}/merge", "--input", "-"], json.dumps(body, separators=(",", ":"))
 
 
 def restore_command(repository: str) -> Command:
@@ -399,11 +331,19 @@ def comment_request(repository: str, pull_request: int, comment: str) -> list[st
     return ["api", "-X", "POST", f"repos/{repository}/issues/{pull_request}/comments", "-f", f"body={comment}"]
 
 
+def says_merged(answer: str) -> bool | None:
+    """Whether a pull request's or a merge request's answer says `merged: true`; None when it holds no such flag."""
+    try:
+        return json.loads(answer)["merged"] is True
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def merged_on_github(gh: GhRunner, door: Door) -> bool | None:
     """What GitHub says now; None when it cannot be read."""
     try:
-        return json.loads(gh(["api", f"repos/{door.repository}/pulls/{door.pull_request}"], None))["merged"] is True
-    except (GhFailed, KeyError, TypeError, ValueError):
+        return says_merged(gh(["api", f"repos/{door.repository}/pulls/{door.pull_request}"], None))
+    except GhFailed:
         return None
 
 
@@ -427,7 +367,7 @@ def restore_gate(gh: GhRunner, repository: str, out: DoorStream) -> str | None:
 def merge_row(door: Door, outcome: Outcome, detail: str) -> Row:
     subject = f"#{door.pull_request}"
     if outcome is Outcome.MERGED:
-        return Row(Glyph.CLEAN, subject, DoorEvent.MERGED, str(door.merge_method.event))
+        return Row(Glyph.CLEAN, subject, DoorEvent.MERGED, METHOD_EVENTS[door.merge_method])
     event = DoorEvent.STATE_UNKNOWN if outcome is Outcome.UNKNOWN else DoorEvent.NOT_MERGED
     return Row(Glyph.COULD_NOT_CHECK, subject, event, detail, descriptive=True)
 
@@ -439,12 +379,11 @@ def switch_off_merge_switch_on(gh: GhRunner, door: Door, out: DoorStream) -> Att
         gh(*gate_request(door.repository, False))
         outcome = Outcome.UNKNOWN
         out.show((Row(Glyph.CLEAN, GATE_PROPERTY, DoorEvent.OFF, door.repository),))
-        gh(
-            ["pr", "merge", str(door.pull_request), "--repo", door.repository, door.merge_method.flag, "--match-head-commit", door.head_sha, "--body-file", "-"],
-            door.landing.message,
-        )
-        outcome = Outcome.MERGED
-        out.show((merge_row(door, outcome, detail),))
+        if says_merged(gh(*merge_request(door))):
+            outcome = Outcome.MERGED
+            out.show((merge_row(door, outcome, detail),))
+        else:
+            detail = "GitHub's answer does not say merged"
     except (GhFailed, KeyboardInterrupt) as stop:
         interrupted = isinstance(stop, KeyboardInterrupt)
         detail = "interrupted" if interrupted else str(stop)
@@ -477,7 +416,7 @@ def log_comment(login: str, moment: datetime, door: Door, attempt: Attempt) -> s
     restored = "on" if attempt.restore_error is None else "NOT restored, it may still be off"
     switched = "not switched off" if attempt.outcome is Outcome.NOT_STARTED else "off"
     return printable(
-        f"{MERGE_COMMAND} run by @{login} at {moment.isoformat(timespec='seconds')}: {'; '.join(door.reasons())}; {door.merge_method.description}; "
+        f"{MERGE_COMMAND} run by @{login} at {moment.isoformat(timespec='seconds')}: {'; '.join(door.reasons())}; merges with a {METHOD_EVENTS[door.merge_method]}; "
         f"{GATE_PROPERTY} {switched} → {attempt.outcome.value} → {restored}."
     )
 
@@ -599,14 +538,14 @@ def read_pull_files(
 
 
 def read_loosenings(
-    gh: GhRunner, repository: str, pull: Mapping[str, object], check_runs: Sequence[Check], sonar_red: bool,
+    gh: GhRunner, repository: str, pull: Mapping[str, object], tip: str, check_runs: Sequence[Check], sonar_red: bool,
     environment: Mapping[str, str], remote_for: RemoteFor, refused: Pair, rerun: str,
 ) -> Judged[tuple[Verdict, GateSettings]]:
-    """The base is read first: a config refused there is not repaired on the pull request's branch."""
-    merge_commit_sha, base_sha = pull["merge_commit_sha"], pull["base"]["sha"]
-    base = read_side_at(gh, repository, base_sha, Instruction(f"fix it on {pull['base']['ref']} first"))
+    """The base side is the compared tip, read first: a config refused there is not repaired on the pull request's branch."""
+    merge_commit_sha = pull["merge_commit_sha"]
+    base = read_side_at(gh, repository, tip, Instruction(f"fix it on {pull['base']['ref']} first"))
     head = read_side_at(gh, repository, merge_commit_sha, Instruction(f"push the fix to the pull request's branch, then run {rerun} again"))
-    pull_tree, renames = read_pull_files(remote_for, repository, base, head, (base_sha, merge_commit_sha), environment)
+    pull_tree, renames = read_pull_files(remote_for, repository, base, head, (tip, merge_commit_sha), environment)
     verdict = rederived_verdict(head, base, check_runs, renames, pull_tree)
     return (verdict, head.settings), (loosenings_row(verdict, sonar_red, refused),)
 
@@ -630,7 +569,33 @@ def read_legacy(count: Callable[[], int], settings: GateSettings, default_branch
 def read_method(gh: GhRunner, repository: str, facts: Mapping[str, object], base: str) -> Judged[tuple[MergeMethod, str]]:
     method = choose_merge_method(gh, repository, facts, base)
     login = gh(["api", "user", "--jq", ".login"], None).strip()
-    return (method, login), (Row(Glyph.NOTE, "merge", method.event, f"allowed on {base}"),)
+    return (method, login), (Row(Glyph.NOTE, "merge", METHOD_EVENTS[method], f"allowed on {base}"),)
+
+
+def update_steps(repository: str, pull_request: int) -> tuple[Step, ...]:
+    return (
+        gh_command(repository, pull_request, "update-branch"),
+        Instruction(f"wait for the checks, then run {merge_command(repository, pull_request)} again"),
+    )
+
+
+def read_base(gh: GhRunner, repository: str, pull_request: int, base: str, head_sha: str) -> Judged[str]:
+    """The base branch's live tip where the head contains it; a head behind it stops the door at its `!` row."""
+    comparison = compare_with_tip(gh, repository, base, head_sha)
+    if comparison.behind_by:
+        row = Row(Glyph.NEEDS_YOU, "base", DoorEvent.BEHIND, f"{comparison.behind_by} commit(s) behind {base}")
+        error = not_merged(f"the head lacks {comparison.behind_by} commit(s) of {base}, so its checks did not run on what would merge")
+        raise Stopped(row, error, update_steps(repository, pull_request))
+    return comparison.tip, (Row(Glyph.CLEAN, "base", DoorEvent.UP_TO_DATE, f"{base} at {comparison.tip[:7]}"),)
+
+
+def read_base_unmoved(gh: GhRunner, door: Door) -> Judged[None]:
+    """After `yes`, before the gate is touched: the tip the rows showed is still the base branch's tip."""
+    comparison = compare_with_tip(gh, door.repository, door.base, door.head_sha)
+    if comparison.tip != door.tip:
+        steps = update_steps(door.repository, door.pull_request) if comparison.behind_by else (Command(merge_command(door.repository, door.pull_request)),)
+        raise Stopped(Row(Glyph.NEEDS_YOU, "base", DoorEvent.MOVED), not_merged(f"{door.base} moved since the rows were shown"), steps)
+    return None, ()
 
 
 def judge_pull_request(
@@ -657,8 +622,9 @@ def judge_pull_request(
     facts, pull = step(f"#{pull_request}", lambda: read_pull_request(gh, repository, pull_request), refused, show=held.extend)
     show((read_release(gh, repository, pull, rerun, judging).row(), *held))
     landing = step(LANDING, lambda: read_landing(pull["body"], repository), landing_refused)
+    tip = step("base", lambda: read_base(gh, repository, pull_request, pull["base"]["ref"], pull["head"]["sha"]), refused)
     check_runs, sonar_red = step("checks", lambda: read_checks(gh, repository, pull["head"]["sha"], refused), refused)
-    verdict, settings = step("loosenings", lambda: read_loosenings(gh, repository, pull, check_runs, sonar_red, environment, remote_for, refused, rerun), refused)
+    verdict, settings = step("loosenings", lambda: read_loosenings(gh, repository, pull, tip, check_runs, sonar_red, environment, remote_for, refused, rerun), refused)
     legacy = None
     if sonar_red:
         token = environment.get("SONAR_TOKEN", "")
@@ -671,7 +637,7 @@ def judge_pull_request(
         legacy = step("sonar", sonar_step, refused)
     merge_method, login = step("merge", lambda: read_method(gh, repository, facts, pull["base"]["ref"]), refused)
     show((Row(Glyph.NOTE, LANDING, LANDING_EVENTS[landing.kind], landing.value),))
-    return Door(repository, pull_request, pull["head"]["sha"], verdict.declared, legacy, merge_method, landing), login
+    return Door(repository, pull_request, pull["head"]["sha"], pull["base"]["ref"], tip, verdict.declared, legacy, merge_method, landing), login
 
 
 MERGE_FACTS = {Outcome.MERGED: "is merged", Outcome.UNKNOWN: "may be merged"}
@@ -718,6 +684,12 @@ def shown_before_asking(rows: tuple[Row, ...], out: DoorStream) -> None:
         raise Unshown
 
 
+def end_at(stop: Stopped, show: Show, channels: Channels) -> int:
+    show((stop.row,))
+    write_pair(stop.error, stop.next_steps, channels.err)
+    return stop.exit_code
+
+
 def run_merge(
     repository: str,
     pull_request: int,
@@ -745,9 +717,7 @@ def run_merge(
         try:
             door, login = judge_pull_request(repository, pull_request, gh, transport, environment, remote_for, show, judging)
         except Stopped as stop:
-            show((stop.row,))
-            write_pair(stop.error, stop.next_steps, channels.err)
-            return stop.exit_code
+            return end_at(stop, show, channels)
         except CannotJudge as refusal:
             again = Instruction(f"fix what the error names, then run {merge_command(repository, pull_request)} again")
             write_pair(refusal.reason.fact, refusal.reason.next_steps or (again,), channels.err)
@@ -763,6 +733,11 @@ def run_merge(
         write_pair(f"not confirmed{SEPARATOR}{NOTHING_CHANGED}", (Command(merge_command(repository, pull_request)),), channels.err)
         return EXIT_REFUSED
     started = clock()
+    again = Instruction(f"fix what the ✗ row names, then run {merge_command(repository, pull_request)} again")
+    try:
+        judged("base", lambda: read_base_unmoved(gh, door), (REFUSED_ERROR, ()), again, show=lambda rows: None)
+    except Stopped as stop:
+        return end_at(stop, out.show, channels)
     attempt = switch_off_merge_switch_on(gh, door, out)
     comment = log_comment(login, now(), door, attempt)
     posted = post_log_comment(gh, door, comment, out)

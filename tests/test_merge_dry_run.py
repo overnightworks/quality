@@ -42,7 +42,7 @@ def asked_after(capsys, gh_kwargs, **arguments):
 
 
 def writes(gh):
-    return [argv for argv in gh.calls if "-X" in argv or argv[:2] == ("pr", "merge")]
+    return [argv for argv in gh.calls if "-X" in argv]
 
 
 @pytest.mark.parametrize("gh_kwargs", [{}, declared_loosening()], ids=["legacy findings", "a declared loosening"])
@@ -94,8 +94,9 @@ def test_a_dry_run_reads_the_pull_request_asked_for(capsys):
         ({"draft": True}, 1),
         ({"fail_on": ["pull"]}, 2),
         ({"body": "a body without the line"}, 1),
+        ({"behind_by": 3}, 1),
     ],
-    ids=["another check red", "a draft", "gh down", "a refused landing line"],
+    ids=["another check red", "a draft", "gh down", "a refused landing line", "a head behind the base tip"],
 )
 def test_a_dry_run_refuses_where_the_door_refuses(gh_kwargs, code, capsys):
     """MERGE-24: a dry run refuses where the door refuses."""
@@ -128,6 +129,7 @@ def test_v_adds_nothing_to_the_door(words, typed, capsys):
     [
         ({}, "no\n", r"next: (.+)"),
         ({"fail_on": ["merge"]}, "yes\n", r"next: (.+)"),
+        ({"later_compare": ("e" * 40, 0)}, "yes\n", r"next: (.+)"),
         ({"fail_on": ["pull"]}, "yes\n", r"next: fix what the ✗ row names, then run (.+) again"),
         (
             {"body": "a body without the line"}, "yes\n",
@@ -138,7 +140,7 @@ def test_v_adds_nothing_to_the_door(words, typed, capsys):
             r"next: push the fix to the pull request's branch, then run (.+) again",
         ),
     ],
-    ids=["not confirmed", "not merged", "not judged", "a refused landing line", "a config refused at the merge commit"],
+    ids=["not confirmed", "not merged", "a base that moved", "not judged", "a refused landing line", "a config refused at the merge commit"],
 )
 def test_a_next_step_that_names_the_door_again_names_the_pull_request_asked_for(gh_kwargs, typed, pattern, capsys):
     """MERGE-10, MERGE-20, MERGE-68: a next step that names the door again names the pull request asked for."""

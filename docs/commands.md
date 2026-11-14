@@ -348,12 +348,13 @@ Ruled by the operator:
   and `quality / sonar` is green or has failed (it did not run, or it ended `timed_out`, `cancelled` or anything else:
   refused) (MERGE-62).
   The verdict is then judged again by its own decider, with the config, baseline and import-linter configs read at the
-  pull request's current merge commit and at base (MERGE-82) and the Sonar job taken as green (MERGE-83): an
+  pull request's current merge commit and at the tip the base comparison named (MERGE-82, MERGE-106) and the Sonar job
+  taken as green (MERGE-83): an
   undeclared loosening (MERGE-84), a declaration that matches nothing (MERGE-85), or a missing (MERGE-86) or red
   mandatory job is refused, naming the verdict's lines. When both sides hold a baseline, or a contract list
   drops a module or a contract is removed, the files git renamed between the two commits count as they do in the
   verdict and the files each commit holds are listed as the verdict lists them, so the door fetches the pull request's
-  base commit and merge commit (MERGE-89) (`git fetch --depth=1` from `https://github.com/<owner>/<repo>.git`) into a
+  compared tip and merge commit (MERGE-89) (`git fetch --depth=1` from `https://github.com/<owner>/<repo>.git`) into a
   temporary bare repository that is removed afterwards (MERGE-90), also when the command is interrupted (MERGE-91). This
   needs `git` and `gh` on the path. git runs with an empty home (MERGE-92) and no inherited `GIT_*` variable (MERGE-93),
   so `.netrc` and git's own configuration count for nothing; `gh` is the only credential source (MERGE-94), told where
@@ -364,6 +365,24 @@ Ruled by the operator:
   the command is interrupted. git's own output is never printed (MERGE-100): a fetch, file listing or rename list
   that fails, or a rename list that came with a warning, could not be checked, and its `✗ loosenings` row says so in
   the door's words (exit `2`) (MERGE-101), never an empty file or rename list (MERGE-102).
+- **The head holds the base's tip** (exit `1`, nothing changed, no log comment): after the landing line and before the
+  checks (MERGE-104) the door reads GitHub's comparison of `refs/heads/<base>`, the live tip, with the pull request's
+  head sha, one commit per page (MERGE-103). A head that lacks commits of the tip is `! base  behind  <n> commit(s)
+  behind <base>` and `error: not merged · the head lacks <n> commit(s) of <base>, so its checks did not run on what
+  would merge · nothing changed`, `next:` being `gh pr update-branch <pr> --repo <owner/repo>` (on a fork the author may
+  have to allow maintainer edits or update the branch himself), then waiting for the checks, then the door again
+  (MERGE-103). A head that contains the tip is `✓ base  up to date  <base> at <tip, 7 characters>`, the row after the
+  pull request's (MERGE-104). A comparison that cannot be read, or whose `behind_by` is no whole number of zero or
+  more or whose `base_commit.sha` is no commit sha, is the `✗ base` row (exit `2`), never up to date (MERGE-105). The
+  verdict's base side and the fetch of the base commit use the compared tip, never the `base.sha` the pull request
+  names (MERGE-106). After `yes` and before the gate is touched the comparison is read again, outside the gate's
+  restore: another tip than the one shown is `! base  moved` with `error: not merged · <base> moved since the rows
+  were shown · nothing changed` (exit `1`, no log comment), `next:` being the update step where the head is now behind,
+  else the door again; Ctrl-C during that read ends the run interrupted (exit `130`) with nothing changed (MERGE-107).
+  Because the head contains the tip and the default branch only moves forward (`non_fast_forward`), every check run on
+  the head tested the tree that merges. A non-default base that is rewound can leave a head tested against commits
+  since removed, and the few seconds between the gate request and the merge request stay open, since GitHub pins only
+  the head.
 - **The landing line.** The pull request body carries exactly one `Work-Item:` or `No-Item:` line (MERGE-63) outside a
   fenced code block (MERGE-64), as the fleet's landings read it: `Work-Item: #<n>` or `Work-Item: <owner>/<repo>#<n>` of
   this repository (MERGE-65), or `No-Item: docs`, `fix` or `deps` (MERGE-66). Otherwise its `! landing` row names why
@@ -382,7 +401,7 @@ Ruled by the operator:
   SonarCloud refuses (a private project answers 404) is exit `2`, naming `SONAR_TOKEN` (MERGE-80); with a token, a 401
   (MERGE-81) or 403 says the token was rejected.
 - **It shows, then asks:** on stdout the [release](#which-release-judges) that judges first, then a row as each step
-  passes (MERGE-1): the pull request (`open`, head, base), the checks, the declared loosenings, each
+  passes (MERGE-1): the pull request (`open`, head, base), the `base` row, the checks, the declared loosenings, each
   [whole](output.md#length) with its `item` and `date` and its `reason` on the line below (MERGE-2), the legacy count
   where Sonar failed (MERGE-3), the merge method (`allowed on <base>`) (MERGE-4), and last the `landing` row naming the
   line the merge commit ends with (MERGE-5) (`work item` and `#<n>`, or `no item` and its kind); then, on stderr,
@@ -402,16 +421,20 @@ Ruled by the operator:
   `<owner>/<repo>#<pr>` is [a wrong invocation](#help-and-wrong-invocations) (exit `2`). Every line it prints is
   escaped as [the other doors' lines are](output.md#masking), so a `reason` cannot hide anything before `yes` or forge
   a line (MERGE-22).
-- **Dry run:** `--dry-run` reads and shows every row the door shows (MERGE-23), refuses where it refuses (MERGE-24),
+- **Dry run:** `--dry-run` reads and shows every row the door shows (MERGE-23), refuses where it refuses before the question (MERGE-24; the read after `yes` it cannot make),
   and in place of the question ends with
   `~ dry run · would switch quality_gate off, merge #<pr>, switch it on · nothing changed` on stdout (exit `0`)
-  (MERGE-25); it reads no answer (MERGE-26) and sends no request that changes anything (no `gh api -X`, no
-  `gh pr merge`) (MERGE-27), and it needs a terminal on stdin like the door. `-v` is taken and adds nothing (MERGE-28):
+  (MERGE-25); it reads no answer (MERGE-26) and sends no request that changes anything (no `gh api -X`)
+  (MERGE-27), and it needs a terminal on stdin like the door. `-v` is taken and adds nothing (MERGE-28):
   the door runs no scanner.
 - **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this takes the fleet's ruleset off
-  it) (MERGE-29), runs `gh pr merge <pr> --repo <owner/repo> --merge --match-head-commit <sha> --body-file -`, the
-  message on its stdin (MERGE-30) (`--squash` where the repository settings or a rule on the pull request's base branch
-  exclude a merge commit but allow a squash (MERGE-31); when neither is allowed, or the settings or rules cannot be read
+  it) (MERGE-29), runs `gh api -X PUT repos/<owner/repo>/pulls/<pr>/merge --input -`, the JSON on its stdin
+  holding `sha` (the head sha), `merge_method` and `commit_message` (the message of MERGE-69, sent as it is; no
+  `commit_title`, so a squash takes its headline from the repository's squash title setting). The request merges or
+  fails and has no merge queue or auto-merge path; `#<pr> merged` is shown only on an answer with `merged: true`, and
+  anything else (a refused or failed request, no answer, Ctrl-C, an answer without `merged: true`) is read back as
+  below (MERGE-30) (`merge_method` is `squash` where the repository settings or a rule on the pull request's base
+  branch exclude a merge commit but allow a squash, else `merge` (MERGE-31); when neither is allowed, or the settings or rules cannot be read
   or are malformed (an answer or a page that is no array, a rule that is no object, or whose `parameters` are present
   but no object), its `✗ merge` row ends the run before the gate is touched (exit `2`) (MERGE-32);
   the shown text and the log comment name the method (MERGE-33)), and sets the property back to `true`

@@ -11,7 +11,6 @@ from tests.support.merge import (
     MERGE_SHA,
     ONE_JOB,
     REPO,
-    SHA,
     SONAR_GREEN,
     TWO_JOBS,
     FakeGh,
@@ -21,6 +20,7 @@ from tests.support.merge import (
     declaring,
     drive,
     log_body,
+    merge_request,
     prompt,
     restore_line,
     rows_before_the_prompt,
@@ -51,8 +51,8 @@ def restore_failed_row(detail="restore broke"):
     return f"  ✗ quality_gate  not restored   {detail}\n"
 
 
-def merge_failed_row():
-    return "  ✗ #7            not merged     merge broke\n"
+def merge_failed_row(detail="merge broke"):
+    return f"  ✗ #7            not merged     {detail}\n"
 
 
 def unknown_row(detail):
@@ -77,6 +77,9 @@ def merge_state_unknown():
 
 def not_merged():
     return "is not merged"
+
+
+NOT_SAID_MERGED = "GitHub's answer does not say merged"
 
 
 def merge_broke():
@@ -139,14 +142,14 @@ def requests_of_the_attempt(gh, repository=REPO):
 
 
 @pytest.mark.parametrize(
-    ("settings", "flag", "method"),
+    ("settings", "merge_method", "method"),
     [
-        ({}, "--merge", "merge commit"),
-        ({"allow_merge_commit": False, "allow_squash_merge": True}, "--squash", "squash"),
+        ({}, "merge", "merge commit"),
+        ({"allow_merge_commit": False, "allow_squash_merge": True}, "squash", "squash"),
     ],
     ids=["a merge commit", "a squash"],
 )
-def test_a_merge_that_goes_through_is_four_rows_and_the_closing_line(settings, flag, method, capsys):
+def test_a_merge_that_goes_through_is_four_rows_and_the_closing_line(settings, merge_method, method, capsys):
     """MERGE-29, MERGE-30, MERGE-31, MERGE-33, MERGE-34, MERGE-35, MERGE-36, MERGE-46, MERGE-47, MERGE-48, MERGE-50:
     a merge that goes through switches the gate off, merges, switches it on and logs, as four rows and the closing
     line."""
@@ -158,7 +161,7 @@ def test_a_merge_that_goes_through_is_four_rows_and_the_closing_line(settings, f
         "",
         [
             gate_request(REPO, "false"),
-            (("pr", "merge", "7", "--repo", REPO, flag, "--match-head-commit", SHA, "--body-file", "-"), "Closes #3\n\nWork-Item: #3"),
+            merge_request(method=merge_method),
             gate_request(REPO, "true"),
             (("api", "-X", "POST", "repos/acme/widgets/issues/7/comments", "-f", log_body(method=method)), None),
         ],
@@ -169,7 +172,7 @@ def gadgets_requests(outcome, restored, *between_restore_and_comment):
     findings = 'declared loosening (overnightworks/songmaker#1345 of 2026-10-20): mandatory job "B" removed - reason: ruled'
     return [
         gate_request("acme/gadgets", "false"),
-        (("pr", "merge", "12", "--repo", "acme/gadgets", "--merge", "--match-head-commit", SHA, "--body-file", "-"), "Closes #3\n\nWork-Item: #3"),
+        merge_request(12, "acme/gadgets"),
         gate_request("acme/gadgets", "true"),
         *between_restore_and_comment,
         (
@@ -222,12 +225,14 @@ def test_the_attempt_names_the_pull_request_asked_for(gh_kwargs, code, out, err,
 
 
 def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
-    """MERGE-36: the closing line counts the seconds from the answer."""
+    """MERGE-36: the closing line counts the seconds from the answer, the base comparison after it included."""
     gh = FakeGh()
     seconds = [0.0]
 
     def merging(arguments, stdin=None):
-        if list(arguments)[:2] == ["pr", "merge"]:
+        if "/compare/" in " ".join(arguments) and seconds[0] == 100.0:
+            seconds[0] = 110.0
+        if list(arguments)[:3] == ["api", "-X", "PUT"]:
             seconds[0] = 114.0
         return gh(arguments, stdin)
 
@@ -263,6 +268,26 @@ def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
             {"fail_on": ["merge"]}, 2,
             off() + on() + merge_failed_row() + posted(),
             rerun_pair(not_merged()), all_four_but("merge"), log_body(outcome=merge_failed()),
+        ),
+        (
+            {"raw_answers": {"merge": '{"merged": false, "message": "queued"}'}}, 2,
+            off() + on() + merge_failed_row(NOT_SAID_MERGED) + posted(),
+            rerun_pair(not_merged()), all_four_but("merge"), log_body(outcome=merge_failed()),
+        ),
+        (
+            {"raw_answers": {"merge": ""}}, 2,
+            off() + on() + merge_failed_row(NOT_SAID_MERGED) + posted(),
+            rerun_pair(not_merged()), all_four_but("merge"), log_body(outcome=merge_failed()),
+        ),
+        (
+            {"raw_answers": {"merge": "{}"}, "merge_lands": True}, 0,
+            off() + on() + merged() + posted() + closing_line(),
+            "", all_four_but("merge"), log_body(),
+        ),
+        (
+            {"raw_answers": {"merge": "[]", "read back": "[]"}}, 2,
+            off() + on() + unknown_row(NOT_SAID_MERGED) + posted(),
+            unknown_pair(), all_four_but("merge"), log_body(outcome=merge_state_unknown()),
         ),
         (
             {"fail_on": ["merge"], "merge_lands": True}, 0,
@@ -315,14 +340,16 @@ def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
         ),
     ],
     ids=[
-        "the switch off fails", "interrupted while switching off", "the merge fails", "the merge fails but landed", "the merge is interrupted",
+        "the switch off fails", "interrupted while switching off", "the merge fails", "the merge answers merged: false", "the merge answers nothing", "the merge answers nothing but landed",
+        "the merge answers nothing and the read back is no object", "the merge fails but landed", "the merge is interrupted",
         "interrupted, but landed", "the read back fails", "the read back is interrupted", "the read back is no object", "the restore fails",
         "the restore is interrupted", "the restore and the merge fail",
     ],
 )
 def test_each_way_the_attempt_ends_is_its_rows_and_the_pair(gh_kwargs, code, out, err, sequence, comment, capsys):
-    """MERGE-34, MERGE-35, MERGE-36, MERGE-37, MERGE-38, MERGE-39, MERGE-41, MERGE-42, MERGE-43, MERGE-50, MERGE-51,
-    MERGE-52: whichever way the attempt ends, the gate is set back to true or its failure is a `not restored` row, each
+    """MERGE-30, MERGE-34, MERGE-35, MERGE-36, MERGE-37, MERGE-38, MERGE-39, MERGE-41, MERGE-42, MERGE-43, MERGE-50,
+    MERGE-51, MERGE-52: whichever way the attempt ends (a refused or failed merge request, 405 or 409 included, and an
+    answer without `merged: true` are read back, and only GitHub's word makes it merged), the gate is set back to true or its failure is a `not restored` row, each
     step is a row, the log comment names the outcome, and a merge that landed with the gate on and the comment posted
     ends with the closing line."""
     gh = FakeGh(**gh_kwargs)

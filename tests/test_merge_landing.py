@@ -6,6 +6,7 @@ from tests.support.merge import (
     ABSENT,
     SHA,
     FakeGh,
+    base_row,
     changed_nothing,
     drive,
     landing_pair,
@@ -58,6 +59,7 @@ def no_body_text():
         ("Work-Item: acme/widgets#123", "Work-Item: #123"),
         ("No-Item: docs", "No-Item: docs"),
         ("No-Item: deps", "No-Item: deps"),
+        ("@octocat please look.\nWork-Item: #9", "@octocat please look.\n\nWork-Item: #9"),
         (
             "Why.\n\nWork-Item: #9\nCo-Authored-By: A <a@example.invalid>",
             "Why.\n\nCo-Authored-By: A <a@example.invalid>\n\nWork-Item: #9",
@@ -71,22 +73,22 @@ def no_body_text():
         "a fence closed three spaces in",
         "a closing run followed by blanks closes", "a longer tilde run closes", "a two character run opens no fence", "a two character tilde run opens no fence", "a four space run opens no fence", "carriage returns end lines like line feeds",
         "a whitespace-only line before the line counts as blank", "a whitespace-only line after the line counts as blank", "outer spaces of the rest are dropped",
-        "a multi-digit item", "a multi-digit item of this repository", "no item docs", "no item deps", "a body ending in a trailer paragraph",
+        "a multi-digit item", "a multi-digit item of this repository", "no item docs", "no item deps", "a message starting with an at sign", "a body ending in a trailer paragraph",
     ],
 )
 def test_the_merge_commit_ends_with_the_bodys_one_classification_line(body, message):
-    """MERGE-64, MERGE-65, MERGE-66, MERGE-69: the merge commit ends with the body's one line outside the fences, in its
+    """MERGE-30, MERGE-64, MERGE-65, MERGE-66, MERGE-69: the merge commit ends with the body's one line outside the fences, in its
     trailer form, after a blank line."""
     gh = FakeGh(body=body)
     assert (drive(gh)[0], gh.merge_messages) == (0, [message])
-    assert gh.merge_calls[0][-2:] == ("--body-file", "-")
+    assert "-F" not in gh.merge_calls[0]
 
 
 def test_a_squash_ends_with_the_same_line():
     """MERGE-69: a squash ends with the same line."""
     gh = FakeGh(body="Work-Item: #9\n\nWhy.", settings={"allow_merge_commit": False, "allow_squash_merge": True, "allow_rebase_merge": False})
     assert (drive(gh)[0], gh.merge_messages) == (0, ["Why.\n\nWork-Item: #9"])
-    assert gh.merge_calls[0][5:] == ("--squash", "--match-head-commit", SHA, "--body-file", "-")
+    assert [(body["merge_method"], body["sha"]) for body in gh.merge_bodies] == [("squash", SHA)]
 
 
 @pytest.mark.parametrize(
@@ -165,7 +167,7 @@ def test_the_last_row_before_the_question_is_what_the_merge_commit_ends_with(bod
     shown = []
     drive(FakeGh(body=body), when_asked=lambda: shown.append(capsys.readouterr()))
     assert (shown[0].out, shown[0].err) == (
-        (f"{RELEASE_ROW}{pull_row()}  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
+        (f"{RELEASE_ROW}{pull_row()}{base_row()}  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
         f"  ✓ loosenings    none\n  ! sonar         4 legacy findings on main\n  · merge         merge commit   allowed on main\n  · landing       {row}\n"),
         prompt(),
     )

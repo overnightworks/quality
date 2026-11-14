@@ -21,6 +21,7 @@ from tests.support.merge import (
     GATE_CONFIG,
     ONE_JOB,
     SONAR_GREEN,
+    base_row,
     changed_nothing,
     closing_line,
     declaring,
@@ -312,11 +313,12 @@ def test_the_door_reads_a_move_as_the_verdict_does(capsys, tmp_path, base, head,
     assert (len(gh.merge_calls) == 1) == (code == 0)
 
 
-def loosenings_not_judged(fact):
+def loosenings_not_judged(fact, tip):
     return (
         RELEASE_ROW
         + "  · #7            open           head aaaaaaa · into main\n"
-        "  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
+        + base_row(tip)
+        + "  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
         f"  ✗ loosenings    not judged     {fact}\n"
     )
 
@@ -334,7 +336,7 @@ def test_a_fetch_that_fails_cannot_be_judged_before_anything_is_touched(capsys, 
     code, _ = drive(gh)
     streams = capsys.readouterr()
     assert (code, streams.out, streams.err) == (
-        2, loosenings_not_judged("cannot fetch the pull request's commits to compare renamed files (git exited 128)"), not_judged_pair(),
+        2, loosenings_not_judged("cannot fetch the pull request's commits to compare renamed files (git exited 128)", gh.base_sha), not_judged_pair(),
     )
     assert "missing.git" not in streams.out + streams.err
     changed_nothing(gh)
@@ -366,9 +368,9 @@ def test_a_fetch_that_needs_a_password_never_asks_for_one(capsys, tmp_path, monk
 
 
 def test_the_door_fetches_exactly_the_pull_requests_base_and_merge_commits(tmp_path, fake_git):
-    """MERGE-89, MERGE-96: the door fetches exactly the pull request's base and merge commits, through gh's credential
-    helper."""
-    gh = failing_fetch(tmp_path)
+    """MERGE-89, MERGE-96, MERGE-106: the door fetches exactly the compared base tip and the merge commit, whatever base
+    sha the pull request still names, through gh's credential helper."""
+    gh = pulled(tmp_path, OLD_ENTRY, NEW_ENTRY, MOVE, pull_base_sha="c" * 40)
     calls = tmp_path / "git-calls"
     fake_git(f'echo "$@" >> "{calls}"')
     assert drive(gh)[0] == 0
@@ -409,7 +411,7 @@ def test_a_step_that_does_not_finish_in_time_cannot_be_judged_and_leaves_no_chil
     fake_git(f'case "$*" in *" {stalls} "*) sleep 300 & echo $! > "{child}"; wait;; esac')
     code, _ = drive(gh)
     streams = capsys.readouterr()
-    assert (code, streams.out, streams.err) == (2, loosenings_not_judged(refusal), not_judged_pair())
+    assert (code, streams.out, streams.err) == (2, loosenings_not_judged(refusal, gh.base_sha), not_judged_pair())
     assert process_is_gone(int(child.read_text()))
     changed_nothing(gh)
 
@@ -580,7 +582,7 @@ def test_a_rename_list_git_did_not_finish_cannot_be_judged_at_the_door(capsys, t
     code, _ = drive(gh)
     streams = capsys.readouterr()
     assert (code, streams.out, streams.err) == (
-        2, loosenings_not_judged("cannot list the files git renamed between the pull request's commits"), not_judged_pair(),
+        2, loosenings_not_judged("cannot list the files git renamed between the pull request's commits", gh.base_sha), not_judged_pair(),
     )
     changed_nothing(gh)
 
