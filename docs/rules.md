@@ -1083,8 +1083,8 @@ Each finding is `missing` at `quality/config.toml` with no line, and the first t
 With all three held the rule has no row. Any tracked workflow counts, a root or not. Named gaps: a matrix render pass cannot
 be green, since the file names the job `render` and the run lists its legs as `render (de)`; a job of a called workflow is
 listed as `caller / job`; pointing `render_pass` at any other mandatory job passes; a nested project's catalogs do not count
-(CATALOG-6). No configuration switches the rule off. It is on main only, so its fleet cell reads `not released` under a tag
-and, on main, `enforced` where the clone declares the catalogs and `no catalogs declaration` where it does not (FLEET-99).
+(CATALOG-6). No configuration switches the rule off. It first ships in v0.17.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column, and from
+v0.17.0 on, and on main, the cell reads `enforced` where the clone declares the catalogs and `no catalogs declaration` where it does not (FLEET-99).
 
 The `literal-text` rule, in the `debt` area, counts the literal texts of a covered repository's pages: the texts a person
 reads that the markup holds itself instead of taking them from a catalog. A repository is covered as for `catalog-check`

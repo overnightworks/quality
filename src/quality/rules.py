@@ -42,6 +42,7 @@ RELEASE_0_11 = "v0.11.0"
 RELEASE_0_12 = "v0.12.0"
 RELEASE_0_13 = "v0.13.0"
 RELEASE_0_16 = "v0.16.0"
+RELEASE_0_17 = "v0.17.0"
 
 
 class Area(StrEnum):
@@ -100,7 +101,7 @@ class Rule(StrEnum):
     CATALOG_CHECK = (
         "catalog-check", Area.WORKFLOWS, RELEASE_0_12, Switch.REPORT_ONLY, SwitchChange(RELEASE_0_13, Switch.CATALOG_DECLARATION)
     )
-    RENDER_PASS = "render-pass", Area.WORKFLOWS, None, Switch.CATALOG_DECLARATION
+    RENDER_PASS = "render-pass", Area.WORKFLOWS, RELEASE_0_17, Switch.CATALOG_DECLARATION
     ADVISORY = "advisory", Area.DEPENDENCIES, RELEASE_0_3, Switch.ALWAYS
 
     def __new__(

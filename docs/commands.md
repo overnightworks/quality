@@ -247,7 +247,7 @@ repository a token can list is dropped without a trace (FLEET-72).
   without an import-linter config (FLEET-16), `clone` on v0.4.0 and, from v0.5.0 on, without a `[clones]` table in
   `quality/baseline.toml` (FLEET-17), `catalog-check` under a tag, which only reports it (FLEET-98), `literal-text` under a tag below v0.16.0, which only measures, and on main without a `[literal_text]` table (FLEET-101, FLEET-102)),
   `not in <tag>` when the pinned release predates the rule (FLEET-18),
-  `not released` when only main has the rule (FLEET-19), `no catalogs declaration` (`catalog-check` and `render-pass` on main, in the gate's own
+  `not released` when only main has the rule (FLEET-19), `no catalogs declaration` (`catalog-check` on main and `render-pass` on main and from v0.17.0 on, in the gate's own
   repository, when the clone's `pyproject.toml` does not declare `overnightworks-design[catalogs]`; `enforced` when it does)
   (FLEET-99), `no judged project` (`test-layout`, from v0.7.0 on, when the
   clone has no Python project with a package under `src/` and no frontend project (a `package.json` outside every
