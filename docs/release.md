@@ -243,13 +243,11 @@ completed publish; both are completed or deleted by hand.
 ## quality's own release
 
 A dispatch of quality's `release.yml` gates, builds, tags and publishes a release without files, with GitHub's generated
-notes (RELEASE-21). The operator dispatches with:
+notes (RELEASE-21). An agent dispatches it once the release pull request's review and CI are green on `main`:
 
 ```sh
 gh workflow run release.yml -R overnightworks/quality -f version=X.Y.Z
 ```
-
-An agent dispatches only on his explicit yes for that one version.
 
 ## The standard
 
