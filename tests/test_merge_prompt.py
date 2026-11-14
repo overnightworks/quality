@@ -104,6 +104,57 @@ def test_ctrl_c_at_the_prompt_ends_the_run_interrupted_and_changes_nothing(capsy
     assert gh.sequence == []
 
 
+MOVED_TIP = "e" * 40
+
+
+@pytest.mark.parametrize(
+    ("later_compare", "next_lines"),
+    [
+        ((MOVED_TIP, 0), "next: quality merge acme/widgets#7\n"),
+        (
+            (MOVED_TIP, 2),
+            "next:\n    gh pr update-branch 7 --repo acme/widgets\n    wait for the checks, then run quality merge acme/widgets#7 again\n",
+        ),
+    ],
+    ids=["the head still contains the new tip", "the head lacks the new tip"],
+)
+def test_a_base_that_moved_after_yes_is_refused_before_the_gate_is_touched(later_compare, next_lines, capsys):
+    """MERGE-107: the comparison read again after `yes` refuses another tip than the one shown (exit 1, nothing
+    changed, no log comment) and names the update step where the head is now behind, else the door again."""
+    gh = FakeGh(later_compare=later_compare)
+    code, answers = drive(gh)
+    streams = capsys.readouterr()
+    assert (code, answers) == (1, ["yes\n"])
+    assert streams.out == rows_before_the_prompt() + "  ! base          moved\n"
+    assert streams.err == prompt() + "error: not merged · main moved since the rows were shown · nothing changed\n" + next_lines
+    changed_nothing(gh)
+    assert (gh.comments, [call for call in gh.calls if "-X" in call]) == ([], [])
+
+
+def test_a_comparison_that_cannot_be_read_after_yes_is_not_judged_and_changes_nothing(capsys):
+    """MERGE-105, MERGE-107: a comparison that fails after `yes` is the `✗ base` row (exit 2), nothing changed."""
+    gh = FakeGh(fail_on=["recheck"])
+    code, _ = drive(gh)
+    streams = capsys.readouterr()
+    assert (code, streams.out.endswith("  ✗ base          not judged     cannot compare aaaaaaa with main: recheck broke\n")) == (2, True)
+    changed_nothing(gh)
+    assert gh.comments == []
+
+
+def test_ctrl_c_during_the_comparison_after_yes_ends_the_run_interrupted_and_changes_nothing():
+    """MERGE-107: Ctrl-C while the comparison is read again ends the run interrupted (exit 130), nothing changed."""
+    gh, sent = FakeGh(interrupt_on=["recheck"]), []
+    saved = signal.getsignal(signal.SIGINT)
+    try:
+        with pytest.raises(SystemExit) as exited:
+            cli.run(door=lambda: drive(gh)[0], environment={}, send_signal=lambda pid, number: sent.append((pid, number)))
+    finally:
+        signal.signal(signal.SIGINT, saved)
+    assert (exited.value.code, sent) == (130, [(os.getpid(), signal.SIGINT)])
+    changed_nothing(gh)
+    assert gh.comments == []
+
+
 def door(gh, **keywords):
     return cli.main(["merge", f"{REPO}#7"], gh=gh, transport=sonar(), remote_for=no_network, ports=door_ports(), **keywords)
 

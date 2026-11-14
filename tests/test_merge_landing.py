@@ -59,6 +59,7 @@ def no_body_text():
         ("Work-Item: acme/widgets#123", "Work-Item: #123"),
         ("No-Item: docs", "No-Item: docs"),
         ("No-Item: deps", "No-Item: deps"),
+        ("@octocat please look.\nWork-Item: #9", "@octocat please look.\n\nWork-Item: #9"),
         (
             "Why.\n\nWork-Item: #9\nCo-Authored-By: A <a@example.invalid>",
             "Why.\n\nCo-Authored-By: A <a@example.invalid>\n\nWork-Item: #9",
@@ -72,14 +73,15 @@ def no_body_text():
         "a fence closed three spaces in",
         "a closing run followed by blanks closes", "a longer tilde run closes", "a two character run opens no fence", "a two character tilde run opens no fence", "a four space run opens no fence", "carriage returns end lines like line feeds",
         "a whitespace-only line before the line counts as blank", "a whitespace-only line after the line counts as blank", "outer spaces of the rest are dropped",
-        "a multi-digit item", "a multi-digit item of this repository", "no item docs", "no item deps", "a body ending in a trailer paragraph",
+        "a multi-digit item", "a multi-digit item of this repository", "no item docs", "no item deps", "a message starting with an at sign", "a body ending in a trailer paragraph",
     ],
 )
 def test_the_merge_commit_ends_with_the_bodys_one_classification_line(body, message):
-    """MERGE-64, MERGE-65, MERGE-66, MERGE-69: the merge commit ends with the body's one line outside the fences, in its
+    """MERGE-30, MERGE-64, MERGE-65, MERGE-66, MERGE-69: the merge commit ends with the body's one line outside the fences, in its
     trailer form, after a blank line."""
     gh = FakeGh(body=body)
     assert (drive(gh)[0], gh.merge_messages) == (0, [message])
+    assert "-F" not in gh.merge_calls[0]
 
 
 def test_a_squash_ends_with_the_same_line():

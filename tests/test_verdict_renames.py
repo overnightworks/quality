@@ -368,9 +368,9 @@ def test_a_fetch_that_needs_a_password_never_asks_for_one(capsys, tmp_path, monk
 
 
 def test_the_door_fetches_exactly_the_pull_requests_base_and_merge_commits(tmp_path, fake_git):
-    """MERGE-89, MERGE-96: the door fetches exactly the pull request's base and merge commits, through gh's credential
-    helper."""
-    gh = failing_fetch(tmp_path)
+    """MERGE-89, MERGE-96, MERGE-106: the door fetches exactly the compared base tip and the merge commit, whatever base
+    sha the pull request still names, through gh's credential helper."""
+    gh = pulled(tmp_path, OLD_ENTRY, NEW_ENTRY, MOVE, pull_base_sha="c" * 40)
     calls = tmp_path / "git-calls"
     fake_git(f'echo "$@" >> "{calls}"')
     assert drive(gh)[0] == 0

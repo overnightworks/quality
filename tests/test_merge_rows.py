@@ -2,6 +2,7 @@
 
 import contextlib
 import io
+import json
 
 import pytest
 
@@ -62,6 +63,21 @@ def not_json_row(subject):
 
 def not_json_answer(step):
     return {"raw_answers": {step: "not json"}}
+
+
+def compare_failed_row(why):
+    return f"  ✗ base          not judged     cannot compare aaaaaaa with main: {why}"
+
+
+NO_COUNT_NO_TIP = "GitHub's answer holds no count of commits behind and no tip commit"
+UNUSABLE_COMPARISONS = tuple(
+    json.dumps({"behind_by": behind_by, "base_commit": {"sha": tip}})
+    for behind_by, tip in ((-1, "b" * 40), ("2", "b" * 40), (True, "b" * 40), (1.5, "b" * 40), (0, "tip"), (0, None))
+) + (json.dumps({"base_commit": {"sha": "b" * 40}}), json.dumps({"behind_by": 0}), json.dumps(["behind_by"]))
+UNUSABLE_COMPARISONS_IDS = (
+    "behind_by below zero", "behind_by a string", "behind_by a boolean", "behind_by no whole number", "a tip that is no sha",
+    "a tip that is null", "no behind_by", "no base commit", "an answer that is no object",
+)
 
 
 def loosenings_none():
@@ -281,11 +297,18 @@ def test_each_refusal_is_its_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, cap
         (not_json_answer("pull"), {}, [not_json_row("#7")]),
         (not_json_answer("checks"), {}, [release_row(), pull_row(), base_row_text(), not_json_row("checks")]),
         (not_json_answer("statuses"), {}, [release_row(), pull_row(), base_row_text(), not_json_row("checks")]),
+        ({"fail_on": ["compare"]}, {}, [release_row(), pull_row(), compare_failed_row("compare broke")]),
+        (not_json_answer("compare"), {}, [release_row(), pull_row(), compare_failed_row("GitHub's answer is no JSON")]),
+        *(
+            ({"raw_answers": {"compare": answer}}, {}, [release_row(), pull_row(), compare_failed_row(NO_COUNT_NO_TIP)])
+            for answer in UNUSABLE_COMPARISONS
+        ),
     ],
     ids=[
         "no admin right", "gh fails on the pull request", "sonar unreachable", "no method the door uses",
         "a pull answer without a body", "a repository answer that is no JSON", "a pull answer that is no JSON",
-        "a check-run answer that is no JSON", "a status answer that is no JSON",
+        "a check-run answer that is no JSON", "a status answer that is no JSON", "a comparison that fails",
+        "a comparison that is no JSON", *UNUSABLE_COMPARISONS_IDS,
     ],
 )
 def test_a_step_that_cannot_be_judged_is_its_cross_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, capsys):
@@ -326,6 +349,35 @@ def test_every_config_refused_at_the_merge_commit_is_its_fact_on_the_row_and_its
         steps = [line.strip() for line in lines[2:]]
         assert (lines[1], steps) == ("next:", ["write it in quality/config.toml like this:", *map(printable, refusal.example), push_step()])
     changed_nothing(gh)
+
+
+@pytest.mark.parametrize(
+    ("gh_kwargs", "behind_by", "base"),
+    [
+        ({"behind_by": 3}, 3, "main"),
+        ({"behind_by": 1, "checks": {**LEGACY_RED, "tests": None}}, 1, "main"),
+        ({"behind_by": 2, "base_ref": "release/1"}, 2, "release/1"),
+    ],
+    ids=["three commits behind", "behind while a check still runs", "a base branch with a slash"],
+)
+def test_a_head_behind_the_base_tip_is_refused_as_base_before_the_checks_and_changes_nothing(gh_kwargs, behind_by, base, capsys):
+    """MERGE-103, MERGE-104: a head that lacks commits of the base's live tip stops the door at the `base` row, also
+    while its checks run, with the update step, exit 1, no write request and no log comment."""
+    gh = FakeGh(**gh_kwargs)
+    code, out, err, answers = run(gh, capsys)
+    assert (code, out, err, answers) == (
+        1,
+        frame(release_row(), f"  · #7            open           head aaaaaaa · into {base}", f"  ! base          behind         {behind_by} commit(s) behind {base}"),
+        frame(
+            f"error: not merged · the head lacks {behind_by} commit(s) of {base}, so its checks did not run on what would merge · nothing changed",
+            "next:",
+            "    gh pr update-branch 7 --repo acme/widgets",
+            "    wait for the checks, then run quality merge acme/widgets#7 again",
+        ),
+        [],
+    )
+    changed_nothing(gh)
+    assert (gh.comments, [call for call in gh.calls if "-X" in call]) == ([], [])
 
 
 @pytest.mark.parametrize(

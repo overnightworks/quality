@@ -4,8 +4,9 @@ from urllib.parse import quote
 
 import pytest
 
-from quality import cli
+from quality import architecture, cli
 from quality.baseline_file import BASELINE_PATH
+from quality.config import CONFIG_PATH
 from quality.sonar import SonarHttpError, basic_authorization
 from tests.support.advisories import allowance_config
 from tests.support.check import assert_every_line_starts_with_the_door
@@ -14,6 +15,7 @@ from tests.support.git_repositories import git_pull
 from tests.support.merge import (
     ALL_METHODS_ALLOWED,
     B_REMOVED,
+    BASE_SHA,
     GATE_CONFIG,
     LEGACY_RED,
     MERGE_SHA,
@@ -334,6 +336,17 @@ def test_the_door_refuses_a_baseline_loosening_next_to_legacy_red(base_baseline,
     assert (gh.merge_calls == []) == (code == 1)
 
 
+def test_the_verdict_reads_the_base_side_at_the_compared_tip_not_at_the_pull_requests_base_sha(capsys):
+    """MERGE-106: the config, the baseline and the import-linter configs of the base side are read at the tip the
+    comparison named, never at the older sha the pull request still names."""
+    older = "c" * 40
+    gh = FakeGh(pull_base_sha=older, checks=SONAR_GREEN, base_config=TWO_JOBS, head_config=ONE_JOB + declaring(B_REMOVED))
+    assert drive(gh)[0] == 0
+    reads = {call[-1].partition("/contents/")[2].partition("?ref=")[0] for call in gh.calls if call[-1].endswith(f"?ref={BASE_SHA}")}
+    assert reads == {CONFIG_PATH, BASELINE_PATH, *architecture.CONFIG_FILES}
+    assert not any(older in argument for call in gh.calls for argument in call)
+
+
 def test_a_malformed_baseline_at_the_merge_commit_cannot_be_judged(capsys):
     """MERGE-16, MERGE-82: a baseline the door cannot read at the merge commit is not judged: exit 2, the file and the
     commit named, nothing changed."""
@@ -501,6 +514,8 @@ def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwar
     gh = FakeGh(**gh_kwargs)
     assert drive(gh)[0] == 0
     assert (gh.merge_calls, [body["merge_method"] for body in gh.merge_bodies]) == ([merge_request()[0]], [method])
+    compare_read = next(call for call in gh.calls if "/compare/" in " ".join(call))
+    assert compare_read == ("api", f"repos/{REPO}/compare/refs/heads/{quote(gh.base_ref, safe='/')}...{SHA}?per_page=1")
     rules_read = next(call for call in gh.calls if "/rules/branches/" in " ".join(call))
     assert rules_read == ("api", "--paginate", "--slurp", f"repos/{REPO}/rules/branches/{quote(gh.base_ref, safe='/')}?per_page=100")
 
