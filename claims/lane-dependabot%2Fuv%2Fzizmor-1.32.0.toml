@@ -1,7 +1,0 @@
-claim_id = "9dd85a7850ff4c0f947f267f71d7e699"
-agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
-role = "builder"
-base = "4849c06fec41235ca35aae8e3242c40406a8dcb3"
-branch = "dependabot/uv/zizmor-1.32.0"
-scope = ["pyproject.toml", "uv.lock"]
-opened_commit = "ce0317f7778ee06ae726cf608c3b7771d910a522"
