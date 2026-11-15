@@ -83,9 +83,10 @@ jobs:
     env:
       IMAGE: ${{ inputs.image }}
       VERSION: ${{ inputs.version }}
+      BUILD_ARGS: ${{ inputs.build-args }}
       REPOSITORY: ${{ github.repository }}
     steps:
-      - name: Refuse a malformed image name or version
+      - name: Refuse a malformed image, version or build-args
         id: name
         run: |
           if [ -n "$IMAGE" ] && ! [[ "$IMAGE" =~ ^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$ ]]; then
@@ -96,7 +97,19 @@ jobs:
             echo "Refused: the version $VERSION is not a valid Docker tag." >&2
             exit 1
           fi
-          echo "name=ghcr.io/${REPOSITORY,,}${IMAGE:+/$IMAGE}" >> "$GITHUB_OUTPUT"
+          if grep -Eq '^[[:space:]]*SERVICE_VERSION([[:space:]]*=|[[:space:]]*$)' <<< "$BUILD_ARGS"; then
+            echo "Refused: build-args sets SERVICE_VERSION, which image.yml sets from version." >&2
+            exit 1
+          fi
+          # A delimiter no caller line can forge, so the lines stay the caller's own.
+          delimiter="build-args-$(cat /proc/sys/kernel/random/uuid)"
+          {
+            echo "name=ghcr.io/${REPOSITORY,,}${IMAGE:+/$IMAGE}"
+            echo "build-args<<$delimiter"
+            echo "SERVICE_VERSION=$VERSION"
+            [ -z "$BUILD_ARGS" ] || printf '%s\n' "$BUILD_ARGS"
+            echo "$delimiter"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Check out the dispatched commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -125,7 +138,7 @@ jobs:
           context: ${{ inputs.context }}
           file: ${{ inputs.file }}
           target: ${{ inputs.target }}
-          build-args: ${{ inputs.build-args }}
+          build-args: ${{ steps.name.outputs.build-args }}
           secrets: ${{ secrets.build-secrets }}
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           platforms: linux/amd64
