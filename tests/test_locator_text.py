@@ -461,12 +461,13 @@ def test_scenario_data_and_every_other_script_value_is_no_site(build_repo, scena
         "return /x/.test(y);\n",
         "/'/.test(y);\n",
         "const text = `${a} and ${b} and ${'}'}`;\n",
+        "const s = `${value}${/'/.test(value)}`;\n",
         "const nested = " + "[" * 20000 + "]" * 20000 + ";\n",
     ],
     ids=[
         "quote in a regex", "quote in a comment", "slash in a class", "divisions", "division after parentheses",
         "division in a template hole", "backtick in a string", "braces in a template hole", "stray braces", "unbalanced brackets", "private field and hashbang",
-        "non-ascii", "number separator", "regex after return", "regex first in the file", "template with several holes", "deep nesting",
+        "non-ascii", "number separator", "regex after return", "regex first in the file", "template with several holes", "regex starting a later hole", "deep nesting",
     ],
 )
 def test_a_valid_file_is_read_to_its_last_site_whatever_comes_first(build_repo, scenario, prefix):

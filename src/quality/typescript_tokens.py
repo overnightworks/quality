@@ -146,7 +146,8 @@ class _Lexer:
         self._template_chunk(start_line, opening=True)
 
     def _template_chunk(self, start_line: int, *, opening: bool) -> None:
-        """The text of a template up to its closing backtick or the next `${`; a hole pushes the template's line."""
+        """The text of a template up to its closing backtick or the next `${`; a hole pushes the template's line and, like the
+        first one, is a boundary token after which a `/` starts a regex."""
         chunk = self._first(TEMPLATE_CHUNK)
         ending = self.source[chunk.end() : chunk.end() + 2]
         if ending[:1] == "`":
@@ -154,8 +155,7 @@ class _Lexer:
                 self.tokens.append(Token(Kind.STRING, _unescape(chunk.group()), start_line))
             self._consume(chunk.end() + 1)
         elif ending == "${":
-            if opening:
-                self.tokens.append(Token(Kind.TEMPLATE, "", start_line))
+            self.tokens.append(Token(Kind.TEMPLATE, "", start_line))
             self.braces.append(start_line)
             self._consume(chunk.end() + 2)
         else:
