@@ -1,7 +1,0 @@
-claim_id = "ff59aa08b1de44089a9efb40c907e025"
-agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
-role = "builder"
-base = "5db1e88b39c8d47797b590789aa123a4f5654de7"
-branch = "dependabot/uv/lizard-1.25.0"
-scope = ["pyproject.toml", "uv.lock"]
-opened_commit = "8c07ec10951ba1e260ed936b37b4d2747812805d"
