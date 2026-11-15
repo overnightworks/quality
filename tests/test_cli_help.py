@@ -172,7 +172,7 @@ def test_the_check_help_stands_in_its_frame(capsys):
         "  workflows     GitHub workflows: lint, security, concurrency, pytest -n,\n"
         "                run-time installs, the languages standard's catalog-check\n"
         "                and render-pass\n"
-        "  dependencies  known advisories in the lockfiles\n"
+        "  dependencies  known advisories and fleet package sources in the lockfiles\n"
         "  code          Python source: security findings and print calls\n"
         "\n"
         "Options:\n"

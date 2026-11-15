@@ -1517,6 +1517,19 @@ When a repository's frontend and its lock are gone, the npm database is no longe
 entry for it is a finding until it is deleted. A repository that falls back to an older quality leaves such an entry
 unmatched and red likewise. The predecessor `pnpm audit --prod` steps are retired by each repository's own head.
 
+`fleet-source` reads every tracked `uv.lock`, the root one and each nested one, offline. A `[[package]]` whose canonical
+name starts with `overnightworks-` and whose `source` is `registry` is a `from index` finding at the lock's tracked path
+(SOURCE-1), one per package and lock, its fact the package, its version and the index, its fix the two allowed pins
+([the standard](release.md#depending-on-a-fleet-package)). A `git`, `url`, `editable`, `virtual`, `directory` or `path`
+source is allowed (SOURCE-2), and a package outside the prefix is not read further (SOURCE-3). A lock that is not UTF-8
+TOML, a fleet package without a `source` and a source of another kind are exit `2`, so a future uv never reads green
+(SOURCE-4). A tracked lock the tree no longer holds is skipped, and one that links outside the repository or is no file
+is exit `2` (SOURCE-5). A lock tracked under several names is judged once, under the first (SOURCE-6). The row's extent
+is the locks read, and a repository without a `uv.lock` is clean at `0` (SOURCE-7); the rule is on for every
+repository, and the lock's content decides whether it judges anything. It does not check that a `git` source is a tag
+rather than a branch, nor the host of a `url` source: the lock pins a commit or a hash either way, and a reviewer reads
+the rest. It judges independently of `advisory`, so neither refuses the other (SOURCE-8).
+
 Every rule is judged, even when another cannot be (CHECK-4), and gives one verdict: clean, findings, unparsable, or
 cannot judge (CHECK-5). Each finding names the file, a fact and a fix. What `quality check` prints, its frame, the
 masking, `-v` and the vet, is [the output contract](output.md).

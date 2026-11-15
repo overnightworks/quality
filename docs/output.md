@@ -112,6 +112,8 @@ rows, by area:
   package, so rows of one folder share one `fix:` (O44); an allowance that ran out leaves the row `affected` and says
   so (O45); two allowances on one group are a `conflict` finding at the config, an allowance no advisory matches an
   `unused` finding there (O46).
+  A fleet package a `uv.lock` resolves from an index is a `from index` finding at the lock, its fact the package, its
+  version and the index ([rules](rules.md)).
 - `code`: a security finding is `insecure`, a `print` or `pprint` is a `print call`, and an owner that names no code
   found in its file is `unused` ([rules](rules.md)).
 
