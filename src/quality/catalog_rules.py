@@ -132,13 +132,13 @@ def read_catalogs(root: Path, tracked: list[str]) -> Catalogs | None:
     refuses in every repository; only `Catalogs.directory` validates the path, so a covered repository's bad path refuses
     its own rule alone."""
     names = checkout.on_disk(root, [name for name in tracked if name == PYPROJECT])
-    texts = checkout.read_existing(repository.read_text, root, names)
-    if PYPROJECT not in texts:
+    contents = checkout.read_existing(repository.read_bytes, root, names)
+    if PYPROJECT not in contents:
         return None
     try:
-        document = repository.parse_toml(texts[PYPROJECT])
+        document = repository.parse_toml_file(PYPROJECT, contents[PYPROJECT])
     except repository.TomlError as error:
-        raise Unparsable(f"{PYPROJECT} is not TOML that Python reads ({error})") from error
+        raise Unparsable(str(error)) from error
     requirements = list(_requirements(_dependency_entries(document)))
     if not any(_is_catalogs_declaration(requirement) for requirement in requirements):
         return None

@@ -41,9 +41,9 @@ def _floor(path: str, requires_python: str) -> Version | None:
 def _requires_python(path: str, content: bytes) -> tuple[bool, str]:
     """Whether the file holds a `[project]` table, and its `requires-python` ("" when it names none)."""
     try:
-        document = repository.parse_toml(content.decode("utf-8"))
-    except (UnicodeDecodeError, repository.TomlError) as error:
-        raise Unparsable(f"{path} is not UTF-8 TOML that Python reads ({error})") from error
+        document = repository.parse_toml_file(path, content)
+    except repository.TomlError as error:
+        raise Unparsable(str(error)) from error
     project = document.get("project")
     if not isinstance(project, dict):
         return False, ""

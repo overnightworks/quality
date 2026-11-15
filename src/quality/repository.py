@@ -86,6 +86,15 @@ def parse_toml(text: str) -> dict:
         raise TomlError(str(error)) from error
 
 
+def parse_toml_file(name: str, content: bytes) -> dict:
+    """The TOML document of the file `name` that holds `content`; the one wording every rule refuses an unreadable
+    `pyproject.toml` with."""
+    try:
+        return parse_toml(content.decode("utf-8"))
+    except (UnicodeDecodeError, TomlError) as error:
+        raise TomlError(f"{name} is not UTF-8 TOML that Python reads ({error})") from error
+
+
 def is_on_disk(root: Path, name: str) -> bool:
     """Whether `name` leads to something; a link to nowhere is gone, a path the filesystem refuses is an error."""
     try:

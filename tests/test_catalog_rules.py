@@ -239,8 +239,8 @@ def test_or_true_still_counts(build_repo):
 @pytest.mark.parametrize(
     ("body", "reason"),
     [
-        pytest.param(None, "pyproject.toml is not UTF-8", id="not UTF-8"),
-        pytest.param("[project\n", "pyproject.toml is not TOML", id="invalid TOML"),
+        pytest.param(None, "pyproject.toml is not UTF-8 TOML", id="not UTF-8"),
+        pytest.param("[project\n", "pyproject.toml is not UTF-8 TOML", id="invalid TOML"),
         pytest.param(
             'dependencies = "overnightworks-design[catalogs]"',
             "pyproject.toml has a dependency list that is no list",
