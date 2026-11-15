@@ -221,6 +221,7 @@ def _python_readings(name: str, content: bytes) -> list[Reading]:
 OPENERS = ("(", "[", "{")
 CLOSERS = (")", "]", "}")
 DECLARATIONS = frozenset({"const", "let", "var", "function", "class"})
+COMPOUND_OPERATORS = ("+", "-", "*", "/", "%", "&", "|", "^")
 SITE_KINDS = frozenset({Kind.STRING, Kind.REGEX, Kind.IDENTIFIER})
 
 
@@ -292,8 +293,27 @@ def _constant_value(tokens: Sequence[Token], index: int) -> str | None:
     return value.value if _ends_declaration(tokens, index + 3) else None
 
 
+def _is_assignment(tokens: Sequence[Token], index: int) -> bool:
+    """Whether the name at `index` is followed by `=` or a compound `+=`, `-=`, ... but not by `==`, `===` or `=>`."""
+    operator = index + 2 if _is_punctuation(_at(tokens, index + 1), *COMPOUND_OPERATORS) else index + 1
+    return _is_punctuation(_at(tokens, operator), "=") and not _is_punctuation(_at(tokens, operator + 1), "=", ">")
+
+
+def _reassigned(tokens: Sequence[Token]) -> set[str]:
+    """The names an assignment statement changes, anywhere in the file: a name right after a declaring keyword or a `.` is
+    a declaration or a property, not a reassignment."""
+    names: set[str] = set()
+    for index, token in enumerate(tokens):
+        previous = _at(tokens, index - 1)
+        declaring = previous is not None and previous.kind is Kind.IDENTIFIER and previous.value in DECLARATIONS
+        if token.kind is Kind.IDENTIFIER and _is_assignment(tokens, index) and not declaring and not _is_punctuation(previous, "."):
+            names.add(token.value)
+    return names
+
+
 def _script_constants(tokens: Sequence[Token]) -> dict[str, str]:
-    """The names declared exactly once at the top level, by a `const` set to a plain string or a template without a hole."""
+    """The names declared exactly once at the top level, by a `const` set to a plain string or a template without a hole, and
+    never assigned to."""
     declared: Counter[str] = Counter()
     strings: dict[str, str] = {}
     for index in _declarations(tokens):
@@ -304,7 +324,8 @@ def _script_constants(tokens: Sequence[Token]) -> dict[str, str]:
         text = _constant_value(tokens, index)
         if text is not None:
             strings[name.value] = text
-    return {name: text for name, text in strings.items() if declared[name] == 1}
+    reassigned = _reassigned(tokens)
+    return {name: text for name, text in strings.items() if declared[name] == 1 and name not in reassigned}
 
 
 def _is_read_attribute(tokens: Sequence[Token], argument: range) -> bool:
