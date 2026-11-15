@@ -3,6 +3,7 @@ text is a finding, one per site. A test finds it by its key through the generate
 a catalog design's strict reading refuses refuses the rule, because the sites after it would be missed in silence."""
 
 import ast
+import fnmatch
 import re
 from collections import Counter
 from collections.abc import Iterator, Sequence
@@ -22,7 +23,7 @@ PYTHON_SUFFIX = ".py"
 SCRIPT_SUFFIXES = frozenset({".ts", ".js"})
 TEST_DIRECTORY = "tests"
 SCRIPT_TEST_DIRECTORIES = frozenset({"e2e", "test-utils"})
-SCRIPT_TEST_MARKERS = frozenset({".test", ".spec"})
+SCRIPT_TEST_PATTERNS = ("*.test.*", "*.spec.*")
 LOCATOR_CALL = re.compile(r"getBy[A-Z]\w*|get_by_[a-z]\w*")
 ASSERTION_CALLS = frozenset(
     {
@@ -79,7 +80,7 @@ def _is_python_test(path: PurePosixPath) -> bool:
 
 def _is_script_test(path: PurePosixPath) -> bool:
     """A TypeScript or JavaScript file named `*.test.*` or `*.spec.*`, or under a directory of end-to-end tests or helpers."""
-    marked = PurePosixPath(path.stem).suffix in SCRIPT_TEST_MARKERS
+    marked = any(fnmatch.fnmatchcase(path.name, pattern) for pattern in SCRIPT_TEST_PATTERNS)
     return path.suffix in SCRIPT_SUFFIXES and (marked or not SCRIPT_TEST_DIRECTORIES.isdisjoint(path.parent.parts))
 
 

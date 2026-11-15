@@ -226,7 +226,7 @@ def test_other_files_are_not_read(build_repo, scenario, name):
     assert found(build_repo({**scenario.covered(), name: 'page.get_by_text("Abbrechen")\npage.getByText("Abbrechen")\n'})) == []
 
 
-@pytest.mark.parametrize("name", ["x.test.ts", "x.spec.js", "src/a.spec.ts", "e2e/helpers.ts", "app/e2e/deep/helpers.js", "test-utils/a.ts", "src/test-utils/b.js"])
+@pytest.mark.parametrize("name", ["x.test.ts", "x.spec.js", "x.test.browser.ts", "x.spec.integration.js", "src/a.spec.ts", "e2e/helpers.ts", "app/e2e/deep/helpers.js", "test-utils/a.ts", "src/test-utils/b.js"])
 def test_a_script_test_file_is_read(build_repo, scenario, name):
     """LOCATOR-8: a tracked `*.ts` or `*.js` named `*.test.*` or `*.spec.*`, or under `e2e/` or `test-utils/`."""
     assert found(build_repo(scenario.only_script("page.getByText('Abbrechen');\n", name))) == [(name, 1, cancel_fact())]
