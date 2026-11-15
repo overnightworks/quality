@@ -1,8 +1,0 @@
-claim_id = "1c0cdd97233c401ca6e85390124c5995"
-agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
-role = "builder"
-base = "2401f77b83b672ef3c7843fe0d2add4b923a7a50"
-branch = "dependabot/github_actions/actions-a6127221f6"
-scope = [".github/workflows/ci.yml", ".github/workflows/codeql.yml", ".github/workflows/gate.yml", ".github/workflows/release.yml"]
-opened_commit = "9185ea739c58f5cef290196e1c62b32c9d6f1659"
-whole_reason = "one Dependabot group bump of the same action pins across all four workflows; splitting would leave the workflows on different versions"
