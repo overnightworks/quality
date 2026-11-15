@@ -1,7 +1,0 @@
-claim_id = "048874f45cb64459940ed5cf0a66e730"
-agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
-role = "builder"
-base = "528e51fa02acd3df2d3bb7060fc8a49ae39f606b"
-branch = "claude/issue-852-release-v0-19-0-zizmor-1-32-lizard-1-25"
-scope = [".github/workflows/gate.yml"]
-opened_commit = "1e58cbd7fdfbbff2236040939bb1b57c48f0c1b4"
