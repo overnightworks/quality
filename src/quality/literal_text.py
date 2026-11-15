@@ -153,9 +153,13 @@ def _folded_markup(source: str) -> str:
         folded = _folded_hole(expression)
         shown = html.escape(folded)
         before = expression[: len(expression) - len(expression.lstrip())].count("\n")
-        parts.append("\n" * before)
-        parts.append(f'"{shown}"' if markup[:opening].rstrip().endswith("=") else shown)
-        parts.append("\n" * (expression.count("\n") - before - folded.count("\n")))
+        parts.extend(
+            (
+                "\n" * before,
+                f'"{shown}"' if markup[:opening].rstrip().endswith("=") else shown,
+                "\n" * (expression.count("\n") - before - folded.count("\n")),
+            )
+        )
         position = closing + 1
     parts.append(markup[position:])
     return "".join(parts)
