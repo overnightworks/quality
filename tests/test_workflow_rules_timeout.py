@@ -605,11 +605,21 @@ def test_a_job_above_fifteen_is_new_debt_without_a_ceiling_file_and_the_closing_
     assert (code, lines[-1]) == (1, "! 1 finding in 1 area · debt ceiling measured, not enforced · <1s")
 
 
-def test_the_clean_debt_row_counts_no_job_entry(build_repo, capsys):
-    """TIMEOUT-15."""
-    repo = build_repo({WORKFLOW: workflow(top=CONCURRENCY, jobs=job("e2e", "40")), BASELINE_PATH: "[clones]\n" + held({WORKFLOW: {"e2e": 40}})})
+@pytest.mark.parametrize(
+    ("limits", "words"),
+    [
+        ({"e2e": 40}, "ceiling held · 0 entries, 0 clone pairs, 1 job limit"),
+        ({"e2e": 40, "build": 30}, "ceiling held · 0 entries, 0 clone pairs, 2 job limits"),
+        ({}, "ceiling held · 0 entries, 0 clone pairs"),
+    ],
+)
+def test_the_clean_debt_row_names_the_job_limits_the_table_holds(build_repo, capsys, limits, words):
+    """TIMEOUT-34."""
+    jobs = "".join(job(name, str(minutes)) for name, minutes in limits.items())
+    repo = build_repo({WORKFLOW: workflow(top=CONCURRENCY, jobs=jobs or job("e2e", "10")), BASELINE_PATH: "[clones]\n" + held({WORKFLOW: limits} if limits else {})})
     code, lines = debt_run(capsys, repo)
-    assert (code, "ceiling held · 0 entries, 0 clone pairs" in debt_words("\n".join(lines))) == (0, True)
+    row = debt_words("\n".join(lines))
+    assert (code, row.endswith(words)) == (0, True)
 
 
 def test_a_size_fix_rewrites_the_baseline_with_the_held_job_table_and_a_second_fix_leaves_the_file_untouched(build_repo):

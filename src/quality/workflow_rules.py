@@ -576,9 +576,8 @@ def check_job_timeouts(root: Path, tracked: list[str], baseline: Baseline | None
     findings: list[Finding] = []
     for name, document, job in judged:
         findings.extend(_limit_findings(name, document, job, debt.get(JobKey(name, job[0])), new_debt_fix))
-    limits = _limits(judged)
-    findings.extend(_unmeasured_entries(held, limits))
-    return RuleResult(findings, len(limits), False)
+    findings.extend(_unmeasured_entries(held, _limits(judged)))
+    return RuleResult(findings, len(held), False)
 
 
 def lower_job_entries(root: Path, tracked: list[str], held: Baseline) -> CeilingFix:
