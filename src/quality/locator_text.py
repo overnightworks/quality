@@ -301,13 +301,20 @@ def _is_assignment(tokens: Sequence[Token], index: int) -> bool:
     return _is_punctuation(_at(tokens, operator), "=") and not _is_punctuation(_at(tokens, operator + 1), "=", ">")
 
 
+def _is_initializer_operand(tokens: Sequence[Token], index: int) -> bool:
+    """Whether the token follows the `=` of an initializer or the `=>` of an arrow, so `NAME = ...` there is an assignment."""
+    previous = _at(tokens, index - 1)
+    return _is_punctuation(previous, "=") or (_is_punctuation(previous, ">") and _is_punctuation(_at(tokens, index - 2), "="))
+
+
 def _member_positions(tokens: Sequence[Token]) -> set[int]:
-    """The indexes that stand directly in the body of a `class` or `enum`, where `NAME = ...` initializes a member."""
+    """The indexes that stand directly in the body of a `class` or `enum` and start a member, where `NAME = ...` declares it;
+    a name inside a member's initializer is no member."""
     members: set[int] = set()
     bodies: list[bool] = []
     pending: int | None = None
     for index, token in enumerate(tokens):
-        if bodies and bodies[-1]:
+        if bodies and bodies[-1] and not _is_initializer_operand(tokens, index):
             members.add(index)
         if token.kind is Kind.IDENTIFIER and token.value in MEMBER_CONTAINERS:
             pending = len(bodies)
