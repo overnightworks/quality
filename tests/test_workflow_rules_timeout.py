@@ -605,11 +605,46 @@ def test_a_job_above_fifteen_is_new_debt_without_a_ceiling_file_and_the_closing_
     assert (code, lines[-1]) == (1, "! 1 finding in 1 area · debt ceiling measured, not enforced · <1s")
 
 
-def test_the_clean_debt_row_counts_no_job_entry(build_repo, capsys):
-    """TIMEOUT-15."""
-    repo = build_repo({WORKFLOW: workflow(top=CONCURRENCY, jobs=job("e2e", "40")), BASELINE_PATH: "[clones]\n" + held({WORKFLOW: {"e2e": 40}})})
-    code, lines = debt_run(capsys, repo)
-    assert (code, "ceiling held · 0 entries, 0 clone pairs" in debt_words("\n".join(lines))) == (0, True)
+PAGE_TEXT = "<p>Text</p>\n"
+LITERAL_PAGE = "frontend/src/lib/A.svelte"
+COVERED_PYPROJECT = '[project]\nname = "app"\nversion = "0.1"\ndependencies = ["overnightworks-design[catalogs]>=1"]\n'
+HELD_E2E = "[clones]\n" + held({WORKFLOW: {"e2e": 40}})
+
+
+@pytest.mark.parametrize(
+    ("files", "words"),
+    [
+        pytest.param(
+            {WORKFLOW: workflow(top=CONCURRENCY, jobs=job("e2e", "40")), BASELINE_PATH: HELD_E2E},
+            "ceiling held · 0 entries, 0 clone pairs, 1 job limit",
+            id="one limit",
+        ),
+        pytest.param(
+            {WORKFLOW: workflow(top=CONCURRENCY, jobs=job("e2e", "40") + job("build", "30")), BASELINE_PATH: "[clones]\n" + held({WORKFLOW: {"e2e": 40, "build": 30}})},
+            "ceiling held · 0 entries, 0 clone pairs, 2 job limits",
+            id="two limits",
+        ),
+        pytest.param(
+            {WORKFLOW: workflow(top=CONCURRENCY, jobs=job("e2e", "10")), BASELINE_PATH: "[clones]\n" + held({})},
+            "ceiling held · 0 entries, 0 clone pairs",
+            id="empty table",
+        ),
+        pytest.param(
+            {
+                WORKFLOW: workflow(top=CONCURRENCY, jobs=job("e2e", "40")),
+                "pyproject.toml": COVERED_PYPROJECT,
+                LITERAL_PAGE: PAGE_TEXT,
+                BASELINE_PATH: HELD_E2E + f'\n[literal_text]\n"{LITERAL_PAGE}" = 1\n',
+            },
+            "ceiling held · 0 entries, 0 clone pairs, 1 job limit, 1 literal text on 1 page",
+            id="with a literal text table",
+        ),
+    ],
+)
+def test_the_clean_debt_row_names_the_job_limits_the_table_holds_before_the_literal_texts(build_repo, capsys, files, words):
+    """TIMEOUT-34."""
+    code, lines = debt_run(capsys, build_repo(files))
+    assert (code, debt_words("\n".join(lines)).endswith(words)) == (0, True)
 
 
 def test_a_size_fix_rewrites_the_baseline_with_the_held_job_table_and_a_second_fix_leaves_the_file_untouched(build_repo):

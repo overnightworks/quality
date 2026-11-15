@@ -140,9 +140,9 @@ An area row is `✓ <area>  clean  <extent>`, also when nothing was found (ROW-9
 findings (ROW-10); the extent of a clean row is:
 
 - `files`: `N rules · M files`, M the distinct paths git tracks (O16).
-- `debt`: `ceiling held · N entries, M clone pairs`, what the ceiling file holds (ROW-18); a covered repository has this row
-  only with a `[literal_text]` table, and it then ends `, K literal texts on P pages`, the texts and pages the table holds
-  (LITERAL-10).
+- `debt`: `ceiling held · N entries, M clone pairs`, what the ceiling file holds (ROW-18); a `[job_minutes]` table holding a job
+  adds `, K job limits` after the pairs (TIMEOUT-34), and a covered repository has this row only with a `[literal_text]`
+  table, which then ends `, K literal texts on P pages`, the texts and pages the table holds (LITERAL-10).
 - `imports`: `N contracts` (ROW-11).
 - `secrets`: `N commits` (O30), because gitleaks reads committed history only; `staged change · N files` for a staged
   run.

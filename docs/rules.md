@@ -143,9 +143,10 @@ It applies these rules:
   (`file is gone · ceiling 802 lines`, `function total is gone · ceiling CCN 19`, fix: `quality check --fix`)
   (CEILING-7); an entry with no measurement otherwise (a tracked file missing from disk, a function entry under a file
   of another language) stands (CEILING-8) and counts in the [clean row](output.md#area-rows)'s
-  `ceiling held · N entries, M clone pairs`; a covered repository with a `[literal_text]` table has the clean row
-  `ceiling held · N entries, M clone pairs, K literal texts on P pages`, and one without the table the note row of
-  LITERAL-10.
+  `ceiling held · N entries, M clone pairs`, followed by `, K job limits` when the held `[job_minutes]` table holds
+  jobs (TIMEOUT-34); a covered repository with a `[literal_text]` table has the clean row
+  `ceiling held · N entries, M clone pairs, K literal texts on P pages` (after the job limits), and one without the
+  table the note row of LITERAL-10.
   [`quality check debt --fix`](commands.md#quality-check---fix) (`--fix` takes no `--staged` and needs `debt` among the
   named areas, or none named; `--dry-run` needs `--fix`; no workflow runs either) changes `quality/baseline.toml` at the
   top of the repository it is started in (a stray `src/quality/baseline.toml` is neither read nor removed) (FIX-1) and
@@ -1200,9 +1201,10 @@ without a readable limit keeps its `missing` or `invalid` finding and its entry 
 findings, sorted by path and job and with no line, each entry that can fall with nothing to measure is `can fall`: its
 path is not tracked or no root reaches the file any more, the file has no such job or the job calls a workflow (`job e2e
 is gone · ceiling 40`), or the entry is of 15 or less (`job e2e has no debt · ceiling 10`) (TIMEOUT-16); the fix of each
-`can fall` form is `quality check --fix` (TIMEOUT-24). The rule's extent and a clean `debt` row's words (`ceiling held ·
-N entries, M clone pairs`) count no job entry. A baseline that cannot be read makes the rule `cannot judge` and names
-the baseline, as it does for `size` and `clone`; one that is absent leaves the rule judging with no entry.
+`can fall` form is `quality check --fix` (TIMEOUT-24). The rule's extent is the jobs the held table holds, and a clean
+`debt` row over a table holding at least one job reads `ceiling held · N entries, M clone pairs, K job limits`, before
+a `[literal_text]` table's words; an empty or absent table adds nothing (TIMEOUT-34). A baseline that cannot be read
+makes the rule `cannot judge` and names the baseline, as it does for `size` and `clone`; one that is absent leaves the rule judging with no entry.
 
 A renamed workflow carries its base entries to its new path in the verdict as a renamed source file carries its size
 entries, a leftover under the new path and an entry under a path the head still names moving nothing; a job id renamed

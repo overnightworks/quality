@@ -552,7 +552,8 @@ def _debt_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) ->
     literal = extents.get(Rule.LITERAL_TEXT)
     measured = {judged.rule for judged in verdict.verdicts if judged.measured_only}
     read = [] if literal is None else [f"{counted(literal.texts, baseline_file.LITERAL_TEXT_NOUN)} in {counted(literal.files, 'file')}"]
-    held = [] if literal is None else [literal_text.table_words(literal.texts, literal.files)]
+    limits = [counted(extents[Rule.JOB_TIMEOUT], baseline_file.JOB_LIMIT)] if extents[Rule.JOB_TIMEOUT] else []
+    held = limits + ([] if literal is None else [literal_text.table_words(literal.texts, literal.files)])
     match verdict.measurement:
         case Measurement.MEASURED_ONLY:
             return ", ".join([f"{entries} over the thresholds", *read])
