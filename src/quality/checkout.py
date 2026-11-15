@@ -179,6 +179,13 @@ def read_existing[T](read: Callable[[Path, str], T | None], root: Path, names: S
     return {name: content for name in names if (content := judged(read, root, name)) is not None}
 
 
+def read_tracked[T](
+    read: Callable[[Path, str], T | None], root: Path, tracked: Sequence[str], wanted: Callable[[str], bool]
+) -> dict[str, T]:
+    """The content of each tracked name `wanted` accepts that the tree holds."""
+    return read_existing(read, root, on_disk(root, [name for name in tracked if wanted(name)]))
+
+
 def is_workflow(path: PurePosixPath) -> bool:
     return path.parent == WORKFLOW_DIRECTORY and path.suffix in YAML_SUFFIXES
 

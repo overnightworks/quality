@@ -194,7 +194,6 @@ def check_locator_text(root: Path, tracked: list[str], catalogs: Catalogs) -> Ru
     """One finding per site of a catalog text in a locator position of the tracked Python test files, at its line; the extent
     is the test files read. A covered repository is one `catalog_rules.read_catalogs` returned."""
     texts = _catalog_texts(root, tracked, catalog_rules.catalogs_directory(catalogs))
-    names = checkout.on_disk(root, [name for name in tracked if _is_test_file(name)])
-    files = checkout.read_existing(repository.read_bytes, root, names)
+    files = checkout.read_tracked(repository.read_bytes, root, tracked, _is_test_file)
     findings = [finding for name, content in files.items() for finding in _file_findings(name, content, texts)]
     return RuleResult(findings, len(files), False)
