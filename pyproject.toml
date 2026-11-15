@@ -6,8 +6,10 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "PyYAML>=6",
+    "babel>=2.18,<3",
     "import-linter==2.15",
     "lizard>=1.24.1,<1.26",
+    "overnightworks-design @ https://github.com/overnightworks/design/releases/download/v0.35.0/overnightworks_design-0.35.0-py3-none-any.whl#sha256=cd72381e3eda306aa1e43ae1a8eec4401e249e9d0b23eba1fc7d718d6d0857ec",
     "packaging>=24",
     "ruff==0.17.4",
     "zizmor==1.32.0",
@@ -29,6 +31,9 @@ members = []
 
 [tool.uv]
 cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.version]
 source = "vcs"

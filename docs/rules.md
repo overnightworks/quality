@@ -976,7 +976,10 @@ extra `catalogs` in `[project] dependencies`, in a group of `[project.optional-d
 an `{include-group}` entry is skipped (CATALOG-1). Only the root file counts, so a nested project is a named gap, and
 `[tool.design-catalogs]` without the declaration does not cover (CATALOG-6). A repository that is not covered sees no row
 and no workflow is read (CATALOG-3). A `pyproject.toml` that is not UTF-8 TOML, whose dependency list is no list or whose
-entry is neither a requirement string nor an `{include-group}` table is exit `2` naming the file (CATALOG-4).
+entry is neither a requirement string nor an `{include-group}` table is exit `2` naming the file (CATALOG-4). The whole
+`[tool.design-catalogs]` table is design's to judge: a covered repository whose table design's `catalog_directory` refuses
+(any key, not only `catalogs`) is exit `2` naming `pyproject.toml` for each rule that needs the directory, `render-pass`
+and `locator-text`, and for no other rule (CATALOG-4).
 
 A covered repository's `run:` steps are read in every workflow a pull request triggers (CATALOG-8). A step counts when
 its script calls `design-catalogs` with `--check` in a form the shared shell reader reads as a call of a named tool, so
@@ -1049,11 +1052,12 @@ of the pass (no key shown as text, `lang` equal to the language, no overflow) st
 - **Who is judged (RENDER-1).** A repository covered as for `catalog-check` (CATALOG-1) that tracks two or more catalogs. A
   repository that is not covered, or has fewer than two catalogs, sees no row and no exit `2` from this rule, and no
   workflow is read for it.
-- **Where the catalogs lie (RENDER-2).** The directory is `[tool.design-catalogs] catalogs` in the tracked root
-  `pyproject.toml`, else `frontend/src/lib/catalogs`, design's default (`design/catalogs/declaration.py` owns it). It is read
-  only when the repository is covered, and follows design's rules: normalised with `os.path.normpath`; a path that is
-  absolute, has no parts (`""` and `"."`) or starts with `..` is exit `2` naming `pyproject.toml`, and so is a value that is
-  no string and a `tool.design-catalogs` that is no table. A catalog is a tracked file `<directory>/<name>.po` directly in
+- **Where the catalogs lie (RENDER-2).** The directory is design's `catalog_directory` over the text of the tracked root
+  `pyproject.toml` that quality has read: `[tool.design-catalogs] catalogs`, else `frontend/src/lib/catalogs`, the default
+  design owns. It is read only when the repository is covered. A table design refuses is exit `2` naming `pyproject.toml`
+  with design's sentence: a `catalogs` that is absolute, has no parts (`""` and `"."`), starts with `..` or is no string, a
+  `python`, `typescript` or `source` that is no string, an unknown key, and a `tool.design-catalogs` that is no table. The
+  app's own `design-catalogs --check` refuses the same table. A catalog is a tracked file `<directory>/<name>.po` directly in
   that directory; a `.po` file elsewhere does not count.
 - **The declaration (RENDER-3).** `quality/config.toml` takes the optional table `[languages]` with the one key
   `render_pass`, the name of a job as `mandatory_jobs` names it (the job's `name:`, else its id; a `name:` that holds an
