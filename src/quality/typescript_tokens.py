@@ -36,9 +36,9 @@ REGEX_KEYWORDS = frozenset(
     {"return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "throw", "case", "do", "else", "yield", "await", "default", "extends"}
 )
 NON_REGEX_PUNCTUATION = frozenset({")", "]"})
+SKIPPED = re.compile(r"(?P<space>\s+)|(?P<comment>//[^\n\r\u2028\u2029]*|/\*.*?\*/)|(?P<unclosed>/\*)", re.DOTALL)
 LEXEME = re.compile(
-    r"(?P<space>\s+)|(?P<comment>//[^\n\r\u2028\u2029]*|/\*.*?\*/)|(?P<unclosed>/\*)|(?P<word>(?:[^\W\d]|\$)[\w$]*)|(?P<number>\d[\w.]*)"
-    r"|(?P<quote>['\"])|(?P<template>`)|(?P<slash>/)|(?P<other>.)",
+    r"(?P<word>(?:[^\W\d]|\$)[\w$]*)|(?P<number>\d[\w.]*)|(?P<quote>['\"])|(?P<template>`)|(?P<slash>/)|(?P<other>.)",
     re.DOTALL,
 )
 STRINGS = {
@@ -83,7 +83,7 @@ class _Lexer:
             "other": self._other,
         }
         while self.position < len(self.source):
-            lexeme = self._first(LEXEME)
+            lexeme = SKIPPED.match(self.source, self.position) or self._first(LEXEME)
             handlers[str(lexeme.lastgroup)](lexeme)
         unclosed = [line for line in self.braces if line is not None]
         if unclosed:
