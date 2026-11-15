@@ -248,11 +248,30 @@ def test_a_malformed_image_or_version_is_refused(image, tmp_path, image_name, ve
     assert result.outputs == ""
 
 
+def parsed_outputs(outputs: str) -> dict[str, str]:
+    """The step outputs, read as GitHub reads a GITHUB_OUTPUT file: `key=value` lines and `key<<delimiter` entries."""
+    parsed: dict[str, str] = {}
+    lines = iter(outputs.splitlines())
+    for line in lines:
+        if "<<" in line and "=" not in line.split("<<", 1)[0]:
+            key, delimiter = line.split("<<", 1)
+            body = []
+            for entry in lines:
+                if entry == delimiter:
+                    break
+                body.append(entry)
+            else:
+                pytest.fail(f"the entry {key} is never closed by {delimiter}")
+            parsed[key] = "\n".join(body)
+        else:
+            key, _, value = line.partition("=")
+            parsed[key] = value
+    return parsed
+
+
 def composed_build_args(outputs: str) -> list[str]:
-    """The lines of the `build-args` step output after its name line, read as GitHub reads a heredoc entry."""
-    _, header, *body, delimiter = outputs.splitlines()
-    assert header == f"build-args<<{delimiter}"
-    return body
+    """The lines of the `build-args` step output."""
+    return parsed_outputs(outputs)["build-args"].splitlines()
 
 
 @pytest.mark.parametrize(
@@ -262,8 +281,17 @@ def composed_build_args(outputs: str) -> list[str]:
         ("A=1\nB=two words", ["A=1", "B=two words"]),
         ("SERVICE_VERSION_X=1", ["SERVICE_VERSION_X=1"]),
         ("X_SERVICE_VERSION=1", ["X_SERVICE_VERSION=1"]),
+        ("A=1\nEOF\nname=evil", ["A=1", "EOF", "name=evil"]),
+        ("build-args<<EOF\nname=evil", ["build-args<<EOF", "name=evil"]),
     ],
-    ids=["empty", "caller lines", "name that starts with it", "name that ends with it"],
+    ids=[
+        "empty",
+        "caller lines",
+        "name that starts with it",
+        "name that ends with it",
+        "output assignment after a delimiter-like line",
+        "output entry header",
+    ],
 )
 def test_the_build_arguments_hold_the_version_then_every_caller_line(image, tmp_path, caller_lines, expected):
     """IMAGE-6, IMAGE-19."""
@@ -271,7 +299,10 @@ def test_the_build_arguments_hold_the_version_then_every_caller_line(image, tmp_
         image, NAME_STEP, tmp_path, REPOSITORY="o/r", IMAGE="", VERSION="1.2.3", BUILD_ARGS=caller_lines
     )
     assert result.returncode == 0
+    outputs = parsed_outputs(result.outputs)
+    assert outputs["name"] == "ghcr.io/o/r"
     assert composed_build_args(result.outputs) == ["SERVICE_VERSION=1.2.3", *expected]
+    assert outputs.keys() == {"name", "build-args"}
 
 
 @pytest.mark.parametrize(
