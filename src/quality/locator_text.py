@@ -222,6 +222,7 @@ def _python_readings(name: str, content: bytes) -> list[Reading]:
 OPENERS = ("(", "[", "{")
 CLOSERS = (")", "]", "}")
 DECLARATIONS = frozenset({"const", "let", "var", "function", "class"})
+MEMBER_CONTAINERS = frozenset({"class", "enum"})
 COMPOUND_OPERATORS = ("+", "-", "*", "/", "%", "&", "|", "^")
 SITE_KINDS = frozenset({Kind.STRING, Kind.REGEX, Kind.IDENTIFIER})
 
@@ -300,14 +301,33 @@ def _is_assignment(tokens: Sequence[Token], index: int) -> bool:
     return _is_punctuation(_at(tokens, operator), "=") and not _is_punctuation(_at(tokens, operator + 1), "=", ">")
 
 
+def _member_positions(tokens: Sequence[Token]) -> set[int]:
+    """The indexes that stand directly in the body of a `class` or `enum`, where `NAME = ...` initializes a member."""
+    members: set[int] = set()
+    bodies: list[bool] = []
+    pending: int | None = None
+    for index, token in enumerate(tokens):
+        if bodies and bodies[-1]:
+            members.add(index)
+        if token.kind is Kind.IDENTIFIER and token.value in MEMBER_CONTAINERS:
+            pending = len(bodies)
+        if _is_punctuation(token, *OPENERS):
+            bodies.append(_is_punctuation(token, "{") and pending == len(bodies))
+            pending = None if bodies[-1] else pending
+        elif _is_punctuation(token, *CLOSERS) and bodies:
+            bodies.pop()
+    return members
+
+
 def _reassigned(tokens: Sequence[Token]) -> set[str]:
     """The names an assignment statement changes, anywhere in the file: a name right after a declaring keyword or a `.` is
-    a declaration or a property, not a reassignment."""
+    a declaration or a property, and a name in a `class` or `enum` body is a member, not a reassignment."""
+    members = _member_positions(tokens)
     names: set[str] = set()
     for index, token in enumerate(tokens):
         previous = _at(tokens, index - 1)
         declaring = previous is not None and previous.kind is Kind.IDENTIFIER and previous.value in DECLARATIONS
-        if token.kind is Kind.IDENTIFIER and _is_assignment(tokens, index) and not declaring and not _is_punctuation(previous, "."):
+        if token.kind is Kind.IDENTIFIER and _is_assignment(tokens, index) and not declaring and not _is_punctuation(previous, ".") and index not in members:
             names.add(token.value)
     return names
 

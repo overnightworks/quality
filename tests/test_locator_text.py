@@ -361,6 +361,14 @@ def test_a_very_long_operator_chain_is_read_and_the_sites_after_it_are_found(bui
             "const LABEL = 'Abbrechen';\nif (LABEL === x) {}\nf(LABEL => 1);\nobj.LABEL = 'y';\npage.getByText(LABEL);\n",
             "Abbrechen", "dialog.cancel", id="const compared, as a parameter and as a property",
         ),
+        pytest.param(
+            "const LABEL = 'Abbrechen';\nclass Button extends Base {\n  LABEL = 'Other';\n  static OTHER = 1; LABEL2 = 2;\n}\npage.getByText(LABEL);\n",
+            "Abbrechen", "dialog.cancel", id="const and a class field of the same name",
+        ),
+        pytest.param(
+            "const LABEL = 'Abbrechen';\nenum Mode {\n  LABEL = 'Other',\n}\npage.getByText(LABEL);\n",
+            "Abbrechen", "dialog.cancel", id="const and an enum member of the same name",
+        ),
         pytest.param("page.getByText(/^Abbrechen$/);\n", "Abbrechen", "dialog.cancel", id="anchored regex"),
         pytest.param("page.getByText(/^Abbrechen$/i);\n", "Abbrechen", "dialog.cancel", id="anchored regex with a flag"),
         pytest.param("page.getByText(/^Fertig\\.$/);\n", "Fertig.", "dialog.done", id="anchored regex with an escape"),
