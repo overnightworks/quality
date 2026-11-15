@@ -159,6 +159,7 @@ class FindingEvent(StrEnum):
     NO_HEADER = "no header"
     STRAY = "stray"
     TEST_IMPORT = "test import"
+    LITERAL_TEXT = "literal text"
     BELOW_FLOOR = "below floor"
     NO_FLOOR = "no floor"
     NEW_DEBT = "new debt"
@@ -284,15 +285,7 @@ class StagedExtent:
     files: int
 
 
-@dataclass(frozen=True)
-class LiteralExtent:
-    """How much the literal-text rule read: the literal texts it counted, in the pages the tree holds."""
-
-    texts: int
-    files: int
-
-
-type Extent = int | LockExtent | StagedExtent | LiteralExtent
+type Extent = int | LockExtent | StagedExtent
 
 
 @dataclass(frozen=True)

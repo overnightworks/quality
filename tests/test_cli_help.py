@@ -154,7 +154,7 @@ def test_the_merge_invocation_names_the_pull_request_and_how(words, dry_run, ver
 
 
 def test_the_check_help_stands_in_its_frame(capsys):
-    """HELP-3, LITERAL-11: the check help explains each area in one entry, the debt one naming literal text."""
+    """HELP-3: the check help explains each area in one entry."""
     assert help_of(capsys, ["check"]) == (
         "usage: quality check [AREA ...] [--staged] [--fix] [--dry-run] [-v]\n"
         "\n"
@@ -163,9 +163,9 @@ def test_the_check_help_stands_in_its_frame(capsys):
         "\n"
         "Areas (default: all):\n"
         "  files         what the repository tracks: layout, tests, env files,\n"
-        "                compose ports, the Python floor\n"
-        "  debt          size, near copies, literal text and job time limits against\n"
-        "                the debt ceiling (quality/baseline.toml)\n"
+        "                compose ports, the Python floor, literal page text\n"
+        "  debt          size, near copies and job time limits against the debt\n"
+        "                ceiling (quality/baseline.toml)\n"
         "  imports       the import contracts\n"
         "  secrets       secrets in the committed history\n"
         "  workflows     GitHub workflows: lint, security, concurrency, pytest -n,\n"

@@ -46,8 +46,8 @@ def test_a_release_is_refused_naming_the_check_that_fails(facts, check):
     ("release", "missing"),
     [
         (RuleRelease("alpha", None, Switch.ALWAYS), ("alpha",)),
-        (RuleRelease("alpha", "v1.0.0", Switch.ALWAYS, SwitchChange(None, Switch.REPORT_ONLY)), ("alpha",)),
-        (RuleRelease("alpha", "v1.0.0", Switch.ALWAYS, SwitchChange("v1.1.0", Switch.REPORT_ONLY)), ()),
+        (RuleRelease("alpha", "v1.0.0", Switch.ALWAYS, (SwitchChange(None, Switch.REPORT_ONLY),)), ("alpha",)),
+        (RuleRelease("alpha", "v1.0.0", Switch.ALWAYS, (SwitchChange("v1.1.0", Switch.REPORT_ONLY),)), ()),
         (RuleRelease("alpha", "v1.0.0", Switch.ALWAYS), ()),
     ],
     ids=["first release missing", "switch release missing", "switch released", "no switch"],

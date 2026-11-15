@@ -605,9 +605,6 @@ def test_a_job_above_fifteen_is_new_debt_without_a_ceiling_file_and_the_closing_
     assert (code, lines[-1]) == (1, "! 1 finding in 1 area · debt ceiling measured, not enforced · <1s")
 
 
-PAGE_TEXT = "<p>Text</p>\n"
-LITERAL_PAGE = "frontend/src/lib/A.svelte"
-COVERED_PYPROJECT = '[project]\nname = "app"\nversion = "0.1"\ndependencies = ["overnightworks-design[catalogs]>=1"]\n'
 HELD_E2E = "[clones]\n" + held({WORKFLOW: {"e2e": 40}})
 
 
@@ -629,19 +626,9 @@ HELD_E2E = "[clones]\n" + held({WORKFLOW: {"e2e": 40}})
             "ceiling held · 0 entries, 0 clone pairs",
             id="empty table",
         ),
-        pytest.param(
-            {
-                WORKFLOW: workflow(top=CONCURRENCY, jobs=job("e2e", "40")),
-                "pyproject.toml": COVERED_PYPROJECT,
-                LITERAL_PAGE: PAGE_TEXT,
-                BASELINE_PATH: HELD_E2E + f'\n[literal_text]\n"{LITERAL_PAGE}" = 1\n',
-            },
-            "ceiling held · 0 entries, 0 clone pairs, 1 job limit, 1 literal text on 1 page",
-            id="with a literal text table",
-        ),
     ],
 )
-def test_the_clean_debt_row_names_the_job_limits_the_table_holds_before_the_literal_texts(build_repo, capsys, files, words):
+def test_the_clean_debt_row_names_the_job_limits_the_table_holds(build_repo, capsys, files, words):
     """TIMEOUT-34."""
     code, lines = debt_run(capsys, build_repo(files))
     assert (code, debt_words("\n".join(lines)).endswith(words)) == (0, True)

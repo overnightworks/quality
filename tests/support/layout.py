@@ -31,6 +31,7 @@ def declaring(path: str, reason: str = "the build reads it by this name", rule: 
 
 
 FILES_RULE_IDS = frozenset(rule.value for rule in Rule if rule.area is Area.FILES)
+UNCOVERED_FILES_RULE_COUNT = len(FILES_RULE_IDS - {Rule.LITERAL_TEXT.value})  # the literal-text rule judges only a covered repository
 
 
 def rule_ids_in(text: str) -> set[str]:

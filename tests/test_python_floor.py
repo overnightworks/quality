@@ -25,6 +25,7 @@ from tests.support.check import (
 from tests.support.check import check_output as run
 from tests.support.config_refusals import ONE_LINE_NEED
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo
+from tests.support.layout import UNCOVERED_FILES_RULE_COUNT
 
 
 def project(requires_python: str | None = ">=3.14") -> str:
@@ -323,13 +324,13 @@ def test_an_allowed_file_stands_as_a_note_row_under_the_files_row_and_no_line_be
 
 
 def test_a_clean_files_row_counts_its_rules_its_tracked_paths_and_its_allowed_files(build_repo, capsys):
-    """O15, O16: the clean files row ends in the rule count, the tracked-path count and the allowed files."""
+    """O15, O16: the clean files row ends in the rule count (for a repository that is not covered), the tracked-path count and the allowed files."""
     tracked = {"pyproject.toml": project(), "src/s/pyproject.toml": project(">=3.12"), CONFIG_PATH: allow("src/s/pyproject.toml")}
     _, output = run(capsys, build_repo(tracked))
     row, _ = files_row_and_rows_below(output)
     extent = [int(part.split()[0]) for part in row.partition(cli.AreaEvent.CLEAN)[2].split(SEPARATOR)]
     assert (extent[0], extent[1], extent[2], row.rsplit(SEPARATOR, 1)[1].split()[1]) == (
-        sum(rule.area is Area.FILES for rule in Rule), len(tracked), 1, NoteEvent.ALLOWED
+        UNCOVERED_FILES_RULE_COUNT, len(tracked), 1, NoteEvent.ALLOWED
     )
 
 
