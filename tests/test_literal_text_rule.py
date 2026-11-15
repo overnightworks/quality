@@ -185,10 +185,10 @@ def test_a_broken_root_pyproject_gives_the_files_area_one_reason_through_every_r
     assert out.count(PYPROJECT_REASON) == 1
 
 
-def test_a_root_pyproject_the_filesystem_refuses_gives_the_files_area_one_reason(build_repo, capsys, tmp_path_factory):
+def test_a_root_pyproject_the_filesystem_refuses_gives_the_files_area_one_reason(build_repo, capsys, elsewhere):
     """LITERAL-15, REFUSAL-4: a read error is worded as the shared reader words it, for both rules."""
     repo = build_repo(COVERED)
-    outside = tmp_path_factory.mktemp("outside") / "outside.toml"
+    outside = elsewhere / "outside.toml"
     outside.write_text("[project]\n")
     (repo / "pyproject.toml").unlink()
     (repo / "pyproject.toml").symlink_to(outside)
