@@ -299,6 +299,14 @@ def test_a_test_file_python_cannot_read_is_exit_two_naming_it(build_repo, scenar
     assert (code, scenario.test_file in refusals(repo)[Rule.LOCATOR_TEXT]) == (2, True)
 
 
+def test_a_very_long_operator_chain_is_read_and_the_sites_after_it_are_found(build_repo, scenario, capsys):
+    """LOCATOR-10: a tree deeper than the interpreter recurses does not refuse the rule."""
+    chain = "X = " + " + ".join(['"a"'] * 8000)
+    repo = build_repo(scenario.only_test(f'{chain}\npage.get_by_text("Abbrechen")\n'))
+    code, out = files_run(capsys, repo)
+    assert (code, cancel_fact() in out) == (1, True)
+
+
 def files_run(capsys, repo):
     """The exit and the whole output of `quality check files` over `repo`."""
     code = door_in(repo, CHECK_WORD, Area.FILES.value)

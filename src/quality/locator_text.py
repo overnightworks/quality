@@ -66,10 +66,12 @@ def _is_test_file(name: str) -> bool:
 
 def _module_level_nodes(node: ast.AST) -> Iterator[ast.AST]:
     """Every node below `node` that binds in the module's own scope: not the bodies of functions, classes and lambdas."""
-    for child in ast.iter_child_nodes(node):
+    pending = list(ast.iter_child_nodes(node))
+    while pending:
+        child = pending.pop()
         yield child
         if not isinstance(child, SCOPES):
-            yield from _module_level_nodes(child)
+            pending.extend(ast.iter_child_nodes(child))
 
 
 def _bound_names(node: ast.AST) -> list[str]:
