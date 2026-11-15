@@ -494,17 +494,17 @@ def test_locator_text_on_main_reads_whether_the_clone_declares_catalogs(declares
     assert rule_cell(LOCATOR_TEXT, Gate.MAIN, declared(declares_catalogs=declares_catalogs)) == words
 
 
-FIRST_SHIPPED_IN_THIS_RELEASE = [Rule.LOCATOR_TEXT.release, Rule.FLEET_SOURCE.release]
+RULES_FIRST_RELEASED_IN_V0_21 = [Rule.LOCATOR_TEXT.release, Rule.FLEET_SOURCE.release]
 
 
-@pytest.mark.parametrize("rule_release", FIRST_SHIPPED_IN_THIS_RELEASE, ids=lambda release: release.rule)
+@pytest.mark.parametrize("rule_release", RULES_FIRST_RELEASED_IN_V0_21, ids=lambda release: release.rule)
 def test_a_rule_first_shipped_in_a_release_reads_not_in_the_tag_of_an_older_pin(rule_release):
     """FLEET-18: a gate pinned below the release that names the rule has no such rule."""
     release = gate_release((gate_call(NEWEST),), False, FIRST_RELEASES)
     assert rule_cell(rule_release, release, declared(declares_catalogs=True)) == "not in v0.3.1"
 
 
-@pytest.mark.parametrize("rule_release", FIRST_SHIPPED_IN_THIS_RELEASE, ids=lambda release: release.rule)
+@pytest.mark.parametrize("rule_release", RULES_FIRST_RELEASED_IN_V0_21, ids=lambda release: release.rule)
 def test_a_rule_first_shipped_in_a_release_reads_its_switch_under_that_release(rule_release):
     """FLEET-18: a gate pinned at the release that names the rule reads the rule's switch."""
     tags = {**FIRST_RELEASES, rule_release.first_release: FIRST_RELEASE_COMMIT}
