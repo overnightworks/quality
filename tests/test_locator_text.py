@@ -127,10 +127,11 @@ def test_a_text_two_keys_share_names_the_first_and_counts_the_rest(build_repo):
     assert found(repo)[0][2] == "'Abbrechen' is the catalog text of button.cancel, and 2 more keys"
 
 
-def test_a_text_one_other_key_shares_says_one_more_key(build_repo):
+def test_a_text_one_other_key_shares_says_one_more_keys(build_repo):
+    """LOCATOR-6: the word is `keys` whatever N is."""
     shared = catalog("de", ("a.cancel", "Abbrechen", ""), ("b.cancel", "Abbrechen", ""))
     repo = build_repo({**COVERED, f"{CATALOGS}/de.po": shared, f"{CATALOGS}/en.po": catalog("en"), TEST_FILE: 'page.get_by_text("Abbrechen")\n'})
-    assert found(repo)[0][2] == "'Abbrechen' is the catalog text of a.cancel, and 1 more key"
+    assert found(repo)[0][2] == "'Abbrechen' is the catalog text of a.cancel, and 1 more keys"
 
 
 def test_a_fuzzy_entry_gives_its_msgid_and_no_translation(build_repo):

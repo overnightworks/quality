@@ -149,7 +149,7 @@ def _catalog_text(literal: str, texts: CatalogTexts, in_regex: bool) -> str | No
 
 def _fact(text: str, keys: list[str]) -> str:
     first, *rest = keys
-    more = f", and {len(rest)} more key{'' if len(rest) == 1 else 's'}" if rest else ""
+    more = f", and {len(rest)} more keys" if rest else ""
     return f"'{text}' is the catalog text of {first}{more}"
 
 
