@@ -3,6 +3,6 @@ agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
 role = "builder"
 base = "003bbe53d026d98edec5419d8773a50dcd0f0383"
 branch = "claude/issue-866-locator-text-slice-2-ts-js"
-scope = ["docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/locator_text.py", "src/quality/typescript_tokens.py", "tests/test_locator_text.py"]
+scope = ["docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/literal_text.py", "src/quality/locator_text.py", "src/quality/read_attributes.py", "src/quality/typescript_tokens.py", "tests/test_locator_text.py"]
 opened_commit = "a24c3eb0eaeb5842bc2119a187bf6d652ba0a674"
 whole_reason = "one rule's second reader and its doc section"
