@@ -153,10 +153,10 @@ The secret's name is illustrative.
 - `build-args` holds `NAME=value` lines. The provenance records them, so a secret goes into `build-secrets` as
   `id=value` lines and is read with `RUN --mount=type=secret,id=<id>` (IMAGE-6). Pass `build-secrets` by name; never
   `secrets: inherit`.
-- Every build gets `SERVICE_VERSION=<version>` as a build argument, ahead of the caller's `build-args` lines, so the
-  release version has one owner and no app repeats it in its `release.yml`. An app that wants it in the running image
+- Every build gets `SERVICE_VERSION=<version>` as a build argument, after the caller's `build-args` lines so it is the last
+  value a builder reads, and the release version has one owner and no app repeats it in its `release.yml`. An app that wants it in the running image
   declares `ARG SERVICE_VERSION` and `ENV SERVICE_VERSION=$SERVICE_VERSION` in its final stage; an image that declares
-  no such argument builds unchanged. A `build-args` line named `SERVICE_VERSION` is refused before anything is built:
+  no such argument builds unchanged. A `build-args` line named `SERVICE_VERSION`, double-quoted or not, is refused before anything is built:
   `Refused: build-args sets SERVICE_VERSION, which image.yml sets from version.` (IMAGE-19).
 - The image is built for `linux/amd64` on a GitHub-hosted runner (IMAGE-7), from the dispatched commit
   (IMAGE-8), the one the gate judged.

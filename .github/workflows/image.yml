@@ -97,7 +97,7 @@ jobs:
             echo "Refused: the version $VERSION is not a valid Docker tag." >&2
             exit 1
           fi
-          if grep -Eq '^[[:space:]]*SERVICE_VERSION([[:space:]]*=|[[:space:]]*$)' <<< "$BUILD_ARGS"; then
+          if grep -Eq '^[[:space:]]*"?SERVICE_VERSION([[:space:]]*=|[[:space:]]*"?$)' <<< "$BUILD_ARGS"; then
             echo "Refused: build-args sets SERVICE_VERSION, which image.yml sets from version." >&2
             exit 1
           fi
@@ -106,8 +106,8 @@ jobs:
           {
             echo "name=ghcr.io/${REPOSITORY,,}${IMAGE:+/$IMAGE}"
             echo "build-args<<$delimiter"
-            echo "SERVICE_VERSION=$VERSION"
             [ -z "$BUILD_ARGS" ] || printf '%s\n' "$BUILD_ARGS"
+            echo "SERVICE_VERSION=$VERSION"
             echo "$delimiter"
           } >> "$GITHUB_OUTPUT"
 

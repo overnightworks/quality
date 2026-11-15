@@ -214,17 +214,18 @@ def test_the_image_is_named_after_the_calling_repository(image, tmp_path, image_
 
 
 @pytest.mark.parametrize(
-    ("image_name", "version", "refusal"),
+    ("image_name", "version", "build_args", "refusal"),
     [
-        ("Worker", "1.2.3", "Refused: the image Worker is not lowercase path components."),
-        ("a//b", "1.2.3", "Refused: the image a//b is not lowercase path components."),
-        ("../x", "1.2.3", "Refused: the image ../x is not lowercase path components."),
-        ("-x", "1.2.3", "Refused: the image -x is not lowercase path components."),
-        ("", "", "Refused: the version  is not a valid Docker tag."),
-        ("", "a b", "Refused: the version a b is not a valid Docker tag."),
-        ("", "-x", "Refused: the version -x is not a valid Docker tag."),
-        ("", "a:b", "Refused: the version a:b is not a valid Docker tag."),
-        ("", "a" * 129, f"Refused: the version {'a' * 129} is not a valid Docker tag."),
+        ("Worker", "1.2.3", "", "Refused: the image Worker is not lowercase path components."),
+        ("a//b", "1.2.3", "", "Refused: the image a//b is not lowercase path components."),
+        ("../x", "1.2.3", "", "Refused: the image ../x is not lowercase path components."),
+        ("-x", "1.2.3", "", "Refused: the image -x is not lowercase path components."),
+        ("", "", "", "Refused: the version  is not a valid Docker tag."),
+        ("", "a b", "", "Refused: the version a b is not a valid Docker tag."),
+        ("", "-x", "", "Refused: the version -x is not a valid Docker tag."),
+        ("", "a:b", "", "Refused: the version a:b is not a valid Docker tag."),
+        ("", "a" * 129, "", f"Refused: the version {'a' * 129} is not a valid Docker tag."),
+        ("", "a b", "SERVICE_VERSION=0.0.1", "Refused: the version a b is not a valid Docker tag."),
     ],
     ids=[
         "uppercase",
@@ -236,12 +237,13 @@ def test_the_image_is_named_after_the_calling_repository(image, tmp_path, image_
         "leading dash version",
         "colon",
         "129 characters",
+        "version before build-args",
     ],
 )
-def test_a_malformed_image_or_version_is_refused(image, tmp_path, image_name, version, refusal):
+def test_a_malformed_image_or_version_is_refused(image, tmp_path, image_name, version, build_args, refusal):
     """IMAGE-3, IMAGE-4."""
     result = run_job_step(
-        image, NAME_STEP, tmp_path, REPOSITORY="o/r", IMAGE=image_name, VERSION=version, BUILD_ARGS=""
+        image, NAME_STEP, tmp_path, REPOSITORY="o/r", IMAGE=image_name, VERSION=version, BUILD_ARGS=build_args
     )
     assert result.returncode == 1
     assert result.stderr == f"{refusal}\n"
@@ -293,7 +295,7 @@ def composed_build_args(outputs: str) -> list[str]:
         "output entry header",
     ],
 )
-def test_the_build_arguments_hold_the_version_then_every_caller_line(image, tmp_path, caller_lines, expected):
+def test_the_build_arguments_hold_every_caller_line_then_the_version(image, tmp_path, caller_lines, expected):
     """IMAGE-6, IMAGE-19."""
     result = run_job_step(
         image, NAME_STEP, tmp_path, REPOSITORY="o/r", IMAGE="", VERSION="1.2.3", BUILD_ARGS=caller_lines
@@ -301,14 +303,21 @@ def test_the_build_arguments_hold_the_version_then_every_caller_line(image, tmp_
     assert result.returncode == 0
     outputs = parsed_outputs(result.outputs)
     assert outputs["name"] == "ghcr.io/o/r"
-    assert composed_build_args(result.outputs) == ["SERVICE_VERSION=1.2.3", *expected]
+    assert composed_build_args(result.outputs) == [*expected, "SERVICE_VERSION=1.2.3"]
     assert outputs.keys() == {"name", "build-args"}
 
 
 @pytest.mark.parametrize(
     "caller_lines",
-    ["SERVICE_VERSION=0.0.1", "A=1\nSERVICE_VERSION=", "  SERVICE_VERSION=2", "SERVICE_VERSION"],
-    ids=["alone", "after another line", "indented", "without a value"],
+    [
+        "SERVICE_VERSION=0.0.1",
+        "A=1\nSERVICE_VERSION=",
+        "  SERVICE_VERSION=2",
+        "SERVICE_VERSION",
+        '"SERVICE_VERSION=9"',
+        '"SERVICE_VERSION',
+    ],
+    ids=["alone", "after another line", "indented", "without a value", "double-quoted", "double-quoted without a value"],
 )
 def test_a_caller_build_argument_named_service_version_is_refused(image, tmp_path, caller_lines):
     """IMAGE-19."""
