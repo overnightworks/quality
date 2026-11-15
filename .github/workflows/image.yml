@@ -101,7 +101,7 @@ jobs:
             echo "Refused: build-args sets SERVICE_VERSION, which image.yml sets from version." >&2
             exit 1
           fi
-          # A delimiter no caller line can forge, so the lines stay the caller's own.
+          # A delimiter no caller line can forge, so the output holds exactly the lines of build-args.
           delimiter="build-args-$(cat /proc/sys/kernel/random/uuid)"
           {
             echo "name=ghcr.io/${REPOSITORY,,}${IMAGE:+/$IMAGE}"
