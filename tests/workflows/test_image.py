@@ -4,7 +4,7 @@ from tests.support.workflow_steps import run_step, step, step_environment, step_
 
 pytestmark = pytest.mark.integration
 
-NAME_STEP = "Refuse a malformed image name or version"
+NAME_STEP = "Refuse a malformed image, version or build-args"
 CHECKOUT_STEP = "Check out the dispatched commit"
 BUILD_STEP = "Build the image"
 ATTEST_STEP = "Attest the image's build provenance"
@@ -64,6 +64,7 @@ def test_the_job_runs_hosted_with_the_inputs_in_its_environment(image):
     assert job["env"] == {
         "IMAGE": "${{ inputs.image }}",
         "VERSION": "${{ inputs.version }}",
+        "BUILD_ARGS": "${{ inputs.build-args }}",
         "REPOSITORY": "${{ github.repository }}",
     }
 
@@ -143,11 +144,10 @@ def test_the_build_is_amd64_with_max_provenance_and_an_sbom(image):
     constant is the quoted string '0': an unquoted 0 is falsy in an expression and would turn the option off.
     """
     build = step(image, "image", BUILD_STEP)
-    assert build["with"] == {
+    assert {option: value for option, value in build["with"].items() if option != "build-args"} == {
         "context": "${{ inputs.context }}",
         "file": "${{ inputs.file }}",
         "target": "${{ inputs.target }}",
-        "build-args": "${{ inputs.build-args }}",
         "secrets": "${{ secrets.build-secrets }}",
         "labels": "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}",
         "platforms": "linux/amd64",
@@ -201,24 +201,31 @@ def test_only_login_attest_and_naming_depend_on_push(image):
 def test_the_image_is_named_after_the_calling_repository(image, tmp_path, image_name, expected):
     """IMAGE-2."""
     result = run_job_step(
-        image, NAME_STEP, tmp_path, REPOSITORY="OvernightWorks/SongMaker", IMAGE=image_name, VERSION="1.2.3"
+        image,
+        NAME_STEP,
+        tmp_path,
+        REPOSITORY="OvernightWorks/SongMaker",
+        IMAGE=image_name,
+        VERSION="1.2.3",
+        BUILD_ARGS="",
     )
     assert result.returncode == 0
-    assert result.outputs == f"name={expected}\n"
+    assert result.outputs.splitlines()[0] == f"name={expected}"
 
 
 @pytest.mark.parametrize(
-    ("image_name", "version", "refusal"),
+    ("image_name", "version", "build_args", "refusal"),
     [
-        ("Worker", "1.2.3", "Refused: the image Worker is not lowercase path components."),
-        ("a//b", "1.2.3", "Refused: the image a//b is not lowercase path components."),
-        ("../x", "1.2.3", "Refused: the image ../x is not lowercase path components."),
-        ("-x", "1.2.3", "Refused: the image -x is not lowercase path components."),
-        ("", "", "Refused: the version  is not a valid Docker tag."),
-        ("", "a b", "Refused: the version a b is not a valid Docker tag."),
-        ("", "-x", "Refused: the version -x is not a valid Docker tag."),
-        ("", "a:b", "Refused: the version a:b is not a valid Docker tag."),
-        ("", "a" * 129, f"Refused: the version {'a' * 129} is not a valid Docker tag."),
+        ("Worker", "1.2.3", "", "Refused: the image Worker is not lowercase path components."),
+        ("a//b", "1.2.3", "", "Refused: the image a//b is not lowercase path components."),
+        ("../x", "1.2.3", "", "Refused: the image ../x is not lowercase path components."),
+        ("-x", "1.2.3", "", "Refused: the image -x is not lowercase path components."),
+        ("", "", "", "Refused: the version  is not a valid Docker tag."),
+        ("", "a b", "", "Refused: the version a b is not a valid Docker tag."),
+        ("", "-x", "", "Refused: the version -x is not a valid Docker tag."),
+        ("", "a:b", "", "Refused: the version a:b is not a valid Docker tag."),
+        ("", "a" * 129, "", f"Refused: the version {'a' * 129} is not a valid Docker tag."),
+        ("", "a b", "SERVICE_VERSION=0.0.1", "Refused: the version a b is not a valid Docker tag."),
     ],
     ids=[
         "uppercase",
@@ -230,20 +237,115 @@ def test_the_image_is_named_after_the_calling_repository(image, tmp_path, image_
         "leading dash version",
         "colon",
         "129 characters",
+        "version before build-args",
     ],
 )
-def test_a_malformed_image_or_version_is_refused(image, tmp_path, image_name, version, refusal):
+def test_a_malformed_image_or_version_is_refused(image, tmp_path, image_name, version, build_args, refusal):
     """IMAGE-3, IMAGE-4."""
-    result = run_job_step(image, NAME_STEP, tmp_path, REPOSITORY="o/r", IMAGE=image_name, VERSION=version)
+    result = run_job_step(
+        image, NAME_STEP, tmp_path, REPOSITORY="o/r", IMAGE=image_name, VERSION=version, BUILD_ARGS=build_args
+    )
     assert result.returncode == 1
     assert result.stderr == f"{refusal}\n"
     assert result.outputs == ""
 
 
+def parsed_outputs(outputs: str) -> dict[str, str]:
+    """The step outputs, read as GitHub reads a GITHUB_OUTPUT file: `key=value` lines and `key<<delimiter` entries."""
+    parsed: dict[str, str] = {}
+    lines = iter(outputs.splitlines())
+    for line in lines:
+        if "<<" in line and "=" not in line.split("<<", 1)[0]:
+            key, delimiter = line.split("<<", 1)
+            body = []
+            for entry in lines:
+                if entry == delimiter:
+                    break
+                body.append(entry)
+            else:
+                pytest.fail(f"the entry {key} is never closed by {delimiter}")
+            parsed[key] = "\n".join(body)
+        else:
+            key, _, value = line.partition("=")
+            parsed[key] = value
+    return parsed
+
+
+def composed_build_args(outputs: str) -> list[str]:
+    """The lines of the `build-args` step output."""
+    return parsed_outputs(outputs)["build-args"].splitlines()
+
+
+@pytest.mark.parametrize(
+    ("caller_lines", "expected"),
+    [
+        ("", []),
+        ("A=1\nB=two words", ["A=1", "B=two words"]),
+        ("SERVICE_VERSION_X=1", ["SERVICE_VERSION_X=1"]),
+        ("X_SERVICE_VERSION=1", ["X_SERVICE_VERSION=1"]),
+        ("A=1\nEOF\nname=evil", ["A=1", "EOF", "name=evil"]),
+        ("build-args<<EOF\nname=evil", ["build-args<<EOF", "name=evil"]),
+    ],
+    ids=[
+        "empty",
+        "caller lines",
+        "name that starts with it",
+        "name that ends with it",
+        "output assignment after a delimiter-like line",
+        "output entry header",
+    ],
+)
+def test_the_build_arguments_hold_every_caller_line_then_the_version(image, tmp_path, caller_lines, expected):
+    """IMAGE-6, IMAGE-19."""
+    result = run_job_step(
+        image, NAME_STEP, tmp_path, REPOSITORY="o/r", IMAGE="", VERSION="1.2.3", BUILD_ARGS=caller_lines
+    )
+    assert result.returncode == 0
+    outputs = parsed_outputs(result.outputs)
+    assert outputs["name"] == "ghcr.io/o/r"
+    assert composed_build_args(result.outputs) == [*expected, "SERVICE_VERSION=1.2.3"]
+    assert outputs.keys() == {"name", "build-args"}
+
+
+@pytest.mark.parametrize(
+    "caller_lines",
+    [
+        "SERVICE_VERSION=0.0.1",
+        "A=1\nSERVICE_VERSION=",
+        "  SERVICE_VERSION=2",
+        "SERVICE_VERSION",
+        '"SERVICE_VERSION=9"',
+        '"SERVICE_VERSION',
+    ],
+    ids=[
+        "alone",
+        "after another line",
+        "indented",
+        "without a value",
+        "double-quoted",
+        "double-quoted without a value",
+    ],
+)
+def test_a_caller_build_argument_named_service_version_is_refused(image, tmp_path, caller_lines):
+    """IMAGE-19."""
+    result = run_job_step(
+        image, NAME_STEP, tmp_path, REPOSITORY="o/r", IMAGE="", VERSION="1.2.3", BUILD_ARGS=caller_lines
+    )
+    assert result.returncode == 1
+    assert result.stderr == "Refused: build-args sets SERVICE_VERSION, which image.yml sets from version.\n"
+    assert result.outputs == ""
+
+
+def test_the_build_reads_the_composed_build_arguments(image):
+    """IMAGE-19."""
+    name_id = step(image, "image", NAME_STEP)["id"]
+    assert step(image, "image", BUILD_STEP)["with"]["build-args"] == f"${{{{ steps.{name_id}.outputs.build-args }}}}"
+
+
 @pytest.mark.parametrize("version", ["v2026.11.06.2", "1.2.3", "a" * 128], ids=["dated", "semantic", "128 characters"])
 def test_a_dated_or_semantic_version_is_accepted(image, tmp_path, version):
     """IMAGE-4."""
-    result = run_job_step(image, NAME_STEP, tmp_path, REPOSITORY="o/r", IMAGE="", VERSION=version)
+    result = run_job_step(image, NAME_STEP, tmp_path, REPOSITORY="o/r", IMAGE="", VERSION=version, BUILD_ARGS="")
     assert result.returncode == 0
 
 
@@ -259,6 +361,7 @@ def test_the_pushed_image_is_referred_to_by_tag_and_digest(image, tmp_path):
         NAME="ghcr.io/o/r/worker",
         DIGEST=digest,
         VERSION="v2026.11.06.2",
+        BUILD_ARGS="",
     )
     assert result.returncode == 0
     assert result.outputs == f"digest={digest}\nref=ghcr.io/o/r/worker:v2026.11.06.2@{digest}\n"
