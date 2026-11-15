@@ -1,0 +1,8 @@
+claim_id = "8ec5ad95e0ab4f8cb2a441d20faf1ac0"
+agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
+role = "builder"
+base = "07196e5a108fca24be8614279e42003d0b78efe3"
+branch = "claude/issue-863-locator-text-slice-1-the-rule-the-catalo"
+scope = ["docs/ARCHITECTURE.md", "docs/commands.md", "docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality", "tests", "uv.lock"]
+opened_commit = "d1839c2b4d60c19b2f2f223e3feef2ee505b743f"
+whole_reason = "a new rule with its first dependency on design: the rule module, its wiring, the catalog lookup it replaces, the lock and the docs that name them"
