@@ -357,6 +357,10 @@ def test_a_very_long_operator_chain_is_read_and_the_sites_after_it_are_found(bui
         pytest.param("export const LABEL = 'Abbrechen'\npage.getByText(LABEL)\n", "Abbrechen", "dialog.cancel", id="exported const without semicolon"),
         pytest.param("const LABEL = 'Abbrechen' as const;\npage.getByText(LABEL);\n", "Abbrechen", "dialog.cancel", id="const as const"),
         pytest.param("const LABEL = `Abbrechen`;\npage.getByRole('button', { name: LABEL });\n", "Abbrechen", "dialog.cancel", id="template const as name"),
+        pytest.param(
+            "const LABEL = 'Abbrechen';\nif (LABEL === x) {}\nf(LABEL => 1);\nobj.LABEL = 'y';\npage.getByText(LABEL);\n",
+            "Abbrechen", "dialog.cancel", id="const compared, as a parameter and as a property",
+        ),
         pytest.param("page.getByText(/^Abbrechen$/);\n", "Abbrechen", "dialog.cancel", id="anchored regex"),
         pytest.param("page.getByText(/^Abbrechen$/i);\n", "Abbrechen", "dialog.cancel", id="anchored regex with a flag"),
         pytest.param("page.getByText(/^Fertig\\.$/);\n", "Fertig.", "dialog.done", id="anchored regex with an escape"),
@@ -419,6 +423,8 @@ def test_each_literal_of_a_multi_line_call_is_a_finding_at_its_own_line(build_re
         "const LABEL = 'Abbrechen';\nconst LABEL = 'Other';\npage.getByText(LABEL);\n",
         "const LABEL = 'Abbrechen';\nLABEL = 'Other';\npage.getByText(LABEL);\n",
         "const LABEL = 'Abbrechen';\nLABEL += 'Other';\npage.getByText(LABEL);\n",
+        "const LABEL = 'Abbrechen';\nclass Button {\n  run() {\n    LABEL = 'Other';\n  }\n}\npage.getByText(LABEL);\n",
+        "const LABEL = 'Abbrechen';\nclass Button {}\nLABEL = 'Other';\npage.getByText(LABEL);\n",
         "const LABEL = 'Abbrechen';\nfunction LABEL() {}\npage.getByText(LABEL);\n",
         "const LABEL = 'Abbrechen';\nclass LABEL {}\npage.getByText(LABEL);\n",
         "test('x', () => {\n  const LABEL = 'Abbrechen';\n  page.getByText(LABEL);\n});\n",
@@ -435,7 +441,7 @@ def test_each_literal_of_a_multi_line_call_is_a_finding_at_its_own_line(build_re
         "alternation", "unanchored RegExp", "RegExp of a constant", "a plain string is no regex", "line comment", "block comment",
         "index", "ternary branch", "ternary else branch", "arrow comparison", "concatenation", "role", "another text", "test id", "toBe",
         "data attribute", "attribute name unknown", "attribute name is the text", "toHaveValue", "let", "var", "const declared twice",
-        "const reassigned", "const extended", "const and function", "const and class", "function-local const", "const concatenation", "const list", "typed const",
+        "const reassigned", "const extended", "const reassigned in a method", "const reassigned after a class", "const and function", "const and class", "function-local const", "const concatenation", "const list", "typed const",
         "dynamic name", "locator selector", "not a locator", "hole alone",
     ],
 )
