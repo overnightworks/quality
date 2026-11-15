@@ -65,6 +65,7 @@ def cancel_fact(text: str = "Abbrechen") -> str:
         pytest.param('page.get_by_role("button", name=label("Abbrechen"))\n', "Abbrechen", "dialog.cancel", id="nested helper"),
         pytest.param('page.get_by_text(re.compile("^Abbrechen$"))\n', "Abbrechen", "dialog.cancel", id="anchored regex"),
         pytest.param('LABEL: str = "Abbrechen"\npage.get_by_text(LABEL)\n', "Abbrechen", "dialog.cancel", id="annotated constant"),
+        pytest.param('LABEL = "Abbrechen"\ndef f():\n    LABEL = "x"\npage.get_by_text(LABEL)\n', "Abbrechen", "dialog.cancel", id="same name inside a function"),
         pytest.param('get_by_text("Abbrechen")\n', "Abbrechen", "dialog.cancel", id="bare function"),
         pytest.param('page.get_by_text("Cancel")\n', "Cancel", "dialog.cancel", id="english msgstr"),
         pytest.param('page.getByRoleButton("Abbrechen")\n', "Abbrechen", "dialog.cancel", id="camel wrapper"),
@@ -107,12 +108,17 @@ def test_a_finding_reads_as_the_rule_words_it_and_the_run_is_red(build_repo, cap
         'page.get_by_text(None)\n',
         'LABEL = "Abbrechen"\nLABEL += "!"\npage.get_by_text(LABEL)\n',
         'LABEL, OTHER = "Abbrechen", "x"\npage.get_by_text(LABEL)\n',
+        'LABEL = "Abbrechen"\nfrom labels import LABEL\npage.get_by_text(LABEL)\n',
+        'LABEL = "Abbrechen"\nimport labels as LABEL\npage.get_by_text(LABEL)\n',
+        'LABEL = "Abbrechen"\nfor LABEL in labels:\n    pass\npage.get_by_text(LABEL)\n',
+        'LABEL = "Abbrechen"\ndef LABEL():\n    pass\npage.get_by_text(LABEL)\n',
+        'LABEL = "Abbrechen"\ntry:\n    pass\nexcept ValueError as LABEL:\n    pass\npage.get_by_text(LABEL)\n',
         'locators["x"]("Abbrechen")\n',
     ],
     ids=[
         "assert", "to_be", "another text", "f-string", "longer text", "constant bound twice",
         "unanchored regex", "unanchored regex with flags", "unanchored regex constant", "dynamic name", "not a locator", "attribute name", "locator selector",
-        "no string", "constant extended", "constant unpacked", "subscripted function",
+        "no string", "constant extended", "constant unpacked", "constant rebound by an import", "constant rebound by an alias", "constant rebound by a loop", "constant rebound by a function", "constant rebound by a handler", "subscripted function",
     ],
 )
 def test_scenario_data_and_every_other_value_is_no_site(build_repo, source):

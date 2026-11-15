@@ -4,6 +4,7 @@ reading refuses refuses the rule, because the sites after it would be missed in 
 
 import ast
 import re
+from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path, PurePosixPath
 
@@ -27,6 +28,9 @@ ANCHORED_REGEX = re.compile(r"\^(.+)\$", re.DOTALL)
 REGEX_ESCAPE = re.compile(r"\\(\W)")
 REGEX_COMPILE_CALL = "compile"
 FIX = "find it by its key through the generated module"
+
+SCOPE_DEFINITIONS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+SCOPES = (*SCOPE_DEFINITIONS, ast.Lambda)
 
 type Value = ast.Constant | ast.Name
 type Site = tuple[Value, bool]
@@ -60,25 +64,42 @@ def _is_test_file(name: str) -> bool:
     return path.suffix == PYTHON_SUFFIX and TEST_DIRECTORY in path.parent.parts
 
 
+def _module_level_nodes(node: ast.AST) -> Iterator[ast.AST]:
+    """Every node below `node` that binds in the module's own scope: not the bodies of functions, classes and lambdas."""
+    for child in ast.iter_child_nodes(node):
+        yield child
+        if not isinstance(child, SCOPES):
+            yield from _module_level_nodes(child)
+
+
+def _bound_names(node: ast.AST) -> list[str]:
+    """The names a node binds: a store, an import, a function or class definition, an `except ... as` handler."""
+    if isinstance(node, ast.Name):
+        return [] if isinstance(node.ctx, ast.Load) else [node.id]
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        return [(alias.asname or alias.name).split(".")[0] for alias in node.names]
+    if isinstance(node, (*SCOPE_DEFINITIONS, ast.ExceptHandler)) and node.name:
+        return [node.name]
+    return []
+
+
+def _plain_assignments(statement: ast.stmt) -> list[tuple[str, ast.expr]]:
+    """The (name, value) pairs of a module-level statement that assigns a value straight to a name."""
+    if isinstance(statement, ast.Assign):
+        return [(target.id, statement.value) for target in statement.targets if isinstance(target, ast.Name)]
+    if isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name) and statement.value:
+        return [(statement.target.id, statement.value)]
+    return []
+
+
 def _module_constants(tree: ast.Module) -> dict[str, str]:
-    """The names bound exactly once at module level, to a plain string literal."""
-    bound: dict[str, list[ast.expr | None]] = {}
-    for statement in tree.body:
-        if isinstance(statement, ast.Assign):
-            targets, value = statement.targets, statement.value
-        elif isinstance(statement, ast.AnnAssign):
-            targets, value = [statement.target], statement.value
-        elif isinstance(statement, ast.AugAssign):
-            targets, value = [statement.target], None
-        else:
-            continue
-        for target in targets:
-            for name in (node.id for node in ast.walk(target) if isinstance(node, ast.Name)):
-                bound.setdefault(name, []).append(value if isinstance(target, ast.Name) else None)
+    """The names bound exactly once in the module's own scope, by an assignment of a plain string literal."""
+    bindings = Counter(name for node in _module_level_nodes(tree) for name in _bound_names(node))
     return {
-        name: values[0].value
-        for name, values in bound.items()
-        if len(values) == 1 and isinstance(values[0], ast.Constant) and isinstance(values[0].value, str)
+        name: value.value
+        for statement in tree.body
+        for name, value in _plain_assignments(statement)
+        if bindings[name] == 1 and isinstance(value, ast.Constant) and isinstance(value.value, str)
     }
 
 
