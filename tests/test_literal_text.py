@@ -138,6 +138,8 @@ def test_an_unclosed_hole_is_named_before_an_unclosed_element():
         pytest.param("<h1>Log in</h1>", [LiteralText(1, "Log in")], id="a text node on the first line"),
         pytest.param("<div>\n  <p>Hello</p>\n\n  <b>Bye</b>\n</div>", [LiteralText(2, "Hello"), LiteralText(4, "Bye")], id="a text node on its own line"),
         pytest.param("<p>\n\n  Hello\n  there\n</p>", [LiteralText(3, "Hello there")], id="a text node at the line of its first letter, collapsed"),
+        pytest.param("<p>\n  42\n  items</p>", [LiteralText(3, "42 items")], id="a text node led by digits stands at its first letter"),
+        pytest.param("<p>\n  -\n  Hello</p>", [LiteralText(3, "- Hello")], id="a text node led by punctuation stands at its first letter"),
         pytest.param('<img\n  alt="Logo">', [LiteralText(1, "Logo")], id="an attribute value at the line of its tag"),
         pytest.param(
             "<script>\n  const a = 1;\n  const b = 2;\n</script>\n<p>Hello</p>", [LiteralText(5, "Hello")],
@@ -145,7 +147,7 @@ def test_an_unclosed_hole_is_named_before_an_unclosed_element():
         ),
         pytest.param("<style>\n.a {}\n</style><p>Hello</p>", [LiteralText(3, "Hello")], id="a text after a multi-line style block"),
         pytest.param(
-            "<p>{\n  'Log in'\n}</p>\n<b>Bye</b>", [LiteralText(1, "Log in"), LiteralText(4, "Bye")],
+            "<p>{\n  'Log in'\n}</p>\n<b>Bye</b>", [LiteralText(2, "Log in"), LiteralText(4, "Bye")],
             id="a text after a multi-line hole",
         ),
         pytest.param("<p>{`Hello\nthere`}</p>\n<b>Bye</b>", [LiteralText(1, "Hello there"), LiteralText(3, "Bye")], id="a hole whose literal spans lines"),

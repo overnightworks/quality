@@ -75,8 +75,8 @@ class _Scanner(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         if self.open_raw_text_tag not in CODE_TAGS:
-            leading = data[: len(data) - len(data.lstrip())]
-            self._found(self.getpos()[0] + leading.count("\n"), data.strip())
+            first_letter = next((index for index, character in enumerate(data) if character.isalpha()), 0)
+            self._found(self.getpos()[0] + data[:first_letter].count("\n"), data.strip())
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
@@ -139,7 +139,8 @@ def _folded_hole(expression: str) -> str:
 
 def _folded_markup(source: str) -> str:
     """The page as HTML: its code blocks dropped and each `{...}` hole folded to the literal it shows, quoted when it is an
-    attribute's whole value. Each dropped or folded part leaves its newlines behind, so a line of the result is the page's."""
+    attribute's whole value. Each dropped or folded part leaves its newlines behind, a hole's before the literal it shows and after it, so a line of
+    the result is the page's."""
     markup = CODE_BLOCK.sub(lambda block: "\n" * block.group().count("\n"), source)
     parts: list[str] = []
     position = 0
@@ -148,10 +149,13 @@ def _folded_markup(source: str) -> str:
         if closing == -1:
             raise UnreadablePage(UNCLOSED_HOLE)
         parts.append(markup[position:opening])
-        folded = _folded_hole(markup[opening + 1 : closing])
+        expression = markup[opening + 1 : closing]
+        folded = _folded_hole(expression)
         shown = html.escape(folded)
+        before = expression[: len(expression) - len(expression.lstrip())].count("\n")
+        parts.append("\n" * before)
         parts.append(f'"{shown}"' if markup[:opening].rstrip().endswith("=") else shown)
-        parts.append("\n" * (markup.count("\n", opening, closing) - folded.count("\n")))
+        parts.append("\n" * (expression.count("\n") - before - folded.count("\n")))
         position = closing + 1
     parts.append(markup[position:])
     return "".join(parts)
