@@ -26,7 +26,7 @@ def run_job_step(image: dict, name: str, directory, **scenario: str):
 
 
 def test_the_call_takes_exactly_the_image_interface(image):
-    """IMAGE-2, IMAGE-4, IMAGE-5, IMAGE-6, IMAGE-11, IMAGE-12, IMAGE-13, IMAGE-16, IMAGE-18, IMAGE-19."""
+    """IMAGE-2, IMAGE-4, IMAGE-5, IMAGE-6, IMAGE-11, IMAGE-12, IMAGE-13, IMAGE-16, IMAGE-18."""
     call = image[True]["workflow_call"]
     assert {
         name: (spec["type"], spec.get("required", False), spec.get("default")) for name, spec in call["inputs"].items()
