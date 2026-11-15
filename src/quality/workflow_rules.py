@@ -567,7 +567,7 @@ def _fall_of(entry: int, limit: int | Unmeasured) -> Fall:
 
 def check_job_timeouts(root: Path, tracked: list[str], baseline: Baseline | None) -> RuleResult:
     """Every job of a workflow a pull request or a push to main triggers, and of the local workflows those call, judged
-    against the baseline's job limits; the extent is how many jobs there are."""
+    against the baseline's job limits; the extent is the number of jobs the held `[job_minutes]` table holds."""
     table = baseline.job_minutes if baseline else None
     held = table or {}
     debt = {key: minutes for key, minutes in held.items() if minutes > MAXIMUM_MINUTES}
