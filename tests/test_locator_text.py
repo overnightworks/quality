@@ -24,6 +24,7 @@ class Scenario:
 
     directory: str = "frontend/src/lib/catalogs"
     test_file: str = "tests/test_dialog.py"
+    script_file: str = "src/dialog.test.ts"
 
     def pyproject(self, *, covered: bool = True, table: str = "") -> str:
         extra = "[catalogs]" if covered else ""
@@ -42,7 +43,14 @@ class Scenario:
         return f"{self.directory}/{language}.po"
 
     def source_catalog(self) -> str:
-        return self.catalog("de", ("dialog.cancel", "Abbrechen", ""), ("dialog.title", "Einstellungen", ""))
+        return self.catalog(
+            "de",
+            ("dialog.cancel", "Abbrechen", ""),
+            ("dialog.title", "Einstellungen", ""),
+            ("dialog.done", "Fertig.", ""),
+            ("dialog.dont", "Don't", ""),
+            ("dialog.size", "Größe", ""),
+        )
 
     def covered(self) -> dict[str, str]:
         english = self.catalog("en", ("dialog.cancel", "Abbrechen", "Cancel"), ("dialog.title", "Einstellungen", "Settings"))
@@ -54,6 +62,9 @@ class Scenario:
 
     def only_test(self, source: str, extra: dict[str, str] | None = None) -> dict[str, str]:
         return {**self.covered(), self.test_file: source, **(extra or {})}
+
+    def only_script(self, source: str, name: str | None = None) -> dict[str, str]:
+        return {**self.covered(), name or self.script_file: source}
 
     def not_covered(self, kind: str) -> dict[str, str]:
         """The pyproject files of a repository the rule does not cover, by what keeps it out."""
@@ -98,6 +109,8 @@ def cancel_fact(text: str = "Abbrechen") -> str:
         pytest.param('page.get_by_text("Cancel")\n', "Cancel", "dialog.cancel", id="english msgstr"),
         pytest.param('page.getByRoleButton("Abbrechen")\n', "Abbrechen", "dialog.cancel", id="camel wrapper"),
         pytest.param('expect(rows).to_have_text(["Abbrechen", "other"])\n', "Abbrechen", "dialog.cancel", id="list of texts"),
+        pytest.param('page.get_by_text("x").filter(has_not_text="Abbrechen")\n', "Abbrechen", "dialog.cancel", id="has_not_text"),
+        pytest.param('expect(button).to_have_accessible_description("Abbrechen")\n', "Abbrechen", "dialog.cancel", id="accessible description"),
     ],
 )
 def test_a_catalog_text_in_a_locator_position_of_a_python_test_is_a_finding(build_repo, scenario, source, text, key):
@@ -146,12 +159,17 @@ def test_a_finding_reads_as_the_rule_words_it_and_the_run_is_red(build_repo, sce
         'page.getByRole(role="Abbrechen")\n',
         'page.get_by_test_id("Abbrechen")\n',
         'page.getByTestId("Abbrechen")\n',
+        'page.get_by_text("^Abbrechen$")\n',
+        'expect(button).to_have_attribute("data-state", "Abbrechen")\n',
+        'expect(button).to_have_attribute(name="data-state", value="Abbrechen")\n',
+        'expect(button).to_have_attribute(attribute, "Abbrechen")\n',
     ],
     ids=[
         "assert", "to_be", "another text", "f-string", "longer text", "constant bound twice",
         "unanchored regex", "unanchored regex with flags", "unanchored regex constant", "dynamic name", "not a locator", "attribute name", "locator selector",
         "no string", "constant extended", "constant unpacked", "constant rebound by an import", "constant rebound by an alias", "constant rebound by a loop", "constant rebound by a function", "constant rebound by a handler", "subscripted function",
         "role argument", "role keyword", "test id", "camelCase test id",
+        "a plain string is no regex", "data attribute", "data attribute keyword", "attribute name unknown",
     ],
 )
 def test_scenario_data_and_every_other_value_is_no_site(build_repo, scenario, source):
@@ -202,10 +220,16 @@ def test_a_python_file_under_a_tests_directory_is_read(build_repo, scenario, nam
     assert len(found(build_repo({**scenario.covered(), name: 'page.get_by_text("Abbrechen")\n'}))) == 1
 
 
-@pytest.mark.parametrize("name", ["src/helpers.py", "test_a.py", "tests/a.js", "tests/a.ts", "tests/a.txt"])
-def test_other_files_are_not_read_in_this_slice(build_repo, scenario, name):
-    """LOCATOR-8: Python files under `tests/` only; TypeScript and JavaScript are not read yet."""
-    assert found(build_repo({**scenario.covered(), name: 'page.get_by_text("Abbrechen")\n'})) == []
+@pytest.mark.parametrize("name", ["src/helpers.py", "test_a.py", "tests/a.txt", "src/lib/app.ts", "x.test.tsx", "x.test.mjs", "x.test.json", "tests/a.js"])
+def test_other_files_are_not_read(build_repo, scenario, name):
+    """LOCATOR-8: Python files under `tests/`, and the TypeScript and JavaScript test files named below."""
+    assert found(build_repo({**scenario.covered(), name: 'page.get_by_text("Abbrechen")\npage.getByText("Abbrechen")\n'})) == []
+
+
+@pytest.mark.parametrize("name", ["x.test.ts", "x.spec.js", "x.test.browser.ts", "x.spec.integration.js", "src/a.spec.ts", "e2e/helpers.ts", "app/e2e/deep/helpers.js", "test-utils/a.ts", "src/test-utils/b.js"])
+def test_a_script_test_file_is_read(build_repo, scenario, name):
+    """LOCATOR-8: a tracked `*.ts` or `*.js` named `*.test.*` or `*.spec.*`, or under `e2e/` or `test-utils/`."""
+    assert found(build_repo(scenario.only_script("page.getByText('Abbrechen');\n", name))) == [(name, 1, cancel_fact())]
 
 
 def test_a_site_stays_red_beside_a_baseline_file(build_repo, scenario):
@@ -310,6 +334,217 @@ def test_a_very_long_operator_chain_is_read_and_the_sites_after_it_are_found(bui
     repo = build_repo(scenario.only_test(f'{chain}\npage.get_by_text("Abbrechen")\n'))
     code, out = files_run(capsys, repo)
     assert (code, cancel_fact() in out) == (1, True)
+
+@pytest.mark.parametrize(
+    ("source", "text", "key"),
+    [
+        pytest.param("page.getByRole('button', { name: 'Abbrechen' });\n", "Abbrechen", "dialog.cancel", id="getByRole name"),
+        pytest.param('page.getByRole("button", { name: "Abbrechen", exact: true });\n', "Abbrechen", "dialog.cancel", id="double quotes and options"),
+        pytest.param("page.getByText('Einstellungen');\n", "Einstellungen", "dialog.title", id="getByText"),
+        pytest.param("screen.getByLabelText('Abbrechen');\n", "Abbrechen", "dialog.cancel", id="a wrapper of testing-library"),
+        pytest.param("page.getByRoleButton('Abbrechen');\n", "Abbrechen", "dialog.cancel", id="an app wrapper"),
+        pytest.param("page.getByText('Cancel');\n", "Cancel", "dialog.cancel", id="english msgstr"),
+        pytest.param("page.locator('li').filter({ hasText: 'Abbrechen' });\n", "Abbrechen", "dialog.cancel", id="hasText"),
+        pytest.param("page.locator('li').filter({ hasNotText: 'Abbrechen' });\n", "Abbrechen", "dialog.cancel", id="hasNotText"),
+        pytest.param("expect(button).toHaveText('Abbrechen');\n", "Abbrechen", "dialog.cancel", id="toHaveText"),
+        pytest.param("expect(button).toHaveAccessibleName('Abbrechen');\n", "Abbrechen", "dialog.cancel", id="toHaveAccessibleName"),
+        pytest.param("expect(button).toHaveAccessibleDescription('Abbrechen');\n", "Abbrechen", "dialog.cancel", id="toHaveAccessibleDescription"),
+        pytest.param("expect(page).toHaveTitle('Einstellungen');\n", "Einstellungen", "dialog.title", id="toHaveTitle"),
+        pytest.param("expect(rows).toHaveText(['Abbrechen', 'other']);\n", "Abbrechen", "dialog.cancel", id="array of texts"),
+        pytest.param("expect(button).toHaveAttribute('aria-label', 'Abbrechen');\n", "Abbrechen", "dialog.cancel", id="read attribute value"),
+        pytest.param("page.getByText(`Abbrechen`);\n", "Abbrechen", "dialog.cancel", id="hole-free template"),
+        pytest.param("const LABEL = 'Abbrechen';\npage.getByText(LABEL);\n", "Abbrechen", "dialog.cancel", id="top-level const"),
+        pytest.param("export const LABEL = 'Abbrechen'\npage.getByText(LABEL)\n", "Abbrechen", "dialog.cancel", id="exported const without semicolon"),
+        pytest.param("const LABEL = 'Abbrechen' as const;\npage.getByText(LABEL);\n", "Abbrechen", "dialog.cancel", id="const as const"),
+        pytest.param("const LABEL = `Abbrechen`;\npage.getByRole('button', { name: LABEL });\n", "Abbrechen", "dialog.cancel", id="template const as name"),
+        pytest.param("page.getByText(/^Abbrechen$/);\n", "Abbrechen", "dialog.cancel", id="anchored regex"),
+        pytest.param("page.getByText(/^Abbrechen$/i);\n", "Abbrechen", "dialog.cancel", id="anchored regex with a flag"),
+        pytest.param("page.getByText(/^Fertig\\.$/);\n", "Fertig.", "dialog.done", id="anchored regex with an escape"),
+        pytest.param("page.getByText(new RegExp('^Abbrechen$'));\n", "Abbrechen", "dialog.cancel", id="new RegExp"),
+        pytest.param("page.getByText(RegExp(\"^Abbrechen$\", 'i'));\n", "Abbrechen", "dialog.cancel", id="RegExp with a flag argument"),
+        pytest.param("page.getByText('Don\\'t');\n", "Don't", "dialog.dont", id="escaped quote"),
+        pytest.param("page.getByText(\"Don't\");\n", "Don't", "dialog.dont", id="quote of the other kind"),
+        pytest.param("page.getByText('Gr\\u00f6\\u{df}e');\n", "Größe", "dialog.size", id="unicode escapes"),
+        pytest.param("page.getByText('Gr\\xf6\\xdfe');\n", "Größe", "dialog.size", id="hex escapes"),
+        pytest.param("page.getByRole('button', { name: label('Abbrechen') });\n", "Abbrechen", "dialog.cancel", id="nested helper"),
+        pytest.param("const m = `x ${page.getByText('Abbrechen')} y`;\n", "Abbrechen", "dialog.cancel", id="inside a template hole"),
+    ],
+)
+def test_a_catalog_text_in_a_locator_position_of_a_script_test_is_a_finding(build_repo, scenario, source, text, key):
+    """LOCATOR-1 to LOCATOR-5: the same positions as Python's, in TypeScript and JavaScript syntax."""
+    repo = build_repo(scenario.only_script(source))
+    ((path, line, fact),) = found(repo)
+    assert (path, line, fact) == (scenario.script_file, source.count("\n"), f"'{text}' is the catalog text of {key}")
+
+
+def test_a_line_continuation_in_a_string_is_no_part_of_its_text_and_the_line_is_where_it_starts(build_repo, scenario):
+    """LOCATOR-2, LOCATOR-6."""
+    source = "x = 1;\npage.getByText('Abbre\\\nchen');\n"
+    assert found(build_repo(scenario.only_script(source))) == [(scenario.script_file, 2, cancel_fact())]
+
+
+def test_each_literal_of_a_multi_line_call_is_a_finding_at_its_own_line(build_repo, scenario):
+    """LOCATOR-6: the line is the literal's, not the call's."""
+    source = "page.getByRole(\n  'button',\n  {\n    name: 'Abbrechen',\n  },\n);\nexpect(x).toHaveText(\n  'Einstellungen',\n);\n"
+    assert [line for _, line, _ in found(build_repo(scenario.only_script(source)))] == [4, 8]
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "page.getByText(`Abbrechen ${n}`);\n",
+        "page.getByText(/Abbrechen/);\n",
+        "page.getByText(/^Abbrechen/);\n",
+        "page.getByText(/Abbrechen$/);\n",
+        "page.getByText(/^Abbrechen$|^Einstellungen$/);\n",
+        "page.getByText(new RegExp('Abbrechen'));\n",
+        "const LABEL = 'Abbrechen';\npage.getByText(new RegExp(LABEL));\n",
+        "page.getByText('^Abbrechen$');\n",
+        "// page.getByText('Abbrechen');\n",
+        "/* page.getByText('Abbrechen');\n   page.getByText('Abbrechen'); */\n",
+        "page.getByText(words['Abbrechen']);\n",
+        "page.getByText(ok ? 'Abbrechen' : 'x');\n",
+        "page.getByText(ok ? 'x' : 'Abbrechen');\n",
+        "page.getByText(text => text === 'Abbrechen');\n",
+        "page.getByText('Abbrechen' + suffix);\n",
+        "page.getByRole('Abbrechen');\n",
+        "page.getByRole('button', { name: 'Speichern' });\n",
+        "page.getByTestId('Abbrechen');\n",
+        "expect(value).toBe('Abbrechen');\n",
+        "expect(button).toHaveAttribute('data-state', 'Abbrechen');\n",
+        "expect(button).toHaveAttribute(attribute, 'Abbrechen');\n",
+        "expect(button).toHaveAttribute('Abbrechen', 'x');\n",
+        "expect(button).toHaveValue('Abbrechen');\n",
+        "const x = 'Abbrechen';\nlet LABEL = 'Abbrechen';\npage.getByText(LABEL);\n",
+        "var LABEL = 'Abbrechen';\npage.getByText(LABEL);\n",
+        "const LABEL = 'Abbrechen';\nconst LABEL = 'Other';\npage.getByText(LABEL);\n",
+        "const LABEL = 'Abbrechen';\nfunction LABEL() {}\npage.getByText(LABEL);\n",
+        "const LABEL = 'Abbrechen';\nclass LABEL {}\npage.getByText(LABEL);\n",
+        "test('x', () => {\n  const LABEL = 'Abbrechen';\n  page.getByText(LABEL);\n});\n",
+        "const LABEL = 'Abbrechen' + 'x';\npage.getByText(LABEL);\n",
+        "const LABEL = 'Abbrechen',\n  OTHER = 'x';\npage.getByText(LABEL);\n",
+        "const LABEL: string = 'Abbrechen';\npage.getByText(LABEL);\n",
+        "page.getByText(name);\n",
+        "page.locator('Abbrechen');\n",
+        "page.getByteTimeDomainData('Abbrechen');\n",
+        "page.getByText(`${label}`);\n",
+    ],
+    ids=[
+        "template with a hole", "unanchored regex", "regex anchored at the start only", "regex anchored at the end only",
+        "alternation", "unanchored RegExp", "RegExp of a constant", "a plain string is no regex", "line comment", "block comment",
+        "index", "ternary branch", "ternary else branch", "arrow comparison", "concatenation", "role", "another text", "test id", "toBe",
+        "data attribute", "attribute name unknown", "attribute name is the text", "toHaveValue", "let", "var", "const declared twice",
+        "const and function", "const and class", "function-local const", "const concatenation", "const list", "typed const",
+        "dynamic name", "locator selector", "not a locator", "hole alone",
+    ],
+)
+def test_scenario_data_and_every_other_script_value_is_no_site(build_repo, scenario, source):
+    """LOCATOR-7: only the named positions with a whole-value equal text count."""
+    assert found(build_repo(scenario.only_script(source))) == []
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "const r = /'/;\n",
+        "// don't\n",
+        "const r = /[/]/;\n",
+        "const half = total / 2;\nconst third = total / 3;\n",
+        "if (ok) { x = a / b; }\nconst y = (a + b) / 2 / 'x'.length;\n",
+        "const text = `a ${b / 2} c`;\n",
+        "const s = '`';\n",
+        "const html = `<a href=\"x\">${f({ a: 1 })}</a>`;\n",
+        "}\n}\n",
+        "foo((({\n",
+        "﻿#!/usr/bin/env node\nclass A { #x = 1; }\n",
+        "const é = 'ü€';\n",
+        "const x = 1_000 / 2;\n",
+        "return /x/.test(y);\n",
+        "/'/.test(y);\n",
+        "const text = `${a} and ${b} and ${'}'}`;\n",
+        "const s = `${value}${/'/.test(value)}`;\n",
+        "const nested = " + "[" * 20000 + "]" * 20000 + ";\n",
+        "i++ / 2;\n",
+        "const a = n-- / 2 + ' a/b';\n",
+        "const a = v! / 2; // don't\n",
+        "const a = f(x)! / 2; // don't\n",
+        "const a = b[0]! / 2; // don't\n",
+        "const a = !/'/.test(y);\n",
+        "const a = x ? 1 : !/'/.test(y);\n",
+        "return !/'/.test(y);\n",
+        "const a = b + +/'/.source;\n",
+        "const a = b - -/'/.source;\n",
+        "const a = b + /* sign */ +/'/.source;\n",
+        "const a = o.in / 2; // it's\n",
+        "const a = o?.of / 2; // it's\n",
+        "const a = cfg.default! / 2; // it's\n",
+        "const exists = \".\" in /'/;\n",
+    ],
+    ids=[
+        "quote in a regex", "quote in a comment", "slash in a class", "divisions", "division after parentheses",
+        "division in a template hole", "backtick in a string", "braces in a template hole", "stray braces", "unbalanced brackets", "private field and hashbang",
+        "non-ascii", "number separator", "regex after return", "regex first in the file", "template with several holes", "regex starting a later hole", "deep nesting",
+        "division after a postfix increment", "division after a postfix decrement", "division after a non-null mark",
+        "division after a non-null mark on a call", "division after a non-null mark on an index", "regex after a not that follows an operator", "regex after a not in a ternary", "regex after a not that follows return",
+        "regex after a spaced unary plus", "regex after a spaced unary minus", "regex after a unary plus split by a comment",
+        "division after a property named like a keyword", "division after an optional property named like a keyword",
+        "division after a non-null mark on a property named like a keyword",
+        "regex after in that follows a string of a dot",
+    ],
+)
+def test_a_valid_file_is_read_to_its_last_site_whatever_comes_first(build_repo, scenario, prefix):
+    """LOCATOR-10, LOCATOR-11: nothing here refuses the rule, and the site after it is found."""
+    source = prefix + "page.getByText('Abbrechen');\n"
+    assert found(build_repo(scenario.only_script(source))) == [(scenario.script_file, source.count("\n"), cancel_fact())]
+
+
+@pytest.mark.parametrize("name", ["default", "of", "in", "return", "new", "delete", "case"])
+def test_a_division_after_a_property_named_like_a_keyword_loses_no_site(build_repo, scenario, name):
+    """LOCATOR-10, LOCATOR-11: a name after a dot is a property, so the slash divides and the site after it is found."""
+    source = f"const half = cfg.{name} / 2, other = page.getByText('Abbrechen') ?? 3 / 4;\n"
+    assert [line for _, line, _ in found(build_repo(scenario.only_script(source)))] == [1]
+
+
+@pytest.mark.parametrize("terminator", ["\r", "\r\n", "\u2028"])
+def test_a_line_is_counted_by_every_terminator_the_lexer_knows(build_repo, scenario, terminator):
+    """LOCATOR-11: a literal's line is the line it starts on, whatever ends the lines before it."""
+    repo = build_repo(scenario.only_script("x = 1\n"))
+    source = terminator.join(["x = 1;", "// note", "page.getByText('Abbrechen');", ""])
+    (repo / scenario.script_file).write_bytes(source.encode())
+    assert found(repo) == [(scenario.script_file, 3, cancel_fact())]
+
+
+@pytest.mark.parametrize(
+    ("content", "line"),
+    [
+        pytest.param(b"x = 1\nconst a = 'abc\nfoo();\n", 2, id="string reaching a newline"),
+        pytest.param(b"x = 1\nconst a = \"abc", 2, id="string reaching the end"),
+        pytest.param(b"x = 1\nconst a = 'abc\\\n", 2, id="continued string reaching the end"),
+        pytest.param(b"x = 1\ny = 2\nconst a = `abc", 3, id="unclosed template"),
+        pytest.param(b"x = 1\nconst a = `abc ${b", 2, id="unclosed hole"),
+        pytest.param(b"x = 1\nconst a = `abc ${ {b} ", 2, id="hole with an unclosed brace"),
+        pytest.param(b"x = 1\nconst r = /abc\nfoo();\n", 2, id="regex reaching a newline"),
+        pytest.param(b"x = 1\nconst r = /abc", 2, id="regex reaching the end"),
+        pytest.param(b"x = 1\nconst r = /[abc/;\n", 2, id="regex class reaching the end of the line"),
+        pytest.param("x = 1\nconst r = /ab\u2028cd/;\n".encode(), 2, id="regex reaching U+2028"),
+        pytest.param("x = 1\nconst r = /[ab\u2029cd]/;\n".encode(), 2, id="regex class reaching U+2029"),
+        pytest.param(b"x = 1\n\n/* never closed\nfoo();\n", 3, id="unclosed block comment"),
+    ],
+)
+def test_a_script_test_file_that_cannot_be_read_is_exit_two_naming_it_and_the_line(build_repo, scenario, capsys, content, line):
+    """LOCATOR-10: the refusal names the file and the line of the construct that does not close."""
+    repo = build_repo(scenario.only_script("x = 1\n"))
+    (repo / scenario.script_file).write_bytes(content)
+    code, _ = files_run(capsys, repo)
+    reason = refusals(repo)[Rule.LOCATOR_TEXT]
+    assert (code, scenario.script_file in reason, f"line {line}" in reason) == (2, True, True)
+
+
+def test_a_script_test_file_that_is_not_utf_8_is_exit_two_naming_it(build_repo, scenario, capsys):
+    """LOCATOR-10."""
+    repo = build_repo(scenario.only_script("x = 1\n"))
+    (repo / scenario.script_file).write_bytes(b"const a = '\xff';\n")
+    code, _ = files_run(capsys, repo)
+    assert (code, scenario.script_file in refusals(repo)[Rule.LOCATOR_TEXT]) == (2, True)
 
 
 def files_run(capsys, repo):

@@ -1,35 +1,47 @@
-"""The `locator-text` rule: a covered repository's Python test that finds an element by a catalog text is a finding, one per
-site. A test finds it by its key through the generated module. A test file Python cannot read or a catalog design's strict
-reading refuses refuses the rule, because the sites after it would be missed in silence."""
+"""The `locator-text` rule: a covered repository's Python, TypeScript or JavaScript test that finds an element by a catalog
+text is a finding, one per site. A test finds it by its key through the generated module. A test file that cannot be read or
+a catalog design's strict reading refuses refuses the rule, because the sites after it would be missed in silence."""
 
 import ast
+import fnmatch
 import re
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from design.catalogs import CatalogEntry, CatalogFileError, parse_catalog
 
 from quality import catalog_rules, checkout, repository
 from quality.catalog_rules import Catalogs
+from quality.read_attributes import READ_ATTRIBUTES
 from quality.report import Finding, FindingEvent, RuleResult, Unparsable
 from quality.rules import Rule
+from quality.typescript_tokens import Kind, ScriptSyntaxError, Token, tokenize
 
 PYTHON_SUFFIX = ".py"
+SCRIPT_SUFFIXES = frozenset({".ts", ".js"})
 TEST_DIRECTORY = "tests"
+SCRIPT_TEST_DIRECTORIES = frozenset({"e2e", "test-utils"})
+SCRIPT_TEST_PATTERNS = ("*.test.*", "*.spec.*")
 LOCATOR_CALL = re.compile(r"getBy[A-Z]\w*|get_by_[a-z]\w*")
 ASSERTION_CALLS = frozenset(
-    {"to_have_text", "toHaveText", "to_have_accessible_name", "toHaveAccessibleName", "to_have_title", "toHaveTitle"}
+    {
+        "to_have_text", "toHaveText", "to_have_accessible_name", "toHaveAccessibleName", "to_have_title", "toHaveTitle",
+        "to_have_accessible_description", "toHaveAccessibleDescription",
+    }
 )
 ATTRIBUTE_CALLS = frozenset({"to_have_attribute", "toHaveAttribute"})
+ATTRIBUTE_NAME_KEYWORD = "name"
 ATTRIBUTE_VALUE_KEYWORD = "value"
-FILTER_KEYWORDS = frozenset({"has_text", "hasText"})
+FILTER_KEYWORDS = frozenset({"has_text", "hasText", "has_not_text", "hasNotText"})
 ROLE_CALLS = frozenset({"get_by_role", "getByRole"})
 ROLE_KEYWORD = "role"
 TEST_ID_CALLS = frozenset({"get_by_test_id", "getByTestId"})
 ANCHORED_REGEX = re.compile(r"\^(.+)\$", re.DOTALL)
 REGEX_ESCAPE = re.compile(r"\\(\W)")
 REGEX_COMPILE_CALL = "compile"
+REGEX_CONSTRUCTOR = "RegExp"
 FIX = "find it by its key through the generated module"
 
 SCOPE_DEFINITIONS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
@@ -62,9 +74,19 @@ def _catalog_texts(root: Path, tracked: list[str], directory: PurePosixPath) -> 
     return {text: sorted(held) for text, held in keys.items()}
 
 
+def _is_python_test(path: PurePosixPath) -> bool:
+    return path.suffix == PYTHON_SUFFIX and TEST_DIRECTORY in path.parent.parts
+
+
+def _is_script_test(path: PurePosixPath) -> bool:
+    """A TypeScript or JavaScript file named `*.test.*` or `*.spec.*`, or under a directory of end-to-end tests or helpers."""
+    marked = any(fnmatch.fnmatchcase(path.name, pattern) for pattern in SCRIPT_TEST_PATTERNS)
+    return path.suffix in SCRIPT_SUFFIXES and (marked or not SCRIPT_TEST_DIRECTORIES.isdisjoint(path.parent.parts))
+
+
 def _is_test_file(name: str) -> bool:
     path = PurePosixPath(name)
-    return path.suffix == PYTHON_SUFFIX and TEST_DIRECTORY in path.parent.parts
+    return _is_python_test(path) or _is_script_test(path)
 
 
 def _module_level_nodes(node: ast.AST) -> Iterator[ast.AST]:
@@ -120,9 +142,12 @@ def _argument_expressions(call: ast.Call) -> list[ast.expr]:
 
 
 def _attribute_value(call: ast.Call) -> list[ast.expr]:
-    """The value argument of a `to_have_attribute` call: the second positional one, or the `value` keyword."""
-    keywords = [keyword.value for keyword in call.keywords if keyword.arg == ATTRIBUTE_VALUE_KEYWORD]
-    return [*call.args[1:2], *keywords]
+    """The value argument of a `to_have_attribute` call: the second positional one, or the `value` keyword; none unless the
+    attribute is a literal one a person reads."""
+    names = [*call.args[:1], *(keyword.value for keyword in call.keywords if keyword.arg == ATTRIBUTE_NAME_KEYWORD)]
+    if not any(isinstance(name, ast.Constant) and name.value in READ_ATTRIBUTES for name in names):
+        return []
+    return [*call.args[1:2], *(keyword.value for keyword in call.keywords if keyword.arg == ATTRIBUTE_VALUE_KEYWORD)]
 
 
 def _surface_arguments(call: ast.Call, name: str) -> list[ast.expr]:
@@ -169,16 +194,192 @@ def _sites(tree: ast.Module) -> list[Site]:
     return [found[position] for position in sorted(found)]
 
 
-def _literal(value: Value, constants: dict[str, str]) -> str | None:
+@dataclass(frozen=True)
+class Reading:
+    """A value in a locator position: its line, its literal text (None where a name or call has none) and whether a regex
+    holds it."""
+
+    line: int
+    literal: str | None
+    in_regex: bool
+
+
+def _python_literal(value: Value, constants: dict[str, str]) -> str | None:
     if isinstance(value, ast.Name):
         return constants.get(value.id)
     return value.value if isinstance(value.value, str) else None
 
 
+def _python_readings(name: str, content: bytes) -> list[Reading]:
+    try:
+        tree = ast.parse(content, name)
+    except (SyntaxError, ValueError, RecursionError) as error:
+        raise Unparsable(f"{name} cannot be read as Python ({error})") from error
+    constants = _module_constants(tree)
+    return [Reading(value.lineno, _python_literal(value, constants), in_regex) for value, in_regex in _sites(tree)]
+
+
+OPENERS = ("(", "[", "{")
+CLOSERS = (")", "]", "}")
+DECLARATIONS = frozenset({"const", "let", "var", "function", "class"})
+SITE_KINDS = frozenset({Kind.STRING, Kind.REGEX, Kind.IDENTIFIER})
+
+
+def _is_punctuation(token: Token | None, *values: str) -> bool:
+    return token is not None and token.kind is Kind.PUNCTUATION and token.value in values
+
+
+def _at(tokens: Sequence[Token], index: int) -> Token | None:
+    return tokens[index] if 0 <= index < len(tokens) else None
+
+
+def _extent(tokens: Sequence[Token], start: int) -> int:
+    """The index where the expression starting at `start` ends: a top-level comma, a closer nothing here opened, or the end."""
+    depth = 0
+    for index in range(start, len(tokens)):
+        if _is_punctuation(tokens[index], *OPENERS):
+            depth += 1
+        elif _is_punctuation(tokens[index], *CLOSERS):
+            if depth == 0:
+                return index
+            depth -= 1
+        elif depth == 0 and _is_punctuation(tokens[index], ","):
+            return index
+    return len(tokens)
+
+
+def _arguments(tokens: Sequence[Token], opening: int) -> list[range]:
+    """The token ranges of the comma-separated arguments of the call whose `(` is at `opening`; a call never closed runs to
+    the end."""
+    arguments = []
+    start = opening + 1
+    while True:
+        end = _extent(tokens, start)
+        arguments.append(range(start, end))
+        if not _is_punctuation(_at(tokens, end), ","):
+            return arguments
+        start = end + 1
+
+
+def _declarations(tokens: Sequence[Token]) -> Iterator[int]:
+    """The index of each declaring keyword (`const`, `let`, `var`, `function`, `class`) that stands at the top level."""
+    depth = 0
+    for index, token in enumerate(tokens):
+        if _is_punctuation(token, *CLOSERS):
+            depth = max(depth - 1, 0)
+        elif depth == 0 and token.kind is Kind.IDENTIFIER and token.value in DECLARATIONS:
+            yield index
+        if _is_punctuation(token, *OPENERS):
+            depth += 1
+
+
+def _ends_declaration(tokens: Sequence[Token], index: int) -> bool:
+    """Whether the statement whose value is at `index` ends there: at `;`, at `as const`, at the end of the file, or at a line
+    that starts with an identifier."""
+    following = _at(tokens, index + 1)
+    if following is None or _is_punctuation(following, ";"):
+        return True
+    if following.kind is not Kind.IDENTIFIER:
+        return False
+    after = _at(tokens, index + 2)
+    return following.line > tokens[index].line or (following.value == "as" and after is not None and after.value == "const")
+
+
+def _constant_value(tokens: Sequence[Token], index: int) -> str | None:
+    """The string the `const` at `index` is set to, when its statement ends right after it."""
+    assignment, value = _at(tokens, index + 2), _at(tokens, index + 3)
+    if tokens[index].value != "const" or not _is_punctuation(assignment, "=") or value is None or value.kind is not Kind.STRING:
+        return None
+    return value.value if _ends_declaration(tokens, index + 3) else None
+
+
+def _script_constants(tokens: Sequence[Token]) -> dict[str, str]:
+    """The names declared exactly once at the top level, by a `const` set to a plain string or a template without a hole."""
+    declared: Counter[str] = Counter()
+    strings: dict[str, str] = {}
+    for index in _declarations(tokens):
+        name = _at(tokens, index + 1)
+        if name is None or name.kind is not Kind.IDENTIFIER:
+            continue
+        declared[name.value] += 1
+        text = _constant_value(tokens, index)
+        if text is not None:
+            strings[name.value] = text
+    return {name: text for name, text in strings.items() if declared[name] == 1}
+
+
+def _is_read_attribute(tokens: Sequence[Token], argument: range) -> bool:
+    """Whether an argument is one string literal naming an attribute a person reads."""
+    return len(argument) == 1 and tokens[argument[0]].kind is Kind.STRING and tokens[argument[0]].value in READ_ATTRIBUTES
+
+
+def _call_positions(tokens: Sequence[Token], index: int) -> list[range]:
+    """The argument ranges of the call named at `index` that sit in a locator position."""
+    name = tokens[index].value
+    if not _is_punctuation(_at(tokens, index + 1), "("):
+        return []
+    arguments = _arguments(tokens, index + 1)
+    if name in ATTRIBUTE_CALLS:
+        return arguments[1:2] if _is_read_attribute(tokens, arguments[0]) else []
+    if name in TEST_ID_CALLS or not (LOCATOR_CALL.fullmatch(name) or name in ASSERTION_CALLS):
+        return []
+    return arguments[1:] if name in ROLE_CALLS else arguments
+
+
+def _positions(tokens: Sequence[Token]) -> set[int]:
+    """The indices of the tokens inside a locator position: call arguments and the value of a `hasText:` property."""
+    positions: set[int] = set()
+    for index, token in enumerate(tokens):
+        if token.kind is not Kind.IDENTIFIER:
+            continue
+        ranges = _call_positions(tokens, index)
+        if token.value in FILTER_KEYWORDS and _is_punctuation(_at(tokens, index + 1), ":"):
+            ranges.append(range(index + 2, _extent(tokens, index + 2)))
+        for span in ranges:
+            positions.update(span)
+    return positions
+
+
+def _opens_position(tokens: Sequence[Token], index: int) -> bool:
+    """Whether the token follows `(`, `,`, the `[` of an array (never an index) or a `key:` of an object."""
+    previous = _at(tokens, index - 1)
+    if _is_punctuation(previous, "(", ","):
+        return True
+    before = _at(tokens, index - 2)
+    if _is_punctuation(previous, "["):
+        indexes = before is not None and (before.kind is Kind.IDENTIFIER or _is_punctuation(before, ")", "]"))
+        return not indexes
+    key_start = _at(tokens, index - 3)
+    is_key = before is not None and before.kind in {Kind.IDENTIFIER, Kind.STRING}
+    return _is_punctuation(previous, ":") and is_key and _is_punctuation(key_start, "{", ",")
+
+
+def _stands_alone(tokens: Sequence[Token], index: int) -> bool:
+    return tokens[index].kind in SITE_KINDS and _is_punctuation(_at(tokens, index + 1), ")", ",", "]", "}") and _opens_position(tokens, index)
+
+
+def _script_reading(tokens: Sequence[Token], index: int, constants: dict[str, str]) -> Reading:
+    token = tokens[index]
+    constructor = _at(tokens, index - 2)
+    constructed = _is_punctuation(_at(tokens, index - 1), "(") and constructor is not None and constructor.value == REGEX_CONSTRUCTOR
+    in_regex = token.kind is Kind.REGEX or constructed
+    literal = constants.get(token.value) if token.kind is Kind.IDENTIFIER else token.value
+    return Reading(token.line, literal, in_regex)
+
+
+def _script_readings(name: str, content: bytes) -> list[Reading]:
+    try:
+        tokens = tokenize(content.decode("utf-8"))
+    except (UnicodeDecodeError, ScriptSyntaxError) as error:
+        raise Unparsable(f"{name} cannot be read as TypeScript or JavaScript ({error})") from error
+    constants = _script_constants(tokens)
+    return [_script_reading(tokens, index, constants) for index in sorted(_positions(tokens)) if _stands_alone(tokens, index)]
+
+
 def _catalog_text(literal: str, texts: CatalogTexts, in_regex: bool) -> str | None:
-    """The catalog text the literal is whole: itself unless a regex compile holds it, or the body of an anchored `^...$` regex."""
-    if literal in texts and not in_regex:
-        return literal
+    """The catalog text the literal is whole: itself, or when a regex holds it the body of an anchored `^...$` regex."""
+    if not in_regex:
+        return literal if literal in texts else None
     anchored = ANCHORED_REGEX.fullmatch(literal)
     body = REGEX_ESCAPE.sub(r"\1", anchored.group(1)) if anchored else None
     return body if body in texts else None
@@ -191,24 +392,19 @@ def _fact(text: str, keys: list[str]) -> str:
 
 
 def _file_findings(name: str, content: bytes, texts: CatalogTexts) -> list[Finding]:
-    try:
-        tree = ast.parse(content, name)
-    except (SyntaxError, ValueError, RecursionError) as error:
-        raise Unparsable(f"{name} cannot be read as Python ({error})") from error
-    constants = _module_constants(tree)
+    readings = _python_readings(name, content) if PurePosixPath(name).suffix == PYTHON_SUFFIX else _script_readings(name, content)
     findings = []
-    for value, in_regex in _sites(tree):
-        literal = _literal(value, constants)
-        text = None if literal is None else _catalog_text(literal, texts, in_regex)
+    for reading in readings:
+        text = None if reading.literal is None else _catalog_text(reading.literal, texts, reading.in_regex)
         if text is not None:
             fact = _fact(text, texts[text])
-            findings.append(Finding(Rule.LOCATOR_TEXT, name, value.lineno, fact, FIX, event=FindingEvent.CATALOG_TEXT))
+            findings.append(Finding(Rule.LOCATOR_TEXT, name, reading.line, fact, FIX, event=FindingEvent.CATALOG_TEXT))
     return findings
 
 
 def check_locator_text(root: Path, tracked: list[str], catalogs: Catalogs) -> RuleResult:
-    """One finding per site of a catalog text in a locator position of the tracked Python test files, at its line; the extent
-    is the test files read. A covered repository is one `catalog_rules.read_catalogs` returned."""
+    """One finding per site of a catalog text in a locator position of the tracked Python, TypeScript and JavaScript test files,
+    at its line; the extent is the test files read. A covered repository is one `catalog_rules.read_catalogs` returned."""
     texts = _catalog_texts(root, tracked, catalog_rules.catalogs_directory(catalogs))
     return checkout.judge_tracked(
         repository.read_bytes, root, tracked, _is_test_file, lambda name, content: _file_findings(name, content, texts)

@@ -87,6 +87,7 @@ layers = [
     "literal_text | locator_text",
     "render_pass",
     "catalog_rules",
+    "read_attributes | typescript_tokens",
     "agent_guidance | architecture | clones | compose | env_file | layout | pip_requirements | python_floor | root_layout | scanners | workflow_rules",
     "makefile",
     "run_script",
