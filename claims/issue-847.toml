@@ -1,0 +1,7 @@
+claim_id = "373672125423452a840df522719250a7"
+agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
+role = "builder"
+base = "505b0df999b4bab932aba53f3e3dea044066debe"
+branch = "claude/issue-847-merge-door-polish"
+scope = ["docs/runbooks/merge.md", "tests/test_merge.py", "tests/test_merge_rows.py"]
+opened_commit = "5f5ab2cd2adc49f59b04b9f3ca13240de810ac27"
