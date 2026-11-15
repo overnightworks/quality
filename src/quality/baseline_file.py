@@ -173,7 +173,7 @@ def load_baseline(text: str) -> Baseline:
         elif table_name == JOB_MINUTES:
             job_minutes = _job_minutes(table)
         elif table_name == LITERAL_TEXT:
-            continue  # a table the rule no longer holds: ignored unread, and `--fix` rewrites the file without it
+            continue  # read and ignored; `--fix` rewrites the file without it
         else:
             size.update(_size_entries(table_name, table))
     return Baseline(size, clones, job_minutes)

@@ -477,8 +477,8 @@ LITERAL_TEXT = Rule.LITERAL_TEXT.release
 )
 @pytest.mark.parametrize("has_literal_table", [True, False], ids=["a table", "no table"])
 def test_literal_text_on_main_reads_whether_the_clone_declares_catalogs(declares_catalogs, has_literal_table, words):
-    """FLEET-99: the cell says what the gate does with the rule, which the catalogs declaration switches on and a held table
-    no longer does."""
+    """FLEET-99: the cell says what the gate does with the rule, which the catalogs declaration switches on and a held
+    `[literal_text]` table leaves as it is."""
     declaration = declared(declares_catalogs=declares_catalogs, has_literal_table=has_literal_table)
     assert rule_cell(LITERAL_TEXT, Gate.MAIN, declaration) == words
 
