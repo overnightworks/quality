@@ -45,7 +45,9 @@ STRINGS = {
     quote: re.compile(rf"{quote}((?:[^{quote}\\\r\n]++|\\(?:\r\n|.))*+){quote}", re.DOTALL) for quote in ("'", '"')
 }
 TEMPLATE_CHUNK = re.compile(r"(?:[^`\\$]++|\\.|\$(?!\{))*+", re.DOTALL)
-REGEX = re.compile(r"/((?:[^/\\\[\r\n]++|\\[^\r\n]|\[(?:[^\]\\\r\n]++|\\[^\r\n])*+\])*+)/\w*")
+REGEX_ESCAPE = r"\\[^\r\n]"
+REGEX_CLASS = rf"\[(?:[^\]\\\r\n]++|{REGEX_ESCAPE})*+\]"
+REGEX = re.compile(rf"/((?:[^/\\\[\r\n]++|{REGEX_ESCAPE}|{REGEX_CLASS})*+)/\w*")
 ESCAPE = re.compile(r"\\(?:u\{([0-9a-fA-F]+)\}|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|(\r\n|.))", re.DOTALL)
 SIMPLE_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "v": "\v", "0": "\0"}
 LINE_TERMINATORS = frozenset({"\n", "\r", "\r\n", "\u2028", "\u2029"})
