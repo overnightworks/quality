@@ -36,6 +36,7 @@ REGEX_KEYWORDS = frozenset(
     {"return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "throw", "case", "do", "else", "yield", "await", "default", "extends"}
 )
 NON_REGEX_PUNCTUATION = frozenset({")", "]"})
+POSTFIX_STEPS = frozenset({"+", "-"})
 SKIPPED = re.compile(r"(?P<space>\s+)|(?P<comment>//[^\n\r\u2028\u2029]*|/\*.*?\*/)|(?P<unclosed>/\*)", re.DOTALL)
 LEXEME = re.compile(
     r"(?P<word>(?:[^\W\d]|\$)[\w$]*)|(?P<number>\d[\w.]*)|(?P<quote>['\"])|(?P<template>`)|(?P<slash>/)|(?P<other>.)",
@@ -45,9 +46,9 @@ STRINGS = {
     quote: re.compile(rf"{quote}((?:[^{quote}\\\r\n]++|\\(?:\r\n|.))*+){quote}", re.DOTALL) for quote in ("'", '"')
 }
 TEMPLATE_CHUNK = re.compile(r"(?:[^`\\$]++|\\.|\$(?!\{))*+", re.DOTALL)
-REGEX_ESCAPE = r"\\[^\r\n]"
-REGEX_CLASS = rf"\[(?:[^\]\\\r\n]++|{REGEX_ESCAPE})*+\]"
-REGEX = re.compile(rf"/((?:[^/\\\[\r\n]++|{REGEX_ESCAPE}|{REGEX_CLASS})*+)/\w*")
+REGEX_ESCAPE = r"\\[^\r\n\u2028\u2029]"
+REGEX_CLASS = rf"\[(?:[^\]\\\r\n\u2028\u2029]++|{REGEX_ESCAPE})*+\]"
+REGEX = re.compile(rf"/((?:[^/\\\[\r\n\u2028\u2029]++|{REGEX_ESCAPE}|{REGEX_CLASS})*+)/\w*")
 ESCAPE = re.compile(r"\\(?:u\{([0-9a-fA-F]+)\}|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|(\r\n|.))", re.DOTALL)
 SIMPLE_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "v": "\v", "0": "\0"}
 LINE_TERMINATORS = frozenset({"\n", "\r", "\r\n", "\u2028", "\u2029"})
@@ -132,16 +133,32 @@ class _Lexer:
         self._emit(Kind.REGEX, regex.group(1), regex.end())
 
     def _regex_allowed(self) -> bool:
-        """A `/` starts a regex after nothing, after punctuation but `)` and `]`, after a keyword that takes an operand and
-        where a template hole begins; after anything else it divides."""
+        """A `/` starts a regex after nothing, after punctuation but `)`, `]`, a postfix `++` or `--` and a `!` that follows an
+        operand (a non-null mark), after a keyword that takes an operand and where a template hole begins; after anything else
+        it divides."""
         if not self.tokens:
             return True
         previous = self.tokens[-1]
         if previous.kind is Kind.PUNCTUATION:
-            return previous.value not in NON_REGEX_PUNCTUATION
+            return previous.value not in NON_REGEX_PUNCTUATION and not self._ends_in_postfix_operator()
         if previous.kind is Kind.IDENTIFIER:
             return previous.value in REGEX_KEYWORDS
         return previous.kind is Kind.TEMPLATE
+
+    def _ends_in_postfix_operator(self) -> bool:
+        """`++` or `--` (a regex never follows a prefix one) or a `!` right after an identifier, `)` or `]`, the TypeScript
+        non-null mark; a `!` after anything else is a prefix not."""
+        last = self.tokens[-1].value
+        before = self.tokens[-2] if len(self.tokens) > 1 else None
+        if before is None:
+            return False
+        if last in POSTFIX_STEPS:
+            return before.kind is Kind.PUNCTUATION and before.value == last
+        if last != "!":
+            return False
+        if before.kind is Kind.PUNCTUATION:
+            return before.value in NON_REGEX_PUNCTUATION
+        return before.kind is Kind.IDENTIFIER and before.value not in REGEX_KEYWORDS
 
     def _template_start(self, lexeme: re.Match[str]) -> None:
         start_line = self.line

@@ -463,11 +463,21 @@ def test_scenario_data_and_every_other_script_value_is_no_site(build_repo, scena
         "const text = `${a} and ${b} and ${'}'}`;\n",
         "const s = `${value}${/'/.test(value)}`;\n",
         "const nested = " + "[" * 20000 + "]" * 20000 + ";\n",
+        "i++ / 2;\n",
+        "const a = n-- / 2 + ' a/b';\n",
+        "const a = v! / 2; // don't\n",
+        "const a = f(x)! / 2; // don't\n",
+        "const a = b[0]! / 2; // don't\n",
+        "const a = !/'/.test(y);\n",
+        "const a = x ? 1 : !/'/.test(y);\n",
+        "return !/'/.test(y);\n",
     ],
     ids=[
         "quote in a regex", "quote in a comment", "slash in a class", "divisions", "division after parentheses",
         "division in a template hole", "backtick in a string", "braces in a template hole", "stray braces", "unbalanced brackets", "private field and hashbang",
         "non-ascii", "number separator", "regex after return", "regex first in the file", "template with several holes", "regex starting a later hole", "deep nesting",
+        "division after a postfix increment", "division after a postfix decrement", "division after a non-null mark",
+        "division after a non-null mark on a call", "division after a non-null mark on an index", "regex after a not that follows an operator", "regex after a not in a ternary", "regex after a not that follows return",
     ],
 )
 def test_a_valid_file_is_read_to_its_last_site_whatever_comes_first(build_repo, scenario, prefix):
@@ -497,6 +507,8 @@ def test_a_line_is_counted_by_every_terminator_the_lexer_knows(build_repo, scena
         pytest.param(b"x = 1\nconst r = /abc\nfoo();\n", 2, id="regex reaching a newline"),
         pytest.param(b"x = 1\nconst r = /abc", 2, id="regex reaching the end"),
         pytest.param(b"x = 1\nconst r = /[abc/;\n", 2, id="regex class reaching the end of the line"),
+        pytest.param("x = 1\nconst r = /ab\u2028cd/;\n".encode(), 2, id="regex reaching U+2028"),
+        pytest.param("x = 1\nconst r = /[ab\u2029cd]/;\n".encode(), 2, id="regex class reaching U+2029"),
         pytest.param(b"x = 1\n\n/* never closed\nfoo();\n", 3, id="unclosed block comment"),
     ],
 )
