@@ -17,7 +17,6 @@ from quality import (
     baseline_file,
     fleet,
     installation,
-    literal_text,
     pin,
     process,
     ratchet,
@@ -423,13 +422,10 @@ def _lowered_fact(ceiling: ratchet.CeilingFix | DryRun) -> str:
 
 
 def _recorded_extent(fix: ratchet.CeilingFix) -> str:
-    """What a first recording holds: its entries and clone pairs, its job limits when it holds a job table and its literal
-    texts when the repository is covered."""
+    """What a first recording holds: its entries and clone pairs, and its job limits when it holds a job table."""
     parts = [counted(len(fix.ceiling.size), "entry", "entries"), counted(len(fix.ceiling.clones), CLONE_PAIR)]
     if fix.ceiling.job_minutes:
         parts.append(counted(len(fix.ceiling.job_minutes), baseline_file.JOB_LIMIT))
-    if (pages := fix.ceiling.literal_texts) is not None:
-        parts.append(literal_text.table_words(sum(pages.values()), len(pages)))
     return ", ".join(parts)
 
 
@@ -549,18 +545,14 @@ def _dependencies_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | N
 
 def _debt_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
     entries, pairs = counted(extents[Rule.SIZE], "entry", "entries"), counted(extents[Rule.CLONE], CLONE_PAIR)
-    literal = extents.get(Rule.LITERAL_TEXT)
-    measured = {judged.rule for judged in verdict.verdicts if judged.measured_only}
-    read = [] if literal is None else [f"{counted(literal.texts, baseline_file.LITERAL_TEXT_NOUN)} in {counted(literal.files, 'file')}"]
     limits = [counted(extents[Rule.JOB_TIMEOUT], baseline_file.JOB_LIMIT)] if extents[Rule.JOB_TIMEOUT] else []
-    held = limits + ([] if literal is None else [literal_text.table_words(literal.texts, literal.files)])
     match verdict.measurement:
         case Measurement.MEASURED_ONLY:
-            return ", ".join([f"{entries} over the thresholds", *read])
+            return f"{entries} over the thresholds"
         case Measurement.PARTLY_MEASURED_ONLY:
-            return ", ".join(([pairs] if Rule.CLONE in measured else []) + (read if Rule.LITERAL_TEXT in measured else []))
+            return pairs
         case Measurement.ENFORCED:
-            return f"{CEILING_HELD}{SEPARATOR}{', '.join([entries, pairs, *held])}"
+            return f"{CEILING_HELD}{SEPARATOR}{', '.join([entries, pairs, *limits])}"
 
 
 def _workflows_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:

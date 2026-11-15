@@ -85,7 +85,7 @@ def rules_without_release(releases: Iterable[RuleRelease]) -> tuple[str, ...]:
     return tuple(
         release.rule
         for release in releases
-        if release.first_release is None or (release.switched is not None and release.switched.release is None)
+        if release.first_release is None or any(change.release is None for change in release.switched)
     )
 
 

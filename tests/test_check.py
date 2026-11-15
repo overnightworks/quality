@@ -199,7 +199,7 @@ def uncovered_rules() -> list[Rule]:
 
 
 def test_a_run_without_flags_judges_every_rule(build_repo, capsys):
-    """CHECK-3, LITERAL-12: no scan is ever skipped, so a plain run judges every rule in run order, the literal-text rule
+    """CHECK-3, LITERAL-15: no scan is ever skipped, so a plain run judges every rule in run order, the literal-text rule
     of a repository that is not covered excepted."""
     verdicts = check_result(build_repo({}), installed_ruff, never_located).verdicts
     assert ([verdict.rule for verdict in verdicts], [verdict.refusal for verdict in verdicts]) == (

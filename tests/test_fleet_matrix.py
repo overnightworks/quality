@@ -382,7 +382,7 @@ def test_a_malformed_baseline_makes_the_gates_own_clone_cell_unreadable_and_the_
 @pytest.mark.parametrize(("pin", "words"), [("v0.5.0", "enforced"), ("v0.4.0", "report-only")], ids=["the switch", "older"])
 def test_a_later_switch_applies_from_the_tag_that_names_it(pin, words):
     """FLEET-17."""
-    rule = RuleRelease("future", "v0.1.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE))
+    rule = RuleRelease("future", "v0.1.0", Switch.REPORT_ONLY, (SwitchChange("v0.5.0", Switch.CLONE_TABLE),))
     release = gate_release((gate_call("e" * 40),), False, {**FIRST_RELEASES, pin: "e" * 40})
     assert rule_cell(rule, release, declared(has_clone_table=True)) == words
 
@@ -425,7 +425,7 @@ CATALOG_SWITCH_PIN = "8" * 40
 )
 def test_catalog_check_under_a_tag_reads_report_only_until_the_release_names_the_switch(pin, declares_catalogs, words):
     """CATALOG-30, FLEET-98, FLEET-99: a tag before the switch change only reports; from it the cell reads as on main."""
-    tags = {**CATALOG_TAGS, CATALOG_CHECK.switched.release: CATALOG_SWITCH_PIN}
+    tags = {**CATALOG_TAGS, CATALOG_CHECK.switched[0].release: CATALOG_SWITCH_PIN}
     release = gate_release((gate_call(pin),), False, tags)
     assert rule_cell(CATALOG_CHECK, release, declared(declares_catalogs=declares_catalogs)) == words
 
@@ -472,11 +472,13 @@ FIRST_RELEASE_COMMIT = "f" * 40
 LITERAL_TEXT = Rule.LITERAL_TEXT.release
 
 
-@pytest.mark.parametrize("declares_catalogs", [True, False], ids=["a catalogs declaration", "no declaration"])
-@pytest.mark.parametrize(("has_literal_table", "words"), [(True, "enforced"), (False, "report-only")], ids=["a table", "no table"])
-def test_literal_text_reads_the_table_on_main_whatever_the_clone_declares(declares_catalogs, has_literal_table, words):
-    """FLEET-101, FLEET-102: the cell says what the gate does with the rule, which the table switches on, never who is
-    covered."""
+@pytest.mark.parametrize(
+    ("declares_catalogs", "words"), [(True, "enforced"), (False, "no catalogs declaration")], ids=["a catalogs declaration", "no declaration"]
+)
+@pytest.mark.parametrize("has_literal_table", [True, False], ids=["a table", "no table"])
+def test_literal_text_on_main_reads_whether_the_clone_declares_catalogs(declares_catalogs, has_literal_table, words):
+    """FLEET-99: the cell says what the gate does with the rule, which the catalogs declaration switches on and a held
+    `[literal_text]` table leaves as it is."""
     declaration = declared(declares_catalogs=declares_catalogs, has_literal_table=has_literal_table)
     assert rule_cell(LITERAL_TEXT, Gate.MAIN, declaration) == words
 
@@ -495,8 +497,8 @@ LITERAL_SWITCH_PIN = "7" * 40
     ids=["first release with a table", "first release with none", "switch release with a table", "switch release with none"],
 )
 def test_literal_text_under_a_tag_reads_report_only_until_the_release_names_the_switch(pin, has_literal_table, words):
-    """FLEET-102: a tag before the switch change only measures; from it the cell reads as on main."""
-    tags = {**FIRST_RELEASES, LITERAL_TEXT.first_release: FIRST_RELEASE_COMMIT, LITERAL_TEXT.switched.release: LITERAL_SWITCH_PIN}
+    """FLEET-102: a tag before the table switch only measures; from it the cell reads the table."""
+    tags = {**FIRST_RELEASES, LITERAL_TEXT.first_release: FIRST_RELEASE_COMMIT, LITERAL_TEXT.switched[0].release: LITERAL_SWITCH_PIN}
     release = gate_release((gate_call(pin),), False, tags)
     assert rule_cell(LITERAL_TEXT, release, declared(has_literal_table=has_literal_table)) == words
 
@@ -531,15 +533,15 @@ def test_the_gates_own_clone_reads_the_catalog_cell_from_its_pyproject(fleet_rep
 @pytest.mark.parametrize(
     ("files", "words"),
     [
-        ({baseline_file.BASELINE_PATH: "[literal_text]\n"}, "enforced"),
-        ({baseline_file.BASELINE_PATH: "[clones]\n"}, "report-only"),
-        ({}, "report-only"),
-        ({baseline_file.BASELINE_PATH: "[literal_text\n"}, "cannot read quality/baseline.toml"),
+        ({"pyproject.toml": '[project]\ndependencies = ["overnightworks-design[catalogs]>=1"]\n'}, "enforced"),
+        ({"pyproject.toml": '[project]\ndependencies = ["overnightworks-design>=1"]\n'}, "no catalogs declaration"),
+        ({baseline_file.BASELINE_PATH: "[literal_text]\n"}, "no catalogs declaration"),
     ],
-    ids=["a literal text table", "a baseline without the table", "no baseline", "an unreadable baseline"],
+    ids=["a catalogs declaration", "the dependency without the extra", "a table without a declaration"],
 )
-def test_the_gates_own_clone_reads_the_literal_text_cell_from_its_ceiling_file(fleet_report, gate_clone, files, words):
-    """FLEET-102: the `[literal_text]` table in the clone's ceiling file switches the cell on main."""
+def test_the_gates_own_clone_reads_the_literal_text_cell_from_its_pyproject_on_main(fleet_report, gate_clone, files, words):
+    """FLEET-99: on main the clone's tracked `pyproject.toml` decides the cell, as for `catalog-check`, and a held
+    `[literal_text]` table does not."""
     _, output = fleet_report(gate_clone({**caller("./.github/workflows/gate.yml"), **files}), tags=first_releases())
     assert cell(output, GATE_REPOSITORY, "literal-text") == words, output
 
@@ -639,7 +641,7 @@ def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces
     _, output = fleet_report(public("any", {}), tags=first_releases())
     assert "Every gate release enforces env-file, compose-port, secret, workflow-lint and workflow-security." in output
     assert MATRIX_COLUMNS[5:] == (
-        "size", "clone", "job-timeout", "literal-text", "import-contract", "claude-md", "agents-md", "root-layout", "file-suffix",
-        "script-name", "script-header", "test-layout", "test-import", "python-floor",
+        "size", "clone", "job-timeout", "import-contract", "claude-md", "agents-md", "root-layout", "file-suffix",
+        "script-name", "script-header", "test-layout", "test-import", "literal-text", "python-floor",
         "python-security", "python-print", "pr-concurrency", "pytest-workers", "runtime-install", "catalog-check", "render-pass", "advisory",
     )

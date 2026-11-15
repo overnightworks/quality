@@ -23,15 +23,12 @@ from quality import checkout, repository
 from quality.baseline_file import (
     BASELINE_PATH,
     FIX_COMMAND,
-    LITERAL_TEXT_NOUN,
     Baseline,
     ClonePair,
     JobKey,
     JobMinutes,
     Key,
-    LiteralTexts,
     Metric,
-    PageKey,
     SizeEntries,
     SizeError,
     UnknownTable,
@@ -303,7 +300,7 @@ def compare(measurements: Measurements, baseline: SizeEntries, gone: Mapping[Key
 class RaisedEntry:
     """A baseline entry the head holds higher than the base; `base` is None when the head adds the entry."""
 
-    key: Key | JobKey | PageKey
+    key: Key | JobKey
     base: int | None
     head: int
 
@@ -370,14 +367,13 @@ def _renamed_paths(name_status: bytes) -> Iterator[tuple[bytes, bytes]]:
 
 
 def named_paths(baseline: Baseline) -> frozenset[str]:
-    """Every path a baseline names, by a size entry, a pair side, a job limit or a page count."""
+    """Every path a baseline names, by a size entry, a pair side or a job limit."""
     sides = {place.path for pair in baseline.clones or () for place in (pair.first, pair.second)}
     workflows = {key.path for key in baseline.job_minutes or ()}
-    pages = {key.path for key in baseline.literal_texts or ()}
-    return frozenset({key.path for key in baseline.size} | sides | workflows | pages)
+    return frozenset({key.path for key in baseline.size} | sides | workflows)
 
 
-def _rekeyed[Entry: (Key, JobKey, PageKey)](
+def _rekeyed[Entry: (Key, JobKey)](
     entries: dict[Entry, int], new_path: Callable[[str], str | None]
 ) -> dict[Entry, int]:
     """The entries with each key under the path `new_path` gives it; an entry whose path it drops is dropped."""
@@ -400,15 +396,12 @@ def carried_base(base: Baseline, renames: Renames, kept: Collection[str]) -> Bas
 
     size = _rekeyed(base.size, new_path)
     limits = base.job_minutes and _rekeyed(base.job_minutes, new_path)
-    pages = base.literal_texts and _rekeyed(base.literal_texts, new_path)
     pairs = base.clones and {
         ClonePair.of(pair.first._replace(path=first), pair.second._replace(path=second))
         for pair in base.clones
         if (first := new_path(pair.first.path)) and (second := new_path(pair.second.path))
     }
-    return copy.replace(
-        base, size=size, job_minutes=limits, literal_texts=pages, clones=None if pairs is None else frozenset(pairs)
-    )
+    return copy.replace(base, size=size, job_minutes=limits, clones=None if pairs is None else frozenset(pairs))
 
 
 def raised_entries(base: SizeEntries, head: SizeEntries) -> list[RaisedEntry]:
@@ -421,12 +414,7 @@ def raised_job_limits(base: JobMinutes, head: JobMinutes) -> list[RaisedEntry]:
     return _raised(base, head, head)
 
 
-def raised_literal_texts(base: LiteralTexts, head: LiteralTexts) -> list[RaisedEntry]:
-    """The same for literal-text counts, in the order the head file holds them; a renamed page is a new one."""
-    return _raised(base, head, head)
-
-
-def _raised[Entry: (Key, JobKey, PageKey)](base: Mapping[Entry, int], head: Mapping[Entry, int], order: Iterable[Entry]) -> list[RaisedEntry]:
+def _raised[Entry: (Key, JobKey)](base: Mapping[Entry, int], head: Mapping[Entry, int], order: Iterable[Entry]) -> list[RaisedEntry]:
     return [RaisedEntry(key, base.get(key), head[key]) for key in order if key not in base or head[key] > base[key]]
 
 
@@ -517,7 +505,7 @@ def _unexplained(path: str) -> CannotJudge:
 
 
 @dataclass(frozen=True)
-class EntryKind[Entry: (Key, JobKey, PageKey)]:
+class EntryKind[Entry: (Key, JobKey)]:
     """How one table of the ceiling words a held entry when a rename moves it, and which entries of a rename it moves."""
 
     held: Callable[[Entry, int], str]
@@ -527,7 +515,7 @@ class EntryKind[Entry: (Key, JobKey, PageKey)]:
     ]
 
 
-def _require_placed[Entry: (Key, JobKey, PageKey)](
+def _require_placed[Entry: (Key, JobKey)](
     entries: Mapping[Entry, int], committed: Mapping[Entry, int], tracked: frozenset[str]
 ) -> None:
     """An entry the committed ceiling lacks under a path git no longer tracks has no lineage."""
@@ -536,7 +524,7 @@ def _require_placed[Entry: (Key, JobKey, PageKey)](
         raise _unexplained(unplaced[0])
 
 
-def _holds[Entry: (Key, JobKey, PageKey)](table: Mapping[Entry, int] | None, key: Entry, value: int) -> bool:
+def _holds[Entry: (Key, JobKey)](table: Mapping[Entry, int] | None, key: Entry, value: int) -> bool:
     """The table holds the entry at this value or higher."""
     return table is not None and key in table and value <= table[key]
 
@@ -557,7 +545,7 @@ def _group_to_move(
     return moving, {key: mine[key] for key in source_first if key.path != source}
 
 
-def _entries_to_move[Entry: (Key, JobKey, PageKey)](
+def _entries_to_move[Entry: (Key, JobKey)](
     held: Mapping[Entry, int],
     committed: Mapping[Entry, int] | None,
     carried: Mapping[Entry, int] | None,
@@ -586,10 +574,9 @@ def _entries_to_move[Entry: (Key, JobKey, PageKey)](
 
 SIZE_ENTRIES = EntryKind(lambda key, value: f"{_subject(key)} {describe_value(key.metric, value)}", _group_to_move)
 JOB_ENTRIES = EntryKind(lambda key, value: f"job {key.job} {value} minutes", _entries_to_move)
-PAGE_ENTRIES = EntryKind(lambda key, value: counted(value, LITERAL_TEXT_NOUN), _entries_to_move)
 
 
-def _followed_entries[Entry: (Key, JobKey, PageKey)](
+def _followed_entries[Entry: (Key, JobKey)](
     kind: EntryKind[Entry],
     held: Mapping[Entry, int],
     committed: Mapping[Entry, int] | None,
@@ -619,8 +606,8 @@ def _followed_entries[Entry: (Key, JobKey, PageKey)](
 
 
 def follow_renames(held: Baseline, committed: Baseline, renames: Renames, tracked: frozenset[str]) -> CeilingFix:
-    """The held ceiling as the verdict will carry the committed one, for the size entries, the clone pairs, the job
-    entries and the page entries alike; a table the held ceiling lacks stays lacking."""
+    """The held ceiling as the verdict will carry the committed one, for the size entries, the clone pairs and the job
+    entries alike; a table the held ceiling lacks stays lacking."""
     carried = carried_base(committed, renames, ())  # git renamed every source out of the index, so the fix keeps none
     size, changes = _followed_entries(SIZE_ENTRIES, held.size, committed.size, carried.size, renames, tracked)
     pairs = held.clones
@@ -633,13 +620,7 @@ def follow_renames(held: Baseline, committed: Baseline, renames: Renames, tracke
             JOB_ENTRIES, held.job_minutes, committed.job_minutes, carried.job_minutes, renames, tracked
         )
         changes += limit_changes
-    pages = held.literal_texts
-    if held.literal_texts is not None:
-        pages, page_changes = _followed_entries(
-            PAGE_ENTRIES, held.literal_texts, committed.literal_texts, carried.literal_texts, renames, tracked
-        )
-        changes += page_changes
-    return CeilingFix(replace(held, size=size, clones=pairs, job_minutes=limits, literal_texts=pages), tuple(changes))
+    return CeilingFix(replace(held, size=size, clones=pairs, job_minutes=limits), tuple(changes))
 
 
 def _followed_pairs(

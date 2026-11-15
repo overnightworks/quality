@@ -1,20 +1,15 @@
-"""The `literal-text` rule: it counts the literal texts of a covered repository's tracked `*.svelte` pages, the words a person
-reads that the markup holds itself instead of taking them from a catalog. Without a `[literal_text]` table in the ceiling it
-only measures; with one, a page above its count or new with text is a finding. A page it cannot read to its end refuses the
-rule, because the texts after the unread part would be missed in silence."""
+"""The `literal-text` rule: every literal text of a covered repository's tracked `*.svelte` pages is a finding, the words a
+person reads that the markup holds itself instead of taking them from a catalog. A page it cannot read to its end refuses
+the rule, because the texts after the unread part would be missed in silence."""
 
 import html
 import re
-from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
 
-from quality import catalog_rules, checkout, repository
-from quality.baseline_file import FIX_COMMAND, LITERAL_TEXT_NOUN, Baseline, LiteralTexts, PageKey
-from quality.output import SEPARATOR, counted
-from quality.ratchet import CeilingFix
-from quality.report import Finding, FindingEvent, LiteralExtent, Note, NoteEvent, RuleResult, Unparsable
+from quality import checkout, repository
+from quality.report import Finding, FindingEvent, RuleResult, Unparsable
 from quality.rules import Rule
 
 SVELTE_SUFFIX = ".svelte"
@@ -29,11 +24,19 @@ CODE_TAGS = frozenset({"script", "style"})
 RAW_TEXT_TAGS = CODE_TAGS | {"textarea", "title", "iframe", "xmp", "noembed", "noframes"}
 UNCLOSED_HOLE = "has a { that is never closed, so the markup after it cannot be read"
 UNCLOSED_ELEMENT = "has a <{tag}> that is opened and never closed, so the markup after it cannot be read"
-NEW_DEBT_FIX = "read each text through the generated module and keep it in the catalog"
+FIX = "read it through the generated module and keep it in the catalog"
 
 
 class UnreadablePage(ValueError):
     """A page whose markup cannot be read to its end; the message says what is wrong, not where."""
+
+
+@dataclass(frozen=True)
+class LiteralText:
+    """One literal text of a page: the line it stands at and its words, whitespace collapsed."""
+
+    line: int
+    words: str
 
 
 def _is_text(candidate: str) -> bool:
@@ -58,21 +61,29 @@ def _read_attributes(tag: str, attributes: dict[str, str | None]) -> frozenset[s
 
 
 class _Scanner(HTMLParser):
-    """Counts the text nodes and the read attribute values; the body of a script or style block is code."""
+    """Collects the text nodes and the read attribute values; the body of a script or style block is code. A text node
+    stands at the line of its first letter, an attribute value at the line of its tag."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self.texts = 0
+        self.texts: list[LiteralText] = []
         self.open_raw_text_tag: str | None = None
 
+    def _found(self, line: int, text: str) -> None:
+        if _is_text(text):
+            self.texts.append(LiteralText(line, " ".join(text.split())))
+
     def handle_data(self, data: str) -> None:
-        if self.open_raw_text_tag not in CODE_TAGS and _is_text(data.strip()):
-            self.texts += 1
+        if self.open_raw_text_tag not in CODE_TAGS:
+            first_letter = next((index for index, character in enumerate(data) if character.isalpha()), 0)
+            self._found(self.getpos()[0] + data[:first_letter].count("\n"), data.strip())
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
-        values = (attributes.get(name) for name in _read_attributes(tag, attributes))
-        self.texts += sum(1 for value in values if value is not None and _is_text(value.strip()))
+        read = _read_attributes(tag, attributes)
+        for name, value in attributes.items():
+            if name in read and value is not None:
+                self._found(self.getpos()[0], value.strip())
         if tag in RAW_TEXT_TAGS:
             self.open_raw_text_tag = tag
 
@@ -128,8 +139,9 @@ def _folded_hole(expression: str) -> str:
 
 def _folded_markup(source: str) -> str:
     """The page as HTML: its code blocks dropped and each `{...}` hole folded to the literal it shows, quoted when it is an
-    attribute's whole value."""
-    markup = CODE_BLOCK.sub("", source)
+    attribute's whole value. Each dropped or folded part leaves its newlines behind, a hole's before the literal it shows and after it, so a line of
+    the result is the page's."""
+    markup = CODE_BLOCK.sub(lambda block: "\n" * block.group().count("\n"), source)
     parts: list[str] = []
     position = 0
     while (opening := markup.find("{", position)) != -1:
@@ -137,15 +149,24 @@ def _folded_markup(source: str) -> str:
         if closing == -1:
             raise UnreadablePage(UNCLOSED_HOLE)
         parts.append(markup[position:opening])
-        shown = html.escape(_folded_hole(markup[opening + 1 : closing]))
-        parts.append(f'"{shown}"' if markup[:opening].rstrip().endswith("=") else shown)
+        expression = markup[opening + 1 : closing]
+        folded = _folded_hole(expression)
+        shown = html.escape(folded)
+        before = expression[: len(expression) - len(expression.lstrip())].count("\n")
+        parts.extend(
+            (
+                "\n" * before,
+                f'"{shown}"' if markup[:opening].rstrip().endswith("=") else shown,
+                "\n" * (expression.count("\n") - before - folded.count("\n")),
+            )
+        )
         position = closing + 1
     parts.append(markup[position:])
     return "".join(parts)
 
 
-def count_literal_texts(source: str) -> int:
-    """The literal texts of one page's source; an `UnreadablePage` when a hole or a raw-text element is never closed."""
+def literal_texts(source: str) -> list[LiteralText]:
+    """The literal texts of one page's source in page order; an `UnreadablePage` when a hole or a raw-text element is never closed."""
     scanner = _Scanner()
     scanner.feed(_folded_markup(source))
     scanner.close()
@@ -154,90 +175,20 @@ def count_literal_texts(source: str) -> int:
     return scanner.texts
 
 
-def _page_counts(root: Path, tracked: list[str]) -> dict[str, int]:
-    """The literal texts of each page the tree holds; the first page in the tracked order that cannot be read to its end stops it."""
+def _page_findings(name: str, source: str) -> list[Finding]:
+    try:
+        texts = literal_texts(source)
+    except UnreadablePage as error:
+        raise Unparsable(f"{name} {error}") from error
+    return [
+        Finding(Rule.LITERAL_TEXT, name, text.line, f"'{text.words}'", FIX, event=FindingEvent.LITERAL_TEXT) for text in texts
+    ]
+
+
+def check_literal_text(root: Path, tracked: list[str]) -> RuleResult:
+    """One finding per literal text of each tracked `*.svelte` page the tree holds, at its line; the extent is the pages
+    read. The first page in the tracked order that cannot be read to its end refuses the rule."""
     names = checkout.on_disk(root, [name for name in tracked if name.endswith(SVELTE_SUFFIX)])
-    counts: dict[str, int] = {}
-    for name, source in checkout.read_existing(repository.read_text, root, names).items():
-        try:
-            counts[name] = count_literal_texts(source)
-        except UnreadablePage as error:
-            raise Unparsable(f"{name} {error}") from error
-    return counts
-
-
-def _covered_counts(root: Path, tracked: list[str]) -> dict[str, int] | None:
-    """The page counts of a covered repository, None for one that is not covered."""
-    return _page_counts(root, tracked) if catalog_rules.declares_catalogs(root, tracked) else None
-
-
-def table_words(texts: int, pages: int) -> str:
-    """What a `[literal_text]` table holds, as a row names it."""
-    return f"{counted(texts, LITERAL_TEXT_NOUN)} on {counted(pages, 'page')}"
-
-
-def recordable_counts(root: Path, tracked: list[str]) -> LiteralTexts | None:
-    """What a table recorded now holds: each page with text at its count; None for a repository that is not covered."""
-    counts = _covered_counts(root, tracked)
-    return None if counts is None else {PageKey(name): count for name, count in counts.items() if count}
-
-
-def lower_literal_entries(root: Path, tracked: list[str], held: Baseline) -> CeilingFix:
-    """The held page counts lowered to what their pages measure and dropped where a page measures none or is gone;
-    nothing rises or enters. A page the tree tracks but the disk lacks keeps its entry. A ceiling without the table, or a
-    repository that is not covered, reads no page; a table with no entry reads them all, so an unreadable page refuses."""
-    entries = held.literal_texts
-    counts = None if entries is None else _covered_counts(root, tracked)
-    if entries is None or counts is None:
-        return CeilingFix(held, ())
-    kept, changes = dict(entries), []
-    for key in sorted(entries):
-        ceiling = entries[key]
-        if key.path not in tracked:
-            changes.append(Note(key.path, NoteEvent.DROPPED, SEPARATOR.join(("file is gone", f"was {counted(ceiling, LITERAL_TEXT_NOUN)}"))))
-            del kept[key]
-        elif (measured := counts.get(key.path, ceiling)) < ceiling:
-            fall = f"{ceiling} → {measured} literal texts"
-            changes.append(Note(key.path, NoteEvent.LOWERED if measured else NoteEvent.DROPPED, fall))
-            if measured:
-                kept[key] = measured
-            else:
-                del kept[key]
-    return CeilingFix(replace(held, literal_texts=kept), tuple(changes))
-
-
-def _findings(counts: dict[str, int], table: LiteralTexts, tracked: frozenset[str]) -> list[Finding]:
-    """The pages against the table: a page above its entry or new with text, then the entries that can fall."""
-    findings = []
-    for name, count in sorted(counts.items()):
-        held = table.get(PageKey(name))
-        if held is None and count:
-            findings.append(_finding(name, count, FindingEvent.NEW_DEBT, "ceiling none", NEW_DEBT_FIX))
-        elif held is not None and count > held:
-            fix = f"bring it back to {counted(held, LITERAL_TEXT_NOUN)} or fewer"
-            findings.append(_finding(name, count, FindingEvent.GREW, f"ceiling {held}", fix))
-        elif held is not None and count < held:
-            findings.append(_finding(name, count, FindingEvent.CAN_FALL, f"ceiling {held}", FIX_COMMAND))
-    for key in sorted(table):
-        if key.path not in tracked:
-            fact = SEPARATOR.join(("file is gone", f"ceiling {table[key]}"))
-            findings.append(Finding(Rule.LITERAL_TEXT, key.path, None, fact, FIX_COMMAND, event=FindingEvent.CAN_FALL))
-    return findings
-
-
-def _finding(name: str, count: int, event: FindingEvent, ceiling: str, fix: str) -> Finding:
-    return Finding(Rule.LITERAL_TEXT, name, None, SEPARATOR.join((counted(count, LITERAL_TEXT_NOUN), ceiling)), fix, event=event)
-
-
-def check_literal_text(root: Path, tracked: list[str], read_ceiling: Callable[[], Baseline | None]) -> RuleResult | None:
-    """A covered repository's pages against its `[literal_text]` table; without the table they are measured only, and the
-    extent counts the texts and files read, with the table the texts and pages it holds. None for a repository that is
-    not covered, whose ceiling is never read for this rule."""
-    counts = _covered_counts(root, tracked)
-    if counts is None:
-        return None
-    baseline = read_ceiling()
-    table = baseline.literal_texts if baseline else None
-    if table is None:
-        return RuleResult([], LiteralExtent(sum(counts.values()), len(counts)), True)
-    return RuleResult(_findings(counts, table, frozenset(tracked)), LiteralExtent(sum(table.values()), len(table)), False)
+    pages = checkout.read_existing(repository.read_text, root, names)
+    findings = [finding for name, source in pages.items() for finding in _page_findings(name, source)]
+    return RuleResult(findings, len(pages), False)

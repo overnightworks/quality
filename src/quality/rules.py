@@ -27,12 +27,12 @@ class SwitchChange:
 @dataclass(frozen=True)
 class RuleRelease:
     """A rule of the door, the first gate release that judges it (None: main only), what switches it on and how that
-    changes at a later release."""
+    changes at later releases, oldest first."""
 
     rule: str
     first_release: str | None
     switch: Switch
-    switched: SwitchChange | None = None
+    switched: tuple[SwitchChange, ...] = ()
 
 
 RELEASE_0_1 = "v0.1.0"
@@ -51,8 +51,8 @@ class Area(StrEnum):
 
     help_line: str
 
-    FILES = "files", "what the repository tracks: layout, tests, env files, compose ports, the Python floor"
-    DEBT = "debt", "size, near copies, literal text and job time limits against the debt ceiling (quality/baseline.toml)"
+    FILES = "files", "what the repository tracks: layout, tests, env files, compose ports, the Python floor, literal page text"
+    DEBT = "debt", "size, near copies and job time limits against the debt ceiling (quality/baseline.toml)"
     IMPORTS = "imports", "the import contracts"
     SECRETS = "secrets", "secrets in the committed history"
     WORKFLOWS = "workflows", "GitHub workflows: lint, security, concurrency, pytest -n, run-time installs, the languages standard's catalog-check and render-pass"
@@ -77,9 +77,6 @@ class Rule(StrEnum):
     SIZE = "size", Area.DEBT, RELEASE_0_3, Switch.SIZE_BASELINE
     CLONE = "clone", Area.DEBT, "v0.4.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE)
     JOB_TIMEOUT = "job-timeout", Area.DEBT, RELEASE_0_12, Switch.ALWAYS
-    LITERAL_TEXT = (
-        "literal-text", Area.DEBT, RELEASE_0_13, Switch.REPORT_ONLY, SwitchChange(RELEASE_0_16, Switch.LITERAL_TABLE)
-    )
     IMPORT_CONTRACT = "import-contract", Area.IMPORTS, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
     CLAUDE_MD = "claude-md", Area.FILES, RELEASE_0_3, Switch.ALWAYS
     AGENTS_MD = "agents-md", Area.FILES, RELEASE_0_11, Switch.ALWAYS
@@ -89,6 +86,10 @@ class Rule(StrEnum):
     SCRIPT_HEADER = "script-header", Area.FILES, RELEASE_0_7, Switch.ALWAYS
     TEST_LAYOUT = "test-layout", Area.FILES, RELEASE_0_7, Switch.JUDGED_PROJECT
     TEST_IMPORT = "test-import", Area.FILES, RELEASE_0_7, Switch.ALWAYS
+    LITERAL_TEXT = (
+        "literal-text", Area.FILES, RELEASE_0_13, Switch.REPORT_ONLY,
+        SwitchChange(RELEASE_0_16, Switch.LITERAL_TABLE), SwitchChange(None, Switch.CATALOG_DECLARATION),
+    )
     PYTHON_FLOOR = "python-floor", Area.FILES, "v0.8.0", Switch.ALWAYS
     PYTHON_SECURITY = "python-security", Area.CODE, "v0.9.0", Switch.ALWAYS
     PYTHON_PRINT = "python-print", Area.CODE, "v0.9.0", Switch.ALWAYS
@@ -105,7 +106,7 @@ class Rule(StrEnum):
     ADVISORY = "advisory", Area.DEPENDENCIES, RELEASE_0_3, Switch.ALWAYS
 
     def __new__(
-        cls, rule_id: str, area: Area, first_release: str | None, switch: Switch, switched: SwitchChange | None = None
+        cls, rule_id: str, area: Area, first_release: str | None, switch: Switch, *switched: SwitchChange
     ) -> Self:
         member = str.__new__(cls, rule_id)
         member._value_ = rule_id

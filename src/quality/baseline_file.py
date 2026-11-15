@@ -1,11 +1,11 @@
 """The baseline file, `quality/baseline.toml`: the data model of what it holds (the size entries, the clone pairs, the
-job limits and the literal-text counts) and the text that renders and reads it. The `size` rule measures and compares, and owns what a value means; this
+job limits) and the text that renders and reads it. The `size` rule measures and compares, and owns what a value means; this
 module owns the key and the text.
 """
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import NamedTuple, Self
@@ -19,7 +19,6 @@ CLONES = "clones"
 JOB_MINUTES = "job_minutes"
 LITERAL_TEXT = "literal_text"
 JOB_LIMIT = "job limit"
-LITERAL_TEXT_NOUN = "literal text"
 BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 BASELINE_HEADER = f"# Measured by `{FIX_COMMAND}`. Entries only ever go down.\n"
 
@@ -68,20 +67,6 @@ class JobKey(NamedTuple):
 JobMinutes = dict[JobKey, int]
 
 
-class PageKey(NamedTuple):
-    """One literal-text entry: the Svelte page, as its path relative to the root."""
-
-    path: str
-
-    @property
-    def label(self) -> str:
-        """The entry as a person reads it: its page."""
-        return self.path
-
-
-LiteralTexts = dict[PageKey, int]
-
-
 @dataclass(frozen=True, order=True)
 class ClonePair:
     """Two near-identical functions in two files; `first` sorts before `second`, so a pair has one spelling."""
@@ -101,14 +86,12 @@ class ClonePair:
 
 @dataclass(frozen=True)
 class Baseline:
-    """What `quality/baseline.toml` holds; `clones`, `job_minutes` and `literal_texts` are None when the file has no such
-    table, so no pair, no job limit and no literal-text count is held. `literal_texts` has no default, so a rebuild that
-    forgets it is a type error instead of a table dropped in silence."""
+    """What `quality/baseline.toml` holds; `clones` and `job_minutes` are None when the file has no such table, so no pair
+    and no job limit is held. A `[literal_text]` table is read and ignored."""
 
     size: SizeEntries
     clones: frozenset[ClonePair] | None
     job_minutes: JobMinutes | None = None
-    literal_texts: LiteralTexts | None = field(kw_only=True)
 
 
 class SizeError(Exception):
@@ -136,8 +119,6 @@ def render_baseline(baseline: Baseline) -> str:
         sections.update(_clone_sections(baseline.clones))
     if baseline.job_minutes is not None:
         sections.update(_job_sections(baseline.job_minutes))
-    if baseline.literal_texts is not None:
-        sections.update(_literal_sections(baseline.literal_texts))
     return BASELINE_HEADER + "".join(f"\n{header}\n" + "".join(f"{line}\n" for line in lines) for header, lines in sections.items())
 
 
@@ -165,11 +146,6 @@ def _job_sections(limits: JobMinutes) -> dict[str, list[str]]:
     return sections
 
 
-def _literal_sections(counts: LiteralTexts) -> dict[str, list[str]]:
-    """One table, a key per page in plain string order; an empty table stands for a repository that allows no text."""
-    return {f"[{LITERAL_TEXT}]": [f"{_toml_string(key.path)} = {counts[key]}" for key in sorted(counts)]}
-
-
 def _toml_key(name: str) -> str:
     """A key as TOML allows it bare, else quoted."""
     return name if BARE_KEY.fullmatch(name) else _toml_string(name)
@@ -190,17 +166,17 @@ def load_baseline(text: str) -> Baseline:
     except repository.TomlError as error:
         raise SizeError(f"{BASELINE_PATH} is not valid TOML ({error})") from error
     size: SizeEntries = {}
-    clones = job_minutes = literal_texts = None
+    clones = job_minutes = None
     for table_name, table in document.items():
         if table_name == CLONES:
             clones = _clone_pairs(table)
         elif table_name == JOB_MINUTES:
             job_minutes = _job_minutes(table)
         elif table_name == LITERAL_TEXT:
-            literal_texts = _literal_texts(table)
+            continue  # read and ignored; `--fix` rewrites the file without it
         else:
             size.update(_size_entries(table_name, table))
-    return Baseline(size, clones, job_minutes, literal_texts=literal_texts)
+    return Baseline(size, clones, job_minutes)
 
 
 def _size_entries(table_name: str, table: object) -> SizeEntries:
@@ -253,15 +229,11 @@ def _job_minutes(table: object) -> JobMinutes:
     return limits
 
 
-def _literal_texts(table: object) -> LiteralTexts:
-    return {PageKey(path): _count(f"{LITERAL_TEXT}.{_toml_string(path)}", count) for path, count in _table(LITERAL_TEXT, table).items()}
-
-
 def _metric_named(name: str) -> Metric:
     try:
         return Metric(name)
     except ValueError:
-        known = ", ".join([*(metric.value for metric in Metric), CLONES, JOB_MINUTES, LITERAL_TEXT])
+        known = ", ".join([*(metric.value for metric in Metric), CLONES, JOB_MINUTES])
         raise UnknownTable(f"{BASELINE_PATH} has an unknown table [{name}]; quality {__version__} knows {known}") from None
 
 

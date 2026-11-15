@@ -113,8 +113,7 @@ It applies these rules:
   ([lizard's issue tracker](https://github.com/terryyin/lizard/issues/521)). Functions are named by their qualified
   symbol (`Class.method`); a second one of the same name, such as a property setter, is `Class.method#2` (SIZE-5).
   Without `quality/baseline.toml` the [debt row](output.md#area-rows) is
-  `· debt  not recorded  N entries over the thresholds · measured only` (a covered repository's row adds `, K literal
-  texts in F files`, LITERAL-10), N the size entries over the thresholds that
+  `· debt  not recorded  N entries over the thresholds · measured only`, N the size entries over the thresholds that
   quality measured (a declared file left out); it equals what a first `quality check --fix` records only when every
   Python file parses, otherwise that fix refuses (SIZE-6). The size debt leaves the exit unchanged (SIZE-7). The
   per-class and language counts leave `check`; the report keeps them.
@@ -132,7 +131,7 @@ It applies these rules:
   (deleted but not staged, left out by a sparse checkout, or a dangling symlink) is skipped, and its entries stand,
   unjudged, while the index tracks it (CEILING-1). A `quality/baseline.toml` that is not UTF-8 is malformed like invalid
   TOML and says to restore it from git or repair it by hand (CEILING-2). A baseline with a table this quality does not
-  know (`has an unknown table [future]; quality <version> knows ccn, file_lines, function_lines, clones, job_minutes, literal_text`) is not told
+  know (`has an unknown table [future]; quality <version> knows ccn, file_lines, function_lines, clones, job_minutes`) is not told
   that: a newer quality may have written it, so the head is told to run the quality release its gate pins (CEILING-3).
   With `quality/baseline.toml`, the tree on disk must hold the baseline: a new violation, an entry that grew and an
   entry above its measured value are findings, each a row under the [debt row](output.md#area-rows): `new debt`
@@ -144,9 +143,7 @@ It applies these rules:
   (CEILING-7); an entry with no measurement otherwise (a tracked file missing from disk, a function entry under a file
   of another language) stands (CEILING-8) and counts in the [clean row](output.md#area-rows)'s
   `ceiling held · N entries, M clone pairs`, followed by `, K job limits` when the held `[job_minutes]` table holds
-  jobs (TIMEOUT-34); a covered repository with a `[literal_text]` table has the clean row
-  `ceiling held · N entries, M clone pairs, K literal texts on P pages` (after the job limits), and one without the
-  table the note row of LITERAL-10.
+  jobs (TIMEOUT-34).
   [`quality check debt --fix`](commands.md#quality-check---fix) (`--fix` takes no `--staged` and needs `debt` among the
   named areas, or none named; `--dry-run` needs `--fix`; no workflow runs either) changes `quality/baseline.toml` at the
   top of the repository it is started in (a stray `src/quality/baseline.toml` is neither read nor removed) (FIX-1) and
@@ -158,15 +155,12 @@ It applies these rules:
   counted among the lowered (FIX-8); a held pair the tree lost goes (`dropped`, `pair ... is gone`) (FIX-9), and a new
   pair stays a finding (FIX-10). It
   records a ceiling (`recorded`, `N entries, M clone pairs · quality/baseline.toml is new`, with `, K job limits` after
-  the pairs where it records the job table and `, K literal texts on P pages` last where the repository is covered,
-  LITERAL-7) only where none lies on
+  the pairs where it records the job table) only where none lies on
   disk, in the index or in any commit `HEAD` reaches (FIX-11); a ceiling or a `[clones]` table git holds and the tree
-  lacks (a `[job_minutes]` table too, where a job above 15 would be recorded, and a `[literal_text]` table in a covered
-  repository) is `✗ not fixed` with `restore quality/baseline.toml from git, or repair it by hand` (FIX-12) (a version no TOML
+  lacks (a `[job_minutes]` table too, where a job above 15 would be recorded) is `✗ not fixed` with `restore quality/baseline.toml from git, or repair it by hand` (FIX-12) (a version no TOML
   parser reads refuses likewise) (FIX-13), and a shallow clone that cannot prove it names
   `git fetch --unshallow` (FIX-14). A file without `[clones]` that git never held it in records the pairs and keeps its
-  entries (FIX-15); a file without `[job_minutes]` records the jobs above 15 under the same condition (TIMEOUT-27), and a covered repository's file
-  without `[literal_text]` records the measured counts under it, an empty table where no page holds a text (LITERAL-7). It also rewrites a file whose text is not what it would render (an older header, other blank lines
+  entries (FIX-15); a file without `[job_minutes]` records the jobs above 15 under the same condition (TIMEOUT-27). It also rewrites a file whose text is not what it would render (an older header, other blank lines
   or order, a comment), though no entry changes: `rewritten`, `quality/baseline.toml` (FIX-16), or beside a finding
   `rewritten · quality/baseline.toml` (FIX-17). The verdict line adds `ceiling lowered by N entries`,
   `ceiling recorded`, `ceiling rewritten` or `nothing to lower` (FIX-18). Under `--dry-run` the same ceiling is made,
@@ -189,7 +183,7 @@ It applies these rules:
   the `✓` row stands, the exit is `2` (FIX-33).
   `--fix` follows renames as the verdict carries them (FIX-34): from the ceiling's last commit it reads what git
   renamed into the index (`git diff --cached -M50% -l1000`) (FIX-35), moves a renamed file's entries, pairs, job entries
-  (TIMEOUT-19) and page entries (LITERAL-13) to the new path at their values (`moved`) (FIX-36) and drops what the ceiling held under that path
+  (TIMEOUT-19) to the new path at their values (`moved`) (FIX-36) and drops what the ceiling held under that path
   before the move (`dropped ... left from before the move`) (FIX-37); a ceiling it already moved stays (FIX-38), an entry it cannot
   place refuses with the restore step (FIX-39), a shallow clone whose ceiling's last commit is its edge, which is
   every depth-1 clone that holds a ceiling, refuses `--fix` with `git fetch --unshallow` (FIX-40), and a move the
@@ -205,8 +199,7 @@ It applies these rules:
   path and qualified symbol of both sides, as `size` names a function (CLONE-2); a pair counts as tests only when both
   files are tests (CLONE-3). Without a `[clones]` table in `quality/baseline.toml` the rule only measures (CLONE-5):
   where the file exists, the pairs stand in the [partly row](output.md#area-rows)
-  (`· debt  not recorded  2 clone pairs · partly measured only`; a covered repository's row adds its literal texts while
-  they are unrecorded, or names them alone where the `[clones]` table exists, LITERAL-10). With one, even an empty one, a new pair is a
+  (`· debt  not recorded  2 clone pairs · partly measured only`). With one, even an empty one, a new pair is a
   `near copy` row at its second side (`function check and tests/test_a.py run`, fix: give the shared body one owner and
   call it, or make the cases one parametrized test) (CLONE-6) and so is a held pair the tree lost, even when a side
   was deleted (`can fall` at its first side: `pair tests/test_a.py run <-> tests/test_b.py check is gone`, fix:
@@ -607,11 +600,6 @@ It applies these rules:
     `job limit baseline adds .github/workflows/ci.yml e2e 40` (TIMEOUT-18);
   - the base's `[job_minutes]` table gone from a head that still has the file: `job limit baseline removed`
     (TIMEOUT-18);
-  - a page count the base's `[literal_text]` table does not hold or holds lower, when the base has the table:
-    `literal text baseline raises frontend/src/lib/A.svelte 3 -> 5`,
-    `literal text baseline adds frontend/src/lib/A.svelte 3` (LITERAL-8);
-  - the base's `[literal_text]` table gone from a head that still has the file: `literal text baseline removed`
-    (LITERAL-8);
   - the base's file deleted: `quality/baseline.toml removed` (BASELINE-6);
   - a `[[size.generated]]` declaration is judged as in [gate](gate.md), "Declared loosenings".
 
@@ -636,9 +624,7 @@ It applies these rules:
   neither side having one (BASELINE-8). A `[clones]` table the base lacks is an adoption too: its pairs are not
   compared (BASELINE-9), while the size entries are still held against the base's (BASELINE-10). A `[job_minutes]` table
   the base lacks is an adoption in the same way, whatever the base's `[clones]` table is, and the job lines stand after the
-  size and clone lines in the file's order (TIMEOUT-18); a `[literal_text]` table the base lacks is one too, its lines stand
-  last, and each table is read from its own field, so a base with `[literal_text]` and no `[clones]` is judged on its page
-  counts (LITERAL-8).
+  size and clone lines in the file's order (TIMEOUT-18).
   A malformed baseline on either side is exit `2`, naming the side (`quality/baseline.toml at the base commit <sha>:
   ...`, `quality/baseline.toml at the head: ...`) (BASELINE-20). So is a head baseline that links out of the repository
   (BASELINE-21), a base file that is not a regular file (`... : not a regular file`) (BASELINE-22), and a base that git
@@ -1087,14 +1073,14 @@ listed as `caller / job`; pointing `render_pass` at any other mandatory job pass
 (CATALOG-6). No configuration switches the rule off. It first ships in v0.17.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column, and from
 v0.17.0 on, and on main, the cell reads `enforced` where the clone declares the catalogs and `no catalogs declaration` where it does not (FLEET-99).
 
-The `literal-text` rule, in the `debt` area, counts the literal texts of a covered repository's pages: the texts a person
-reads that the markup holds itself instead of taking them from a catalog. A repository is covered as for `catalog-check`
-(the same read of the root `pyproject.toml`, CATALOG-1), so a repository that is not covered sees no row and no new
-verdict, and its `debt` area holds exactly the verdicts of `size`, `clone` and `job-timeout`; the one change for it is that
-a root `pyproject.toml` that cannot be read refuses the `debt` area too, as it refuses `workflows`, where `quality check
-debt` alone went from exit `0` to `2` (LITERAL-12). The rule reads every tracked `*.svelte` file the tree holds, with the
-standard library's `html.parser` and a fold of the `{...}` holes; a `.vue`, `.jsx`, `.tsx` or `.html` file is not read
-(LITERAL-1).
+The `literal-text` rule, in the `files` area, turns every literal text of a covered repository's pages into a finding: the
+texts a person reads that the markup holds itself instead of taking them from a catalog. A repository is covered as for
+`catalog-check` (the same read of the root `pyproject.toml`, CATALOG-1), so a repository that is not covered sees no row
+and no new verdict, and its `debt` area holds exactly the verdicts of `size`, `clone` and `job-timeout`; the root
+`pyproject.toml` is read once for the area, and one that cannot be read refuses the rule with the reason `python-floor` gives,
+`pyproject.toml is not UTF-8 TOML that Python reads (<error>)`, which `catalog-check` and `render-pass` give too (LITERAL-15).
+The rule reads every tracked `*.svelte` file the tree holds, with the standard library's `html.parser` and a fold of the
+`{...}` holes; a `.vue`, `.jsx`, `.tsx` or `.html` file is not read (LITERAL-1).
 
 A text counts once per text node and once per attribute value, not per word: the text nodes of a page, the values of
 `title`, `placeholder`, `aria-label`, `alt`, `label`, `aria-description`, `aria-roledescription` and `aria-valuetext`, a
@@ -1104,40 +1090,27 @@ and `content` on `<meta name="description">`, on elements and on components alik
 `<script>` or `<style>` block, a hole that is not a bare string literal, a logic block or a hole starting with `#`, `:`, `/`
 or `@` (`{@html '...'}` included), and any content with no letter. A hole that is one string literal, or a template literal
 without a substitution, counts as the text it holds, in a text position and as a whole attribute value; there is no
-exemption mechanism, a brand name lives in the catalog (LITERAL-3). The extent is the total and the number of files read, so a
-repository with no Svelte file reads `0 literal texts in 0 files` (LITERAL-4).
+exemption mechanism, a brand name lives in the catalog (LITERAL-3).
 
-The table `[literal_text]` in `quality/baseline.toml` holds one count per Svelte page: the page's path relative to the
-root, quoted, as the key, an integer of at least 1 as the value, sorted by path, and no entry for a page without text
-(`"frontend/src/lib/A.svelte" = 3`) (LITERAL-5). Its presence is the rule's switch, as `[clones]` is for `clone`: an empty
-table means "enforced, nothing allowed". A count that is no integer of at least 1 is exit `2` naming the file.
-Without the table the rule only measures: it has no finding and no note, and the row names the count and the mode
-`partly measured only` or `measured only` with exit `0` and `fix: quality check --fix`, which records the table, as
-[the debt row](output.md#area-rows) says (LITERAL-10). With the table a page above its count is `grew`
-(`5 literal texts · ceiling 3`, fix: bring it back to 3 literal texts or fewer), a page with text and no entry is `new debt`
-(`3 literal texts · ceiling none`, fix: read each text through the generated module and keep it in the catalog), and a
-page below its count (`1 literal text · ceiling 4`) or an entry whose page the index no longer tracks
-(`file is gone · ceiling 2`) `can fall`, fix: `quality check --fix` (LITERAL-6). A page the index tracks and the disk lacks
-is not read: its entry stands unjudged. A swap of one text for another in a page that keeps its count is not seen.
-`quality check debt --fix` records the table where the ceiling has none, the repository is covered and git never held it,
-even when no page holds a text (`recorded  K literal texts on P pages`), and refuses with `✗ not fixed` and the restore
-step where git held it; it lowers an entry to the page's measured count (`lowered`, `4 → 1 literal texts`), drops the
-entry of a page that measures none or is gone (`dropped`), and never raises or adds an entry, so a `grew` or `new debt`
-row stays red after the fix. `--dry-run` plans the same rows. A page the rule cannot read refuses the fix with exit `2`
-naming it (LITERAL-7). A renamed page carries its entry, as a job entry does (LITERAL-13). `quality verdict` reads a head
-table against a base without one as an adoption, a head without the table the base held as `literal text baseline
-removed`, and a raised or added entry as `literal text baseline raises ...` or `literal text baseline adds ...`, each
-table judged by itself (LITERAL-8). A release older than the table refuses a head holding it with `UnknownTable`, exit
-`2` and the hint to run the quality release the gate pins.
+Each literal text is one `literal text` finding at `<page>:<line>`, whatever `quality/baseline.toml` holds: no table and
+no exemption turn it off. Its fact is the text in single quotes with its whitespace collapsed (`'Log in'`), and its fix is
+`read it through the generated module and keep it in the catalog`. A text node stands at the line of its first letter and
+an attribute value at the line of its tag; the fold leaves the newlines of a dropped `<script>` or `<style>` block and of a
+folded hole behind, so the line is the page's (LITERAL-14). A page the index tracks and the disk lacks is not read.
+
+A `[literal_text]` table in `quality/baseline.toml`, which an earlier release wrote, is read and ignored whatever it holds,
+malformed included, so it is no exit `2`, no finding and no loosening: a base that holds it and a head that does not is
+green. `quality check debt --fix` rewrites the file without it (`rewritten`, FIX-16) (LITERAL-16).
 
 Named gaps, each a fact of the parser or of the scan: a literal inside a larger expression (`{ok ? 'Saved' : x}`) is not
 counted; a component prop outside the attribute list (`<Hero heading="Welcome" />`) is not counted; a string in a `<script>`
 is not counted, and the scheduled audit finds those under LANG-24; an unpaired quote in a hole swallows the markup up to the
 next quote (`{x // don't}` followed by `<b>Real text</b>` and a hole with another apostrophe counts nothing), and with one
 apostrophe only the hole never closes (exit `2`); `a < b` reads two text nodes; `title="{n} items"` counts the fragment
-`items`, because the fold leaves the literal part beside a hole. Python 3.14's parser reads the body of `title`, `textarea`,
-`iframe`, `xmp`, `noembed` and `noframes` as one text up to the end tag, whatever the case, so `<Title><b>One</b><i>Two</i></Title>`
-is one text and a self-closing `<Title />` holds none.
+`items`, because the fold leaves the literal part beside a hole; a text holding an apostrophe prints inside single quotes
+unescaped (`'Don't'`); an attribute of a tag spread over several lines names the line of the tag's first. Python 3.14's
+parser reads the body of `title`, `textarea`, `iframe`, `xmp`, `noembed` and `noframes` as one text up to the end tag,
+whatever the case, so `<Title><b>One</b><i>Two</i></Title>` is one text and a self-closing `<Title />` holds none.
 
 Exit `2` names the file: a page that is not UTF-8; a `<script>`, `<style>`, `<textarea>`, `<title>`, `<iframe>`, `<xmp>`,
 `<noembed>` or `<noframes>` that is opened and never closed, because the parser then reads the rest of the page as one text
@@ -1145,9 +1118,10 @@ and every text after it would be missed in silence; and a `{` hole that is never
 included. The first page in the tracked order that cannot be read to its end stops the rule, so one fact prints, a page that is not UTF-8 is named before any other, and the fold runs
 before the parser, so an unclosed hole is named before an unclosed element. A missing directory, no Svelte file and a
 tracked page deleted from the tree are no finding (LITERAL-9). It first ships in v0.13.0, so a gate pinned below that release shows `not in <tag>`
-in the fleet matrix's column. v0.16.0 is the release that names the switch (FLEET-102): a gate pinned at v0.13.0 to v0.15.0
-reads `report-only` (FLEET-101), and from v0.16.0 on the cell reads as on main, `enforced` where `quality/baseline.toml`
-holds `[literal_text]` and `report-only` where it does not. No
+in the fleet matrix's column. v0.16.0 is the release that names the table as its switch (FLEET-102): a gate pinned at v0.13.0 to v0.15.0
+reads `report-only` (FLEET-101), from v0.16.0 on the cell reads `enforced` where `quality/baseline.toml`
+holds `[literal_text]` and `report-only` where it does not, and on main the cell reads `enforced` where the clone declares
+the catalogs and `no catalogs declaration` where it does not, as for `catalog-check` (FLEET-99). No
 configuration switches it off.
 
 The `job-timeout` rule, in the `debt` area, judges every job of a workflow that runs on a pull request or on a push to
@@ -1202,8 +1176,8 @@ findings, sorted by path and job and with no line, each entry that can fall with
 path is not tracked or no root reaches the file any more, the file has no such job or the job calls a workflow (`job e2e
 is gone · ceiling 40`), or the entry is of 15 or less (`job e2e has no debt · ceiling 10`) (TIMEOUT-16); the fix of each
 `can fall` form is `quality check --fix` (TIMEOUT-24). The rule's extent is the jobs the held table holds, and a clean
-`debt` row over a table holding at least one job reads `ceiling held · N entries, M clone pairs, K job limits`, before
-a `[literal_text]` table's words; an empty or absent table adds nothing (TIMEOUT-34). A baseline that cannot be read
+`debt` row over a table holding at least one job reads `ceiling held · N entries, M clone pairs, K job limits`; an empty or
+absent table adds nothing (TIMEOUT-34). A baseline that cannot be read
 makes the rule `cannot judge` and names the baseline, as it does for `size` and `clone`; one that is absent leaves the rule judging with no entry.
 
 A renamed workflow carries its base entries to its new path in the verdict as a renamed source file carries its size
@@ -1253,7 +1227,7 @@ is not a raise: after the table exists `--fix` adds no entry to it, so a job abo
 read no job table is written, not even a partial one, while the size and clone fix proceeds and the rule reports the
 file with exit `2` (TIMEOUT-30). The debt row is `recorded  K job limits · quality/baseline.toml` with a `recorded  K
 job limits` row under it (`1 job limit` for one); beside clone pairs it names both (`M clone pairs, K job limits`), a
-first recording names the job limits before the literal texts (`N entries, M clone pairs, K job limits · quality/baseline.toml is new`), and
+first recording names the job limits after the pairs (`N entries, M clone pairs, K job limits · quality/baseline.toml is new`), and
 `--dry-run` words the rows `to record` and `record`; the verdict line is `ceiling recorded`, under the dry run `ceiling
 would be recorded`, and a recording adds nothing to the entries that fell (TIMEOUT-31).
 
@@ -1263,7 +1237,7 @@ A workflow whose YAML or file cannot be read, an alias or a merge key where it c
 that is no mapping, a local call in a judged file that names no tracked workflow of the workflow folder, and a called
 workflow gone from the tree are exit `2` naming the file; the other rules still judge. A workflow with no `jobs:` has no
 job (TIMEOUT-7). The rule is judged beside `size` and `clone` and independent of both, and the debt area counts only the
-rules a ceiling file switches as measured, the literal-text rule of a covered repository included, so the verdict reads `debt ceiling measured, not enforced` where no ceiling file holds the debt, even when
+rules a ceiling file switches as measured, so the verdict reads `debt ceiling measured, not enforced` where no ceiling file holds the debt, even when
 `job-timeout` finds (TIMEOUT-8). A clean `debt` row keeps its words, and no configuration
 switches the rule off (TIMEOUT-10). It first ships in v0.12.0, so a gate pinned below that release shows `not in <tag>`
 in the fleet matrix's column (TIMEOUT-11). A repeated job id or a repeated `timeout-minutes` key is read as the loader

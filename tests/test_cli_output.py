@@ -39,6 +39,7 @@ from tests.support.check import (
 )
 from tests.support.clones import function
 from tests.support.door import CHECK_WORD, FIX_WORDS, MODULE_DOOR, PinnedJudging, check_door, door_environment, door_in
+from tests.support.layout import UNCOVERED_FILES_RULE_COUNT
 from tests.support.merge import ONE_JOB
 from tests.support.processes import process_is_gone
 from tests.support.scanners import fake_scanner, lacking
@@ -431,7 +432,7 @@ def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_re
     assert extent_counts(area_fact("\n".join(out), Area.DEPENDENCIES)) == [0, 0]
     workflows = area_fact("\n".join(out), Area.WORKFLOWS)
     assert (leading_count(workflows), workflows.endswith(cli.OFFLINE_AUDITS)) == (0, True)
-    assert extent == [sum(rule.area is Area.FILES for rule in Rule), len(tracked)]
+    assert extent == [UNCOVERED_FILES_RULE_COUNT, len(tracked)]
     assert extent_counts(area_fact("\n".join(out), Area.DEBT)) == [len(held.size), len(held.clones)] == [1, 0]
     assert leading_count(area_fact("\n".join(out), Area.IMPORTS)) == len(contracts)
     assert (area_row("\n".join(out), Area.SECRETS).glyph, leading_count(area_fact("\n".join(out), Area.SECRETS))) == (Glyph.CLEAN, 1)

@@ -22,7 +22,7 @@ from quality import output, pin, process
 from quality.report import CannotJudge, Release
 from tests.support.door import LAUNCH_DRIVER, door_environment
 from tests.support.git_repositories import git, head_commit, make_repo
-from tests.support.layout import FILES_RULE_IDS
+from tests.support.layout import UNCOVERED_FILES_RULE_COUNT
 
 pytestmark = pytest.mark.integration
 
@@ -187,7 +187,7 @@ def test_the_child_judges_at_the_pin_and_names_its_fetch(scene):
         0,
         [
             release_row(f"fetched now · {PINNED_IN}"),
-            f"  ✓ files         clean          {len(FILES_RULE_IDS)} rules · 2 files",
+            f"  ✓ files         clean          {UNCOVERED_FILES_RULE_COUNT} rules · 2 files",
         ],
         "",
     )

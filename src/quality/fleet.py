@@ -39,7 +39,7 @@ from quality import (
     web,
 )
 from quality.report import CannotJudge, Command, Example, Instruction, Step
-from quality.rules import Rule, RuleRelease, Switch
+from quality.rules import Rule, RuleRelease, Switch, SwitchChange
 
 
 def repository_url(name: str) -> str:
@@ -425,7 +425,8 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
         baseline = baseline_file.read_baseline(clone)
         has_baseline = baseline is not None
         has_clone_table = baseline is not None and baseline.clones is not None
-        has_literal_table = baseline is not None and baseline.literal_texts is not None
+        held = checkout.judged(repository.read_bytes, clone, baseline_file.BASELINE_PATH)
+        has_literal_table = held is not None and baseline_file.holds_table(held, baseline_file.LITERAL_TEXT)
     except (report.CannotJudge, baseline_file.SizeError):
         unreadable.add(baseline_file.BASELINE_PATH)
     try:
@@ -626,17 +627,15 @@ def rule_cell(rule: RuleRelease, release: Gate | str, declared: Declared) -> Cel
 
 
 def switch_at(rule: RuleRelease, release: Gate | str) -> Switch:
-    """The rule's later switch for main and for a tag at or above the change, else its first switch."""
-    change = rule.switched
-    if change is None:
-        return rule.switch
+    """The switch of the latest change main or a tag reaches (a tag at or above the change's release), else the first."""
+    reached = [change for change in rule.switched if _reaches(change, release)]
+    return reached[-1].switch if reached else rule.switch
+
+
+def _reaches(change: SwitchChange, release: Gate | str) -> bool:
     if release is Gate.MAIN:
-        after_change = True
-    else:
-        after_change = (
-            isinstance(release, str) and change.release is not None and checkout.release_order(release) >= checkout.release_order(change.release)
-        )
-    return change.switch if after_change else rule.switch
+        return True
+    return isinstance(release, str) and change.release is not None and checkout.release_order(release) >= checkout.release_order(change.release)
 
 
 def switch_words(switch: Switch, declared: Declared) -> Cell:

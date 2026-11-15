@@ -1,6 +1,6 @@
 import pytest
 
-from quality.literal_text import UnreadablePage, count_literal_texts
+from quality.literal_text import LiteralText, UnreadablePage, literal_texts
 
 RAW_TEXT_ELEMENTS = ["script", "style", "textarea", "title", "iframe", "xmp", "noembed", "noframes"]
 COMPONENT_NAMES = ["title", "textarea", "iframe", "xmp", "noembed", "noframes"]
@@ -61,72 +61,100 @@ COMPONENT_NAMES = ["title", "textarea", "iframe", "xmp", "noembed", "noframes"]
     ],
 )
 def test_the_reference_cases_give_the_same_counts(page, count):
-    """LITERAL-2, LITERAL-3, LITERAL-4: the cases of presentator's catalog purity check count as it reports them."""
-    assert count_literal_texts(page) == count
+    """LITERAL-2, LITERAL-3: the cases of presentator's catalog purity check count as it reports them."""
+    assert len(literal_texts(page)) == count
 
 
 def test_a_literal_inside_a_larger_expression_is_not_counted():
     """LITERAL-3: only a hole that is one string literal counts."""
-    assert count_literal_texts("<p>{ok ? 'Saved' : x}</p>") == 0
+    assert len(literal_texts("<p>{ok ? 'Saved' : x}</p>")) == 0
 
 
 def test_a_component_prop_outside_the_attribute_list_is_not_counted():
     """LITERAL-2: only the listed attributes are read, on components too."""
-    assert count_literal_texts('<Hero heading="Welcome" />') == 0
+    assert len(literal_texts('<Hero heading="Welcome" />')) == 0
 
 
 def test_a_string_in_a_script_block_is_not_counted():
     """LITERAL-3: the body of a script is code."""
-    assert count_literal_texts("<script>toast('Saved today');</script>") == 0
+    assert len(literal_texts("<script>toast('Saved today');</script>")) == 0
 
 
 def test_a_capitalised_prop_name_is_read_as_the_lowercase_attribute():
     """LITERAL-2: the parser lowercases names, so a component's `Label` is the attribute `label`."""
-    assert count_literal_texts('<Field Label="Name" />') == 1
+    assert len(literal_texts('<Field Label="Name" />')) == 1
 
 
 def test_an_html_hole_is_not_counted():
     """LITERAL-3: a hole starting with `@` renders nothing the scan sees."""
-    assert count_literal_texts("<p>{@html '<b>Hello</b>'}</p>") == 0
+    assert len(literal_texts("<p>{@html '<b>Hello</b>'}</p>")) == 0
 
 
 def test_an_apostrophe_in_a_hole_comment_swallows_the_markup_to_the_next_quote():
     """LITERAL-3: an unpaired quote in a hole reads as a string up to the next quote, so the markup between is missed."""
-    assert count_literal_texts("<p>{x // don't}</p><b>Real text</b><i>{y // it's}</i>") == 0
+    assert len(literal_texts("<p>{x // don't}</p><b>Real text</b><i>{y // it's}</i>")) == 0
 
 
 def test_a_single_apostrophe_in_a_hole_comment_is_an_unclosed_hole():
     """LITERAL-9: with one quote only, the string never ends and the hole is never closed."""
     with pytest.raises(UnreadablePage, match="{ that is never closed"):
-        count_literal_texts("<p>{x // don't}</p><b>Real text</b>")
+        literal_texts("<p>{x // don't}</p><b>Real text</b>")
 
 
 def test_an_unbalanced_brace_in_an_html_comment_is_an_unclosed_hole():
     """LITERAL-9: the fold reads a `{` in a comment as a hole."""
     with pytest.raises(UnreadablePage, match="{ that is never closed"):
-        count_literal_texts("<!-- a { b --><p>Text</p>")
+        literal_texts("<!-- a { b --><p>Text</p>")
 
 
 @pytest.mark.parametrize("name", COMPONENT_NAMES)
 def test_a_component_named_like_a_raw_text_element_reads_its_child_markup_as_one_text(name):
     """LITERAL-2: the parser reads everything up to the end tag of these names as one text, whatever the case."""
-    assert count_literal_texts(f"<{name.capitalize()}><b>One</b><i>Two</i></{name.capitalize()}>") == 1
+    assert len(literal_texts(f"<{name.capitalize()}><b>One</b><i>Two</i></{name.capitalize()}>")) == 1
 
 
 @pytest.mark.parametrize("name", COMPONENT_NAMES)
 def test_a_self_closing_component_named_like_a_raw_text_element_reads_no_child_text(name):
     """LITERAL-2: a self-closing one holds no child, and the markup after it is read as ever."""
-    assert count_literal_texts(f"<{name.capitalize()} /><p>Hello</p>") == 1
+    assert len(literal_texts(f"<{name.capitalize()} /><p>Hello</p>")) == 1
 
 
 @pytest.mark.parametrize("name", RAW_TEXT_ELEMENTS)
 def test_an_unclosed_raw_text_element_is_an_unreadable_page(name):
     """LITERAL-9: the parser reads the rest of the page as the element's text, so a miss would be silent."""
     with pytest.raises(UnreadablePage, match=f"has a <{name}> that is opened and never closed"):
-        count_literal_texts(f"<{name}>\n<p>Hello</p>")
+        literal_texts(f"<{name}>\n<p>Hello</p>")
 
 
 def test_an_unclosed_hole_is_named_before_an_unclosed_element():
     """LITERAL-9: the fold runs before the parser."""
     with pytest.raises(UnreadablePage, match="{ that is never closed"):
-        count_literal_texts("<script>\n<p>{ never")
+        literal_texts("<script>\n<p>{ never")
+
+
+@pytest.mark.parametrize(
+    ("page", "texts"),
+    [
+        pytest.param("<h1>Log in</h1>", [LiteralText(1, "Log in")], id="a text node on the first line"),
+        pytest.param("<div>\n  <p>Hello</p>\n\n  <b>Bye</b>\n</div>", [LiteralText(2, "Hello"), LiteralText(4, "Bye")], id="a text node on its own line"),
+        pytest.param("<p>\n\n  Hello\n  there\n</p>", [LiteralText(3, "Hello there")], id="a text node at the line of its first letter, collapsed"),
+        pytest.param("<p>\n  42\n  items</p>", [LiteralText(3, "42 items")], id="a text node led by digits stands at its first letter"),
+        pytest.param("<p>\n  -\n  Hello</p>", [LiteralText(3, "- Hello")], id="a text node led by punctuation stands at its first letter"),
+        pytest.param('<img\n  alt="Logo">', [LiteralText(1, "Logo")], id="an attribute value at the line of its tag"),
+        pytest.param(
+            "<script>\n  const a = 1;\n  const b = 2;\n</script>\n<p>Hello</p>", [LiteralText(5, "Hello")],
+            id="a text after a multi-line script block",
+        ),
+        pytest.param("<style>\n.a {}\n</style><p>Hello</p>", [LiteralText(3, "Hello")], id="a text after a multi-line style block"),
+        pytest.param(
+            "<p>{\n  'Log in'\n}</p>\n<b>Bye</b>", [LiteralText(2, "Log in"), LiteralText(4, "Bye")],
+            id="a text after a multi-line hole",
+        ),
+        pytest.param("<p>{`Hello\nthere`}</p>\n<b>Bye</b>", [LiteralText(1, "Hello there"), LiteralText(3, "Bye")], id="a hole whose literal spans lines"),
+        pytest.param('<p title={\n  "Hint"\n}>\n  Text\n</p>', [LiteralText(1, "Hint"), LiteralText(4, "Text")], id="a text after a multi-line attribute hole"),
+    ],
+)
+def test_each_literal_text_is_read_with_its_line(page, texts):
+    """LITERAL-14: a text node stands at its first letter's line, an attribute value at its tag's line, and a dropped or
+    folded part keeps its lines."""
+    assert literal_texts(page) == texts
