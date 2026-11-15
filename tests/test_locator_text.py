@@ -434,6 +434,7 @@ def test_each_literal_of_a_multi_line_call_is_a_finding_at_its_own_line(build_re
         "const LABEL = 'Abbrechen';\nclass Button {\n  run() {\n    LABEL = 'Other';\n  }\n}\npage.getByText(LABEL);\n",
         "const LABEL = 'Abbrechen';\nclass Button {}\nLABEL = 'Other';\npage.getByText(LABEL);\n",
         "const LABEL = 'Abbrechen';\nclass Button {\n  other = LABEL = 'Other';\n}\npage.getByText(LABEL);\n",
+        "const LABEL = 'Abbrechen';\nconst object = { class: 1 };\nfunction run() { let LABEL; if (x) { LABEL = 2; } }\npage.getByText(LABEL);\n",
         "const LABEL = 'Abbrechen';\nfunction LABEL() {}\npage.getByText(LABEL);\n",
         "const LABEL = 'Abbrechen';\nclass LABEL {}\npage.getByText(LABEL);\n",
         "test('x', () => {\n  const LABEL = 'Abbrechen';\n  page.getByText(LABEL);\n});\n",
@@ -450,7 +451,7 @@ def test_each_literal_of_a_multi_line_call_is_a_finding_at_its_own_line(build_re
         "alternation", "unanchored RegExp", "RegExp of a constant", "a plain string is no regex", "line comment", "block comment",
         "index", "ternary branch", "ternary else branch", "arrow comparison", "concatenation", "role", "another text", "test id", "toBe",
         "data attribute", "attribute name unknown", "attribute name is the text", "toHaveValue", "let", "var", "const declared twice",
-        "const reassigned", "const extended", "const reassigned in a method", "const reassigned after a class", "const reassigned in a field initializer", "const and function", "const and class", "function-local const", "const concatenation", "const list", "typed const",
+        "const reassigned", "const extended", "const reassigned in a method", "const reassigned after a class", "const reassigned in a field initializer", "const reassigned beside a class key", "const and function", "const and class", "function-local const", "const concatenation", "const list", "typed const",
         "dynamic name", "locator selector", "not a locator", "hole alone",
     ],
 )

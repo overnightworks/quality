@@ -316,8 +316,10 @@ def _member_positions(tokens: Sequence[Token]) -> set[int]:
     for index, token in enumerate(tokens):
         if bodies and bodies[-1] and not _is_initializer_operand(tokens, index):
             members.add(index)
-        if token.kind is Kind.IDENTIFIER and token.value in MEMBER_CONTAINERS:
+        if token.kind is Kind.IDENTIFIER and token.value in MEMBER_CONTAINERS and not _is_punctuation(_at(tokens, index - 1), "."):
             pending = len(bodies)
+        elif pending == len(bodies) and _is_punctuation(token, ";", ":"):
+            pending = None
         if _is_punctuation(token, *OPENERS):
             bodies.append(_is_punctuation(token, "{") and pending == len(bodies))
             pending = None if bodies[-1] else pending
