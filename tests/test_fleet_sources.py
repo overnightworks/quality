@@ -6,7 +6,9 @@ from tests.support.check import check_result, refusals, rule_findings
 from tests.support.git_repositories import git
 
 INDEX = 'registry = "https://pypi.org/simple"'
-WHEEL_URL = "https://github.com/overnightworks/design/releases/download/v1.2.0/overnightworks_design-1.2.0-py3-none-any.whl"
+WHEEL_URL = (
+    "https://github.com/overnightworks/design/releases/download/v1.2.0/overnightworks_design-1.2.0-py3-none-any.whl"
+)
 SOURCES = {
     "git": 'git = "https://github.com/overnightworks/logline?rev=v0.2.1#0123456789abcdef"',
     "url": f'url = "{WHEEL_URL}"',
@@ -64,7 +66,10 @@ def test_the_prefix_is_read_in_its_canonical_spelling(build_repo):
     [
         ("version = [\n", "uv.lock is not UTF-8 TOML"),
         (lock("overnightworks-logline", None), "overnightworks-logline has no source"),
-        (lock("overnightworks-logline", 'ftp = "x"'), "overnightworks-logline has a source of a kind quality does not know"),
+        (
+            lock("overnightworks-logline", 'ftp = "x"'),
+            "overnightworks-logline has a source of a kind quality does not know",
+        ),
     ],
     ids=["unreadable lock", "no source", "unknown source kind"],
 )
@@ -114,7 +119,18 @@ def test_the_extent_is_the_count_of_locks_read(build_repo, files, locks):
 
 def test_the_rule_judges_when_the_advisory_rule_cannot(build_repo):
     """SOURCE-8: a refused config refuses the advisory rule, and the fleet sources are still judged."""
-    repo = build_repo({"uv.lock": lock("overnightworks-logline", INDEX), "quality/config.toml": "[secrets]\nignore = []\n"})
+    repo = build_repo(
+        {"uv.lock": lock("overnightworks-logline", INDEX), "quality/config.toml": "[secrets]\nignore = []\n"}
+    )
     result = check_result(repo)
     assert Rule.ADVISORY in refusals(repo)
-    assert [finding.event for finding in result.findings if finding.rule == Rule.FLEET_SOURCE] == [FindingEvent.FROM_INDEX]
+    assert [finding.event for finding in result.findings if finding.rule == Rule.FLEET_SOURCE] == [
+        FindingEvent.FROM_INDEX
+    ]
+
+
+def test_the_advisory_rule_judges_when_the_rule_cannot(build_repo):
+    """SOURCE-8: a fleet package without a source refuses only this rule; the advisory rule still judges the lock."""
+    reasons = refusals(build_repo({"uv.lock": lock("overnightworks-logline", None)}))
+    assert Rule.FLEET_SOURCE in reasons
+    assert Rule.ADVISORY not in reasons
