@@ -312,7 +312,7 @@ def test_each_refusal_is_its_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, cap
     ],
 )
 def test_a_step_that_cannot_be_judged_is_its_cross_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, capsys):
-    """MERGE-16, MERGE-54, MERGE-55: a step that cannot be judged is its `✗` row and the pair, a missing admin right
+    """MERGE-16, MERGE-54, MERGE-55, MERGE-105: a step that cannot be judged is its `✗` row and the pair, a missing admin right
     included."""
     gh = FakeGh(**gh_kwargs)
     code, out, err, answers = run(gh, capsys, transport=sonar(**sonar_kwargs))

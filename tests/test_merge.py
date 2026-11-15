@@ -1,6 +1,5 @@
 import json
 from datetime import UTC, datetime
-from urllib.parse import quote
 
 import pytest
 
@@ -514,10 +513,28 @@ def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwar
     gh = FakeGh(**gh_kwargs)
     assert drive(gh)[0] == 0
     assert (gh.merge_calls, [body["merge_method"] for body in gh.merge_bodies]) == ([merge_request()[0]], [method])
+
+
+@pytest.mark.parametrize(
+    ("base_ref", "compare_path", "rules_path"),
+    [
+        ("main", "refs/heads/main", "main"),
+        ("release/1", "refs/heads/release/1", "release/1"),
+        ("rel#x", "refs/heads/rel%23x", "rel%23x"),
+    ],
+    ids=["the default base", "a base branch with a slash", "a base branch with a hash"],
+)
+def test_the_door_reads_the_comparison_and_the_rules_of_the_base_branch_the_pull_request_names(base_ref, compare_path, rules_path):
+    """MERGE-103: the door asks GitHub to compare the live tip of the pull request's base branch, its ref
+    percent-encoded but for slashes, with the head, one commit per page, and reads that branch's rules."""
+    gh = FakeGh(base_ref=base_ref)
+    assert drive(gh)[0] == 0
     compare_read = next(call for call in gh.calls if "/compare/" in " ".join(call))
-    assert compare_read == ("api", f"repos/{REPO}/compare/refs/heads/{quote(gh.base_ref, safe='/')}...{SHA}?per_page=1")
     rules_read = next(call for call in gh.calls if "/rules/branches/" in " ".join(call))
-    assert rules_read == ("api", "--paginate", "--slurp", f"repos/{REPO}/rules/branches/{quote(gh.base_ref, safe='/')}?per_page=100")
+    assert (compare_read, rules_read) == (
+        ("api", f"repos/{REPO}/compare/{compare_path}...{SHA}?per_page=1"),
+        ("api", "--paginate", "--slurp", f"repos/{REPO}/rules/branches/{rules_path}?per_page=100"),
+    )
 
 
 @pytest.mark.parametrize(
