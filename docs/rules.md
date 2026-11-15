@@ -1120,7 +1120,8 @@ before the parser, so an unclosed hole is named before an unclosed element. A mi
 tracked page deleted from the tree are no finding (LITERAL-9). It first ships in v0.13.0, so a gate pinned below that release shows `not in <tag>`
 in the fleet matrix's column. v0.16.0 is the release that names the table as its switch (FLEET-102): a gate pinned at v0.13.0 to v0.15.0
 reads `report-only` (FLEET-101), from v0.16.0 on the cell reads `enforced` where `quality/baseline.toml`
-holds `[literal_text]` and `report-only` where it does not, and on main the cell reads `enforced` where the clone declares
+holds `[literal_text]` and `report-only` where it does not, until the release that names the catalogs declaration as the switch
+(`SwitchChange` in `src/quality/rules.py`); from that release on and on main the cell reads `enforced` where the clone declares
 the catalogs and `no catalogs declaration` where it does not, as for `catalog-check` (FLEET-99). No
 configuration switches it off.
 
