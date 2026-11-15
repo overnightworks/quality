@@ -217,24 +217,31 @@ wheels = [
 
 [[package]]
 name = "overnightworks-design"
-version = "0.35.0"
-source = { url = "https://github.com/overnightworks/design/releases/download/v0.35.0/overnightworks_design-0.35.0-py3-none-any.whl" }
+version = "0.36.0"
+source = { url = "https://github.com/overnightworks/design/releases/download/v0.36.0/overnightworks_design-0.36.0-py3-none-any.whl" }
 wheels = [
-    { url = "https://github.com/overnightworks/design/releases/download/v0.35.0/overnightworks_design-0.35.0-py3-none-any.whl", hash = "sha256:cd72381e3eda306aa1e43ae1a8eec4401e249e9d0b23eba1fc7d718d6d0857ec" },
+    { url = "https://github.com/overnightworks/design/releases/download/v0.36.0/overnightworks_design-0.36.0-py3-none-any.whl", hash = "sha256:a0b8fe02f2715feca2a307c39c0998036e5a72f6a01f1af8e9a0d5bcbd066b92" },
+]
+
+[package.optional-dependencies]
+po = [
+    { name = "babel" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "babel", marker = "extra == 'catalogs'", specifier = ">=2.18,<3" }]
-provides-extras = ["catalogs"]
+requires-dist = [
+    { name = "babel", marker = "extra == 'po'", specifier = ">=2.18,<3" },
+    { name = "overnightworks-design", extras = ["po"], marker = "extra == 'catalogs'" },
+]
+provides-extras = ["catalogs", "po"]
 
 [[package]]
 name = "overnightworks-quality"
 source = { editable = "." }
 dependencies = [
-    { name = "babel" },
     { name = "import-linter" },
     { name = "lizard" },
-    { name = "overnightworks-design" },
+    { name = "overnightworks-design", extra = ["po"] },
     { name = "packaging" },
     { name = "pyyaml" },
     { name = "ruff" },
@@ -250,10 +257,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "babel", specifier = ">=2.18,<3" },
     { name = "import-linter", specifier = "==2.15" },
     { name = "lizard", specifier = ">=1.24.1,<1.26" },
-    { name = "overnightworks-design", url = "https://github.com/overnightworks/design/releases/download/v0.35.0/overnightworks_design-0.35.0-py3-none-any.whl" },
+    { name = "overnightworks-design", extras = ["po"], url = "https://github.com/overnightworks/design/releases/download/v0.36.0/overnightworks_design-0.36.0-py3-none-any.whl" },
     { name = "packaging", specifier = ">=24" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "ruff", specifier = "==0.17.4" },
