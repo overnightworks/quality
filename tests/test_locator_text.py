@@ -175,11 +175,10 @@ def test_other_files_are_not_read_in_this_slice(build_repo, name):
     assert found(build_repo({**COVERED, name: 'page.get_by_text("Abbrechen")\n'})) == []
 
 
-def test_a_site_stays_red_beside_a_baseline_file(build_repo, capsys):
+def test_a_site_stays_red_beside_a_baseline_file(build_repo):
     """LOCATOR-6: no baseline table or ceiling turns it off."""
     repo = build_repo(only_test('page.get_by_text("Abbrechen")\n', {BASELINE_PATH: "[literal_text]\n[size]\n"}))
     assert (door_in(repo, *FILES), len(found(repo))) == (1, 1)
-    capsys.readouterr()
 
 
 @pytest.mark.parametrize(
@@ -267,20 +266,13 @@ def test_a_catalog_symlinked_out_of_the_repository_is_exit_two_and_never_read(bu
     assert "Draußen" not in out
 
 
-@pytest.mark.parametrize(
-    ("content", "fact"),
-    [
-        (b"def broken(:\n", "tests/test_dialog.py"),
-        (b"x = '\xff'\n", "tests/test_dialog.py"),
-    ],
-    ids=["a syntax error", "not UTF-8"],
-)
-def test_a_test_file_python_cannot_read_is_exit_two_naming_it(build_repo, capsys, content, fact):
+@pytest.mark.parametrize("content", [b"def broken(:\n", b"x = '\xff'\n"], ids=["a syntax error", "not UTF-8"])
+def test_a_test_file_python_cannot_read_is_exit_two_naming_it(build_repo, capsys, content):
     """LOCATOR-10."""
     repo = build_repo(only_test("x = 1\n"))
     (repo / TEST_FILE).write_bytes(content)
     code, _ = files_run(capsys, repo)
-    assert (code, fact in refusals(repo)[Rule.LOCATOR_TEXT]) == (2, True)
+    assert (code, TEST_FILE in refusals(repo)[Rule.LOCATOR_TEXT]) == (2, True)
 
 
 def files_run(capsys, repo):
