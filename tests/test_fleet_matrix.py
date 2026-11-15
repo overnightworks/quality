@@ -504,6 +504,19 @@ def test_literal_text_under_a_tag_reads_report_only_until_the_release_names_the_
 
 
 @pytest.mark.parametrize(
+    ("declares_catalogs", "words"),
+    [(True, "enforced"), (False, "no catalogs declaration")],
+    ids=["a catalogs declaration", "no declaration"],
+)
+def test_literal_text_under_a_tag_reads_the_declaration_from_the_release_that_names_it(declares_catalogs, words):
+    """FLEET-99: from the release that names the catalogs declaration the cell reads as on main."""
+    declaration_release = LITERAL_TEXT.switched[-1].release
+    tags = {**FIRST_RELEASES, LITERAL_TEXT.first_release: FIRST_RELEASE_COMMIT, declaration_release: LITERAL_SWITCH_PIN}
+    release = gate_release((gate_call(LITERAL_SWITCH_PIN),), False, tags)
+    assert rule_cell(LITERAL_TEXT, release, declared(declares_catalogs=declares_catalogs)) == words
+
+
+@pytest.mark.parametrize(
     ("pin", "words"),
     [(NEWEST, "not in v0.3.1"), (FIRST_RELEASE_COMMIT, "report-only")],
     ids=["an older tag", "the rule's first release"],
