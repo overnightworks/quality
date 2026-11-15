@@ -1,8 +1,0 @@
-claim_id = "df538adc65e3444490e5c361362ea24b"
-agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
-role = "builder"
-base = "4fe26b24d60e131396278382692757d9056596ab"
-branch = "claude/issue-855-clean-row-job-limits"
-scope = ["docs/output.md", "docs/rules.md", "src/quality/cli.py", "src/quality/workflow_rules.py", "tests/test_workflow_rules_timeout.py"]
-opened_commit = "1f143b476f5d12da4202340ba2a2805933f8adc9"
-whole_reason = "one row's words, with its docs and its test"
