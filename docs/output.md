@@ -72,7 +72,9 @@ rows, by area:
   shape breaks, its fact then holding the place too, and `misplaced` where only the place does (O19).
   A `literal-text` finding is `literal text` at the page and line, its fact the text in single quotes, its fix to read it
   through the generated module and keep it in the catalog (LITERAL-14); a covered repository's row counts the rule among
-  its `N rules` ([rules](rules.md)).
+  its `N rules` ([rules](rules.md)). A `locator-text` finding is `catalog text` at the test file and line, its fact
+  `'<text>' is the catalog text of <key>` (with `, and N more keys` when several keys share the text), its fix to find the
+  element by its key through the generated module (LOCATOR-6).
 - `debt`: a `job-timeout` finding is `missing` (`job <id> has no timeout-minutes`, at the job's line), `invalid`
   (`job <id> has a timeout-minutes that is not a number above zero`), `new debt` (`job <id> has timeout-minutes
   <value> · limit 15`), `grew` (`job <id> has timeout-minutes <value> · ceiling <entry>`) or `can fall` (the same fact
@@ -257,7 +259,9 @@ A fact of a few words says what is missing (`mise could not locate gitleaks 8.30
 mise). The `files` area refuses with the fact of a page the literal-text scan cannot read to its end, which names the page:
 `<file> has a <script> that is opened and never closed, so the markup after it cannot be read` (the element as written in
 lower case) or `<file> has a { that is never closed, so the markup after it cannot be read`, and with the shared reader's
-`cannot read <file>` for a page that is not UTF-8 (LITERAL-9). A reason that several rules of one area share stands once (REFUSAL-4); distinct reasons make the row say
+`cannot read <file>` for a page that is not UTF-8 (LITERAL-9); it names a Python test file it cannot read, a catalog
+design's strict reading refuses as `<file>:<line>: <problem>`, and a `pyproject.toml` whose `[tool.design-catalogs]` table
+design refuses (LOCATOR-10). A reason that several rules of one area share stands once (REFUSAL-4); distinct reasons make the row say
 `N reasons` (REFUSAL-5) and stand on `✗` lines below it (REFUSAL-6), and a reason counts once. Findings of an area
 that also cannot check stay under its `✗` row (REFUSAL-7) and are counted in [the error line](#the-closing-line).
 

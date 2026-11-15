@@ -9,8 +9,9 @@ constraints stand. The references ([gate](gate.md), [codeql](codeql.md), [sonar]
 The engineer and the agent run `quality check` locally and in the commit hook. The operator uses his door
 (`quality merge`) to merge past a red gate. Every gated repository's CI calls the reusable `gate.yml`, which
 runs the check, the SonarCloud job and the verdict. Outside quality lie GitHub (its API and Actions), SonarCloud, the
-OSV advisory archives, mise with the three scanners it installs, and PyPI, which uv installs quality's own dependencies
-from.
+OSV advisory archives, mise with the three scanners it installs, PyPI, which uv installs quality's own dependencies
+from, and design's release wheel on GitHub, the second source of a dependency: `design.catalogs` reads the catalogs
+declaration and the catalog files for the languages rules.
 
 ```mermaid
 flowchart LR
@@ -23,6 +24,7 @@ flowchart LR
     osv["OSV advisory archives"]
     mise["mise and the three scanners"]
     pypi["PyPI via uv"]
+    design["design's release wheel<br/>pinned by URL and sha256"]
     engineer --> quality
     operator --> quality
     ci --> quality
@@ -31,6 +33,7 @@ flowchart LR
     quality --> osv
     quality --> mise
     pypi --> quality
+    design --> quality
 ```
 
 ## 2. Building Block View
@@ -119,7 +122,8 @@ directory.
 
 **Trust.** The operator and his settings are trusted. A pull request's content and every repository text are untrusted
 input: output masks them and stops workflow commands ([output](output.md#masking)). Reads stay inside the
-repository (`repository.py`). A scanner's stderr is shown only once gitleaks clears it. The GitHub transport follows no
+repository (`repository.py`): design's catalog functions get only text that `repository.py` has read, never a path, so no
+symlink is followed out of the repository and no untracked file is read. A scanner's stderr is shown only once gitleaks clears it. The GitHub transport follows no
 redirect. The fleet report's listing is public repositories only (a private one an operator's token can list is dropped
 before any line), and its token goes to `api.github.com` only, never to git. A workflow's pin selects which code runs
 locally. The gate's tool is its own uv workspace root, so a caller's checkout above it cannot take it in or configure

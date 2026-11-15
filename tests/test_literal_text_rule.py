@@ -81,11 +81,11 @@ def test_a_repository_that_is_not_covered_sees_no_literal_row_and_its_debt_area_
     assert "literal" not in out
 
 
-def test_every_area_judges_exactly_the_rules_it_owns_but_the_literal_rule_of_an_uncovered_repository(build_repo):
+def test_every_area_judges_exactly_the_rules_it_owns_but_the_covered_only_rules_of_an_uncovered_repository(build_repo):
     """LITERAL-15: the area guard hides no forgotten rule."""
     judged = {area.area: {verdict.rule for verdict in area.verdicts} for area in check_result(build_repo(UNCOVERED)).areas}
     owned = {area: {rule for rule in Rule if rule.area is area} for area in Area}
-    owned[Area.FILES].discard(Rule.LITERAL_TEXT)
+    owned[Area.FILES] -= {Rule.LITERAL_TEXT, Rule.LOCATOR_TEXT}
     assert judged == owned
 
 

@@ -19,6 +19,7 @@ from quality import (
     env_file,
     layout,
     literal_text,
+    locator_text,
     process,
     python_floor,
     python_lint,
@@ -417,20 +418,23 @@ class RunInputs:
         return _attempt(lambda: catalog_rules.read_catalogs(self.root, self.tracked))
 
 
-def _literal_text_result(inputs: RunInputs) -> Judged | None:
-    """The literal-text verdict of a covered repository, None for one that is not covered."""
-    if inputs.catalogs is None or isinstance(inputs.catalogs, CannotJudge):
-        return inputs.catalogs
-    return _attempt(lambda: literal_text.check_literal_text(inputs.root, inputs.tracked))
+def _covered_result(inputs: RunInputs, check: Callable[[catalog_rules.Catalogs], RuleResult]) -> Judged | None:
+    """The verdict of a rule that only a covered repository gets, None for one that is not covered."""
+    catalogs = inputs.catalogs
+    if catalogs is None or isinstance(catalogs, CannotJudge):
+        return catalogs
+    return _attempt(lambda: check(catalogs))
 
 
 def _judge_files(inputs: RunInputs) -> AreaVerdict:
     root, tracked, allow_lists, modes = inputs.root, inputs.tracked, inputs.allow_lists, inputs.modes
-    literal = _literal_text_result(inputs)
+    literal = _covered_result(inputs, lambda _: literal_text.check_literal_text(root, tracked))
+    locator = _covered_result(inputs, lambda catalogs: locator_text.check_locator_text(root, tracked, catalogs))
     return _area_verdict(
         Area.FILES,
         {
             **({} if literal is None else {Rule.LITERAL_TEXT: literal}),
+            **({} if locator is None else {Rule.LOCATOR_TEXT: locator}),
             Rule.ENV_FILE: env_file.check_env_files(tracked),
             Rule.COMPOSE_PORT: _attempt(lambda: compose.check_compose_ports(root, tracked, _required(allow_lists).compose)),
             Rule.CLAUDE_MD: _attempt(lambda: agent_guidance.check_claude_md(root, tracked)),

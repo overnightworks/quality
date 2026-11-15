@@ -52,7 +52,7 @@ class Area(StrEnum):
 
     help_line: str
 
-    FILES = "files", "what the repository tracks: layout, tests, env files, compose ports, the Python floor, literal page text"
+    FILES = "files", "what the repository tracks: layout, tests, env files, compose ports, the Python floor, literal page text, catalog texts in test locators"
     DEBT = "debt", "size, near copies and job time limits against the debt ceiling (quality/baseline.toml)"
     IMPORTS = "imports", "the import contracts"
     SECRETS = "secrets", "secrets in the committed history"
@@ -91,6 +91,7 @@ class Rule(StrEnum):
         "literal-text", Area.FILES, RELEASE_0_13, Switch.REPORT_ONLY,
         SwitchChange(RELEASE_0_16, Switch.LITERAL_TABLE), SwitchChange(RELEASE_0_20, Switch.CATALOG_DECLARATION),
     )
+    LOCATOR_TEXT = "locator-text", Area.FILES, None, Switch.CATALOG_DECLARATION
     PYTHON_FLOOR = "python-floor", Area.FILES, "v0.8.0", Switch.ALWAYS
     PYTHON_SECURITY = "python-security", Area.CODE, "v0.9.0", Switch.ALWAYS
     PYTHON_PRINT = "python-print", Area.CODE, "v0.9.0", Switch.ALWAYS

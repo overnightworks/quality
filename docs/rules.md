@@ -1129,6 +1129,51 @@ holds `[literal_text]` and `report-only` where it does not, until the release th
 the catalogs and `no catalogs declaration` where it does not, as for `catalog-check` (FLEET-99). No
 configuration switches it off.
 
+The `locator-text` rule, in the `files` area, turns a catalog text in a locator position of a covered repository's Python
+tests into a finding: a test finds an element by its key through the generated module, never by the words a person reads.
+It is not a second target of `literal-text`, which reads page files; this rule reads test files and judges only a text a
+catalog holds, in a position that finds an element. There is no baseline, no ceiling and no exemption: a brand name lives
+in the catalog like any text (LITERAL-3), so a test reads it by key.
+
+- **Who is judged (LOCATOR-9).** A repository covered as for `catalog-check` (CATALOG-1). A repository that is not covered
+  sees no row and nothing is read for it.
+- **Test files (LOCATOR-8).** Every tracked `*.py` file the tree holds under a directory named `tests`. A file Python
+  cannot read (a syntax error, a file that is not UTF-8) refuses the rule naming the file. TypeScript and JavaScript tests
+  are a named gap until a later release reads them.
+- **Catalog texts (LOCATOR-4).** The directory is design's `catalog_directory` (RENDER-2). Every tracked `<name>.po` file
+  directly in it is read with design's `parse_catalog` over the bytes `repository.py` read, so the reading is design's own:
+  strict UTF-8, closed strings, obsolete `#~` entries left out. A text is every msgid and every non-empty msgstr form, so an
+  English translation (`en.po`, msgstr `Settings`) is surface text too; a fuzzy entry gives its msgid only, since gettext
+  does not show its msgstr. The key a finding names is the entry's msgctxt (the msgid for an entry that has none), and a
+  text several keys hold names the first in sort order (LOCATOR-5).
+- **Locator positions (LOCATOR-1).** An argument of a call named `getBy<Upper...>` or `get_by_<lower...>` (an app's
+  `getByRoleButton` counts, `getByteTimeDomainData` does not); an argument of `to_have_text`, `to_have_accessible_name`,
+  `to_have_title` and their camelCase forms; the value argument of `to_have_attribute` (its second positional argument or
+  `value=`); and a `has_text` or `hasText` keyword of any call.
+- **Sites (LOCATOR-2).** A string literal in such a position whose whole value is a catalog text, including one inside a
+  helper call that is itself an argument (`get_by_role("button", name=label("Abbrechen"))`) and one in a list; and an
+  anchored regex literal `^...$` whose body, regex escapes undone, is exactly such a text. An f-string is no site.
+- **Constants (LOCATOR-3).** A name bound exactly once at module level to a plain string literal in the same file is
+  resolved to it; a name bound twice, extended, unpacked or imported from another module is not.
+- **Out of scope (LOCATOR-7).** `toBe`, `toContain`, `to_be`, `assert x == "..."` and every other position: about four of
+  five such sites are scenario data, and the scheduled audit judges them.
+
+Each site is one `catalog text` finding at `<test file>:<line>` (the line of the literal), whatever `quality/baseline.toml`
+holds. Its fact is `'<text>' is the catalog text of <key>`, with `, and N more keys` when several keys share the text, and
+its fix is `find it by its key through the generated module` (LOCATOR-6). The extent of the rule's row is the number of test
+files read.
+
+Exit `2` (LOCATOR-10): a test file Python cannot read; a catalog design's strict reading refuses, named `<file>:<line>`; a
+catalog that is a symlink resolving outside the repository, which is never read; a `[tool.design-catalogs]` table design
+refuses (RENDER-2), named `pyproject.toml`. A missing catalogs directory is no finding here: it is held by `catalog-check`,
+since the app's own `design-catalogs --check` turns red when the source catalog is missing.
+
+Named gaps: a msgid with a gap (`Hello {name}`); a regex locator that is not an anchored exact text (`/shuffle/i`);
+a constant imported from another module; a dynamic string; helper modules outside `tests/` directories; a nested
+project's catalogs. The rule has no release yet, so a gate pinned to a release shows `not released` in the fleet matrix
+(FLEET-19), and on main the cell reads `enforced` where the clone declares the catalogs and `no catalogs declaration`
+where it does not (FLEET-99).
+
 The `job-timeout` rule, in the `debt` area, judges every job of a workflow that runs on a pull request or on a push to
 main, and of the reusable workflows those call through a local `uses:`. Every tracked workflow is parsed, a root or not,
 because a root is known only after the parse; a tracked file gone from the tree is skipped and a composite action is not
