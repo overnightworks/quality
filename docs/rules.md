@@ -1138,9 +1138,15 @@ in the catalog like any text (LITERAL-3), so a test reads it by key.
 - **Who is judged (LOCATOR-9).** A repository covered as for `catalog-check` (CATALOG-1). A repository that is not covered
   sees no row and nothing is read for it.
 - **Test files (LOCATOR-8).** Every tracked `*.py` file the tree holds under a directory named `tests`, and every tracked
-  `*.ts` or `*.js` file named `*.test.*` or `*.spec.*` or held under a directory named `e2e` or `test-utils` (`.tsx`,
-  `.jsx`, `.mjs`, `.cjs` and `.mts` files are not read). A file that cannot be read refuses the rule naming the file
-  (LOCATOR-10).
+  `*.ts` or `*.js` file named `*.test.*` or `*.spec.*` (`x.test.browser.ts` too) or held under a directory named `e2e` or
+  `test-utils` (`.tsx`, `.jsx`, `.mjs`, `.cjs` and `.mts` files are not read). A file that cannot be read refuses the rule
+  naming the file (LOCATOR-10).
+- **Reading a script (LOCATOR-11).** A script is read as tokens, not parsed: strings with their escapes decoded (`\'`, `\n`,
+  `\xHH`, `\uHHHH`, `\u{...}`, a line continuation), templates, regex literals, names, numbers and punctuation, with comments
+  skipped. A `/` starts a regex after nothing, after punctuation but `)` and `]`, and after `return`, `typeof`, `case` and
+  the other keywords that take an operand; after anything else it divides. A template with a hole is no site and its holes
+  are read like the rest, so a locator inside one is judged. A literal's line is the line it starts on, a line ending at
+  `\n`, `\r\n`, `\r`, U+2028 or U+2029. JSX is not read.
 - **Catalog texts (LOCATOR-4).** The directory is design's `catalog_directory` (RENDER-2). Every tracked `<name>.po` file
   directly in it is read with design's `parse_catalog` over the bytes `repository.py` read, so the reading is design's own:
   strict UTF-8, closed strings, obsolete `#~` entries left out. A text is every msgid and every non-empty msgstr form, so an
@@ -1168,9 +1174,9 @@ in the catalog like any text (LITERAL-3), so a test reads it by key.
 - **Constants (LOCATOR-3).** A name bound exactly once at module level to a plain string literal in the same file is
   resolved to it; a name bound twice, extended, unpacked or imported from another module is not. In a script it is a
   top-level `const` (optionally `export`) set to a string or a template without a hole and ended by `;`, `as const`, the
-  end of the file or a line that starts with a name, and it is the only top-level `const`, `let`, `var`, `function` or
-  `class` of that name. A `const` inside a function is no constant, and a function-local name that shadows a top-level
-  one resolves to the top-level value, so a false finding there is fixed by renaming.
+  end of the file or a line that starts with a name, it is the only top-level `const`, `let`, `var`, `function` or
+  `class` of that name, and nothing assigns to the name (`NAME = ...`, `NAME += ...`). A `const` inside a function is no constant, and a function-local name that shadows a
+  top-level one resolves to the top-level value, so a false finding there is fixed by renaming.
 - **Out of scope (LOCATOR-7).** `toBe`, `toContain`, `toEqual`, `to_be`, `to_contain_text`, `toContainText` and the other
   substring assertions, `assert x == "..."` and every other position: about four
   of five such sites are scenario data, and the scheduled audit judges them.
@@ -1189,19 +1195,13 @@ Unbalanced brackets, a stray `}`, any other character and a valid file nested de
 nothing: a valid file is judged like any other, and no site of it is lost. A missing catalogs directory is no finding here:
 it is held by `catalog-check`, since the app's own `design-catalogs --check` turns red when the source catalog is missing.
 
-- **Reading a script (LOCATOR-11).** A script is read as tokens, not parsed: strings with their escapes decoded (`\'`, `\n`,
-  `\xHH`, `\uHHHH`, `\u{...}`, a line continuation), templates, regex literals, names, numbers and punctuation, with comments
-  skipped. A `/` starts a regex after nothing, after punctuation but `)` and `]`, and after `return`, `typeof`, `case` and
-  the other keywords that take an operand; after anything else it divides. A template with a hole is no site and its holes
-  are read like the rest, so a locator inside one is judged. A literal's line is the line it starts on. JSX is not read.
-
 Named gaps: a msgid with a gap (`Hello {name}`) and a `msgid_plural`; a regex locator that is not an anchored exact text
 (`/shuffle/i`), a case-insensitive one that differs in case and a regex right after `)`; a constant imported from another
 module, one declared `const A: string = '...'` or `const A = '...', B = '...'`, and a dynamic string, a concatenation and a
 ternary; a helper named other than `getBy...`, testing-library's bare `getByRole(container, role)`, `to_have_value` and
 `toHaveValue` (a value is mostly scenario data), and an attribute named by a variable or `value` or `content`, which
 `literal-text` reads only conditionally; `.tsx`, `.jsx`, `.mjs`, `.cjs` and `.mts` files; helper modules outside `tests/`
-directories; a nested project's catalogs. The rule has no release that reads scripts yet, so a gate pinned to a release shows
+directories; a nested project's catalogs. The rule has no release yet, so a gate pinned to a release shows
 `not released` in the fleet matrix (FLEET-19), and on main the cell reads `enforced` where the clone declares the catalogs
 and `no catalogs declaration` where it does not (FLEET-99).
 

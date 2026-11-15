@@ -424,8 +424,8 @@ def _file_findings(name: str, content: bytes, texts: CatalogTexts) -> list[Findi
 
 
 def check_locator_text(root: Path, tracked: list[str], catalogs: Catalogs) -> RuleResult:
-    """One finding per site of a catalog text in a locator position of the tracked Python test files, at its line; the extent
-    is the test files read. A covered repository is one `catalog_rules.read_catalogs` returned."""
+    """One finding per site of a catalog text in a locator position of the tracked Python, TypeScript and JavaScript test files,
+    at its line; the extent is the test files read. A covered repository is one `catalog_rules.read_catalogs` returned."""
     texts = _catalog_texts(root, tracked, catalog_rules.catalogs_directory(catalogs))
     return checkout.judge_tracked(
         repository.read_bytes, root, tracked, _is_test_file, lambda name, content: _file_findings(name, content, texts)

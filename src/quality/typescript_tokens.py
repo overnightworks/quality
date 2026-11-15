@@ -37,7 +37,7 @@ REGEX_KEYWORDS = frozenset(
 )
 NON_REGEX_PUNCTUATION = frozenset({")", "]"})
 LEXEME = re.compile(
-    r"(?P<space>\s+)|(?P<comment>//[^\n]*|/\*.*?\*/)|(?P<unclosed>/\*)|(?P<word>(?:[^\W\d]|\$)[\w$]*)|(?P<number>\d[\w.]*)"
+    r"(?P<space>\s+)|(?P<comment>//[^\n\r\u2028\u2029]*|/\*.*?\*/)|(?P<unclosed>/\*)|(?P<word>(?:[^\W\d]|\$)[\w$]*)|(?P<number>\d[\w.]*)"
     r"|(?P<quote>['\"])|(?P<template>`)|(?P<slash>/)|(?P<other>.)",
     re.DOTALL,
 )
@@ -49,6 +49,7 @@ REGEX = re.compile(r"/((?:[^/\\\[\r\n]++|\\[^\r\n]|\[(?:[^\]\\\r\n]++|\\[^\r\n])
 ESCAPE = re.compile(r"\\(?:u\{([0-9a-fA-F]+)\}|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|(\r\n|.))", re.DOTALL)
 SIMPLE_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "v": "\v", "0": "\0"}
 LINE_TERMINATORS = frozenset({"\n", "\r", "\r\n", "\u2028", "\u2029"})
+LINE_BREAK = re.compile(r"\r\n|[\n\r\u2028\u2029]")
 LAST_CODE_POINT = 0x10FFFF
 
 
@@ -94,7 +95,7 @@ class _Lexer:
         return next(pattern.finditer(self.source, self.position))
 
     def _consume(self, end: int) -> None:
-        self.line += self.source.count("\n", self.position, end)
+        self.line += len(LINE_BREAK.findall(self.source, self.position, end))
         self.position = end
 
     def _emit(self, kind: Kind, value: str, end: int) -> None:

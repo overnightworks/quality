@@ -478,6 +478,15 @@ def test_a_valid_file_is_read_to_its_last_site_whatever_comes_first(build_repo, 
     assert found(build_repo(scenario.only_script(source))) == [(scenario.script_file, source.count("\n"), cancel_fact())]
 
 
+@pytest.mark.parametrize("terminator", ["\r", "\r\n", "\u2028"])
+def test_a_line_is_counted_by_every_terminator_the_lexer_knows(build_repo, scenario, terminator):
+    """LOCATOR-11: a literal's line is the line it starts on, whatever ends the lines before it."""
+    repo = build_repo(scenario.only_script("x = 1\n"))
+    source = terminator.join(["x = 1;", "// note", "page.getByText('Abbrechen');", ""])
+    (repo / scenario.script_file).write_bytes(source.encode())
+    assert found(repo) == [(scenario.script_file, 3, cancel_fact())]
+
+
 @pytest.mark.parametrize(
     ("content", "line"),
     [
