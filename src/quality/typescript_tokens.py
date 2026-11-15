@@ -151,7 +151,7 @@ class _Lexer:
         first one, is a boundary token after which a `/` starts a regex."""
         chunk = self._first(TEMPLATE_CHUNK)
         ending = self.source[chunk.end() : chunk.end() + 2]
-        if ending[:1] == "`":
+        if ending.startswith("`"):
             if opening:
                 self.tokens.append(Token(Kind.STRING, _unescape(chunk.group()), start_line))
             self._consume(chunk.end() + 1)
