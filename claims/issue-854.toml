@@ -3,6 +3,6 @@ agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
 role = "builder"
 base = "ec69abcca2d8c0636f60b611e965002a2eb7c91e"
 branch = "claude/issue-854-literal-text-fixed"
-scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality", "tests"]
+scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "scripts/verify_release.py", "src/quality", "tests"]
 opened_commit = "bfd9cc0bab981a8c15ed68be5db29dd9257be360"
 whole_reason = "the table's removal touches the ratchet, verdict, check, cli and fleet owners together, and the rule cannot be fixed while the table still governs it"
