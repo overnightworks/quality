@@ -1176,9 +1176,9 @@ in the catalog like any text (LITERAL-3), so a test reads it by key.
 - **Constants (LOCATOR-3).** A name bound exactly once at module level to a plain string literal in the same file is
   resolved to it; a name bound twice, extended, unpacked or imported from another module is not. In a script it is a
   top-level `const` (optionally `export`) set to a string or a template without a hole and ended by `;`, `as const`, the
-  end of the file or a line that starts with a name, it is the only top-level `const`, `let`, `var`, `function` or
-  `class` of that name. An assignment to a const is not looked for, since TypeScript refuses it and it throws when the
-  module loads, so valid code has none. A `const` inside a function is no constant,
+  end of the file or a line that starts with a name, and it is the only top-level `const`, `let`, `var`, `function` or
+  `class` of that name. An assignment to a const is not looked for, since TypeScript refuses it and it throws when it
+  runs, so code that type-checks has none. A `const` inside a function is no constant,
   and a function-local name that shadows a top-level one resolves to the top-level value, so a false finding there is fixed
   by renaming.
 - **Out of scope (LOCATOR-7).** `toBe`, `toContain`, `toEqual`, `to_be`, `to_contain_text`, `toContainText` and the other
@@ -1192,7 +1192,7 @@ files read.
 
 Exit `2` (LOCATOR-10): a Python test file that is not valid Python or not UTF-8; a script test file that is not UTF-8, has a
 string that reaches a raw newline or the end of the file, a template or `${` hole that is never closed, a regex that reaches
-a newline or the end of the file, or a block comment that is never closed, named with the file and the `line N` of the
+a line ending or the end of the file, or a block comment that is never closed, named with the file and the `line N` of the
 construct; a catalog design's strict reading refuses, named `<file>:<line>`; a catalog that is a symlink resolving outside
 the repository, which is never read; a `[tool.design-catalogs]` table design refuses (RENDER-2), named `pyproject.toml`.
 Unbalanced brackets, a stray `}`, any other character and a valid file nested deeper than the interpreter recurses refuse
@@ -1200,7 +1200,10 @@ nothing: a valid file is judged like any other, and no site of it is lost. A mis
 it is held by `catalog-check`, since the app's own `design-catalogs --check` turns red when the source catalog is missing.
 
 Named gaps: a msgid with a gap (`Hello {name}`) and a `msgid_plural`; a regex locator that is not an anchored exact text
-(`/shuffle/i`), a case-insensitive one that differs in case and a regex right after `)`; a constant imported from another
+(`/shuffle/i`), a case-insensitive one that differs in case and a regex right after `)`, which also refuses a valid file with exit `2`
+when the regex holds a quote or a backtick (`if (x) /'/.test(y);`) and not only misses a site; a later typed parameter
+such as `name: string`, which reads as a key with an identifier site that only a top-level const of that name could make
+red; a constant imported from another
 module, one declared `const A: string = '...'` or `const A = '...', B = '...'`, and a dynamic string, a concatenation and a
 ternary; a helper named other than `getBy...`, testing-library's bare `getByRole(container, role)`, `to_have_value` and
 `toHaveValue` (a value is mostly scenario data), and an attribute named by a variable or `value` or `content`, which
