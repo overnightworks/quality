@@ -1129,17 +1129,18 @@ holds `[literal_text]` and `report-only` where it does not, until the release th
 the catalogs and `no catalogs declaration` where it does not, as for `catalog-check` (FLEET-99). No
 configuration switches it off.
 
-The `locator-text` rule, in the `files` area, turns a catalog text in a locator position of a covered repository's Python
-tests into a finding: a test finds an element by its key through the generated module, never by the words a person reads.
+The `locator-text` rule, in the `files` area, turns a catalog text in a locator position of a covered repository's Python,
+TypeScript and JavaScript tests into a finding: a test finds an element by its key through the generated module, never by the words a person reads.
 It is not a second target of `literal-text`, which reads page files; this rule reads test files and judges only a text a
 catalog holds, in a position that finds an element. There is no baseline, no ceiling and no exemption: a brand name lives
 in the catalog like any text (LITERAL-3), so a test reads it by key.
 
 - **Who is judged (LOCATOR-9).** A repository covered as for `catalog-check` (CATALOG-1). A repository that is not covered
   sees no row and nothing is read for it.
-- **Test files (LOCATOR-8).** Every tracked `*.py` file the tree holds under a directory named `tests`. A file Python
-  cannot read (a syntax error, a file that is not UTF-8) refuses the rule naming the file. TypeScript and JavaScript tests
-  are a named gap until a later release reads them.
+- **Test files (LOCATOR-8).** Every tracked `*.py` file the tree holds under a directory named `tests`, and every tracked
+  `*.ts` or `*.js` file named `*.test.*` or `*.spec.*` or held under a directory named `e2e` or `test-utils` (`.tsx`,
+  `.jsx`, `.mjs`, `.cjs` and `.mts` files are not read). A file that cannot be read refuses the rule naming the file
+  (LOCATOR-10).
 - **Catalog texts (LOCATOR-4).** The directory is design's `catalog_directory` (RENDER-2). Every tracked `<name>.po` file
   directly in it is read with design's `parse_catalog` over the bytes `repository.py` read, so the reading is design's own:
   strict UTF-8, closed strings, obsolete `#~` entries left out. A text is every msgid and every non-empty msgstr form, so an
@@ -1148,15 +1149,28 @@ in the catalog like any text (LITERAL-3), so a test reads it by key.
   text several keys hold names the first in sort order (LOCATOR-5).
 - **Locator positions (LOCATOR-1).** An argument of a call named `getBy<Upper...>` or `get_by_<lower...>` (an app's
   `getByRoleButton` counts, `getByteTimeDomainData` does not); an argument of `to_have_text`, `to_have_accessible_name`,
-  `to_have_title` and their camelCase forms; the value argument of `to_have_attribute` (its second positional argument or
-  `value=`); and a `has_text` or `hasText` keyword of any call. The role argument of `get_by_role` (its first positional
-  argument or `role=`) and the argument of `get_by_test_id` are protocol tokens and test ids, never surface text, so they
-  are no position.
-- **Sites (LOCATOR-2).** A string literal in such a position whose whole value is a catalog text, including one inside a
-  helper call that is itself an argument (`get_by_role("button", name=label("Abbrechen"))`) and one in a list; and an
-  anchored regex literal `^...$` whose body, regex escapes undone, is exactly such a text. An f-string is no site.
+  `to_have_title`, `to_have_accessible_description` and their camelCase forms; the value argument of `to_have_attribute`
+  and `toHaveAttribute` (its second argument, in Python also `value=`) when its first argument (in Python also `name=`) is a
+  string literal naming an attribute a person reads (`title`, `placeholder`, `aria-label`, `alt`, `label`,
+  `aria-description`, `aria-roledescription`, `aria-valuetext`), so a `data-state` value is no position; and a `has_text`,
+  `has_not_text`, `hasText` or `hasNotText` keyword or property of any call. The role argument of `get_by_role` and
+  `getByRole` (its first argument, in Python also `role=`) and the argument of `get_by_test_id` and `getByTestId` are
+  protocol tokens and test ids, never surface text, so they are no position.
+- **Sites (LOCATOR-2).** A literal in such a position whose whole value is a catalog text: a string, in a script also a
+  template without a `${` hole, including one inside a helper call that is itself an argument
+  (`get_by_role("button", name=label("Abbrechen"))`), one in a list and, in a script, one a property of an options object
+  holds (`{ name: 'Abbrechen' }`); and a regex literal anchored `^...$` whose body, regex escapes undone, is exactly such a
+  text, whatever its flags (case-sensitive), or the same anchored text in a string that `re.compile(` or `RegExp(` holds. A
+  plain string is never read as a regex: `"^Abbrechen$"` is compared whole. An f-string, a template with a hole, a
+  concatenation, a ternary branch and a comparison are no site. In a script a value is a site only when it stands alone:
+  it follows `(`, `,`, the `[` of an array (a `[` after a name, `)` or `]` is an index) or a `key:`, and it is followed by
+  `)`, `,`, `]` or `}`.
 - **Constants (LOCATOR-3).** A name bound exactly once at module level to a plain string literal in the same file is
-  resolved to it; a name bound twice, extended, unpacked or imported from another module is not.
+  resolved to it; a name bound twice, extended, unpacked or imported from another module is not. In a script it is a
+  top-level `const` (optionally `export`) set to a string or a template without a hole and ended by `;`, `as const`, the
+  end of the file or a line that starts with a name, and it is the only top-level `const`, `let`, `var`, `function` or
+  `class` of that name. A `const` inside a function is no constant, and a function-local name that shadows a top-level
+  one resolves to the top-level value, so a false finding there is fixed by renaming.
 - **Out of scope (LOCATOR-7).** `toBe`, `toContain`, `toEqual`, `to_be`, `to_contain_text`, `toContainText` and the other
   substring assertions, `assert x == "..."` and every other position: about four
   of five such sites are scenario data, and the scheduled audit judges them.
@@ -1166,16 +1180,30 @@ holds. Its fact is `'<text>' is the catalog text of <key>`, with `, and N more k
 its fix is `find it by its key through the generated module` (LOCATOR-6). The extent of the rule's row is the number of test
 files read.
 
-Exit `2` (LOCATOR-10): a test file Python cannot read; a catalog design's strict reading refuses, named `<file>:<line>`; a
-catalog that is a symlink resolving outside the repository, which is never read; a `[tool.design-catalogs]` table design
-refuses (RENDER-2), named `pyproject.toml`. A missing catalogs directory is no finding here: it is held by `catalog-check`,
-since the app's own `design-catalogs --check` turns red when the source catalog is missing.
+Exit `2` (LOCATOR-10): a Python test file that is not valid Python or not UTF-8; a script test file that is not UTF-8, has a
+string that reaches a raw newline or the end of the file, a template or `${` hole that is never closed, a regex that reaches
+a newline or the end of the file, or a block comment that is never closed, named with the file and the `line N` of the
+construct; a catalog design's strict reading refuses, named `<file>:<line>`; a catalog that is a symlink resolving outside
+the repository, which is never read; a `[tool.design-catalogs]` table design refuses (RENDER-2), named `pyproject.toml`.
+Unbalanced brackets, a stray `}`, any other character and a valid file nested deeper than the interpreter recurses refuse
+nothing: a valid file is judged like any other, and no site of it is lost. A missing catalogs directory is no finding here:
+it is held by `catalog-check`, since the app's own `design-catalogs --check` turns red when the source catalog is missing.
 
-Named gaps: a msgid with a gap (`Hello {name}`); a regex locator that is not an anchored exact text (`/shuffle/i`);
-a constant imported from another module; a dynamic string; helper modules outside `tests/` directories; a nested
-project's catalogs. The rule has no release yet, so a gate pinned to a release shows `not released` in the fleet matrix
-(FLEET-19), and on main the cell reads `enforced` where the clone declares the catalogs and `no catalogs declaration`
-where it does not (FLEET-99).
+- **Reading a script (LOCATOR-11).** A script is read as tokens, not parsed: strings with their escapes decoded (`\'`, `\n`,
+  `\xHH`, `\uHHHH`, `\u{...}`, a line continuation), templates, regex literals, names, numbers and punctuation, with comments
+  skipped. A `/` starts a regex after nothing, after punctuation but `)` and `]`, and after `return`, `typeof`, `case` and
+  the other keywords that take an operand; after anything else it divides. A template with a hole is no site and its holes
+  are read like the rest, so a locator inside one is judged. A literal's line is the line it starts on. JSX is not read.
+
+Named gaps: a msgid with a gap (`Hello {name}`) and a `msgid_plural`; a regex locator that is not an anchored exact text
+(`/shuffle/i`), a case-insensitive one that differs in case and a regex right after `)`; a constant imported from another
+module, one declared `const A: string = '...'` or `const A = '...', B = '...'`, and a dynamic string, a concatenation and a
+ternary; a helper named other than `getBy...`, testing-library's bare `getByRole(container, role)`, `to_have_value` and
+`toHaveValue` (a value is mostly scenario data), and an attribute named by a variable or `value` or `content`, which
+`literal-text` reads only conditionally; `.tsx`, `.jsx`, `.mjs`, `.cjs` and `.mts` files; helper modules outside `tests/`
+directories; a nested project's catalogs. The rule has no release that reads scripts yet, so a gate pinned to a release shows
+`not released` in the fleet matrix (FLEET-19), and on main the cell reads `enforced` where the clone declares the catalogs
+and `no catalogs declaration` where it does not (FLEET-99).
 
 The `job-timeout` rule, in the `debt` area, judges every job of a workflow that runs on a pull request or on a push to
 main, and of the reusable workflows those call through a local `uses:`. Every tracked workflow is parsed, a root or not,

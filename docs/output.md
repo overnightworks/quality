@@ -259,7 +259,7 @@ A fact of a few words says what is missing (`mise could not locate gitleaks 8.30
 mise). The `files` area refuses with the fact of a page the literal-text scan cannot read to its end, which names the page:
 `<file> has a <script> that is opened and never closed, so the markup after it cannot be read` (the element as written in
 lower case) or `<file> has a { that is never closed, so the markup after it cannot be read`, and with the shared reader's
-`cannot read <file>` for a page that is not UTF-8 (LITERAL-9); it names a Python test file it cannot read, a catalog
+`cannot read <file>` for a page that is not UTF-8 (LITERAL-9); it names a Python, TypeScript or JavaScript test file it cannot read, a catalog
 design's strict reading refuses as `<file>:<line>: <problem>`, and a `pyproject.toml` whose `[tool.design-catalogs]` table
 design refuses (LOCATOR-10). A reason that several rules of one area share stands once (REFUSAL-4); distinct reasons make the row say
 `N reasons` (REFUSAL-5) and stand on `✗` lines below it (REFUSAL-6), and a reason counts once. Findings of an area
