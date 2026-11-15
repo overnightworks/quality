@@ -317,7 +317,14 @@ def test_the_build_arguments_hold_every_caller_line_then_the_version(image, tmp_
         '"SERVICE_VERSION=9"',
         '"SERVICE_VERSION',
     ],
-    ids=["alone", "after another line", "indented", "without a value", "double-quoted", "double-quoted without a value"],
+    ids=[
+        "alone",
+        "after another line",
+        "indented",
+        "without a value",
+        "double-quoted",
+        "double-quoted without a value",
+    ],
 )
 def test_a_caller_build_argument_named_service_version_is_refused(image, tmp_path, caller_lines):
     """IMAGE-19."""
