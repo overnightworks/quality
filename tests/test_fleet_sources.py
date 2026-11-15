@@ -66,12 +66,14 @@ def test_the_prefix_is_read_in_its_canonical_spelling(build_repo):
     [
         ("version = [\n", "uv.lock is not UTF-8 TOML"),
         (lock("overnightworks-logline", None), "overnightworks-logline has no source"),
+        ("version = 1\npackage = [1]\n", "uv.lock is not a uv lock"),
+        ('version = 1\n[package]\nname = "overnightworks-x"\n', "uv.lock is not a uv lock"),
         (
             lock("overnightworks-logline", 'ftp = "x"'),
             "overnightworks-logline has a source of a kind quality does not know",
         ),
     ],
-    ids=["unreadable lock", "no source", "unknown source kind"],
+    ids=["unreadable lock", "no source", "packages not a list", "package a table", "unknown source kind"],
 )
 def test_a_lock_that_cannot_be_read_as_a_judgement_refuses_the_rule(build_repo, content, reason):
     """SOURCE-4: an unreadable lock, a fleet package without a source and an unknown source kind are exit 2, never clean."""
@@ -83,6 +85,7 @@ def test_a_tracked_lock_gone_from_disk_is_skipped(build_repo):
     repo = build_repo({"uv.lock": lock("overnightworks-logline", INDEX)})
     (repo / "uv.lock").unlink()
     assert rule_findings(repo, Rule.FLEET_SOURCE) == []
+    assert Rule.FLEET_SOURCE not in refusals(repo)
 
 
 def test_a_lock_linking_out_of_the_repository_refuses_the_rule(build_repo, tmp_path):

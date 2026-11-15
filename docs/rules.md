@@ -1522,7 +1522,7 @@ name starts with `overnightworks-` and whose `source` is `registry` is a `from i
 (SOURCE-1), one per package and lock, its fact the package, its version and the index, its fix the two allowed pins
 ([the standard](release.md#depending-on-a-fleet-package)). A `git`, `url`, `editable`, `virtual`, `directory` or `path`
 source is allowed (SOURCE-2), and a package outside the prefix is not read further (SOURCE-3). A lock that is not UTF-8
-TOML, a fleet package without a `source` and a source of another kind are exit `2`, so a future uv never reads green
+TOML or whose packages are not a list of tables, a fleet package without a `source` and a source of another kind are exit `2`, so a future uv never reads green
 (SOURCE-4). A tracked lock the tree no longer holds is skipped, and one that links outside the repository or is no file
 is exit `2` (SOURCE-5). A lock tracked under several names is judged once, under the first (SOURCE-6). The row's extent
 is the locks read, and a repository without a `uv.lock` is clean at `0` (SOURCE-7); the rule is on for every
