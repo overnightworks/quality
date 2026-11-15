@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath
 import yaml
 
 from quality import process, repository
-from quality.report import CannotJudge, Command, Instruction, Reason, Step, shell_word
+from quality.report import CannotJudge, Command, Finding, Instruction, Reason, RuleResult, Step, shell_word
 
 UNSHALLOW_STEP = Command("git fetch --unshallow")
 RENAME_LISTING = ("-M50%", "-l1000", "--no-color", "--name-status", "-z")
@@ -177,6 +177,18 @@ def on_disk(root: Path, names: Sequence[str]) -> list[str]:
 def read_existing[T](read: Callable[[Path, str], T | None], root: Path, names: Sequence[str]) -> dict[str, T]:
     """The content of each name the tree holds; a name that vanished since it was listed is gone."""
     return {name: content for name in names if (content := judged(read, root, name)) is not None}
+
+
+def judge_tracked[T](
+    read: Callable[[Path, str], T | None],
+    root: Path,
+    tracked: Sequence[str],
+    wanted: Callable[[str], bool],
+    findings_of: Callable[[str, T], list[Finding]],
+) -> RuleResult:
+    """The findings of each tracked name `wanted` accepts that the tree holds, in tracked order; the extent is the names read."""
+    contents = read_existing(read, root, on_disk(root, [name for name in tracked if wanted(name)]))
+    return RuleResult([finding for name, content in contents.items() for finding in findings_of(name, content)], len(contents), False)
 
 
 def is_workflow(path: PurePosixPath) -> bool:

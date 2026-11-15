@@ -483,6 +483,23 @@ def test_literal_text_on_main_reads_whether_the_clone_declares_catalogs(declares
     assert rule_cell(LITERAL_TEXT, Gate.MAIN, declaration) == words
 
 
+LOCATOR_TEXT = Rule.LOCATOR_TEXT.release
+
+
+@pytest.mark.parametrize(
+    ("declares_catalogs", "words"), [(True, "enforced"), (False, "no catalogs declaration")], ids=["a catalogs declaration", "no declaration"]
+)
+def test_locator_text_on_main_reads_whether_the_clone_declares_catalogs(declares_catalogs, words):
+    """FLEET-99: the catalogs declaration switches the rule on, as for `literal-text`."""
+    assert rule_cell(LOCATOR_TEXT, Gate.MAIN, declared(declares_catalogs=declares_catalogs)) == words
+
+
+def test_locator_text_is_not_released_on_a_pinned_gate_until_it_has_a_release():
+    """FLEET-19: only main holds the rule until its release fact is set."""
+    release = gate_release((gate_call(NEWEST),), False, FIRST_RELEASES)
+    assert rule_cell(LOCATOR_TEXT, release, declared(declares_catalogs=True)) == "not released"
+
+
 LITERAL_SWITCH_PIN = "7" * 40
 
 
@@ -655,6 +672,6 @@ def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces
     assert "Every gate release enforces env-file, compose-port, secret, workflow-lint and workflow-security." in output
     assert MATRIX_COLUMNS[5:] == (
         "size", "clone", "job-timeout", "import-contract", "claude-md", "agents-md", "root-layout", "file-suffix",
-        "script-name", "script-header", "test-layout", "test-import", "literal-text", "python-floor",
+        "script-name", "script-header", "test-layout", "test-import", "literal-text", "locator-text", "python-floor",
         "python-security", "python-print", "pr-concurrency", "pytest-workers", "runtime-install", "catalog-check", "render-pass", "advisory",
     )

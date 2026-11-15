@@ -188,7 +188,6 @@ def _page_findings(name: str, source: str) -> list[Finding]:
 def check_literal_text(root: Path, tracked: list[str]) -> RuleResult:
     """One finding per literal text of each tracked `*.svelte` page the tree holds, at its line; the extent is the pages
     read. The first page in the tracked order that cannot be read to its end refuses the rule."""
-    names = checkout.on_disk(root, [name for name in tracked if name.endswith(SVELTE_SUFFIX)])
-    pages = checkout.read_existing(repository.read_text, root, names)
-    findings = [finding for name, source in pages.items() for finding in _page_findings(name, source)]
-    return RuleResult(findings, len(pages), False)
+    return checkout.judge_tracked(
+        repository.read_text, root, tracked, lambda name: name.endswith(SVELTE_SUFFIX), _page_findings
+    )

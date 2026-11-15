@@ -8,6 +8,7 @@ dependencies = [
     "PyYAML>=6",
     "import-linter==2.15",
     "lizard>=1.24.1,<1.26",
+    "overnightworks-design[po] @ https://github.com/overnightworks/design/releases/download/v0.36.0/overnightworks_design-0.36.0-py3-none-any.whl#sha256=a0b8fe02f2715feca2a307c39c0998036e5a72f6a01f1af8e9a0d5bcbd066b92",
     "packaging>=24",
     "ruff==0.17.4",
     "zizmor==1.32.0",
@@ -29,6 +30,9 @@ members = []
 
 [tool.uv]
 cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.version]
 source = "vcs"
@@ -80,7 +84,7 @@ layers = [
     "pin",
     "advisories",
     "python_lint",
-    "literal_text",
+    "literal_text | locator_text",
     "render_pass",
     "catalog_rules",
     "agent_guidance | architecture | clones | compose | env_file | layout | pip_requirements | python_floor | root_layout | scanners | workflow_rules",

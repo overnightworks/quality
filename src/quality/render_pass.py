@@ -3,22 +3,16 @@
 one of the gate's mandatory jobs. The rule judges presence and gating, never what the job does."""
 
 from collections.abc import Callable
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from quality import catalog_rules, workflow_rules
 from quality.config import CONFIG_PATH, Declarations, RenderPass
 from quality.report import Finding, FindingEvent, RuleResult
 from quality.rules import Rule
 
-CATALOG_SUFFIX = ".po"
 MINIMUM_CATALOGS = 2
 UNDECLARED_FIX = "name the job that renders each page once per language in [languages] render_pass"
 NOT_A_JOB_FIX = "name a job a tracked workflow holds"
-
-
-def _catalogs(tracked: list[str], directory: PurePosixPath) -> list[str]:
-    """The tracked `.po` files that lie directly in the directory."""
-    return [name for name in tracked if PurePosixPath(name).parent == directory and PurePosixPath(name).suffix == CATALOG_SUFFIX]
 
 
 def _finding(fact: str, fix: str) -> Finding:
@@ -44,7 +38,7 @@ def check_render_pass(root: Path, tracked: list[str], declarations: Callable[[],
     catalogs = catalog_rules.read_catalogs(root, tracked)
     if catalogs is None:
         return RuleResult([], 0, False)
-    count = len(_catalogs(tracked, catalogs.directory()))
+    count = len(catalog_rules.tracked_catalogs(tracked, catalog_rules.catalogs_directory(catalogs)))
     if count < MINIMUM_CATALOGS:
         return RuleResult([], 0, False)
     unmet = _unmet(root, tracked, declarations().render_pass, count)

@@ -160,6 +160,7 @@ class FindingEvent(StrEnum):
     STRAY = "stray"
     TEST_IMPORT = "test import"
     LITERAL_TEXT = "literal text"
+    CATALOG_TEXT = "catalog text"
     BELOW_FLOOR = "below floor"
     NO_FLOOR = "no floor"
     NEW_DEBT = "new debt"

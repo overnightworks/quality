@@ -159,11 +159,15 @@ def test_catalogs_in_the_default_directory_do_not_count_when_another_is_declared
         '[tool.design-catalogs]\ncatalogs = "a/../../out"',
         "[tool.design-catalogs]\ncatalogs = 3",
         "[tool]\ndesign-catalogs = 1",
+        '[tool.design-catalogs]\npython = 3',
+        '[tool.design-catalogs]\ntypescript = 3',
+        '[tool.design-catalogs]\nsource = 3',
+        '[tool.design-catalogs]\nunknown = "x"',
     ],
-    ids=["absolute", "empty", "dot", "parent", "escaping", "no string", "no table"],
+    ids=["absolute", "empty", "dot", "parent", "escaping", "no string", "no table", "python", "typescript", "source", "unknown key"],
 )
-def test_an_invalid_catalogs_path_in_a_covered_repository_is_exit_two_naming_the_pyproject(build_repo, capsys, table):
-    """RENDER-2."""
+def test_a_table_design_refuses_in_a_covered_repository_is_exit_two_naming_the_pyproject(build_repo, capsys, table):
+    """RENDER-2: any key of `[tool.design-catalogs]` that design's lookup refuses, not only `catalogs`."""
     repo = build_repo({"pyproject.toml": pyproject(table=table), **catalogs(), CONFIG: GATE + LANGUAGES})
     code, out = check_output(capsys, repo)
     assert (code, "pyproject.toml" in out) == (2, True)
