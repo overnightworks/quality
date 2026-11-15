@@ -43,6 +43,7 @@ RELEASE_0_12 = "v0.12.0"
 RELEASE_0_13 = "v0.13.0"
 RELEASE_0_16 = "v0.16.0"
 RELEASE_0_17 = "v0.17.0"
+RELEASE_0_20 = "v0.20.0"
 
 
 class Area(StrEnum):
@@ -88,7 +89,7 @@ class Rule(StrEnum):
     TEST_IMPORT = "test-import", Area.FILES, RELEASE_0_7, Switch.ALWAYS
     LITERAL_TEXT = (
         "literal-text", Area.FILES, RELEASE_0_13, Switch.REPORT_ONLY,
-        SwitchChange(RELEASE_0_16, Switch.LITERAL_TABLE), SwitchChange(None, Switch.CATALOG_DECLARATION),
+        SwitchChange(RELEASE_0_16, Switch.LITERAL_TABLE), SwitchChange(RELEASE_0_20, Switch.CATALOG_DECLARATION),
     )
     PYTHON_FLOOR = "python-floor", Area.FILES, "v0.8.0", Switch.ALWAYS
     PYTHON_SECURITY = "python-security", Area.CODE, "v0.9.0", Switch.ALWAYS
