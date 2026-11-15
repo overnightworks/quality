@@ -3,5 +3,6 @@ agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
 role = "builder"
 base = "d39ec39a1c82c4124e5bc3d4762fbe51bebe33d5"
 branch = "claude/issue-860-literal-text-name-the-release-and-roll-i"
-scope = [".github/workflows/gate.yml", "src/quality/rules.py", "tests/test_fleet_matrix.py"]
+scope = [".github/workflows/gate.yml", "docs/commands.md", "docs/rules.md", "src/quality/rules.py", "tests/test_fleet_matrix.py"]
 opened_commit = "908d89fad0bc31a436533d2e58b90e6d5be12df8"
+whole_reason = "one release: the rule fact, the gate pins and the two docs that name them"
