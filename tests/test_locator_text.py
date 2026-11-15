@@ -142,11 +142,16 @@ def test_a_finding_reads_as_the_rule_words_it_and_the_run_is_red(build_repo, sce
         'LABEL = "Abbrechen"\ndef LABEL():\n    pass\npage.get_by_text(LABEL)\n',
         'LABEL = "Abbrechen"\ntry:\n    pass\nexcept ValueError as LABEL:\n    pass\npage.get_by_text(LABEL)\n',
         'locators["x"]("Abbrechen")\n',
+        'page.get_by_role("Abbrechen")\n',
+        'page.getByRole(role="Abbrechen")\n',
+        'page.get_by_test_id("Abbrechen")\n',
+        'page.getByTestId("Abbrechen")\n',
     ],
     ids=[
         "assert", "to_be", "another text", "f-string", "longer text", "constant bound twice",
         "unanchored regex", "unanchored regex with flags", "unanchored regex constant", "dynamic name", "not a locator", "attribute name", "locator selector",
         "no string", "constant extended", "constant unpacked", "constant rebound by an import", "constant rebound by an alias", "constant rebound by a loop", "constant rebound by a function", "constant rebound by a handler", "subscripted function",
+        "role argument", "role keyword", "test id", "camelCase test id",
     ],
 )
 def test_scenario_data_and_every_other_value_is_no_site(build_repo, scenario, source):

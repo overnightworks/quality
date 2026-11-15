@@ -24,6 +24,9 @@ ASSERTION_CALLS = frozenset(
 ATTRIBUTE_CALLS = frozenset({"to_have_attribute", "toHaveAttribute"})
 ATTRIBUTE_VALUE_KEYWORD = "value"
 FILTER_KEYWORDS = frozenset({"has_text", "hasText"})
+ROLE_CALLS = frozenset({"get_by_role", "getByRole"})
+ROLE_KEYWORD = "role"
+TEST_ID_CALLS = frozenset({"get_by_test_id", "getByTestId"})
 ANCHORED_REGEX = re.compile(r"\^(.+)\$", re.DOTALL)
 REGEX_ESCAPE = re.compile(r"\\(\W)")
 REGEX_COMPILE_CALL = "compile"
@@ -122,12 +125,21 @@ def _attribute_value(call: ast.Call) -> list[ast.expr]:
     return [*call.args[1:2], *keywords]
 
 
+def _surface_arguments(call: ast.Call, name: str) -> list[ast.expr]:
+    """The arguments of a call that carry surface text: the ARIA role of `get_by_role` and a test id are protocol tokens."""
+    if name in TEST_ID_CALLS:
+        return []
+    if name in ROLE_CALLS:
+        return [*call.args[1:], *(keyword.value for keyword in call.keywords if keyword.arg != ROLE_KEYWORD)]
+    return _argument_expressions(call)
+
+
 def _locator_arguments(call: ast.Call) -> list[ast.expr]:
     """The argument expressions of a call that sit in a locator position."""
     name = _called_name(call)
     positions = _attribute_value(call) if name in ATTRIBUTE_CALLS else []
     if LOCATOR_CALL.fullmatch(name) or name in ASSERTION_CALLS:
-        positions += _argument_expressions(call)
+        positions += _surface_arguments(call, name)
     return positions + [keyword.value for keyword in call.keywords if keyword.arg in FILTER_KEYWORDS]
 
 

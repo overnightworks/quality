@@ -1149,14 +1149,17 @@ in the catalog like any text (LITERAL-3), so a test reads it by key.
 - **Locator positions (LOCATOR-1).** An argument of a call named `getBy<Upper...>` or `get_by_<lower...>` (an app's
   `getByRoleButton` counts, `getByteTimeDomainData` does not); an argument of `to_have_text`, `to_have_accessible_name`,
   `to_have_title` and their camelCase forms; the value argument of `to_have_attribute` (its second positional argument or
-  `value=`); and a `has_text` or `hasText` keyword of any call.
+  `value=`); and a `has_text` or `hasText` keyword of any call. The role argument of `get_by_role` (its first positional
+  argument or `role=`) and the argument of `get_by_test_id` are protocol tokens and test ids, never surface text, so they
+  are no position.
 - **Sites (LOCATOR-2).** A string literal in such a position whose whole value is a catalog text, including one inside a
   helper call that is itself an argument (`get_by_role("button", name=label("Abbrechen"))`) and one in a list; and an
   anchored regex literal `^...$` whose body, regex escapes undone, is exactly such a text. An f-string is no site.
 - **Constants (LOCATOR-3).** A name bound exactly once at module level to a plain string literal in the same file is
   resolved to it; a name bound twice, extended, unpacked or imported from another module is not.
-- **Out of scope (LOCATOR-7).** `toBe`, `toContain`, `to_be`, `assert x == "..."` and every other position: about four of
-  five such sites are scenario data, and the scheduled audit judges them.
+- **Out of scope (LOCATOR-7).** `toBe`, `toContain`, `toEqual`, `to_be`, `to_contain_text`, `toContainText` and the other
+  substring assertions, `assert x == "..."` and every other position: about four
+  of five such sites are scenario data, and the scheduled audit judges them.
 
 Each site is one `catalog text` finding at `<test file>:<line>` (the line of the literal), whatever `quality/baseline.toml`
 holds. Its fact is `'<text>' is the catalog text of <key>`, with `, and N more keys` when several keys share the text, and
