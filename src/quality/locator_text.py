@@ -25,9 +25,11 @@ ATTRIBUTE_VALUE_KEYWORD = "value"
 FILTER_KEYWORDS = frozenset({"has_text", "hasText"})
 ANCHORED_REGEX = re.compile(r"\^(.+)\$", re.DOTALL)
 REGEX_ESCAPE = re.compile(r"\\(\W)")
+REGEX_COMPILE_CALL = "compile"
 FIX = "find it by its key through the generated module"
 
 type Value = ast.Constant | ast.Name
+type Site = tuple[Value, bool]
 type CatalogTexts = dict[str, list[str]]
 
 
@@ -104,26 +106,28 @@ def _locator_arguments(call: ast.Call) -> list[ast.expr]:
     return positions + [keyword.value for keyword in call.keywords if keyword.arg in FILTER_KEYWORDS]
 
 
-def _values(expression: ast.expr) -> Iterator[Value]:
-    """The names and constants an argument is made of: itself, the arguments of a helper call it holds, the elements of a list."""
+def _values(expression: ast.expr, in_regex: bool = False) -> Iterator[Site]:
+    """The names and constants an argument is made of, each with whether a regex compile holds it: itself, the arguments of a
+    helper call it holds, the elements of a list."""
     if isinstance(expression, (ast.Constant, ast.Name)):
-        yield expression
+        yield expression, in_regex
     elif isinstance(expression, ast.Call):
+        inside = in_regex or _called_name(expression) == REGEX_COMPILE_CALL
         for argument in _argument_expressions(expression):
-            yield from _values(argument)
+            yield from _values(argument, inside)
     elif isinstance(expression, (ast.List, ast.Tuple, ast.Set)):
         for element in expression.elts:
-            yield from _values(element)
+            yield from _values(element, in_regex)
 
 
-def _sites(tree: ast.Module) -> list[Value]:
+def _sites(tree: ast.Module) -> list[Site]:
     """Each value in a locator position, once, in source order."""
     found = {
-        (value.lineno, value.col_offset): value
+        (value.lineno, value.col_offset): (value, in_regex)
         for call in ast.walk(tree)
         if isinstance(call, ast.Call)
         for argument in _locator_arguments(call)
-        for value in _values(argument)
+        for value, in_regex in _values(argument)
     }
     return [found[position] for position in sorted(found)]
 
@@ -134,9 +138,9 @@ def _literal(value: Value, constants: dict[str, str]) -> str | None:
     return value.value if isinstance(value.value, str) else None
 
 
-def _catalog_text(literal: str, texts: CatalogTexts) -> str | None:
-    """The catalog text the literal is whole: itself, or the body of an anchored `^...$` regex."""
-    if literal in texts:
+def _catalog_text(literal: str, texts: CatalogTexts, in_regex: bool) -> str | None:
+    """The catalog text the literal is whole: itself unless a regex compile holds it, or the body of an anchored `^...$` regex."""
+    if literal in texts and not in_regex:
         return literal
     anchored = ANCHORED_REGEX.fullmatch(literal)
     body = REGEX_ESCAPE.sub(r"\1", anchored.group(1)) if anchored else None
@@ -156,9 +160,9 @@ def _file_findings(name: str, content: bytes, texts: CatalogTexts) -> list[Findi
         raise Unparsable(f"{name} cannot be read as Python ({error})") from error
     constants = _module_constants(tree)
     findings = []
-    for value in _sites(tree):
+    for value, in_regex in _sites(tree):
         literal = _literal(value, constants)
-        text = None if literal is None else _catalog_text(literal, texts)
+        text = None if literal is None else _catalog_text(literal, texts, in_regex)
         if text is not None:
             fact = _fact(text, texts[text])
             findings.append(Finding(Rule.LOCATOR_TEXT, name, value.lineno, fact, FIX, event=FindingEvent.CATALOG_TEXT))

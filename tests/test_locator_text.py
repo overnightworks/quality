@@ -97,6 +97,9 @@ def test_a_finding_reads_as_the_rule_words_it_and_the_run_is_red(build_repo, cap
         'page.get_by_text(f"Abbrechen {n}")\n',
         'page.get_by_text("Abbrechen now")\n',
         'page.get_by_text(LABEL)\nLABEL = "Abbrechen"\nLABEL = "Other"\n',
+        'page.get_by_text(re.compile("Abbrechen"))\n',
+        'page.get_by_text(re.compile("Abbrechen", re.IGNORECASE))\n',
+        'LABEL = "Abbrechen"\npage.get_by_text(re.compile(LABEL))\n',
         'page.get_by_text(name)\n',
         'page.getByteTimeDomainData("Abbrechen")\n',
         'expect(button).to_have_attribute("Abbrechen", "x")\n',
@@ -108,7 +111,7 @@ def test_a_finding_reads_as_the_rule_words_it_and_the_run_is_red(build_repo, cap
     ],
     ids=[
         "assert", "to_be", "another text", "f-string", "longer text", "constant bound twice",
-        "dynamic name", "not a locator", "attribute name", "locator selector",
+        "unanchored regex", "unanchored regex with flags", "unanchored regex constant", "dynamic name", "not a locator", "attribute name", "locator selector",
         "no string", "constant extended", "constant unpacked", "subscripted function",
     ],
 )
