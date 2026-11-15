@@ -204,5 +204,7 @@ def test_a_broken_root_pyproject_is_exit_two_in_a_full_run_for_the_files_and_wor
     debt_code = door_in(repo, CHECK_WORD, Area.DEBT.value)
     capsys.readouterr()
     full_code, full = check_output(capsys, repo)
+    reasons = refusals(repo)
     assert (debt_code, full_code) == (0, 2)
     assert [refusal_row(area) in full for area in (Area.FILES, Area.WORKFLOWS, Area.DEBT)] == [True, True, False]
+    assert {reasons[rule].startswith(PYPROJECT_REASON) for rule in (Rule.CATALOG_CHECK, Rule.RENDER_PASS)} == {True}

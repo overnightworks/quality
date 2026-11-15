@@ -247,11 +247,13 @@ def test_or_true_still_counts(build_repo):
             id="list is a string",
         ),
         pytest.param(
-            "dependencies = [3]", "pyproject.toml has an entry that is no requirement", id="entry is an integer"
+            "dependencies = [3]",
+            "pyproject.toml has an entry that is neither a requirement string nor an include-group table",
+            id="entry is an integer",
         ),
         pytest.param(
             'dependencies = ["overnightworks-design[catalogs"]',
-            "pyproject.toml has an invalid requirement",
+            "pyproject.toml has a requirement quality cannot read",
             id="invalid requirement",
         ),
         pytest.param(
@@ -268,7 +270,7 @@ def test_a_pyproject_quality_cannot_read_is_exit_two(build_repo, body, reason):
         (repo / "pyproject.toml").write_bytes(b'[project]\nname = "\xff"\n')
     refusal = catalog_verdict(repo).refusal
     assert refusal is not None, reason
-    assert "pyproject.toml" in str(refusal)
+    assert str(refusal).startswith(reason)
 
 
 @pytest.mark.parametrize(
