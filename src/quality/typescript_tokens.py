@@ -150,7 +150,7 @@ class _Lexer:
         whatever it is spelled; a `.` that closes a spread's three dots is no member access."""
         if self.tokens[index].value not in REGEX_KEYWORDS:
             return True
-        dots = [token.value == "." for token in self.tokens[max(index - 2, 0) : index]]
+        dots = [token.kind is Kind.PUNCTUATION and token.value == "." for token in self.tokens[max(index - 2, 0) : index]]
         return dots[-1:] == [True] and dots != [True, True]
 
     def _ends_in_postfix_operator(self) -> bool:

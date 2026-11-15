@@ -477,6 +477,7 @@ def test_scenario_data_and_every_other_script_value_is_no_site(build_repo, scena
         "const a = o.in / 2; // it's\n",
         "const a = o?.of / 2; // it's\n",
         "const a = cfg.default! / 2; // it's\n",
+        "const exists = \".\" in /'/;\n",
     ],
     ids=[
         "quote in a regex", "quote in a comment", "slash in a class", "divisions", "division after parentheses",
@@ -487,6 +488,7 @@ def test_scenario_data_and_every_other_script_value_is_no_site(build_repo, scena
         "regex after a spaced unary plus", "regex after a spaced unary minus", "regex after a unary plus split by a comment",
         "division after a property named like a keyword", "division after an optional property named like a keyword",
         "division after a non-null mark on a property named like a keyword",
+        "regex after in that follows a string of a dot",
     ],
 )
 def test_a_valid_file_is_read_to_its_last_site_whatever_comes_first(build_repo, scenario, prefix):
