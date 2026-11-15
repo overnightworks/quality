@@ -471,6 +471,9 @@ def test_scenario_data_and_every_other_script_value_is_no_site(build_repo, scena
         "const a = !/'/.test(y);\n",
         "const a = x ? 1 : !/'/.test(y);\n",
         "return !/'/.test(y);\n",
+        "const a = b + +/'/.source;\n",
+        "const a = b - -/'/.source;\n",
+        "const a = b + /* sign */ +/'/.source;\n",
     ],
     ids=[
         "quote in a regex", "quote in a comment", "slash in a class", "divisions", "division after parentheses",
@@ -478,6 +481,7 @@ def test_scenario_data_and_every_other_script_value_is_no_site(build_repo, scena
         "non-ascii", "number separator", "regex after return", "regex first in the file", "template with several holes", "regex starting a later hole", "deep nesting",
         "division after a postfix increment", "division after a postfix decrement", "division after a non-null mark",
         "division after a non-null mark on a call", "division after a non-null mark on an index", "regex after a not that follows an operator", "regex after a not in a ternary", "regex after a not that follows return",
+        "regex after a spaced unary plus", "regex after a spaced unary minus", "regex after a unary plus split by a comment",
     ],
 )
 def test_a_valid_file_is_read_to_its_last_site_whatever_comes_first(build_repo, scenario, prefix):

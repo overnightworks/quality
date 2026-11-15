@@ -36,7 +36,7 @@ REGEX_KEYWORDS = frozenset(
     {"return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "throw", "case", "do", "else", "yield", "await", "default", "extends"}
 )
 NON_REGEX_PUNCTUATION = frozenset({")", "]"})
-POSTFIX_STEPS = frozenset({"+", "-"})
+POSTFIX_STEPS = frozenset({"++", "--"})
 SKIPPED = re.compile(r"(?P<space>\s+)|(?P<comment>//[^\n\r\u2028\u2029]*|/\*.*?\*/)|(?P<unclosed>/\*)", re.DOTALL)
 LEXEME = re.compile(
     r"(?P<word>(?:[^\W\d]|\$)[\w$]*)|(?P<number>\d[\w.]*)|(?P<quote>['\"])|(?P<template>`)|(?P<slash>/)|(?P<other>.)",
@@ -153,7 +153,7 @@ class _Lexer:
         if before is None:
             return False
         if last in POSTFIX_STEPS:
-            return before.kind is Kind.PUNCTUATION and before.value == last
+            return True
         if last != "!":
             return False
         if before.kind is Kind.PUNCTUATION:
@@ -183,6 +183,10 @@ class _Lexer:
 
     def _other(self, lexeme: re.Match[str]) -> None:
         character = lexeme.group()
+        step = self.source[self.position : self.position + 2]
+        if step in POSTFIX_STEPS:
+            self._emit(Kind.PUNCTUATION, step, self.position + 2)
+            return
         if character == "{":
             self.braces.append(None)
         elif character == "}" and self.braces:
