@@ -474,6 +474,9 @@ def test_scenario_data_and_every_other_script_value_is_no_site(build_repo, scena
         "const a = b + +/'/.source;\n",
         "const a = b - -/'/.source;\n",
         "const a = b + /* sign */ +/'/.source;\n",
+        "const a = o.in / 2; // it's\n",
+        "const a = o?.of / 2; // it's\n",
+        "const a = cfg.default! / 2; // it's\n",
     ],
     ids=[
         "quote in a regex", "quote in a comment", "slash in a class", "divisions", "division after parentheses",
@@ -482,12 +485,21 @@ def test_scenario_data_and_every_other_script_value_is_no_site(build_repo, scena
         "division after a postfix increment", "division after a postfix decrement", "division after a non-null mark",
         "division after a non-null mark on a call", "division after a non-null mark on an index", "regex after a not that follows an operator", "regex after a not in a ternary", "regex after a not that follows return",
         "regex after a spaced unary plus", "regex after a spaced unary minus", "regex after a unary plus split by a comment",
+        "division after a property named like a keyword", "division after an optional property named like a keyword",
+        "division after a non-null mark on a property named like a keyword",
     ],
 )
 def test_a_valid_file_is_read_to_its_last_site_whatever_comes_first(build_repo, scenario, prefix):
     """LOCATOR-10, LOCATOR-11: nothing here refuses the rule, and the site after it is found."""
     source = prefix + "page.getByText('Abbrechen');\n"
     assert found(build_repo(scenario.only_script(source))) == [(scenario.script_file, source.count("\n"), cancel_fact())]
+
+
+@pytest.mark.parametrize("name", ["default", "of", "in", "return", "new", "delete", "case"])
+def test_a_division_after_a_property_named_like_a_keyword_loses_no_site(build_repo, scenario, name):
+    """LOCATOR-10, LOCATOR-11: a name after a dot is a property, so the slash divides and the site after it is found."""
+    source = f"const half = cfg.{name} / 2, other = page.getByText('Abbrechen') ?? 3 / 4;\n"
+    assert [line for _, line, _ in found(build_repo(scenario.only_script(source)))] == [1]
 
 
 @pytest.mark.parametrize("terminator", ["\r", "\r\n", "\u2028"])

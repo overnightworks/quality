@@ -1144,12 +1144,12 @@ in the catalog like any text (LITERAL-3), so a test reads it by key.
 - **Reading a script (LOCATOR-11).** A script is read as tokens, not parsed: strings with their escapes decoded (`\'`,
   `\n`, `\xHH`, `\uHHHH`, `\u{...}`, a line continuation), templates, regex literals, names, numbers and punctuation,
   with comments skipped. A `/` starts a regex after nothing, after punctuation but `)` and `]`, and after `return`,
-  `typeof`, `case` and the other keywords that take an operand; after anything else it divides. A `/` right after a
-  postfix `++` or `--` divides (a regex never follows a prefix one), and so does one after a `!` that follows an
-  identifier, `)` or `]`, the TypeScript non-null mark (`v! / 2`); a `!` after anything else is a prefix not and a regex
-  may follow it (`!/x/.test(y)`). A template with a hole is no site and its holes are read like the rest, so a locator
-  inside one is judged. A literal's line is the line it starts on, a line ending at `\n`, `\r\n`, `\r`, U+2028 or
-  U+2029. JSX is not read.
+  `typeof`, `case` and the other keywords that take an operand, but not after a property of that spelling
+  (`cfg.default / 2` divides); after anything else it divides. A `/` right after a postfix `++` or `--` divides (a regex
+  never follows a prefix one), and so does one after a `!` that follows an identifier, `)` or `]`, the TypeScript
+  non-null mark (`v! / 2`); a `!` after anything else is a prefix not and a regex may follow it (`!/x/.test(y)`).
+  A template with a hole is no site and its holes are read like the rest, so a locator inside one is judged.
+  A literal's line is the line it starts on, a line ending at `\n`, `\r\n`, `\r`, U+2028 or U+2029. JSX is not read.
 - **Catalog texts (LOCATOR-4).** The directory is design's `catalog_directory` (RENDER-2). Every tracked `<name>.po` file
   directly in it is read with design's `parse_catalog` over the bytes `repository.py` read, so the reading is design's own:
   strict UTF-8, closed strings, obsolete `#~` entries left out. A text is every msgid and every non-empty msgstr form, so an

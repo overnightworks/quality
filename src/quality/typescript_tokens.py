@@ -134,16 +134,24 @@ class _Lexer:
 
     def _regex_allowed(self) -> bool:
         """A `/` starts a regex after nothing, after punctuation but `)`, `]`, a postfix `++` or `--` and a `!` that follows an
-        operand (a non-null mark), after a keyword that takes an operand and where a template hole begins; after anything else
-        it divides."""
+        operand (a non-null mark), after a keyword that takes an operand (not after a property of that spelling) and where a
+        template hole begins; after anything else it divides."""
         if not self.tokens:
             return True
         previous = self.tokens[-1]
         if previous.kind is Kind.PUNCTUATION:
             return previous.value not in NON_REGEX_PUNCTUATION and not self._ends_in_postfix_operator()
         if previous.kind is Kind.IDENTIFIER:
-            return previous.value in REGEX_KEYWORDS
+            return not self._ends_operand_word(len(self.tokens) - 1)
         return previous.kind is Kind.TEMPLATE
+
+    def _ends_operand_word(self, index: int) -> bool:
+        """A name ends an operand, a keyword that takes an operand does not, and a name after a `.` (or `?.`) is a property,
+        whatever it is spelled; a `.` that closes a spread's three dots is no member access."""
+        if self.tokens[index].value not in REGEX_KEYWORDS:
+            return True
+        dots = [token.value == "." for token in self.tokens[max(index - 2, 0) : index]]
+        return dots[-1:] == [True] and dots != [True, True]
 
     def _ends_in_postfix_operator(self) -> bool:
         """`++` or `--` (a regex never follows a prefix one) or a `!` right after an identifier, `)` or `]`, the TypeScript
@@ -158,7 +166,7 @@ class _Lexer:
             return False
         if before.kind is Kind.PUNCTUATION:
             return before.value in NON_REGEX_PUNCTUATION
-        return before.kind is Kind.IDENTIFIER and before.value not in REGEX_KEYWORDS
+        return before.kind is Kind.IDENTIFIER and self._ends_operand_word(len(self.tokens) - 2)
 
     def _template_start(self, lexeme: re.Match[str]) -> None:
         start_line = self.line
