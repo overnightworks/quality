@@ -1191,6 +1191,9 @@ holds. Its fact is `'<text>' is the catalog text of <key>`, with `, and N more k
 its fix is `find it by its key through the generated module` (LOCATOR-6). The extent of the rule's row is the number of test
 files read.
 
+It first ships in v0.21.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column, and on main and
+from v0.21.0 on the cell reads `enforced` where the clone declares the catalogs and `no catalogs declaration` where it does not (FLEET-99).
+
 Exit `2` (LOCATOR-10): a Python test file that is not valid Python or not UTF-8; a script test file that is not UTF-8, has a
 string that reaches a raw newline or the end of the file, a template or `${` hole that is never closed, a regex that reaches
 a line ending or the end of the file, or a block comment that is never closed, named with the file and the `line N` of the
@@ -1209,9 +1212,7 @@ name could make red; a constant imported from another module, one declared `cons
 testing-library's bare `getByRole(container, role)`, `to_have_value` and `toHaveValue` (a value is mostly scenario
 data), and an attribute named by a variable or `value` or `content`, which `literal-text` reads only conditionally;
 `.tsx`, `.jsx`, `.mjs`, `.cjs` and `.mts` files; helper modules outside `tests/` directories; a nested project's
-catalogs. The rule has no release yet, so a gate pinned to a release shows `not released` in the fleet matrix
-(FLEET-19), and on main the cell reads `enforced` where the clone declares the catalogs
-and `no catalogs declaration` where it does not (FLEET-99).
+catalogs.
 
 The `job-timeout` rule, in the `debt` area, judges every job of a workflow that runs on a pull request or on a push to
 main, and of the reusable workflows those call through a local `uses:`. Every tracked workflow is parsed, a root or not,
@@ -1529,6 +1530,8 @@ is the locks read, and a repository without a `uv.lock` is clean at `0` (SOURCE-
 repository, and the lock's content decides whether it judges anything. It does not check that a `git` source is a tag
 rather than a branch, nor the host of a `url` source: the lock pins a commit or a hash either way, and a reviewer reads
 the rest. It judges independently of `advisory`, so neither refuses the other (SOURCE-8).
+
+It first ships in v0.21.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column (FLEET-18).
 
 Every rule is judged, even when another cannot be (CHECK-4), and gives one verdict: clean, findings, unparsable, or
 cannot judge (CHECK-5). Each finding names the file, a fact and a fix. What `quality check` prints, its frame, the
