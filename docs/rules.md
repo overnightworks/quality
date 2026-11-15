@@ -1176,7 +1176,9 @@ in the catalog like any text (LITERAL-3), so a test reads it by key.
   top-level `const` (optionally `export`) set to a string or a template without a hole and ended by `;`, `as const`, the
   end of the file or a line that starts with a name, it is the only top-level `const`, `let`, `var`, `function` or
   `class` of that name, and nothing assigns to the name (`NAME = ...`, `NAME += ...` and the other single-character
-  compound forms). The multi-character compound assignments (`**=`, `<<=`, `&&=`, `??=` and the like), `++` and `--` are
+  compound forms; a member of a `class` or `enum` body is no assignment). Any other `NAME = ...` in the file counts,
+  so a parameter default or a destructuring default of the same name drops the constant and its locator stays green.
+  The multi-character compound assignments (`**=`, `<<=`, `&&=`, `??=` and the like), `++` and `--` are
   not looked for: all are invalid on a `const`, so valid code never holds them. A `const` inside a function is no constant,
   and a function-local name that shadows a top-level one resolves to the top-level value, so a false finding there is fixed
   by renaming.
