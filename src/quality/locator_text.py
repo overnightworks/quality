@@ -222,8 +222,6 @@ def _python_readings(name: str, content: bytes) -> list[Reading]:
 OPENERS = ("(", "[", "{")
 CLOSERS = (")", "]", "}")
 DECLARATIONS = frozenset({"const", "let", "var", "function", "class"})
-MEMBER_CONTAINERS = frozenset({"class", "enum"})
-COMPOUND_OPERATORS = ("+", "-", "*", "/", "%", "&", "|", "^")
 SITE_KINDS = frozenset({Kind.STRING, Kind.REGEX, Kind.IDENTIFIER})
 
 
@@ -295,55 +293,8 @@ def _constant_value(tokens: Sequence[Token], index: int) -> str | None:
     return value.value if _ends_declaration(tokens, index + 3) else None
 
 
-def _is_assignment(tokens: Sequence[Token], index: int) -> bool:
-    """Whether the name at `index` is followed by `=` or a compound `+=`, `-=`, ... but not by `==`, `===` or `=>`."""
-    operator = index + 2 if _is_punctuation(_at(tokens, index + 1), *COMPOUND_OPERATORS) else index + 1
-    return _is_punctuation(_at(tokens, operator), "=") and not _is_punctuation(_at(tokens, operator + 1), "=", ">")
-
-
-def _is_initializer_operand(tokens: Sequence[Token], index: int) -> bool:
-    """Whether the token follows the `=` of an initializer or the `=>` of an arrow, so `NAME = ...` there is an assignment."""
-    previous = _at(tokens, index - 1)
-    return _is_punctuation(previous, "=") or (_is_punctuation(previous, ">") and _is_punctuation(_at(tokens, index - 2), "="))
-
-
-def _member_positions(tokens: Sequence[Token]) -> set[int]:
-    """The indexes that stand directly in the body of a `class` or `enum` and start a member, where `NAME = ...` declares it;
-    a name inside a member's initializer is no member."""
-    members: set[int] = set()
-    bodies: list[bool] = []
-    pending: int | None = None
-    for index, token in enumerate(tokens):
-        if bodies and bodies[-1] and not _is_initializer_operand(tokens, index):
-            members.add(index)
-        if token.kind is Kind.IDENTIFIER and token.value in MEMBER_CONTAINERS and not _is_punctuation(_at(tokens, index - 1), "."):
-            pending = len(bodies)
-        elif pending == len(bodies) and _is_punctuation(token, ";", ":"):
-            pending = None
-        if _is_punctuation(token, *OPENERS):
-            bodies.append(_is_punctuation(token, "{") and pending == len(bodies))
-            pending = None if bodies[-1] else pending
-        elif _is_punctuation(token, *CLOSERS) and bodies:
-            bodies.pop()
-    return members
-
-
-def _reassigned(tokens: Sequence[Token]) -> set[str]:
-    """The names an assignment statement changes, anywhere in the file: a name right after a declaring keyword or a `.` is
-    a declaration or a property, and a name in a `class` or `enum` body is a member, not a reassignment."""
-    members = _member_positions(tokens)
-    names: set[str] = set()
-    for index, token in enumerate(tokens):
-        previous = _at(tokens, index - 1)
-        declaring = previous is not None and previous.kind is Kind.IDENTIFIER and previous.value in DECLARATIONS
-        if token.kind is Kind.IDENTIFIER and _is_assignment(tokens, index) and not declaring and not _is_punctuation(previous, ".") and index not in members:
-            names.add(token.value)
-    return names
-
-
 def _script_constants(tokens: Sequence[Token]) -> dict[str, str]:
-    """The names declared exactly once at the top level, by a `const` set to a plain string or a template without a hole, and
-    never assigned to."""
+    """The names declared exactly once at the top level, by a `const` set to a plain string or a template without a hole."""
     declared: Counter[str] = Counter()
     strings: dict[str, str] = {}
     for index in _declarations(tokens):
@@ -354,8 +305,7 @@ def _script_constants(tokens: Sequence[Token]) -> dict[str, str]:
         text = _constant_value(tokens, index)
         if text is not None:
             strings[name.value] = text
-    reassigned = _reassigned(tokens)
-    return {name: text for name, text in strings.items() if declared[name] == 1 and name not in reassigned}
+    return {name: text for name, text in strings.items() if declared[name] == 1}
 
 
 def _is_read_attribute(tokens: Sequence[Token], argument: range) -> bool:
