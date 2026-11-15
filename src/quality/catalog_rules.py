@@ -24,10 +24,6 @@ PYPROJECT = "pyproject.toml"
 DESIGN_DISTRIBUTION = "overnightworks-design"
 CATALOGS_EXTRA = "catalogs"
 CATALOG_SUFFIX = ".po"
-# The attributes whose value a person reads, which both text rules judge.
-READ_ATTRIBUTES = frozenset(
-    {"title", "placeholder", "aria-label", "alt", "label", "aria-description", "aria-roledescription", "aria-valuetext"}
-)
 INCLUDE_GROUP = "include-group"
 GENERATOR = Tool(commands=frozenset({"design-catalogs"}), module="design.catalogs.command")
 CHECK_FLAG = "--check"

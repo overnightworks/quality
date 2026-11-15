@@ -12,7 +12,8 @@ from pathlib import Path, PurePosixPath
 from design.catalogs import CatalogEntry, CatalogFileError, parse_catalog
 
 from quality import catalog_rules, checkout, repository
-from quality.catalog_rules import READ_ATTRIBUTES, Catalogs
+from quality.catalog_rules import Catalogs
+from quality.literal_text import READ_ATTRIBUTES
 from quality.report import Finding, FindingEvent, RuleResult, Unparsable
 from quality.rules import Rule
 from quality.typescript_tokens import Kind, ScriptSyntaxError, Token, tokenize

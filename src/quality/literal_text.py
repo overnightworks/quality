@@ -9,7 +9,6 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 from quality import checkout, repository
-from quality.catalog_rules import READ_ATTRIBUTES
 from quality.report import Finding, FindingEvent, RuleResult, Unparsable
 from quality.rules import Rule
 
@@ -17,6 +16,9 @@ SVELTE_SUFFIX = ".svelte"
 CODE_BLOCK = re.compile(r"<(script|style)(?:\s[^>]*)?>.*?</\1\s*>", re.DOTALL | re.IGNORECASE)
 LOGIC_MARKS = frozenset("#:/@")
 QUOTES = frozenset("'\"`")
+READ_ATTRIBUTES = frozenset(
+    {"title", "placeholder", "aria-label", "alt", "label", "aria-description", "aria-roledescription", "aria-valuetext"}
+)
 LABELLED_INPUT_TYPES = frozenset({"submit", "button", "reset"})
 CODE_TAGS = frozenset({"script", "style"})
 RAW_TEXT_TAGS = CODE_TAGS | {"textarea", "title", "iframe", "xmp", "noembed", "noframes"}
