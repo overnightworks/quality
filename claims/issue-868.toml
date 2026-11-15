@@ -1,7 +1,0 @@
-claim_id = "3a271d89aa134e8890b7ed2f4963e6ac"
-agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
-role = "builder"
-base = "1da3f8e1af13dff810123e3784bf188d39911058"
-branch = "claude/issue-868-image-yml-bakes-service-version-from-its"
-scope = [".github/workflows/image.yml", "docs/release.md", "tests/workflows/test_image.py"]
-opened_commit = "54fd5dfe7d87376ebdfd94fa08b7dc625e1c4491"
