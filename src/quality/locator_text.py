@@ -105,7 +105,9 @@ def _module_constants(tree: ast.Module) -> dict[str, str]:
 
 def _called_name(call: ast.Call) -> str:
     function = call.func
-    return function.attr if isinstance(function, ast.Attribute) else function.id if isinstance(function, ast.Name) else ""
+    if isinstance(function, ast.Attribute):
+        return function.attr
+    return function.id if isinstance(function, ast.Name) else ""
 
 
 def _argument_expressions(call: ast.Call) -> list[ast.expr]:
