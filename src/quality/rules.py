@@ -57,7 +57,7 @@ class Area(StrEnum):
     IMPORTS = "imports", "the import contracts"
     SECRETS = "secrets", "secrets in the committed history"
     WORKFLOWS = "workflows", "GitHub workflows: lint, security, concurrency, pytest -n, run-time installs, the languages standard's catalog-check and render-pass"
-    DEPENDENCIES = "dependencies", "known advisories in the lockfiles"
+    DEPENDENCIES = "dependencies", "known advisories and fleet package sources in the lockfiles"
     CODE = "code", "Python source: security findings and print calls"
 
     def __new__(cls, word: str, help_line: str) -> Self:
@@ -106,6 +106,7 @@ class Rule(StrEnum):
     )
     RENDER_PASS = "render-pass", Area.WORKFLOWS, RELEASE_0_17, Switch.CATALOG_DECLARATION
     ADVISORY = "advisory", Area.DEPENDENCIES, RELEASE_0_3, Switch.ALWAYS
+    FLEET_SOURCE = "fleet-source", Area.DEPENDENCIES, None, Switch.ALWAYS
 
     def __new__(
         cls, rule_id: str, area: Area, first_release: str | None, switch: Switch, *switched: SwitchChange

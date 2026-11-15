@@ -17,6 +17,7 @@ from quality import (
     clones,
     compose,
     env_file,
+    fleet_sources,
     layout,
     literal_text,
     locator_text,
@@ -633,7 +634,8 @@ def _judge_dependencies(inputs: RunInputs) -> AreaVerdict:
         inputs.running, Area.DEPENDENCIES, scanners.OSV_SCANNER,
         partial(check_advisories, inputs.root, inputs.tracked, inputs.allow_lists, inputs.deadline, log, inputs.cache),
     )
-    return _area_verdict(Area.DEPENDENCIES, {Rule.ADVISORY: advisory}, runs)
+    fleet_source = _attempt(lambda: fleet_sources.check_fleet_sources(inputs.root, inputs.tracked))
+    return _area_verdict(Area.DEPENDENCIES, {Rule.ADVISORY: advisory, Rule.FLEET_SOURCE: fleet_source}, runs)
 
 
 def _judge_code(inputs: RunInputs) -> AreaVerdict:

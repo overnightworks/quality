@@ -1,6 +1,6 @@
 # The release path
 
-Reference for the engineer who adds a repository's `release.yml` or reads a refusal of the release gate.
+Reference for the engineer who adds a repository's `release.yml`, reads a refusal of the release gate or depends on another fleet package.
 
 ## The path
 
@@ -245,6 +245,20 @@ tag or release at that version and the image's attestation.
 While the draft release is open, users and workflows with write permission can change it and its assets, so "exactly the
 build's files" holds against cooperative writers only. A killed runner can leave a stale draft, and gh can refuse after a
 completed publish; both are completed or deleted by hand.
+
+## Depending on a fleet package
+
+Ruled by the operator: a library declares another fleet package (an `overnightworks-*` package) by name and version range
+in `[project].dependencies`, and its git URL only in its dev group's `[tool.uv.sources]`. A host pins every fleet package
+its `uv.lock` resolves, direct or transitive, by git tag (`name @ git+https://github.com/overnightworks/<repository>@vX.Y.Z`)
+or by the release's wheel URL with `#sha256=...`, then runs `uv lock`; the host's tag decides the one version, and a tag
+outside a library's range fails the lock loudly. Never from an index: the bare names are not the fleet's, so an unpinned
+host would install a stranger's package. `fleet-source` ([rules](rules.md)) refuses that in every tracked `uv.lock`; the
+library's declaration form is left to review.
+
+Covered are every fleet repository that depends on a fleet package, library or host. The trigger is now for a new
+dependency, and an existing pin converts at its repository's next release. A deviation is asked as marketplace
+`docs/standards.md` says and recorded here, at the owner, overnightworks/quality.
 
 ## quality's own release
 
