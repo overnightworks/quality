@@ -31,7 +31,8 @@ Each line has a reason:
   `quality / sonar` and `quality / verdict`. That definition pins the name `quality / verdict` and GitHub Actions as
   its producer, so renaming the check or moving its producer to another App is asked of platform's head first.
 - **`needs:` lists the id of every job that a `mandatory_jobs` name belongs to.** The verdict then judges finished jobs,
-  and a job GitHub still lists as running is unsettled and never green (READ-1), so the answer is stale: the verdict
+  and a job GitHub still lists as running is unsettled and never green (READ-1; an entry that carries a `conclusion` and a
+  `completed_at` counts as finished with that conclusion whatever its `status` says), so the answer is stale: the verdict
   reads the run's jobs again, every 10 seconds (READ-2) and at most 12 times (READ-3): two minutes of waiting plus the
   time the reads take. Without `needs:`, a job still running holds the verdict for that long, then it cannot judge:
   `GitHub still lists "checks" (attempt 1) as in_progress after 13 reads · …`, with two steps under `next:`,
@@ -80,7 +81,8 @@ mandatory_jobs = ["checks"]
   several times in that attempt is green only when every entry succeeded (VERDICT-6). A job that is missing from the run
   is the row `! x  missing  not in the run` (VERDICT-7); one that failed, was skipped or cancelled is red (VERDICT-8).
   One GitHub still lists as running (`queued`, `in_progress`, `waiting`, `requested`, `pending`) is read again
-  (VERDICT-9). Each read judges every entry any answer listed, at the furthest state an answer showed, so an answer
+  (VERDICT-9), unless it carries a `conclusion` and a `completed_at`, which read as finished with that conclusion.
+  Each read judges every entry any answer listed, at the furthest state an answer showed, so an answer
   that lists an entry late or drops one never hides a failure an earlier answer showed (VERDICT-10).
 - The verdict reads every page of the run's jobs (VERDICT-11). A read whose jobs differ in number from the count the
   listing gives, or that runs past 10 pages, cannot be judged (VERDICT-12).

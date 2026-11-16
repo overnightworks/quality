@@ -397,7 +397,11 @@ def _job_of(entry: dict) -> Job:
     numbers_typed = type(job_id) is int and type(run_attempt) is int
     if not (numbers_typed and isinstance(name, str) and isinstance(status, str)):
         raise TypeError(f"a job's id, name, run_attempt or status has the wrong type: {entry!r}")
-    return Job(name, run_attempt, status, entry["conclusion"], job_id)
+    conclusion, completed_at = entry["conclusion"], entry.get("completed_at")
+    if not (completed_at is None or isinstance(completed_at, str)):
+        raise TypeError(f"a job's completed_at has the wrong type: {entry!r}")
+    # GitHub leaves some finished entries at in_progress; a conclusion with a completion time is the job's end.
+    return Job(name, run_attempt, COMPLETED if conclusion and completed_at else status, conclusion, job_id)
 
 
 class GitHubServerError(CannotJudge):
