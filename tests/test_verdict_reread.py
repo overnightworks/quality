@@ -31,10 +31,18 @@ def running(state="in_progress", name="checks", attempt=1, leg=1):
     return job(name, attempt, state, None, leg)
 
 
+def stuck(conclusion="success", completed_at="2026-11-16T10:00:00Z", name="checks"):
+    """GitHub's entry for a job that has ended but is still listed `in_progress`; a raw entry, as GitHub sends it."""
+    entry = {"id": job(name).id, "name": name, "run_attempt": 1, "status": "in_progress", "conclusion": conclusion}
+    return {**entry, "completed_at": completed_at}
+
+
 def page(*jobs, total=None, link=None):
     listed = [
-        {"id": entry.id, "name": entry.name, "run_attempt": entry.run_attempt, "status": entry.status,
-         "conclusion": entry.conclusion}
+        entry
+        if isinstance(entry, dict)
+        else {"id": entry.id, "name": entry.name, "run_attempt": entry.run_attempt, "status": entry.status,
+              "conclusion": entry.conclusion}
         for entry in jobs
     ]
     return json.dumps({"total_count": len(listed) if total is None else total, "jobs": listed}), link
@@ -162,6 +170,42 @@ def reread(capsys, monkeypatch, run_env, pull_request):
              "✓ green · 1 mandatory job · <1s"],
             10,
             id="in_progress is re-read",
+        ),
+        pytest.param(
+            (page(stuck()),), {}, 0, ["✓ green · 1 mandatory job · <1s"], 0,
+            id="an in_progress entry with a conclusion and completed_at is green on the first read",
+        ),
+        pytest.param(
+            (page(stuck("failure")),), {}, 1,
+            ["! checks failure attempt 1", "! red · 1 of 1 mandatory job failed · <1s"], 0,
+            id="an in_progress entry concluded failure is red on the first read",
+        ),
+        pytest.param(
+            (page(stuck(conclusion=None)), page(job())),
+            {},
+            0,
+            ['· run 2 reads GitHub first listed "checks" (attempt 1) as in_progress',
+             "✓ green · 1 mandatory job · <1s"],
+            10,
+            id="an in_progress entry with completed_at and no conclusion is re-read",
+        ),
+        pytest.param(
+            (page(stuck(completed_at=None)), page(job())),
+            {},
+            0,
+            ['· run 2 reads GitHub first listed "checks" (attempt 1) as in_progress',
+             "✓ green · 1 mandatory job · <1s"],
+            10,
+            id="an in_progress entry with a conclusion and no completed_at is re-read",
+        ),
+        pytest.param(
+            (page(running()), page(stuck())),
+            {},
+            0,
+            ['· run 2 reads GitHub first listed "checks" (attempt 1) as in_progress',
+             "✓ green · 1 mandatory job · <1s"],
+            10,
+            id="a later concluded answer settles an earlier in_progress one",
         ),
         pytest.param(
             (page(running("queued")), page(running()), page(job())),

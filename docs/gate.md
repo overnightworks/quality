@@ -80,7 +80,8 @@ mandatory_jobs = ["checks"]
   several times in that attempt is green only when every entry succeeded (VERDICT-6). A job that is missing from the run
   is the row `! x  missing  not in the run` (VERDICT-7); one that failed, was skipped or cancelled is red (VERDICT-8).
   One GitHub still lists as running (`queued`, `in_progress`, `waiting`, `requested`, `pending`) is read again
-  (VERDICT-9). Each read judges every entry any answer listed, at the furthest state an answer showed, so an answer
+  (VERDICT-9), unless it carries a `conclusion` and a `completed_at`, which read as finished with that conclusion.
+  Each read judges every entry any answer listed, at the furthest state an answer showed, so an answer
   that lists an entry late or drops one never hides a failure an earlier answer showed (VERDICT-10).
 - The verdict reads every page of the run's jobs (VERDICT-11). A read whose jobs differ in number from the count the
   listing gives, or that runs past 10 pages, cannot be judged (VERDICT-12).

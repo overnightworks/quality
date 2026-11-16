@@ -767,8 +767,8 @@ def test_a_malformed_declaration_cannot_be_judged(capsys, run_env, entry, named)
 @pytest.mark.parametrize(
     "job_entry",
     [{"id": 1, "name": "checks", "run_attempt": "1"}, {"id": 1, "name": None, "run_attempt": 1},
-     {"id": "1", "name": "checks", "run_attempt": 1}],
-    ids=["run_attempt as text", "name null", "id as text"],
+     {"id": "1", "name": "checks", "run_attempt": 1}, {"id": 1, "name": "checks", "run_attempt": 1, "completed_at": 5}],
+    ids=["run_attempt as text", "name null", "id as text", "completed_at as a number"],
 )
 def test_a_job_field_of_the_wrong_type_cannot_be_judged(capsys, run_env, job_entry):
     """VERDICT-46: a jobs page with a field of the wrong type is exit 2, the pair."""
