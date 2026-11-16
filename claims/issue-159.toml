@@ -1,8 +1,0 @@
-claim_id = "c6deb2a4a0304b00bd94f3edca557a66"
-agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
-role = "builder"
-base = "915acb8df197c4765b6637b4f3ab67f2fba09c4a"
-branch = "claude/issue-159-verdict-reads-a-concluded-entry"
-scope = ["docs/gate.md", "src/quality/verdict.py", "tests/test_verdict.py", "tests/test_verdict_reread.py"]
-opened_commit = "7ae296b0a03e7d562d77e02d4ed1ea670461a39b"
-whole_reason = "one reading rule: its adapter line, the tests that pin how a job entry is read, and the gate document that states it"
