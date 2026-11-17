@@ -1,8 +1,0 @@
-claim_id = "055df65cf6e44d12af48ce026c06e63f"
-agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
-role = "builder"
-base = "fb634f5f0f6860ace4e91635cf300c3d9877f635"
-branch = "claude/issue-886-stale-passages"
-scope = ["README.md", "docs/ARCHITECTURE.md", "docs/VISION.md", "docs/commands.md", "docs/gate.md", "docs/release.md"]
-opened_commit = "951d1cf14e85db8c8566e40ba52266c78e10407d"
-whole_reason = "one docs pass over the passages #881's review found stale, each a sentence or two"
