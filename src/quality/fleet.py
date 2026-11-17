@@ -394,12 +394,15 @@ def measure_repository(name: str) -> Row:
             # git's own words name the local clone directory, so only its exit code is reported.
             if cloned.returncode != 0:
                 return Unjudged(name, f"cannot clone (git exited {cloned.returncode})")
-            head = git(["-C", str(clone), "rev-parse", "HEAD"], scratch, environment, CLONE_TIMEOUT_SECONDS)
-            if head.returncode != 0:
-                return unread_head(name, head.returncode, git(["-C", str(clone), "rev-list", "-n", "1", "--all"], scratch,
-                                                              environment, CLONE_TIMEOUT_SECONDS))
         except process.ProcessError as error:
             return Unjudged(name, f"cannot clone ({error})")
+        try:
+            head = process.unborn_aware_head_commit(clone, environment)
+        except process.ProcessError:
+            # The error names the local clone directory, which a published reason never carries.
+            return Unjudged(name, "cannot read the cloned commit")
+        if head is None:
+            return Unjudged(name, "holds no commit")
         try:
             tracked = checkout.tracked_files(clone)
             sources = ratchet.read_sources(clone, tracked)
@@ -409,7 +412,7 @@ def measure_repository(name: str) -> Row:
         declared = read_declared(clone, tracked)
     tree = ratchet.measure(sources)
     pairs = clones.summarise_pairs(clones.find_pairs(sources).pairs)
-    commit = head.stdout.strip()[:SHORT_COMMIT]
+    commit = head[:SHORT_COMMIT]
     languages, areas = ratchet.language_lines(tree), ratchet.summarise(tree)
     return Measured(name, commit, languages, areas, len(tree.unparsable), pairs, workflows, declared)
 
@@ -451,13 +454,6 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
 def find_import_config(clone: Path, tracked: list[str]) -> bool:
     texts = {name: repository.read_text(clone, name) for name in tracked if name in architecture.CONFIG_FILES}
     return architecture.find_config({name: text for name, text in texts.items() if text is not None}) is not None
-
-
-def unread_head(name: str, exit_code: int, commits: subprocess.CompletedProcess[str]) -> Unjudged:
-    """Why a clone's HEAD could not be read: a repository that holds no commit says so, any other cause names git's exit."""
-    if commits.returncode == 0 and not commits.stdout.strip():
-        return Unjudged(name, "holds no commit")
-    return Unjudged(name, f"cannot read the cloned commit (git exited {exit_code})")
 
 
 def git(

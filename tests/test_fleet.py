@@ -324,14 +324,14 @@ def test_only_the_default_branch_tip_is_measured(fleet_report, public, remotes):
 
 def git_that_signals(directory: Path, signal_name: str) -> Path:
     """A directory whose `git` serves github.com from the remotes like the `public` fixture, runs the real one, but first
-    sends `signal_name` to its caller on `rev-parse`.
+    sends `signal_name` to its caller on `rev-list`.
 
-    The report runs `rev-parse` once the clone exists, so the signal arrives while the clone is on disk.
+    The report runs `rev-list` once the clone exists, so the signal arrives while the clone is on disk.
     """
     directory.mkdir()
     fake = directory / "git"
     fake.write_text(
-        f'#!/bin/sh\n{GITHUB_REDIRECT}\ncase " $* " in *" rev-parse "*) kill -{signal_name} $PPID;; esac\nexec {shlex.quote(shutil.which("git"))} "$@"\n'
+        f'#!/bin/sh\n{GITHUB_REDIRECT}\ncase " $* " in *" rev-list "*) kill -{signal_name} $PPID;; esac\nexec {shlex.quote(shutil.which("git"))} "$@"\n'
     )
     fake.chmod(0o755)
     return directory
