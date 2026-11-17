@@ -1,0 +1,7 @@
+claim_id = "ee78bd81ff4c4513b0495dd38ec33c4e"
+agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
+role = "builder"
+base = "693d45c9178bc8fac3389f90cac731a15f59d439"
+branch = "claude/issue-885-empty-repository-row"
+scope = ["docs/commands.md", "src/quality/fleet.py", "tests/test_fleet.py"]
+opened_commit = "964981164a25b1c3e863e55e383ba80479cfe7d6"
