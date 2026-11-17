@@ -478,6 +478,17 @@ def test_scenario_data_and_every_other_script_value_is_no_site(build_repo, scena
         "const a = o?.of / 2; // it's\n",
         "const a = cfg.default! / 2; // it's\n",
         "const exists = \".\" in /'/;\n",
+        "if (x) /'/.test(y);\n",
+        "while (x) /'/.test(y);\n",
+        "for (;;) /'/.test(y);\n",
+        "for await (const a of b) /'/.test(a);\n",
+        "with (o) /'/.test(y);\n",
+        "if (f(x) && g(y)) /'/.test(y);\n",
+        "const a = o.if(x) / 2; // it's\n",
+        "const a = this.#default / 2; // it's\n",
+        "const a = this.#in?.#of / 2; // it's\n",
+        "const a = [...await /'/.source];\n",
+        "const a = [...yield /'/.source];\n",
     ],
     ids=[
         "quote in a regex", "quote in a comment", "slash in a class", "divisions", "division after parentheses",
@@ -489,6 +500,11 @@ def test_scenario_data_and_every_other_script_value_is_no_site(build_repo, scena
         "division after a property named like a keyword", "division after an optional property named like a keyword",
         "division after a non-null mark on a property named like a keyword",
         "regex after in that follows a string of a dot",
+        "regex after an if head", "regex after a while head", "regex after a for head", "regex after a for await head",
+        "regex after a with head", "regex after a head with nested parentheses",
+        "division after the parentheses of a property named like a head keyword",
+        "division after a private field named like a keyword", "division after a chain of private fields named like keywords",
+        "regex after a spread await", "regex after a spread yield",
     ],
 )
 def test_a_valid_file_is_read_to_its_last_site_whatever_comes_first(build_repo, scenario, prefix):
@@ -502,6 +518,25 @@ def test_a_division_after_a_property_named_like_a_keyword_loses_no_site(build_re
     """LOCATOR-10, LOCATOR-11: a name after a dot is a property, so the slash divides and the site after it is found."""
     source = f"const half = cfg.{name} / 2, other = page.getByText('Abbrechen') ?? 3 / 4;\n"
     assert [line for _, line, _ in found(build_repo(scenario.only_script(source)))] == [1]
+
+
+@pytest.mark.parametrize("nested", ["getByText(", "f(", "[", "getByText(f(g("], ids=["locators", "helpers", "arrays", "mixed"])
+def test_the_work_of_reading_a_script_grows_with_its_nesting_in_proportion(build_repo, scenario, monkeypatch, nested):
+    """LOCATOR-10: a call span is scanned once, so doubling the nesting at most about doubles the tokens looked at."""
+    looked_at = []
+    original = locator_text._is_punctuation
+
+    def counting(token, *values):
+        looked_at[-1] += 1
+        return original(token, *values)
+
+    monkeypatch.setattr(locator_text, "_is_punctuation", counting)
+    closer = {"[": "]"}.get(nested, ")")
+    for depth in (400, 800):
+        looked_at.append(0)
+        source = f"page.getByText({nested * depth}'Abbrechen'{closer * (nested.count('(') * depth or depth)});\n"
+        assert found(build_repo(scenario.only_script(source))) == [(scenario.script_file, 1, cancel_fact())]
+    assert looked_at[1] < 2.5 * looked_at[0]
 
 
 @pytest.mark.parametrize("terminator", ["\r", "\r\n", "\u2028"])
