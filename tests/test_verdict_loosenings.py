@@ -30,10 +30,38 @@ def kind(base_config, head_config, baselines=("", ""), imports=(None, None), *, 
     return pytest.param(base_config, head_config, baselines, imports, id=id)
 
 
+def secret_allowance(rule="api-key", file="src/app.py", hash_digit="a", reason="a test key"):
+    """One (rule, file, secret_sha256, reason) allowance; `hash_digit` fills the first 12 hex digits of the hash."""
+    return (rule, file, hash_digit * 12 + "0" * 52, reason)
+
+
+def secret_blocks(*allowances: tuple[str, str, str, str]) -> str:
+    """Each (rule, file, secret_sha256, reason) as a [[secrets.allow]] block."""
+    return "".join(
+        f'[[secrets.allow]]\nrule = "{rule}"\nfile = "{file}"\nsecret_sha256 = "{sha256}"\nreason = "{reason}"\n'
+        for rule, file, sha256, reason in allowances
+    )
+
+
 def judged(base_config, head_config, baselines, imports):
     base = side_of(base_config, baselines[0], "the base", {".importlinter": imports[0]})
     head = side_of(head_config, baselines[1], "the head", {".importlinter": imports[1]})
     return judge(head, base, [job(), job("B")], {}, 1, NO_RENAMES)
+
+
+def secret_inline(*allowances: tuple[str, str, str, str]) -> str:
+    """The same entries as one inline `allow = [...]` list."""
+    rows = ", ".join(
+        f'{{ rule = "{rule}", file = "{file}", secret_sha256 = "{sha256}", reason = "{reason}" }}'
+        for rule, file, sha256, reason in allowances
+    )
+    return f"[secrets]\nallow = [{rows}]\n"
+
+
+def settled(base_config, head_config):
+    """The verdict's loosenings as `(what, declared)`, the `what`s of its unmatched declarations, and whether it is blocked."""
+    result = judged(base_config, head_config, ("", ""), (None, None))
+    return [(each.what, each.declaration is not None) for each in result.loosenings], [each.what for each in result.stale], result.blocked
 
 
 def printed(judged_verdict) -> list[str]:
@@ -96,6 +124,7 @@ UNDECLARED_KINDS = [
          id="an ignore added"),
     kind(CHECKS, CHECKS, imports=(GUARDED, contracts_ini({"guarded": {**FORBIDDEN, "allow_indirect_imports": True}})),
          id="a contract option changed"),
+    kind(CHECKS, CHECKS + secret_blocks(secret_allowance()), id="a secret allowance added"),
 ]
 SELF_DECLARED_KINDS = [
     kind(CHECKS, CHECKS + allowance_config(), id="an advisory allowance added"),
@@ -124,6 +153,7 @@ PRINTED = {
     "a contract's type changed": ['    ! import contract "guarded" changes type'],
     "an ignore added": ['    ! import contract "guarded" ignores shop.db -> shop.web'],
     "a contract option changed": ['    ! import contract "guarded" changes allow_indirect_imports'],
+    "a secret allowance added": [f"    ! secret allowance adds api-key in src/app.py{output.SEPARATOR}sha256 aaaaaaaaaaaa"],
     "an advisory allowance added": [f"    ! advisory allowance adds {QWEN} until 2027-01-31 · {PRESENTATOR}", GRADIO],
     "an advisory allowance extended": [f"    ! advisory allowance extends {QWEN} to 2027-07-31 · {PRESENTATOR}", GRADIO],
     "a generated file": [
@@ -261,3 +291,57 @@ def test_a_job_limit_typo_in_a_declaration_matches_nothing_and_leaves_the_raise_
 def test_a_literal_text_table_is_ignored_so_whatever_it_holds_loosens_nothing(baselines):
     """LITERAL-16: the table is read and ignored, so no change of it, a malformed one included, is a loosening or exit 2."""
     assert printed(judged(CHECKS, CHECKS, baselines, (None, None))) == []
+
+
+def secret_allowance_scenarios():
+    """(base config, head config, expected) of the secret allowance loosenings: the loosenings, the stale declarations
+    and whether the verdict is blocked."""
+    key, other_hash = secret_allowance(), secret_allowance(hash_digit="b")
+    inherited = CHECKS + secret_blocks(key)
+    nothing = ([], [], False)
+    key_text = f"secret allowance adds api-key in src/app.py{output.SEPARATOR}sha256 aaaaaaaaaaaa"
+    other_hash_text = f"secret allowance adds api-key in src/app.py{output.SEPARATOR}sha256 bbbbbbbbbbbb"
+    added = ([(key_text, False)], [], True)
+    return [
+        pytest.param(CHECKS, inherited, added, id="added"),
+        pytest.param(CHECKS, CHECKS + secret_inline(key), added, id="added inline"),
+        pytest.param(CHECKS + secret_inline(key), inherited, nothing, id="inherited, written another way"),
+        pytest.param(
+            None, CHECKS + secret_blocks(key, other_hash), ([(key_text, False), (other_hash_text, False)], [], True),
+            id="a base without config: adoption",
+        ),
+        pytest.param(inherited, inherited, nothing, id="inherited"),
+        pytest.param(inherited, CHECKS, nothing, id="deleted"),
+        pytest.param(inherited, CHECKS + secret_blocks(secret_allowance(reason="reworded")), nothing, id="reason changed"),
+        pytest.param(
+            inherited, CHECKS + secret_blocks(secret_allowance(rule="token")),
+            ([(f"secret allowance adds token in src/app.py{output.SEPARATOR}sha256 aaaaaaaaaaaa", False)], [], True), id="rule changed",
+        ),
+        pytest.param(
+            inherited, CHECKS + secret_blocks(secret_allowance(file="src/other.py")),
+            ([(f"secret allowance adds api-key in src/other.py{output.SEPARATOR}sha256 aaaaaaaaaaaa", False)], [], True), id="file changed",
+        ),
+        pytest.param(inherited, CHECKS + secret_blocks(other_hash), ([(other_hash_text, False)], [], True), id="hash changed"),
+        pytest.param(
+            inherited, CHECKS + secret_blocks(key, other_hash), ([(other_hash_text, False)], [], True),
+            id="a second value added beside an inherited one",
+        ),
+    ]
+
+
+@pytest.mark.parametrize(("base_config", "head_config", "expected"), secret_allowance_scenarios())
+def test_a_secret_allowance_the_base_lacks_is_a_loosening_that_needs_a_declaration(base_config, head_config, expected):
+    """VERDICT-71, VERDICT-72, VERDICT-73: a head (rule, file, secret_sha256) the base lacks is a loosening and, without
+    a [[gate.loosened]] entry, undeclared; an inherited or deleted entry and a changed reason loosen nothing; a base
+    without config, a changed rule, file or hash makes the entry new, and an inline list reads as blocks do."""
+    assert settled(base_config, head_config) == expected
+
+
+def test_a_declaration_with_the_secret_allowance_text_declares_it_and_stays_red_for_the_door():
+    """VERDICT-71: a [[gate.loosened]] entry with that text as `what` binds the loosening, which stays red for the door."""
+    text = f"secret allowance adds api-key in src/app.py{output.SEPARATOR}sha256 aaaaaaaaaaaa"
+    head = CHECKS + secret_blocks(secret_allowance()) + declaration(text)
+    result = judged(CHECKS, head, ("", ""), (None, None))
+    assert ([(each.what, each.declaration is not None) for each in result.loosenings], result.stale, result.green) == (
+        [(text, True)], (), False,
+    )
