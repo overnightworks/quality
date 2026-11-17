@@ -6,6 +6,7 @@ repository and for the operator who merges past it.
 
     quality check [AREA ...] [--staged] [--fix] [--dry-run] [-v]
     quality sonar properties [-v]
+    quality sonar scanner [-v]
     quality sonar findings [-v]
     quality verdict [-v]
     quality report

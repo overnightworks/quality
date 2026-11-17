@@ -337,8 +337,8 @@ Ruled by the operator:
   (checked first: exit `2`, nothing changed (MERGE-54), the missing right named (MERGE-55)). Agents never run it; it
   refuses when stdin is not a terminal. This is the agent contract, not a lock: agents on the operator's machine share
   his `gh` login, so to an agent the terminal is a hurdle, and that login could switch `quality_gate` directly. A real
-  lock (agents with a token without admin rights) belongs to the machine's setup, not to quality; it is a known
-  residual risk.
+  lock (agents with a token without admin rights) belongs to the machine's setup, owned by
+  [overnightworks/platform](https://github.com/overnightworks/platform), not to quality; it is a known residual risk.
 - **It refuses unless the door is the only way** (exit `1`, nothing changed): the pull request is open (MERGE-56) and
   no draft (a draft is refused before its body or any check is read (MERGE-57),
   `next:` naming `gh pr ready` (MERGE-58)); no check is still running (MERGE-59); every check run and commit status
