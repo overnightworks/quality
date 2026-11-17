@@ -1227,8 +1227,10 @@ none (TIMEOUT-2).
 
 A job whose `uses:` starts with `./` or `$/` and names `.github/workflows/<file>.yml` or `.yaml`, a tracked workflow,
 makes that file judged, followed from every root and judged once, so a cycle ends where it closes and is no finding. A
-remote reusable workflow is not followed. A workflow no root reaches is outside, which is how release and image
-workflows stay outside; a local call in a file that is not judged is not read (TIMEOUT-3). A judged job is an entry of
+remote reusable workflow is not followed: it is judged in its own repository when a root there reaches it through a
+local call, and one that only another repository's root reaches is judged nowhere, a gap this rule keeps. A workflow no
+root reaches is outside, which is how release and image workflows stay outside; a local call in a file that is not
+judged is not read (TIMEOUT-3). A judged job is an entry of
 `jobs:` with no `uses:`; a job with `uses:` is not judged itself, and a matrix job is one job (TIMEOUT-4).
 
 The limit is read in this order: no `timeout-minutes` key is `missing`, never debt; a plain unquoted decimal number
