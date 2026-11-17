@@ -152,8 +152,8 @@ cannot be written adds `error: GITHUB_STEP_SUMMARY is not writable · <reason>` 
 Ruled by the operator: the verdict reads the run's jobs again for at most two minutes, because GitHub's jobs listing
 answers late per job; a job still listed as running after the last read is exit `2`.
 
-Three defaults the operator never answered: the verdict says in a first line that it read again (READ-4), reads a 5xx
-again (READ-5), and adds the permission hint only after a 403 or 404 (READ-6).
+The verdict says in a first line that it read again (READ-4), reads a 5xx again (READ-5), and adds the permission hint
+only after a 403 or 404 (READ-6).
 
 The optional `[languages]` table beside `[gate]` holds one key, `render_pass`, a non-empty job name as `mandatory_jobs` names
 it. It is read by the `render-pass` rule under `quality check` ([rules](rules.md)), not by the verdict: the verdict does not

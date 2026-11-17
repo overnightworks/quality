@@ -189,6 +189,5 @@ cannot judge.
 ## 8. Risks and Technical Debt
 
 - Agents share the operator's `gh` login; the door is a contract, not a lock.
-- A defect in the shared gate reaches every gated repository at once, and so does its fix.
+- Each repository is judged by the release it pins, so a fix reaches it only with its next pin move, and a defect stays until then.
 - SonarCloud's engine is downloaded unpinned, an accepted trust boundary ([sonar](sonar.md#quality-sonar-findings)).
-- The size ceiling (`quality/baseline.toml`) lists the modules above the debt marks.

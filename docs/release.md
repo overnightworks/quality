@@ -273,8 +273,8 @@ gh workflow run release.yml -R overnightworks/quality -f version=X.Y.Z
 
 Ruled by the operator: every project is released on one checked path, and every release starts with the same command and only the version: gate,
 then the project's own build, then tag; the gate exists once, in quality. Covered are every
-repository that publishes a release (agent-runtime, aco, design, figure, quality, speech-runtime, webauth) and every app that ships an image
-through the platform (hopin, presentator, speech-runtime, songmaker, skat, platform's Keycloak image). The trigger is a repository's first release after the quality tag that ships the workflows it needs.
+repository that publishes a release and every app that ships an image through the platform; which ones do is read from
+the callers of `release-gate.yml` (`gh search code release-gate.yml --owner overnightworks`), never kept as a list here. The trigger is a repository's first release after the quality tag that ships the workflows it needs.
 
 A deviation is asked as marketplace `docs/standards.md` says: the covered head names the enduring harm with its
 uncertainty, quality's head reviews it, and the operator rules it; the ruling is recorded at the owner, overnightworks/quality.
