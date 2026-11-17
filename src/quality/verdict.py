@@ -64,6 +64,7 @@ PERMISSION_STEP = Instruction("grant actions: read in the caller job's permissio
 SET_BY_THE_GATE = Instruction("quality verdict runs as gate.yml's verdict step, which sets it")
 WHOLE_NUMBER = re.compile(r"[1-9]\d{0,17}", re.ASCII)
 EXIT_GREEN, EXIT_RED, EXIT_CANNOT_JUDGE = 0, 1, 2
+SHA_PREFIX_LENGTH = 12
 
 PageFetcher = Callable[[str], tuple[str, str | None]]
 MERGE_COMMAND = "quality merge"
@@ -257,9 +258,6 @@ def judge(
         outcomes.append(outcome)
     outcomes += (_concluded(name, JobKind.GATE, result) for name, result in gate_results.items())
     return Verdict(loosenings, stale, tuple(outcomes), tuple(unsettled))
-
-
-SHA_PREFIX_LENGTH = 12
 
 
 def _loosenings(
