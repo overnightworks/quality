@@ -1,7 +1,0 @@
-claim_id = "532cdefe16254d90bc96777c1a2ea182"
-agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
-role = "builder"
-base = "dc9f4e64edbe719e6aa25eda7bb65c1ba8489f68"
-branch = "claude/issue-800-job-timeout-remote-gap"
-scope = ["docs/rules.md"]
-opened_commit = "24ee964f17e45f00b792734ff6bc2d3a7e8910c3"
