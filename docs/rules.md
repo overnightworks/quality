@@ -1477,7 +1477,9 @@ archive. md5 is an integrity check against the server's own statement and no sig
 that an attacker could not forge, and a collision does not help against an archive the attacker did not produce.
 Records the pinned osv-scanner cannot read are dropped by it silently; the live-database test for
 `pyyaml 5.3.1` on every quality pull request is the canary (ADVISORY-18). osv-scanner judges the lock as written; the
-caller's own `uv sync --locked` guards against a hand-edited lock. osv-scanner exits `127` on a `uv.lock` or
+caller's own `uv sync --locked` guards against a hand-edited lock. A `pnpm-lock.yaml` entry pinned by URL without
+`integrity` is refused by the caller's own `pnpm install --frozen-lockfile` from pnpm 10.34.1 and 11.4.0 on
+(`ERR_PNPM_MISSING_TARBALL_INTEGRITY`); quality does not read it. osv-scanner exits `127` on a `uv.lock` or
 `pnpm-lock.yaml` it cannot parse, which is `cannot judge`, never clean.
 
 The check job in `gate.yml` stops at a limit that setup, the scanner install step's limit, the run's deadline and a
