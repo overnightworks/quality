@@ -1,8 +1,0 @@
-claim_id = "badc8744cc7644d9ab8f876ec538cab6"
-agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
-role = "builder"
-base = "75cc6903773e6fc3a7b8a0cf7defffea59b34028"
-branch = "claude/issue-869-ts-reader-follow-ups"
-scope = ["docs/rules.md", "src/quality/locator_text.py", "src/quality/typescript_tokens.py", "tests/test_locator_text.py"]
-opened_commit = "948cbbee33b6570f45e79148a864477db37a34ce"
-whole_reason = "one reader's follow-ups in its two modules, its test module and its rules section"
