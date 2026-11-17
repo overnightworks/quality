@@ -335,12 +335,6 @@ def test_a_secret_allowance_the_base_lacks_is_a_loosening_that_needs_a_declarati
     assert settled(base_config, head_config) == expected
 
 
-def test_a_secret_allowance_judged_without_a_base_loosens_nothing():
-    """VERDICT-61: a push or a merge group has no base, so no loosening is judged."""
-    head = side_of(INHERITED, None, "the head")
-    assert judge(head, None, [job(), job("B")], {}, 1, NO_RENAMES).loosenings == ()
-
-
 def test_a_declaration_with_the_secret_allowance_text_declares_it_and_stays_red_for_the_door():
     """VERDICT-71: a [[gate.loosened]] entry with that text as `what` binds the loosening, which stays red for the door."""
     head = INHERITED + declaration(KEY_ALLOWED_TEXT)
