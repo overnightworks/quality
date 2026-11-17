@@ -1,8 +1,0 @@
-claim_id = "c942462bd5a1499b94935403986aa033"
-agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
-role = "builder"
-base = "7bac495e789e6197fcbe027e961229cd8fba62bd"
-branch = "claude/issue-883-secret-allowance-loosening"
-scope = ["docs/gate.md", "src/quality/config.py", "src/quality/verdict.py", "tests/test_verdict_loosenings.py"]
-opened_commit = "40c1d8be025d19cb9f406dcefd7297aeeaac1153"
-whole_reason = "One loosening class: its comparison in verdict.py, the settings config.py reads, its tests and its gate.md sentences."
