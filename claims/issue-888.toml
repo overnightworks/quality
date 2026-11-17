@@ -1,7 +1,0 @@
-claim_id = "0b18d7dc65ab478b9495f9398fd546c7"
-agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
-role = "builder"
-base = "1d66f90569946cf182634a3372e1e183cec8353b"
-branch = "claude/issue-888-pnpm-integrity-sentence"
-scope = ["docs/rules.md"]
-opened_commit = "bc1f459228931813a78190fe42cbe6e06250e3c4"
