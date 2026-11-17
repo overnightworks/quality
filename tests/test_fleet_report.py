@@ -2,6 +2,7 @@
 tables alone on stdout and in the step summary."""
 
 import json
+import subprocess
 import urllib.error
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -161,6 +162,20 @@ def test_a_repository_that_cannot_be_cloned_is_its_row_and_the_pair_after_the_ta
         "next: quality report\n"),
     )
     assert row(printed.out, missing)[2] == "cannot judge: cannot clone (git exited 128)"
+
+
+def test_a_repository_that_holds_no_commit_is_a_row_that_says_so(capsys, monkeypatch, tmp_path, public, remotes):
+    """FLEET-36, FLEET-103: a served repository without a commit is not measured, and its row says it holds none."""
+    alpha = public("alpha", {"a.py": "a = 1\n"})
+    empty = remotes / "o" / "empty"
+    empty.mkdir(parents=True)
+    subprocess.run(["git", "init", "--quiet", str(empty)], check=True)
+    printed = report_in(write_fleet(tmp_path / "fleet", [alpha, "o/empty"]), capsys, monkeypatch, ticks(0, 1, 2, 3, 4))
+    assert (printed.code, printed.err.splitlines()[2:4]) == (
+        2,
+        ["  ✗ o/empty       not measured   holds no commit", "error: 1 of 2 repositories not measured · the tables say so"],
+    )
+    assert row(printed.out, "o/empty")[2] == "cannot judge: holds no commit"
 
 
 def test_unread_release_tags_stand_under_the_fleet_line_and_in_the_pair(capsys, monkeypatch, tmp_path, public, remotes):

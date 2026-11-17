@@ -395,10 +395,11 @@ def measure_repository(name: str) -> Row:
             if cloned.returncode != 0:
                 return Unjudged(name, f"cannot clone (git exited {cloned.returncode})")
             head = git(["-C", str(clone), "rev-parse", "HEAD"], scratch, environment, CLONE_TIMEOUT_SECONDS)
+            if head.returncode != 0:
+                return unread_head(name, head.returncode, git(["-C", str(clone), "rev-list", "-n", "1", "--all"], scratch,
+                                                              environment, CLONE_TIMEOUT_SECONDS))
         except process.ProcessError as error:
             return Unjudged(name, f"cannot clone ({error})")
-        if head.returncode != 0:
-            return Unjudged(name, f"cannot read the cloned commit (git exited {head.returncode})")
         try:
             tracked = checkout.tracked_files(clone)
             sources = ratchet.read_sources(clone, tracked)
@@ -450,6 +451,13 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
 def find_import_config(clone: Path, tracked: list[str]) -> bool:
     texts = {name: repository.read_text(clone, name) for name in tracked if name in architecture.CONFIG_FILES}
     return architecture.find_config({name: text for name, text in texts.items() if text is not None}) is not None
+
+
+def unread_head(name: str, exit_code: int, commits: subprocess.CompletedProcess[str]) -> Unjudged:
+    """Why a clone's HEAD could not be read: a repository that holds no commit says so, any other cause names git's exit."""
+    if commits.returncode == 0 and not commits.stdout.strip():
+        return Unjudged(name, "holds no commit")
+    return Unjudged(name, f"cannot read the cloned commit (git exited {exit_code})")
 
 
 def git(

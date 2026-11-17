@@ -174,7 +174,7 @@ list (FLEET-31)); the fleet is every public, non-archived, non-fork repository G
 (FLEET-32), less the excluded ones, plus the named ones. On stderr it prints
 `· fleet  N found  <organizations> · quality/fleet.toml` (without `<organizations> · ` when the file names none)
 (FLEET-33), then a row per repository as it is measured, sorted by name, case-insensitively (FLEET-34):
-`✓ <owner/name>  measured  <commit> · <time>` (FLEET-35), `✗ …  not measured <reason>` (FLEET-36) or
+`✓ <owner/name>  measured  <commit> · <time>` (FLEET-35), `✗ …  not measured <reason>` (FLEET-36), whose reason for a repository without a commit is `holds no commit` (FLEET-103), or
 `✗ …  partly read  cannot read <files>` (FLEET-37); a failed read of the release tags adds
 `✗ release tags  not read <reason>` under the fleet line (FLEET-38). The subjects share one column (FLEET-39). On stdout
 it prints the two markdown tables and nothing else, so `quality report > fleet.md` writes only them (FLEET-40): the size
