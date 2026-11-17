@@ -1144,8 +1144,9 @@ in the catalog like any text (LITERAL-3), so a test reads it by key.
 - **Reading a script (LOCATOR-11).** A script is read as tokens, not parsed: strings with their escapes decoded (`\'`,
   `\n`, `\xHH`, `\uHHHH`, `\u{...}`, a line continuation), templates, regex literals, names, numbers and punctuation,
   with comments skipped. A `/` starts a regex after nothing, after punctuation but `)` and `]`, and after `return`,
-  `typeof`, `case` and the other keywords that take an operand, but not after a property of that spelling
-  (`cfg.default / 2` divides); after anything else it divides. A `/` right after a postfix `++` or `--` divides (a regex
+  `typeof`, `case` and the other keywords that take an operand, but not after a property or a private field of that
+  spelling (`cfg.default / 2` and `this.#default / 2` divide), and after the `)` that closes the head of an `if`, `while`,
+  `for` or `with` (`if (x) /'/.test(y);`); after anything else it divides. A `/` right after a postfix `++` or `--` divides (a regex
   never follows a prefix one), and so does one after a `!` that follows an identifier, `)` or `]`, the TypeScript
   non-null mark (`v! / 2`); a `!` after anything else is a prefix not and a regex may follow it (`!/x/.test(y)`).
   A template with a hole is no site and its holes are read like the rest, so a locator inside one is judged.
@@ -1204,8 +1205,7 @@ nothing: a valid file is judged like any other, and no site of it is lost. A mis
 it is held by `catalog-check`, since the app's own `design-catalogs --check` turns red when the source catalog is missing.
 
 Named gaps: a msgid with a gap (`Hello {name}`) and a `msgid_plural`; a regex locator that is not an anchored exact text
-(`/shuffle/i`), a case-insensitive one that differs in case and a regex right after `)`, which also refuses a valid file
-with exit `2` when the regex holds a quote or a backtick (`if (x) /'/.test(y);`) and not only misses a site; a later
+(`/shuffle/i`), a case-insensitive one that differs in case; a later
 typed parameter such as `name: string`, which reads as a key with an identifier site that only a top-level const of that
 name could make red; a constant imported from another module, one declared `const A: string = '...'` or `const A =
 '...', B = '...'`, and a dynamic string, a concatenation and a ternary; a helper named other than `getBy...`,

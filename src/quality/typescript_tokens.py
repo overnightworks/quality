@@ -35,6 +35,7 @@ class ScriptSyntaxError(ValueError):
 REGEX_KEYWORDS = frozenset(
     {"return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "throw", "case", "do", "else", "yield", "await", "default", "extends"}
 )
+HEAD_KEYWORDS = frozenset({"if", "while", "for", "with"})
 NON_REGEX_PUNCTUATION = frozenset({")", "]"})
 POSTFIX_STEPS = frozenset({"++", "--"})
 SKIPPED = re.compile(r"(?P<space>\s+)|(?P<comment>//[^\n\r\u2028\u2029]*|/\*.*?\*/)|(?P<unclosed>/\*)", re.DOTALL)
@@ -78,6 +79,10 @@ class _Lexer:
         self.tokens: list[Token] = []
         # One entry per open brace: the line of the template whose `${` hole it opens, None for a plain brace.
         self.braces: list[int | None] = []
+        # One entry per open paren: whether it opens the head of an `if`, `while`, `for` or `with`.
+        self.parens: list[bool] = []
+        # The token indices of the `)` that close such a head; a regex may follow them.
+        self.head_closers: set[int] = set()
 
     def run(self) -> list[Token]:
         handlers = {
@@ -135,23 +140,37 @@ class _Lexer:
     def _regex_allowed(self) -> bool:
         """A `/` starts a regex after nothing, after punctuation but `)`, `]`, a postfix `++` or `--` and a `!` that follows an
         operand (a non-null mark), after a keyword that takes an operand (not after a property of that spelling) and where a
-        template hole begins; after anything else it divides."""
+        template hole begins, and after the `)` that closes the head of an `if`, `while`, `for` or `with`; after anything else it
+        divides."""
         if not self.tokens:
             return True
         previous = self.tokens[-1]
         if previous.kind is Kind.PUNCTUATION:
-            return previous.value not in NON_REGEX_PUNCTUATION and not self._ends_in_postfix_operator()
+            closes_head = len(self.tokens) - 1 in self.head_closers
+            return (closes_head or previous.value not in NON_REGEX_PUNCTUATION) and not self._ends_in_postfix_operator()
         if previous.kind is Kind.IDENTIFIER:
             return not self._ends_operand_word(len(self.tokens) - 1)
         return previous.kind is Kind.TEMPLATE
 
     def _ends_operand_word(self, index: int) -> bool:
-        """A name ends an operand, a keyword that takes an operand does not, and a name after a `.` (or `?.`) is a property,
-        whatever it is spelled; a `.` that closes a spread's three dots is no member access."""
-        if self.tokens[index].value not in REGEX_KEYWORDS:
-            return True
-        dots = [token.kind is Kind.PUNCTUATION and token.value == "." for token in self.tokens[max(index - 2, 0) : index]]
-        return dots[-1:] == [True] and dots != [True, True]
+        """A name ends an operand, a keyword that takes an operand does not, and a name after a `.` (or `?.`) or a `#` is a
+        property or a private field, whatever it is spelled."""
+        return self.tokens[index].value not in REGEX_KEYWORDS or self._is_member(index)
+
+    def _is_member(self, index: int) -> bool:
+        """Whether the name at `index` follows a `.` (or `?.`) or a `#`; a `.` that closes a spread's three dots is no member
+        access."""
+        before = self.tokens[max(index - 2, 0) : index]
+        marks = [token.kind is Kind.PUNCTUATION and token.value for token in before]
+        return marks[-1:] == ["#"] or (marks[-1:] == ["."] and marks != [".", "."])
+
+    def _opens_statement_head(self) -> bool:
+        """Whether a `(` now follows `if`, `while`, `for` or `for await`, not as a property of that spelling."""
+        words = [token.value if token.kind is Kind.IDENTIFIER else "" for token in self.tokens[-2:]]
+        index = len(self.tokens) - 1
+        if words[-2:] == ["for", "await"]:
+            index -= 1
+        return index >= 0 and self.tokens[index].kind is Kind.IDENTIFIER and self.tokens[index].value in HEAD_KEYWORDS and not self._is_member(index)
 
     def _ends_in_postfix_operator(self) -> bool:
         """`++` or `--` (a regex never follows a prefix one) or a `!` right after an identifier, `)` or `]`, the TypeScript
@@ -195,6 +214,10 @@ class _Lexer:
         if step in POSTFIX_STEPS:
             self._emit(Kind.PUNCTUATION, step, self.position + 2)
             return
+        if character == "(":
+            self.parens.append(self._opens_statement_head())
+        elif character == ")" and self.parens and self.parens.pop():
+            self.head_closers.add(len(self.tokens))
         if character == "{":
             self.braces.append(None)
         elif character == "}" and self.braces:

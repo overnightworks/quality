@@ -233,28 +233,40 @@ def _at(tokens: Sequence[Token], index: int) -> Token | None:
     return tokens[index] if 0 <= index < len(tokens) else None
 
 
-def _extent(tokens: Sequence[Token], start: int) -> int:
-    """The index where the expression starting at `start` ends: a top-level comma, a closer nothing here opened, or the end."""
-    depth = 0
-    for index in range(start, len(tokens)):
+def _closings(tokens: Sequence[Token]) -> dict[int, int]:
+    """The index of the closer of each opener, in one pass; an opener never closed maps to the end. A closer nothing opened
+    closes nothing."""
+    closings: dict[int, int] = {}
+    open_indices: list[int] = []
+    for index, token in enumerate(tokens):
+        if _is_punctuation(token, *OPENERS):
+            open_indices.append(index)
+        elif _is_punctuation(token, *CLOSERS) and open_indices:
+            closings[open_indices.pop()] = index
+    closings.update(dict.fromkeys(open_indices, len(tokens)))
+    return closings
+
+
+def _extent(tokens: Sequence[Token], closings: dict[int, int], start: int) -> int:
+    """The index where the expression starting at `start` ends: a top-level comma, a closer nothing here opened, or the end.
+    A bracket is stepped over to its closer, so nothing inside it is read here."""
+    index = start
+    while index < len(tokens):
         if _is_punctuation(tokens[index], *OPENERS):
-            depth += 1
-        elif _is_punctuation(tokens[index], *CLOSERS):
-            if depth == 0:
-                return index
-            depth -= 1
-        elif depth == 0 and _is_punctuation(tokens[index], ","):
+            index = closings[index]
+        elif _is_punctuation(tokens[index], *CLOSERS, ","):
             return index
+        index += 1
     return len(tokens)
 
 
-def _arguments(tokens: Sequence[Token], opening: int) -> list[range]:
+def _arguments(tokens: Sequence[Token], closings: dict[int, int], opening: int) -> list[range]:
     """The token ranges of the comma-separated arguments of the call whose `(` is at `opening`; a call never closed runs to
     the end."""
     arguments = []
     start = opening + 1
     while True:
-        end = _extent(tokens, start)
+        end = _extent(tokens, closings, start)
         arguments.append(range(start, end))
         if not _is_punctuation(_at(tokens, end), ","):
             return arguments
@@ -313,31 +325,33 @@ def _is_read_attribute(tokens: Sequence[Token], argument: range) -> bool:
     return len(argument) == 1 and tokens[argument[0]].kind is Kind.STRING and tokens[argument[0]].value in READ_ATTRIBUTES
 
 
-def _call_positions(tokens: Sequence[Token], index: int) -> list[range]:
+def _call_positions(tokens: Sequence[Token], closings: dict[int, int], index: int) -> list[range]:
     """The argument ranges of the call named at `index` that sit in a locator position."""
     name = tokens[index].value
-    if not _is_punctuation(_at(tokens, index + 1), "("):
+    is_locator = bool(LOCATOR_CALL.fullmatch(name)) and name not in TEST_ID_CALLS or name in ASSERTION_CALLS
+    if not (is_locator or name in ATTRIBUTE_CALLS) or not _is_punctuation(_at(tokens, index + 1), "("):
         return []
-    arguments = _arguments(tokens, index + 1)
+    arguments = _arguments(tokens, closings, index + 1)
     if name in ATTRIBUTE_CALLS:
         return arguments[1:2] if _is_read_attribute(tokens, arguments[0]) else []
-    if name in TEST_ID_CALLS or not (LOCATOR_CALL.fullmatch(name) or name in ASSERTION_CALLS):
-        return []
     return arguments[1:] if name in ROLE_CALLS else arguments
 
 
-def _positions(tokens: Sequence[Token]) -> set[int]:
-    """The indices of the tokens inside a locator position: call arguments and the value of a `hasText:` property."""
-    positions: set[int] = set()
+def _positions(tokens: Sequence[Token]) -> Iterator[int]:
+    """The indices of the tokens inside a locator position, once each in order: call arguments and the value of a `hasText:`
+    property. Spans nest, so the sorted ranges are merged instead of each filled in."""
+    closings = _closings(tokens)
+    ranges: list[range] = []
     for index, token in enumerate(tokens):
         if token.kind is not Kind.IDENTIFIER:
             continue
-        ranges = _call_positions(tokens, index)
+        ranges.extend(_call_positions(tokens, closings, index))
         if token.value in FILTER_KEYWORDS and _is_punctuation(_at(tokens, index + 1), ":"):
-            ranges.append(range(index + 2, _extent(tokens, index + 2)))
-        for span in ranges:
-            positions.update(span)
-    return positions
+            ranges.append(range(index + 2, _extent(tokens, closings, index + 2)))
+    reached = 0
+    for span in sorted(ranges, key=lambda span: span.start):
+        yield from range(max(span.start, reached), span.stop)
+        reached = max(reached, span.stop)
 
 
 def _opens_position(tokens: Sequence[Token], index: int) -> bool:
@@ -373,7 +387,7 @@ def _script_readings(name: str, content: bytes) -> list[Reading]:
     except (UnicodeDecodeError, ScriptSyntaxError) as error:
         raise Unparsable(f"{name} cannot be read as TypeScript or JavaScript ({error})") from error
     constants = _script_constants(tokens)
-    return [_script_reading(tokens, index, constants) for index in sorted(_positions(tokens)) if _stands_alone(tokens, index)]
+    return [_script_reading(tokens, index, constants) for index in _positions(tokens) if _stands_alone(tokens, index)]
 
 
 def _catalog_text(literal: str, texts: CatalogTexts, in_regex: bool) -> str | None:
