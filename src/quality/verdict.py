@@ -259,11 +259,15 @@ def judge(
     return Verdict(loosenings, stale, tuple(outcomes), tuple(unsettled))
 
 
+SHA_PREFIX_LENGTH = 12
+
+
 def _loosenings(
     head: Side, base: Side, renames: Renames, pull_tree: PullTree | None
 ) -> tuple[tuple[Loosening, ...], tuple[Declaration, ...]]:
     """Each loosening, bound to the head's new declaration of it; a declaration the base holds already binds nothing.
-    An advisory allowance and a generated file declare their own loosening, so no [[gate.loosened]] entry binds one."""
+    An advisory allowance and a generated file declare their own loosening, so no [[gate.loosened]] entry binds one; a
+    secret allowance, which carries no item or date, is declared by a [[gate.loosened]] entry like a removed job."""
     whats = [_removal(name) for name in base.settings.mandatory_jobs if name not in head.settings.mandatory_jobs]
     if base.settings.legacy is LegacyMode.FAIL and head.settings.legacy is not LegacyMode.FAIL:
         whats.append(f"legacy {base.settings.legacy.value} → {head.settings.legacy.value}")
@@ -271,6 +275,7 @@ def _loosenings(
         whats.append("sonar true → false")
     whats += _baseline_loosenings(base.baseline, head.baseline, renames if pull_tree is None else pull_tree.renames)
     whats += architecture.contract_loosenings(base.contracts, head.contracts, pull_tree)
+    whats += _secret_allowance_loosenings(base.settings, head.settings)
     new = {
         declaration.what: declaration
         for declaration in head.settings.loosened
@@ -280,6 +285,16 @@ def _loosenings(
     stale = tuple(declaration for what, declaration in new.items() if what not in loosened)
     own = (Loosening(what, new.get(what)) for what in whats)
     return (*own, *_allowance_loosenings(base.settings, head.settings), *_generated_loosenings(base.settings, head.settings)), stale
+
+
+def _secret_allowance_loosenings(base: GateSettings, head: GateSettings) -> list[str]:
+    """Each head secret allowance whose rule, file and value the base lacks, named by the first 12 hex digits of the hash."""
+    inherited = set(base.secret_allowances)
+    return [
+        f"secret allowance adds {allowance.rule} in {allowance.file}{SEPARATOR}sha256 {allowance.secret_sha256[:SHA_PREFIX_LENGTH]}"
+        for allowance in head.secret_allowances
+        if allowance not in inherited
+    ]
 
 
 def _allowance_loosenings(base: GateSettings, head: GateSettings) -> list[Loosening]:

@@ -208,7 +208,7 @@ class GeneratedFile:
 @dataclass(frozen=True)
 class GateSettings:
     """What the gate reads from quality/config.toml: the settings a pull request must not loosen, the loosenings
-    it declares, and the advisories it allows; `sonar` is whether the gate's `sonar` job scans."""
+    it declares, and the advisories and secret values it allows; `sonar` is whether the gate's `sonar` job scans."""
 
     mandatory_jobs: tuple[str, ...]
     legacy: LegacyMode
@@ -216,6 +216,7 @@ class GateSettings:
     advisory_allowances: tuple[AdvisoryAllowance, ...] = ()
     generated_files: tuple[GeneratedFile, ...] = ()
     sonar: bool = True
+    secret_allowances: tuple[Allowance, ...] = ()
 
 
 class Allowance(NamedTuple):
@@ -709,6 +710,7 @@ def load_gate_settings(text: str | None) -> GateSettings:
     return GateSettings(
         jobs, legacy, document.declarations,
         document.allow_lists.advisories, document.allow_lists.generated, _sonar(document.gate, legacy),
+        tuple(document.allow_lists.secrets),
     )
 
 

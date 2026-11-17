@@ -208,6 +208,14 @@ reason = "the operator ruled the requirement shelf machinery out"
   adoption is new (VERDICT-66). A `[[gate.loosened]]` entry whose `what` is such a text matches nothing and is red
   (VERDICT-67). The verdict and the door read the whole config, so
   [a malformed `[secrets]` or `[advisories]` entry](rules.md) is exit `2` there too.
+- A secret allowance (`[[secrets.allow]]` or an inline `allow = [...]` list, see the `secret` rule under `quality check`)
+  is a loosening with no `item` and `date` of its own, since its entry carries none and no `until` brings it back to red.
+  A head `(rule, file, secret_sha256)` the base lacks prints
+  `secret allowance adds <rule> in <file> · sha256 <first 12 hex of secret_sha256>`; it is declared by a
+  `[[gate.loosened]]` entry with that text as `what`, like a removed mandatory job, and stays red for the operator's door
+  (VERDICT-71). A deleted entry and a changed `reason` loosen nothing; a changed `rule`, `file` or `secret_sha256` is a
+  new entry (VERDICT-72). A base without `quality/config.toml` holds no allowance, so every secret allowance of the
+  adoption is new (VERDICT-73).
 - A generated-file declaration (`[[size.generated]]`, see the `size` rule under `quality check`) declares its own
   loosening with its own `item` and `date`, like an allowance. A head `path` the base does not declare prints
   `size leaves out generated file <path> · <item> of <date>`, so a changed `path` and every declaration of an adoption
