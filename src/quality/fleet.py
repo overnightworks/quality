@@ -69,7 +69,6 @@ LISTING_URL = "https://api.github.com/orgs/{organization}/repos?type=public&per_
 NEXT_PAGE = re.compile(r'rel="next"')
 LISTING_CREDENTIAL_VARIABLE = "GITHUB_TOKEN"
 NOTHING_MEASURED = "nothing measured"
-FUNCTION_SCOPE = "functions and CCN: Python only"
 CLONE_TIMEOUT_SECONDS = 300
 LS_REMOTE_TIMEOUT_SECONDS = 60
 SHORT_COMMIT = 7
@@ -414,7 +413,7 @@ def measure_repository(name: str) -> Row:
     pairs = clones.summarise_pairs(clones.find_pairs(sources).pairs)
     commit = head[:SHORT_COMMIT]
     languages, areas = ratchet.language_lines(tree), ratchet.summarise(tree)
-    return Measured(name, commit, languages, areas, len(tree.unparsable), pairs, workflows, declared)
+    return Measured(name, commit, languages, areas, tree.unparsable_python, pairs, workflows, declared)
 
 
 def read_declared(clone: Path, tracked: list[str]) -> Declared:
@@ -463,7 +462,7 @@ def git(
 
 
 def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTagsError) -> tuple[str, ...]:
-    heading = f"**Fleet report, {today.isoformat()}, quality {__version__} — {FUNCTION_SCOPE}**"
+    heading = f"**Fleet report, {today.isoformat()}, quality {__version__}**"
     table = [table_line(COLUMNS), "|---" * len(COLUMNS) + "|", *(table_line(cells(row)) for row in rows)]
     pins = release_tags_or_none(tags)
     matrix_heading = f"**Repo × rule, {newest_release_words(tags)}**"

@@ -103,7 +103,7 @@ writes the file when an entry changes and when its bytes are not what the fix wo
 one that renders byte for byte stays untouched. It never raises an entry and never adds one to a table the file holds:
 what grew or is new stays a finding, and a raise is a hand edit with a declared loosening ([rules](rules.md)). A file git renamed into the index
 since the ceiling's last commit takes its entries with it ([rules](rules.md)). An entry whose path the index no longer
-tracks, whose Python function is gone or whose file is declared generated goes; one only missing from disk stands; a
+tracks, whose Python or script function is gone or whose file is declared generated goes; one only missing from disk stands; a
 held pair the tree lost goes. A held `[job_minutes]` entry falls to its job's rounded-up limit or goes where it is no
 debt or its job is gone, and a workflow that cannot be read refuses the whole fix while such an entry is held
 ([rules](rules.md)). Where the file has no `[job_minutes]` table and git never held one, it records the jobs above 15 at
@@ -178,8 +178,7 @@ list (FLEET-31)); the fleet is every public, non-archived, non-fork repository G
 `✗ …  partly read  cannot read <files>` (FLEET-37); a failed read of the release tags adds
 `✗ release tags  not read <reason>` under the fleet line (FLEET-38). The subjects share one column (FLEET-39). On stdout
 it prints the two markdown tables and nothing else, so `quality report > fleet.md` writes only them (FLEET-40): the size
-of every repository under a heading with the date, the quality version and that functions and CCN are measured for
-Python only (FLEET-41), then the same rows as a repo × rule matrix (FLEET-42). With `GITHUB_STEP_SUMMARY` set, the
+of every repository under a heading with the date and the quality version (FLEET-41), then the same rows as a repo × rule matrix (FLEET-42). With `GITHUB_STEP_SUMMARY` set, the
 tables are appended there (FLEET-43). Every cell puts a backslash before `` \ ` * _ ~ [ ] < > & | ``, so repository text
 opens no HTML comment, link or new cell (FLEET-44); a bare URL still renders as a link to its own address. The run ends
 on stderr with `✓ N of N repositories measured · <time>` (`repository` for one, exit `0`) (FLEET-45) or with `error: `
@@ -220,7 +219,7 @@ repository a token can list is dropped without a trace (FLEET-72).
   ties by name (FLEET-81), and `—` for a row with no measured file (FLEET-82). Production versus test is the `size`
   rule's file-name rule, so `scripts/test_inventory.py` counts as test (FLEET-83). `test:prod` is test lines divided by
   production lines with two decimals (FLEET-84), `—` without production lines (FLEET-85). The debt columns count files
-  from 800 lines, and Python's functions from 60 lines and with a CCN above 15, [`size`](rules.md)'s debt (FLEET-86).
+  from 800 lines, and the functions from 60 lines and with a CCN above 15 of Python, TypeScript, JavaScript, Svelte and Vue, [`size`](rules.md)'s debt (FLEET-86).
 - `Clone pairs prod / test` counts the `clone` rule's pairs (two near-identical functions in two files, at 40 tokens and
   90 %) (FLEET-87); a pair counts as test only when both sides are tests, so a test that copies production code counts
   as prod (FLEET-88).

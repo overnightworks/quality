@@ -1,9 +1,10 @@
 """The `size` rule: lines per file of every tracked file in a table language, and lines and CCN per function of
-every tracked Python file, held by a baseline; the baseline file itself, `quality/baseline.toml`, is `baseline_file`'s.
+every tracked Python, TypeScript, JavaScript, Svelte and Vue file, held by a baseline; the baseline file itself,
+`quality/baseline.toml`, is `baseline_file`'s.
 
 lizard measures; Python's own `ast` only names each function by its qualified symbol (`Class.method`), which
 lizard leaves unqualified. Both read the same text, decoded from the file's bytes the way Python reads source.
-The other languages are counted by lines only: lizard misplaces their function boundaries.
+The script files' functions are `ratchet_scripts`'; the other suffixes of the table are counted by lines only.
 """
 
 import ast
@@ -19,7 +20,7 @@ from pathlib import Path, PurePosixPath
 
 import lizard
 
-from quality import checkout, repository
+from quality import checkout, ratchet_scripts, repository
 from quality.baseline_file import (
     BASELINE_PATH,
     FIX_COMMAND,
@@ -44,6 +45,8 @@ UNKNOWN_TABLE_HINT = "run the quality release your gate pins"
 RAISE_IS_BY_HAND = "a raise is a hand edit and a declared loosening"
 OCCURRENCE_MARK = "#"
 PARSE_ERRORS = (SyntaxError, ValueError, LookupError)
+NOT_PYTHON = "not valid Python"
+NOT_UTF8 = "not UTF-8"
 TEST_DIRECTORIES = frozenset({"test", "tests"})
 RUNNER_TEST_DIRECTORIES = TEST_DIRECTORIES | {"__tests__"}
 RUNNER_TEST_WORDS = frozenset({"test", "spec", "test-d", "spec-d"})
@@ -78,13 +81,14 @@ def fix_for(metric: Metric) -> str:
 
 
 class Language(Enum):
-    """A language the `size` rule counts: its lines everywhere, its functions only for Python."""
+    """A language the `size` rule counts: its lines everywhere, its functions where a reader names them."""
 
     PYTHON = "Python"
     TYPESCRIPT = "TypeScript"
     JAVASCRIPT = "JavaScript"
     SVELTE = "Svelte"
     VUE = "Vue"
+    CSS = "CSS"
 
     @property
     def suffixes(self) -> frozenset[str]:
@@ -94,6 +98,7 @@ class Language(Enum):
             Language.JAVASCRIPT: frozenset({".js", ".jsx", ".mjs", ".cjs"}),
             Language.SVELTE: frozenset({".svelte"}),
             Language.VUE: frozenset({".vue"}),
+            Language.CSS: frozenset({".css"}),
         }[self]
 
     def is_test_file(self, path: PurePosixPath) -> bool:
@@ -154,17 +159,21 @@ def area_of(path: str) -> Area:
 
 @dataclass(frozen=True)
 class TreeMeasurement:
-    """Every file's lines, and the functions of every Python file Python can parse; `unparsable` maps the rest of
-    the Python files to why."""
+    """Every file's lines, and the functions of every Python file Python can parse and every script file that is UTF-8;
+    `unparsable` maps the rest of those files to why."""
 
     measurements: Measurements
     unparsable: dict[str, str]
+
+    @property
+    def unparsable_python(self) -> int:
+        return sum(language_of(path) is Language.PYTHON for path in self.unparsable)
 
     def complete(self) -> Measurements:
         """Holding or writing a baseline needs every function measured, so an unparsable file cannot be judged."""
         if self.unparsable:
             path = min(self.unparsable)
-            raise UnparsableSource(f"{path} is not valid Python ({self.unparsable[path]})")
+            raise UnparsableSource(_unparsable_fact(path, self.unparsable[path]))
         return self.measurements
 
 
@@ -174,16 +183,37 @@ def measure(sources: dict[str, bytes]) -> TreeMeasurement:
     unparsable: dict[str, str] = {}
     for path, source in sources.items():
         measurements[Key(Metric.FILE_LINES, path)] = Measured(len(source.splitlines()), None)
-        if language_of(path) is not Language.PYTHON:
-            continue
         try:
-            text = python_text(source)
-            tree = ast.parse(text, filename=path)
+            functions = _functions_of(path, source)
         except PARSE_ERRORS as error:
             unparsable[path] = str(error)
             continue
-        measurements.update(_function_measurements(path, text, tree))
+        measurements.update(functions)
     return TreeMeasurement(measurements, unparsable)
+
+
+def _functions_of(path: str, source: bytes) -> Iterator[tuple[Key, Measured]]:
+    """The file's functions, once its text is read; lizard's own errors surface when the result is consumed."""
+    suffix = PurePosixPath(path).suffix
+    if language_of(path) is Language.PYTHON:
+        text = python_text(source)
+        return _function_measurements(path, text, ast.parse(text, filename=path))
+    if ratchet_scripts.reads_functions(suffix):
+        return _script_measurements(path, suffix, source.decode("utf-8"))
+    return iter(())
+
+
+def _unparsable_fact(path: str, reason: str) -> str:
+    return f"{path} is {NOT_UTF8}" if language_of(path) is not Language.PYTHON else f"{path} is {NOT_PYTHON} ({reason})"
+
+
+def _script_measurements(path: str, suffix: str, text: str) -> Iterator[tuple[Key, Measured]]:
+    occurrences: Counter[str] = Counter()
+    for function in ratchet_scripts.script_functions(suffix, text):
+        occurrences[function.name] += 1
+        symbol = nth(function.name, occurrences[function.name])
+        yield Key(Metric.FUNCTION_LINES, path, symbol), Measured(function.lines, function.line)
+        yield Key(Metric.CCN, path, symbol), Measured(function.ccn, function.line)
 
 
 def python_text(source: bytes) -> str:
@@ -261,6 +291,10 @@ def language_lines(tree: TreeMeasurement) -> dict[Language, int]:
     return dict(sorted(lines.items(), key=lambda entry: (-entry[1], entry[0].value)))
 
 
+def _reads_functions(path: str) -> bool:
+    return language_of(path) is Language.PYTHON or ratchet_scripts.reads_functions(PurePosixPath(path).suffix)
+
+
 def gone_entries(
     held: SizeEntries, measurements: Measurements, tracked: frozenset[str], generated: Collection[GeneratedFile]
 ) -> dict[Key, str]:
@@ -269,8 +303,8 @@ def gone_entries(
     declared = {file.path for file in generated}
     gone = {}
     for key in held.keys() - measurements.keys():
-        python = language_of(key.path) is Language.PYTHON
-        if key.path not in tracked or (python and Key(Metric.FILE_LINES, key.path) in measurements):
+        read = _reads_functions(key.path)
+        if key.path not in tracked or (read and Key(Metric.FILE_LINES, key.path) in measurements):
             gone[key] = f"{_subject(key)} is gone"
         elif key.path in declared:
             gone[key] = f"{_subject(key)} is left out as generated"
@@ -692,7 +726,9 @@ def _stale_declarations(tree: TreeMeasurement, generated: Collection[GeneratedFi
 
 
 def _unmeasured_notes(unparsable: Mapping[str, str]) -> tuple[Note, ...]:
-    return tuple(Note(path, NoteEvent.NOT_MEASURED, "not valid Python") for path in sorted(unparsable))
+    return tuple(
+        Note(path, NoteEvent.NOT_MEASURED, NOT_PYTHON if language_of(path) is Language.PYTHON else NOT_UTF8) for path in sorted(unparsable)
+    )
 
 
 def check_size(

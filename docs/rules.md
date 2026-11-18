@@ -70,11 +70,12 @@ It applies these rules:
   interpolation (COMPOSE-14), is a finding unless `quality/config.toml` declares its file and service
   (COMPOSE-16, COMPOSE-17).
 - `size`: every tracked file of Python, TypeScript (`.ts` `.tsx` `.mts` `.cts`), JavaScript (`.js` `.jsx` `.mjs`
-  `.cjs`), Svelte or Vue is measured by its lines (SIZE-1), and no other file is (SIZE-2), and every tracked `*.py`
-  file also with [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a Python function from 60 lines
-  and a Python function with a CCN above 15 are debt (SIZE-3), [counted apart](commands.md#quality-report) for
-  production and tests (a path under `test/` or `tests/`; Python also `conftest.py`, `test_*.py`, `*_test.py`;
-  TypeScript and JavaScript also `__tests__/`, `*.test.*`, `*.spec.*`, `*.test-d.*` and `*.spec-d.*`).
+  `.cjs`), Svelte, Vue or CSS (`.css`) is measured by its lines (SIZE-1), and no other file is (SIZE-2), and every
+  tracked `.py`, `.ts`, `.js`, `.mjs`, `.svelte` and `.vue` file also by its functions with
+  [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a named function from 60 lines and a named
+  function with a CCN above 15 are debt (SIZE-3), [counted apart](commands.md#quality-report) for production and tests
+  (a path under `test/` or `tests/`; Python also `conftest.py`, `test_*.py`, `*_test.py`; TypeScript and JavaScript
+  also `__tests__/`, `*.test.*`, `*.spec.*`, `*.test-d.*` and `*.spec-d.*`).
 
   Ruled by the operator: a file that `quality/config.toml` declares generated is left out of the `size` rule
   (GENERATED-1); a minified or generated file the repository does not declare is counted by its lines like any other
@@ -109,19 +110,43 @@ It applies these rules:
   rule leaves the file out: `clone` and the report still read it. quality cannot see what the declared job runs; the
   operator checks it once, at the door.
 
-  Functions of the other languages are not measured (SIZE-4): lizard misplaces their boundaries
-  ([lizard's issue tracker](https://github.com/terryyin/lizard/issues/521)). Functions are named by their qualified
-  symbol (`Class.method`); a second one of the same name, such as a property setter, is `Class.method#2` (SIZE-5).
+  Functions are measured as follows (SIZE-4). lizard 1.26.1 is pinned exactly, and quality's suffix table names the
+  reader, never lizard's fallback to C: `.ts` is read by lizard's TypeScript reader, `.js` and `.mjs` by its JavaScript
+  reader, `.svelte` and `.vue` by its Vue reader, which reads their `<script>` blocks as TypeScript at the lines of the
+  file. A function lizard gives no name (a callback passed to a call, an anonymous default export, an arrow under a
+  quoted or computed key) is no entry: its lines and its branches count in the smallest named function whose lines
+  hold it (of two on the same lines, the one lizard lists first), and a named function inside another adds nothing to
+  the outer one. The measurement has these limits, each pinned by a test, so a lizard release that changes one fails the
+  pull request that moves the pin:
+  - `.tsx`, `.jsx`, `.mts`, `.cts` and `.cjs` are counted by lines only.
+  - A function written in Svelte or Vue markup is not measured.
+  - A callback no named function holds counts nowhere, and only the 800-line file limit holds it.
+  - An arrow under a quoted or computed key reads as anonymous.
+  - Six misreadings of lizard stand: a statement that calls a function named `type` ends the function there; `as` with an
+    object type over several lines ends an expression-bodied arrow there; an arrow whose parameters, or a function whose
+    type parameters, span lines starts at their last line (all three read short); a function type as a type argument and
+    each overload signature read as a function of their own, which shifts the `#n` of the same name; a call in a
+    ternary branch reads as a function and takes its holder's branches (reads low); a regex literal before `!` in an
+    expression body runs one statement on (reads long).
+  - A byte order mark and a carriage return in a script file are unproven readings, and so are minified and built files,
+    which are measured like any other file unless declared (GENERATED-1).
+  - An optional chain is no decision for lizard.
+
+  A Python function is named by its qualified symbol (`Class.method`); lizard names a function of the script languages
+  without its class (`render`, an accessor `get name`, an assignment target `window.onload`). A second function of the
+  same name, such as a property setter or a method of another class, is `Class.method#2` or `render#2`, numbered in
+  source order, so a function inserted above a held one renumbers it (SIZE-5).
   Without `quality/baseline.toml` the [debt row](output.md#area-rows) is
   `· debt  not recorded  N entries over the thresholds · measured only`, N the size entries over the thresholds that
   quality measured (a declared file left out); it equals what a first `quality check --fix` records only when every
   Python file parses, otherwise that fix refuses (SIZE-6). The size debt leaves the exit unchanged (SIZE-7). The
   per-class and language counts leave `check`; the report keeps them.
   A `.py` file is read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding)
-  (SIZE-8). One Python 3.14 cannot decode or parse is named as not valid Python: without a baseline it stands as a
+  (SIZE-8). One Python 3.14 cannot decode or parse is named as not valid Python, and a script file that is not UTF-8
+  as `not UTF-8`: without a baseline it stands as a
   [note row](output.md#notes) under the debt row (`· bad.py  not measured  not valid Python`) and the size verdict is
   unchanged (SIZE-9), while `python-security` judges the file unparsable or cannot judge it (exit `2`); with a baseline
-  the `debt` row is `✗ not checked` with `bad.py is not valid Python (...)` (SIZE-10), and `quality check --fix`
+  the `debt` row is `✗ not checked` with `bad.py is not valid Python (...)` or `bad.ts is not UTF-8` (SIZE-10), and `quality check --fix`
   refuses the same way, writing nothing; both exit `2`. Only where no baseline is held does `--fix` refuse with
   `✗ not fixed`, since only recording the first ceiling is refused (SIZE-11). A tracked file the operating system
   refuses to read makes the `debt` row `✗ not checked` with or without a baseline, and `quality check --fix` refuses
@@ -138,10 +163,10 @@ It applies these rules:
   (`file has 800 lines · debt from 800 lines`, fix: split the file below 800 lines) (CEILING-4), `grew`
   (`function read_rows has 71 lines · ceiling 64`, fix: bring it back to 64 lines or below) (CEILING-5) and `can fall`
   (`file has 742 lines · ceiling 766`, fix: `quality check --fix`) (CEILING-6); an entry whose path the index no longer
-  tracks, or whose Python file is measured without the function, can fall after the measured rows, with no line
+  tracks, or whose Python or script file is measured without the function, can fall after the measured rows, with no line
   (`file is gone · ceiling 802 lines`, `function total is gone · ceiling CCN 19`, fix: `quality check --fix`)
   (CEILING-7); an entry with no measurement otherwise (a tracked file missing from disk, a function entry under a file
-  of another language) stands (CEILING-8) and counts in the [clean row](output.md#area-rows)'s
+  of a suffix measured by lines only) stands (CEILING-8) and counts in the [clean row](output.md#area-rows)'s
   `ceiling held · N entries, M clone pairs`, followed by `, K job limits` when the held `[job_minutes]` table holds
   jobs (TIMEOUT-34).
   [`quality check debt --fix`](commands.md#quality-check---fix) (`--fix` takes no `--staged` and needs `debt` among the

@@ -55,6 +55,7 @@ from tests.support.source_code import (
     long_file,
     long_function,
     minified_bundle,
+    typescript_branchy_function,
     typescript_file,
     typescript_function,
 )
@@ -179,6 +180,7 @@ def test_a_fix_refuses_a_file_python_cannot_read(build_repo, capsys, source):
 
 
 HELD_70 = '[function_lines."src/a.py"]\nlong_one = 70\n'
+HELD_TS_64 = '[function_lines."src/a.ts"]\nbig = 64\n'
 
 
 @pytest.mark.parametrize(
@@ -189,8 +191,22 @@ HELD_70 = '[function_lines."src/a.py"]\nlong_one = 70\n'
         ({"src/a.py": branchy_function(16)}, EMPTY_BASELINE, "src/a.py", 1, FindingEvent.NEW_DEBT, ("branchy", str(debt_from(Metric.CCN)))),
         ({"src/a.py": long_function(71)}, HELD_70, "src/a.py", 1, FindingEvent.GREW, ("long_one", "71", "70")),
         ({"src/a.py": long_function(65)}, HELD_70, "src/a.py", 1, FindingEvent.CAN_FALL, ("long_one", "65", "70")),
+        ({"src/a.ts": typescript_function(60)}, EMPTY_BASELINE, "src/a.ts", 1, FindingEvent.NEW_DEBT, ("big", str(debt_from(Metric.FUNCTION_LINES)))),
+        ({"src/a.ts": typescript_branchy_function(16)}, EMPTY_BASELINE, "src/a.ts", 1, FindingEvent.NEW_DEBT, ("branchy", str(debt_from(Metric.CCN)))),
+        ({"src/a.ts": typescript_function(71)}, HELD_TS_64, "src/a.ts", 1, FindingEvent.GREW, ("big", "71", "64")),
+        ({"src/a.ts": typescript_function(61)}, HELD_TS_64, "src/a.ts", 1, FindingEvent.CAN_FALL, ("big", "61", "64")),
     ],
-    ids=["new-file-from-800-lines", "new-function-from-60-lines", "new-ccn-above-15", "grown-entry", "stale-entry"],
+    ids=[
+        "new-file-from-800-lines",
+        "new-function-from-60-lines",
+        "new-ccn-above-15",
+        "grown-entry",
+        "stale-entry",
+        "new-typescript-function-from-60-lines",
+        "new-typescript-ccn-above-15",
+        "grown-typescript-entry",
+        "stale-typescript-entry",
+    ],
 )
 def test_against_a_baseline_new_grown_and_stale_entries_are_red(build_repo, capsys, files, baseline, path, line, event, values):
     """CEILING-4, CEILING-5, CEILING-6, SIZE-3, SIZE-5, ROW-7, ROW-14: against a baseline a new violation, a grown entry
@@ -696,7 +712,7 @@ def test_a_baseline_that_is_not_utf8_is_malformed_and_names_the_restore_step_onc
     assert (output.count("restore quality/baseline.toml from git, or repair it by hand"), "rewrite it with" in output) == (1, False), output
 
 
-@pytest.mark.parametrize("suffix", ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "svelte", "vue"])
+@pytest.mark.parametrize("suffix", ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "svelte", "vue", "css"])
 def test_a_file_of_every_table_language_is_new_debt_from_800_lines_against_a_baseline(build_repo, capsys, suffix):
     """SIZE-1, SIZE-3: against a baseline a file of any measured language is new debt at 1210 lines, not at 799."""
     path = f"frontend/src/lib/api/types.{suffix}"
@@ -707,19 +723,12 @@ def test_a_file_of_every_table_language_is_new_debt_from_800_lines_against_a_bas
     assert len(rows_of(output, finding)) == 1
 
 
-@pytest.mark.parametrize("name", ["tool.rs", "run.sh", "app.css", "index.html", "notes.md"])
+@pytest.mark.parametrize("name", ["tool.rs", "run.sh", "app.scss", "app.less", "index.html", "notes.md"])
 def test_a_file_of_a_language_the_table_lacks_is_never_debt(build_repo, capsys, name):
     """SIZE-2: a file of no measured language is never debt, however long."""
     repo = build_repo({f"src/{name}": "line\n" * 2000, BASELINE_PATH: EMPTY_BASELINE})
     code, output = run(capsys, repo)
     assert (code, rule_findings(repo, Rule.SIZE)) == (0, []), output
-
-
-def test_a_function_of_120_lines_in_typescript_is_no_finding_and_the_file_is_not_unparsable(build_repo, capsys):
-    """SIZE-4: a 120-line TypeScript function is no finding and its file is not unparsable under a held baseline."""
-    repo = build_repo({"src/a.py": "x = 1\n", "src/api.ts": typescript_function(120), BASELINE_PATH: EMPTY_BASELINE})
-    code, output = run(capsys, repo)
-    assert (code, rule_notes(repo, Rule.SIZE), rule_findings(repo, Rule.SIZE)) == (0, [], []), output
 
 
 @pytest.mark.parametrize(

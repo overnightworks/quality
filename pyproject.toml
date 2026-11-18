@@ -7,7 +7,7 @@ requires-python = ">=3.14"
 dependencies = [
     "PyYAML>=6",
     "import-linter==2.15",
-    "lizard>=1.24.1,<1.26",
+    "lizard==1.26.1",
     "overnightworks-design[po] @ https://github.com/overnightworks/design/releases/download/v0.36.0/overnightworks_design-0.36.0-py3-none-any.whl#sha256=a0b8fe02f2715feca2a307c39c0998036e5a72f6a01f1af8e9a0d5bcbd066b92",
     "packaging>=24",
     "ruff==0.17.4",
@@ -92,6 +92,7 @@ layers = [
     "makefile",
     "run_script",
     "ratchet",
+    "ratchet_scripts",
     "baseline_file",
     "checkout",
     "output",

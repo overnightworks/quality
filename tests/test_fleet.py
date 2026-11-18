@@ -153,14 +153,14 @@ PYTHON_100 = {"src/app.py": long_file(100), "tests/test_app.py": long_file(20)}
                 "frontend/app.css": "a { color: red; }\n" * 400,
                 "frontend/index.html": "<p>hi</p>\n" * 400,
             },
-            "TypeScript 1,210 · Python 120 · Svelte 30 · JavaScript 5",
+            "TypeScript 1,210 · CSS 400 · Python 120 · Svelte 30 · JavaScript 5",
         ),
         ({"a.vue": long_file(5), "b.svelte": long_file(5), "c.js": long_file(5)}, "JavaScript 5 · Svelte 5 · Vue 5"),
         ({"README.md": "# nothing measured\n", "run.sh": "echo hi\n"}, "—"),
     ],
     ids=[
         "a Python-only repository",
-        "each language with production and tests together, largest first, no shell, CSS or HTML",
+        "each language with production and tests together, largest first, no shell or HTML",
         "equal lines are ordered by name",
         "no measured file",
     ],
@@ -172,13 +172,13 @@ def test_the_languages_cell_lists_each_measured_language_largest_first(fleet_rep
     assert row(output, "o/polyglot")[LANGUAGES_CELL] == cell
 
 
-def test_the_lines_columns_count_every_language_and_the_function_columns_only_python(fleet_report, public):
+def test_the_lines_columns_and_the_function_columns_count_a_typescript_file_like_a_python_one(fleet_report, public):
     """FLEET-77, FLEET-84, FLEET-86: a 1,210-line .ts is a production file from 800 lines, and its 1,208-line
-    function is no function debt."""
+    function is function debt."""
     files = {"src/api.ts": typescript_function(1208) + typescript_file(2), "tests/api.spec.ts": typescript_file(10)}
     code, output = fleet_report(public("typed", files))
     assert code == 0, output
-    assert row(output, "o/typed")[3:8] == ["1,210 / 10", "0.01", "1 / 0", "0 / 0", "0 / 0"]
+    assert row(output, "o/typed")[3:8] == ["1,210 / 10", "0.01", "1 / 0", "1 / 0", "0 / 0"]
 
 
 def test_a_minified_bundle_counts_its_one_line_and_nothing_is_said_to_be_skipped(fleet_report, public):
@@ -365,12 +365,12 @@ def test_no_temporary_clone_outlives_a_stopped_run(public, scratch, tmp_path, st
 
 
 def test_the_heading_names_date_version_and_languages(fleet_report, public):
-    """FLEET-41: the date of the run, the quality version and what only Python has."""
+    """FLEET-41: the date of the run and the quality version."""
     before = datetime.now(UTC).date()
     _, output = fleet_report(public("dated", {}))
     after = datetime.now(UTC).date()
     heading, blank, header, separator, *_ = output.splitlines()
-    match = re.fullmatch(rf"\*\*Fleet report, (\S+), quality {re.escape(__version__)} — functions and CCN: Python only\*\*", heading)
+    match = re.fullmatch(rf"\*\*Fleet report, (\S+), quality {re.escape(__version__)}\*\*", heading)
     assert match, heading
     assert match.group(1) in {before.isoformat(), after.isoformat()}
     assert (blank, header, separator) == ("", HEADER, "|---" * 10 + "|")
