@@ -31,7 +31,7 @@ from tests.support.fleet import (
     row,
     write_fleet,
 )
-from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo
+from tests.support.git_repositories import GIT_IDENTITY, build_repo_with_source, git, head_commit, make_repo
 from tests.support.source_code import (
     branchy_function,
     long_file,
@@ -196,6 +196,16 @@ def test_a_file_of_another_language_is_never_not_valid_python(fleet_report, publ
     code, output = fleet_report(public("mixed", files))
     assert code == 0, output
     assert row(output, "o/mixed")[-1] == "1 file not valid Python"
+
+
+def test_a_script_file_that_is_not_utf8_is_counted_beside_the_unparsable_python(fleet_report, public, remotes):
+    """FLEET-90: the note counts a script file that is not UTF-8 apart from a .py Python cannot parse."""
+    name = public("mixed", {"src/broken.py": "def (:\n", "src/api.ts": ""})
+    build_repo_with_source(lambda files: remotes / name, {}, "src/api.ts", b"export const a = '\xe9';\n")
+    git(remotes / name, "commit", "-q", "-am", "not utf-8")
+    code, output = fleet_report(name)
+    assert code == 0, output
+    assert row(output, "o/mixed")[-1] == "1 file not valid Python, 1 file not UTF-8"
 
 
 def test_an_unparsable_file_is_counted_but_never_named(fleet_report, public):

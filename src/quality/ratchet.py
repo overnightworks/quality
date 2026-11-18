@@ -45,8 +45,6 @@ UNKNOWN_TABLE_HINT = "run the quality release your gate pins"
 RAISE_IS_BY_HAND = "a raise is a hand edit and a declared loosening"
 OCCURRENCE_MARK = "#"
 PARSE_ERRORS = (SyntaxError, ValueError, LookupError)
-NOT_PYTHON = "not valid Python"
-NOT_UTF8 = "not UTF-8"
 TEST_DIRECTORIES = frozenset({"test", "tests"})
 RUNNER_TEST_DIRECTORIES = TEST_DIRECTORIES | {"__tests__"}
 RUNNER_TEST_WORDS = frozenset({"test", "spec", "test-d", "spec-d"})
@@ -157,36 +155,61 @@ def area_of(path: str) -> Area:
     return Area.TESTS if language and language.is_test_file(posix) else Area.PRODUCTION
 
 
+class FunctionSource(Enum):
+    """What reads a file's functions, and so why it cannot be read: Python's parser or a script's UTF-8 text."""
+
+    PYTHON = "not valid Python"
+    SCRIPT = "not UTF-8"
+
+
+@dataclass(frozen=True)
+class Unparsed:
+    source: FunctionSource
+    reason: str
+
+    @property
+    def fact(self) -> str:
+        return f"{self.source.value} ({self.reason})" if self.source is FunctionSource.PYTHON else self.source.value
+
+
+def function_source(path: str) -> FunctionSource | None:
+    """The one answer to whether a file gets functions measured, and by what."""
+    if language_of(path) is Language.PYTHON:
+        return FunctionSource.PYTHON
+    if ratchet_scripts.reads_functions(PurePosixPath(path).suffix):
+        return FunctionSource.SCRIPT
+    return None
+
+
 @dataclass(frozen=True)
 class TreeMeasurement:
     """Every file's lines, and the functions of every Python file Python can parse and every script file that is UTF-8;
     `unparsable` maps the rest of those files to why."""
 
     measurements: Measurements
-    unparsable: dict[str, str]
+    unparsable: dict[str, Unparsed]
 
-    @property
-    def unparsable_python(self) -> int:
-        return sum(language_of(path) is Language.PYTHON for path in self.unparsable)
+    def unparsable_count(self, source: FunctionSource) -> int:
+        return sum(entry.source is source for entry in self.unparsable.values())
 
     def complete(self) -> Measurements:
         """Holding or writing a baseline needs every function measured, so an unparsable file cannot be judged."""
         if self.unparsable:
             path = min(self.unparsable)
-            raise UnparsableSource(_unparsable_fact(path, self.unparsable[path]))
+            raise UnparsableSource(f"{path} is {self.unparsable[path].fact}")
         return self.measurements
 
 
 def measure(sources: dict[str, bytes]) -> TreeMeasurement:
     """A file's lines are counted in its bytes, so a file Python cannot decode still has them."""
     measurements: Measurements = {}
-    unparsable: dict[str, str] = {}
+    unparsable: dict[str, Unparsed] = {}
     for path, source in sources.items():
         measurements[Key(Metric.FILE_LINES, path)] = Measured(len(source.splitlines()), None)
         try:
             functions = _functions_of(path, source)
         except PARSE_ERRORS as error:
-            unparsable[path] = str(error)
+            unparsable[path] = Unparsed(function_source(path), str(error))
             continue
         measurements.update(functions)
     return TreeMeasurement(measurements, unparsable)
@@ -194,17 +217,13 @@ def measure(sources: dict[str, bytes]) -> TreeMeasurement:
 
 def _functions_of(path: str, source: bytes) -> Iterator[tuple[Key, Measured]]:
     """The file's functions, once its text is read; lizard's own errors surface when the result is consumed."""
-    suffix = PurePosixPath(path).suffix
-    if language_of(path) is Language.PYTHON:
-        text = python_text(source)
-        return _function_measurements(path, text, ast.parse(text, filename=path))
-    if ratchet_scripts.reads_functions(suffix):
-        return _script_measurements(path, suffix, source.decode("utf-8"))
+    match function_source(path):
+        case FunctionSource.PYTHON:
+            text = python_text(source)
+            return _function_measurements(path, text, ast.parse(text, filename=path))
+        case FunctionSource.SCRIPT:
+            return _script_measurements(path, PurePosixPath(path).suffix, source.decode("utf-8"))
     return iter(())
-
-
-def _unparsable_fact(path: str, reason: str) -> str:
-    return f"{path} is {NOT_UTF8}" if language_of(path) is not Language.PYTHON else f"{path} is {NOT_PYTHON} ({reason})"
 
 
 def _script_measurements(path: str, suffix: str, text: str) -> Iterator[tuple[Key, Measured]]:
@@ -291,10 +310,6 @@ def language_lines(tree: TreeMeasurement) -> dict[Language, int]:
     return dict(sorted(lines.items(), key=lambda entry: (-entry[1], entry[0].value)))
 
 
-def _reads_functions(path: str) -> bool:
-    return language_of(path) is Language.PYTHON or ratchet_scripts.reads_functions(PurePosixPath(path).suffix)
-
-
 def gone_entries(
     held: SizeEntries, measurements: Measurements, tracked: frozenset[str], generated: Collection[GeneratedFile]
 ) -> dict[Key, str]:
@@ -303,7 +318,7 @@ def gone_entries(
     declared = {file.path for file in generated}
     gone = {}
     for key in held.keys() - measurements.keys():
-        read = _reads_functions(key.path)
+        read = function_source(key.path) is not None
         if key.path not in tracked or (read and Key(Metric.FILE_LINES, key.path) in measurements):
             gone[key] = f"{_subject(key)} is gone"
         elif key.path in declared:
@@ -706,7 +721,7 @@ def without_generated(tree: TreeMeasurement, generated: Collection[GeneratedFile
     declared = {file.path for file in generated}
     return TreeMeasurement(
         {key: measured for key, measured in tree.measurements.items() if key.path not in declared},
-        {path: reason for path, reason in tree.unparsable.items() if path not in declared},
+        {path: entry for path, entry in tree.unparsable.items() if path not in declared},
     )
 
 
@@ -725,10 +740,8 @@ def _stale_declarations(tree: TreeMeasurement, generated: Collection[GeneratedFi
     ]
 
 
-def _unmeasured_notes(unparsable: Mapping[str, str]) -> tuple[Note, ...]:
-    return tuple(
-        Note(path, NoteEvent.NOT_MEASURED, NOT_PYTHON if language_of(path) is Language.PYTHON else NOT_UTF8) for path in sorted(unparsable)
-    )
+def _unmeasured_notes(unparsable: Mapping[str, Unparsed]) -> tuple[Note, ...]:
+    return tuple(Note(path, NoteEvent.NOT_MEASURED, unparsable[path].source.value) for path in sorted(unparsable))
 
 
 def check_size(

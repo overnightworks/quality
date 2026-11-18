@@ -223,8 +223,9 @@ repository a token can list is dropped without a trace (FLEET-72).
 - `Clone pairs prod / test` counts the `clone` rule's pairs (two near-identical functions in two files, at 40 tokens and
   90 %) (FLEET-87); a pair counts as test only when both sides are tests, so a test that copies production code counts
   as prod (FLEET-88).
-- A `.py` file Python cannot parse still has its lines counted (FLEET-89); the row's note says how many such files there
-  are (FLEET-90), never which (FLEET-91).
+- A `.py` file Python cannot parse, or a TypeScript, JavaScript, Svelte or Vue file that is not UTF-8, still has its
+  lines counted (FLEET-89); the row's note says how many such files there are, as `N files not valid Python` and
+  `N files not UTF-8` (FLEET-90), never which (FLEET-91).
 - The matrix stands under a heading naming the newest release tag of `overnightworks/quality` by version, read by an
   anonymous `git ls-remote --tags` and never from the running code's version; an annotated tag counts at the commit it
   points to, a name that is no release tag is ignored, and a listing without a release tag is unreadable (FLEET-1). It

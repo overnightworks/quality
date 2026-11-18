@@ -198,7 +198,7 @@ class Measured:
     commit: str
     languages: dict[ratchet.Language, int]
     areas: dict[ratchet.Area, ratchet.AreaSummary]
-    unparsable: int
+    unparsable: dict[ratchet.FunctionSource, int]
     pairs: dict[ratchet.Area, int]
     workflows: checkout.Workflows
     declared: Declared
@@ -413,7 +413,7 @@ def measure_repository(name: str) -> Row:
     pairs = clones.summarise_pairs(clones.find_pairs(sources).pairs)
     commit = head[:SHORT_COMMIT]
     languages, areas = ratchet.language_lines(tree), ratchet.summarise(tree)
-    return Measured(name, commit, languages, areas, tree.unparsable_python, pairs, workflows, declared)
+    return Measured(name, commit, languages, areas, {source: tree.unparsable_count(source) for source in ratchet.FunctionSource}, pairs, workflows, declared)
 
 
 def read_declared(clone: Path, tracked: list[str]) -> Declared:
@@ -725,6 +725,6 @@ def clone_pairs_cell(row: Measured) -> str:
 
 
 def unparsable_note(row: Measured) -> str:
-    if not row.unparsable:
-        return ""
-    return f"{row.unparsable} {'file' if row.unparsable == 1 else 'files'} not valid Python"
+    return ", ".join(
+        f"{count} {'file' if count == 1 else 'files'} {source.value}" for source, count in row.unparsable.items() if count
+    )
