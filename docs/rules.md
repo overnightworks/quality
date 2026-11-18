@@ -116,8 +116,8 @@ It applies these rules:
   file. A function lizard gives no name (a callback passed to a call, an anonymous default export, an arrow under a
   quoted or computed key) is no entry: its lines and its branches count in the smallest named function whose lines
   hold it (of two on the same lines, the one lizard lists first), and a named function inside another adds nothing to
-  the outer one. The measurement has these limits, each pinned by a test, so a lizard release that changes one fails the
-  pull request that moves the pin:
+  the outer one. The measurement has these limits. A test pins each of the first five, so a lizard release that changes
+  one fails the pull request that moves the pin; the last two are not pinned:
   - `.tsx`, `.jsx`, `.mts`, `.cts` and `.cjs` are counted by lines only.
   - A function written in Svelte or Vue markup is not measured.
   - A callback no named function holds counts nowhere, and only the 800-line file limit holds it.
