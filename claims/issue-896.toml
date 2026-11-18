@@ -1,0 +1,7 @@
+claim_id = "39c9cf6702cf4f679568f1b5593266ad"
+agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
+role = "builder"
+base = "aa74d6f3295b46f76aa40574133123e9c05e1d7b"
+branch = "claude/issue-896-wildcard-covers-dropped-module"
+scope = ["docs/rules.md", "src/quality/architecture.py", "tests/test_verdict_reread.py"]
+opened_commit = "13e13bfea1cec252d98b56a9e9a63dedf46740ff"
