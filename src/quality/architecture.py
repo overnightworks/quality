@@ -71,7 +71,7 @@ TIGHTENINGS: Mapping[tuple[str, str], Tightening] = MappingProxyType({
     (LayersContract.type_name, "layers"): Tightening.MODULES_PLACED_IN_LAYERS,
 })
 _TIGHTENING_HOLDS: Mapping[Tightening, Callable[[object, object], bool]] = MappingProxyType({
-    Tightening.EXPRESSIONS_ADDED: lambda before, after: before <= after,
+    Tightening.EXPRESSIONS_ADDED: lambda before, after: _expressions_kept_or_covered(before, after),
     Tightening.INDIRECT_IMPORTS_FORBIDDEN: lambda before, after: before is True and after is False,
     Tightening.MODULES_PLACED_IN_LAYERS: lambda before, after: _without_modules_unknown_to(before, after) == before,
 })
@@ -424,6 +424,20 @@ def _field_changed(option: str, base: ContractFields, head: ContractFields) -> b
 
 def _holds(tightening: Tightening, before: object, after: object) -> bool:
     return _TIGHTENING_HOLDS[tightening](before, after)
+
+
+def _expressions_kept_or_covered(before: Iterable[ModuleExpression], after: Iterable[ModuleExpression]) -> bool:
+    """Every base expression is kept, or is a plain module name one of the head's wildcard expressions matches; the match
+    is import-linter's own, asked of a graph holding only those names."""
+    dropped = set(before) - set(after)
+    if any(expression.has_wildcard_expression() for expression in dropped):
+        return False
+    graph = grimp.ImportGraph()
+    for expression in dropped:
+        graph.add_module(expression.expression)
+    covered = {module for expression in after if expression.has_wildcard_expression()
+               for module in graph.find_matching_modules(expression.expression)}
+    return {expression.expression for expression in dropped} <= covered
 
 
 def _without_modules_unknown_to(base_layers: Sequence[Layer], head_layers: Sequence[Layer]) -> list[Layer]:
