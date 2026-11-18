@@ -3,6 +3,6 @@ agent = "Claude 262a47a7-b1b5-438c-8fcc-c61de19fa9cd"
 role = "builder"
 base = "ee00914d43ea30397d8be2c8589397fcd70495fe"
 branch = "claude/issue-884-script-function-metrics"
-scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/fleet.py", "src/quality/ratchet.py", "src/quality/ratchet_scripts.py", "tests/support/source_code.py", "tests/test_fleet.py", "tests/test_fleet_report.py", "tests/test_ratchet.py", "tests/test_ratchet_gone.py", "tests/test_ratchet_languages.py", "tests/test_ratchet_scripts.py", "uv.lock"]
+scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/fleet.py", "src/quality/ratchet.py", "src/quality/ratchet_scripts.py", "tests/support/git_repositories.py", "tests/support/source_code.py", "tests/test_fleet.py", "tests/test_fleet_report.py", "tests/test_ratchet.py", "tests/test_ratchet_gone.py", "tests/test_ratchet_languages.py", "tests/test_ratchet_scripts.py", "uv.lock"]
 opened_commit = "9998eb72303abef52bb5111ad08d1d8472f37f59"
 whole_reason = "One measurement extended to the script languages and CSS: its new module, its two callers, its pin, its spec and the tests that pin the Python-only reading."
