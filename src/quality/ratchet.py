@@ -134,7 +134,8 @@ Measurements = dict[Key, Measured]
 
 
 class UnparsableSource(SizeError):
-    """A tracked file Python cannot decode or parse, so its functions cannot be measured."""
+    """A tracked Python file that cannot be decoded or parsed, or a script file that is not UTF-8, so its functions
+    cannot be measured."""
 
 
 def language_of(name: str) -> Language | None:

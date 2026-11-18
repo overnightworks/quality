@@ -139,7 +139,7 @@ It applies these rules:
   Without `quality/baseline.toml` the [debt row](output.md#area-rows) is
   `· debt  not recorded  N entries over the thresholds · measured only`, N the size entries over the thresholds that
   quality measured (a declared file left out); it equals what a first `quality check --fix` records only when every
-  Python file parses, otherwise that fix refuses (SIZE-6). The size debt leaves the exit unchanged (SIZE-7). The
+  Python file parses and every script file is UTF-8, otherwise that fix refuses (SIZE-6). The size debt leaves the exit unchanged (SIZE-7). The
   per-class and language counts leave `check`; the report keeps them.
   A `.py` file is read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding)
   (SIZE-8). One Python 3.14 cannot decode or parse is named as not valid Python, and a script file that is not UTF-8
