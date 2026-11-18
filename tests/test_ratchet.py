@@ -394,6 +394,34 @@ def test_a_first_recording_writes_the_measured_debt_sorted_and_check_then_holds_
     assert (code, is_clean(output)) == (0, True), output
 
 
+@pytest.mark.parametrize(
+    ("lines", "held", "expected"),
+    [
+        pytest.param(62, HELD_TS_64.replace("64", "70"), {"src/a.ts": {"big": 62}}, id="a held entry falls"),
+        pytest.param(40, HELD_TS_64.replace("64", "70"), {}, id="a held entry below the threshold goes"),
+        pytest.param(62, None, {"src/a.ts": {"big": 62}}, id="a first ceiling is recorded under the script path"),
+    ],
+)
+def test_the_fix_treats_a_typescript_function_entry_as_a_python_one(build_repo, lines, held, expected):
+    """FIX-3, FIX-4, FIX-11: the fix lowers, drops and first records the entries of a script file by its path and name."""
+    repo = build_repo({"src/a.ts": typescript_function(lines)} | ({} if held is None else {BASELINE_PATH: held}))
+    assert door_in(repo, *FIX_WORDS) == 0
+    written = tomllib.loads((repo / BASELINE_PATH).read_text(encoding="utf-8"))
+    assert written.get("function_lines", {}) == expected
+
+
+def test_a_function_inserted_above_a_held_script_function_of_the_same_name_renumbers_it(build_repo, capsys):
+    """SIZE-5: the held `render#2` becomes `render#3` when a `render` is inserted above it, so the old key can fall and
+    the new `render#3` is new debt."""
+    named = "".join(typescript_function(lines).replace("big", "render") for lines in (61, 60, 70))
+    held = '[function_lines."src/a.ts"]\nrender = 61\n"render#2" = 70\n'
+    repo = build_repo({"src/a.ts": named, BASELINE_PATH: held})
+    code, _ = run(capsys, repo)
+    findings = [(finding.fact.split()[1], finding.event) for finding in rule_findings(repo, Rule.SIZE)]
+    assert code == 1
+    assert sorted(findings, key=str) == sorted([("render#2", FindingEvent.CAN_FALL), ("render#3", FindingEvent.NEW_DEBT)], key=str)
+
+
 def test_fixing_twice_yields_the_same_file(build_repo):
     """The recorded baseline is the measurement, so fixing again changes nothing."""
     repo = build_repo({"src/a.py": long_function(62)})
