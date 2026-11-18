@@ -669,19 +669,22 @@ It applies these rules:
   Ruled by the operator: a change that can only forbid more is no loosening (LOOSE-25). Per contract type:
   `allow_indirect_imports` turned from true to false (also by dropping the line) (LOOSE-26) and a module added to
   `source_modules` or `forbidden_modules` of a `forbidden` contract, the base's expressions all kept (LOOSE-27); a
-  module added to the `modules` of an `independence` contract, the base's all kept (LOOSE-28); and a module newly
+  module added to the `modules` of an `independence` contract, the base's all kept (LOOSE-28); a base expression that
+  is a plain module name counts as kept when a wildcard expression of the head's same list matches it by import-linter's
+  own matcher, so base `a.x`, `a.y` against head `a.*` is green and base `a.*` against head `a.x` is red (LOOSE-35);
+  and a module newly
   placed in a `layers` contract: the head's `layers` are compared with every module name the base's `layers` do not
   name stripped, and a layer left empty dropped. Base layers `a`, `b` against head `a`, `new`, `b` is green (LOOSE-29).
   A layer left with one module has no sibling, so its independence says nothing: base `(game)` against head
   `(game) : (agent)` is green, and base `a | b` against head `a : b : new` stays a loosening (LOOSE-30).
   Everything else stays a loosening, except a struck module the head no longer has and git does not read as renamed
   (LOOSE-19), or git reads as renamed to a module the same list names (below) (LOOSE-22): a removed, renamed or replaced
-  expression (`shop.web` turned into `shop.*` included), an expression added and another removed in one field
+  expression (a wildcard narrowed or replaced by names included), an expression added and another removed in one field
   (LOOSE-31), `allow_indirect_imports` turned from false to true (LOOSE-32), `as_packages`,
   `unmatched_ignore_imports_alerting`, `containers`, `exhaustive`, `exhaustive_ignores` (LOOSE-33) and every `protected`
   or `acyclic_siblings` field in either direction, a reorder, a merge into `a | b`, a module moved to another layer,
   `a | b` turned into `a : b`, a required `a` made optional `(a)` (LOOSE-34), and the session options (LOOSE-12).
-  No import graph is built.
+  No import graph of the repository is built.
 
   A new contract (LOOSE-13), a removed `ignore_imports` entry (LOOSE-14), a reworded `broken_contract_guidance` and
   adopting import contracts (the base has no config) (LOOSE-15) are green. Two contracts of one name on a side

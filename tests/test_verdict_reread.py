@@ -607,7 +607,17 @@ GREEN = ["✓ green"]
         (*toml_pair(contract_of("independence"), contract_of("independence", modules=["shop.web"])), (), changes("modules")),
         (*toml_pair(FORBIDDEN, forbidden_with(source_modules=["shop.api"])), (), changes("source_modules")),
         (*toml_pair(FORBIDDEN, forbidden_with(source_modules=["shop.api", "shop.web"])), (), changes("source_modules")),
-        (*toml_pair(forbidden_with(forbidden_modules=["shop.web"]), forbidden_with(forbidden_modules=["shop.*"])), (),
+        (*toml_pair(forbidden_with(source_modules=["shop.db", "shop.api"], forbidden_modules=["shop.web", "shop.cli"]),
+                    forbidden_with(source_modules=["shop.*"], forbidden_modules=["shop.*"])), (), GREEN),
+        (*toml_pair(forbidden_with(forbidden_modules=["shop.web", "shop.web.page"]), forbidden_with(forbidden_modules=["shop.**"])), (), GREEN),
+        (*toml_pair(contract_of("independence", modules=["shop.web", "shop.api"]), contract_of("independence", modules=["shop.*"])), (), GREEN),
+        (*toml_pair(forbidden_with(forbidden_modules=["shop.*"]), forbidden_with(forbidden_modules=["shop.web"])), (),
+         changes("forbidden_modules")),
+        (*toml_pair(forbidden_with(forbidden_modules=["shop.web.page"]), forbidden_with(forbidden_modules=["shop.*"])), (),
+         changes("forbidden_modules")),
+        (*toml_pair(forbidden_with(forbidden_modules=["shop.*"]), forbidden_with(forbidden_modules=["shop.web", "shop.api"])), (),
+         changes("forbidden_modules")),
+        (*toml_pair(forbidden_with(forbidden_modules=["shop.*"]), forbidden_with(forbidden_modules=["shop.web.*"])), (),
          changes("forbidden_modules")),
         (*toml_pair(FORBIDDEN, forbidden_with(source_modules=["shop.db", "shop.api"], allow_indirect_imports=True)), (),
          changes("allow_indirect_imports")),
@@ -621,14 +631,16 @@ GREEN = ["✓ green"]
         "indirect imports forbidden", "the indirect line dropped in INI", "source module added",
         "forbidden module added", "wildcard added", "independence module added", "three tightenings in one contract",
         "forbidden module removed", "independence module removed", "source module renamed",
-        "one added and one removed", "expression replaced by a wider one", "indirect imports allowed again",
+        "one added and one removed", "listed modules replaced by a wildcard", "deeper module covered by **",
+        "independence modules replaced by a wildcard", "wildcard narrowed to a name", "module no head wildcard matches",
+        "wildcard replaced by names", "wildcard replaced by a deeper wildcard", "indirect imports allowed again",
         "exhaustive switched on", "protected module added", "as_packages switched",
         "a declaration of a tightening",
     ],
 )
 def test_a_change_that_only_forbids_more_is_no_loosening_and_every_other_change_is(judged_contracts, base, head, declared, expected):
-    """LOOSE-25, LOOSE-26, LOOSE-27, LOOSE-28, LOOSE-31, LOOSE-32, LOOSE-33: The listed tightenings are green; every
-    other change of a contract field stays a loosening."""
+    """LOOSE-25, LOOSE-26, LOOSE-27, LOOSE-28, LOOSE-31, LOOSE-32, LOOSE-33, LOOSE-35: The listed tightenings are green;
+    every other change of a contract field stays a loosening."""
     assert judged_contracts(base, head, declared) == (0 if expected == GREEN else 1, expected)
 
 

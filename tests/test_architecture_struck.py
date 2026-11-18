@@ -371,9 +371,12 @@ def test_a_renamed_module_keeps_the_place_of_the_struck_name_in_a_layers_contrac
     assert lines({"type": "layers", **base}, {"type": "layers", **head}, moved_tree(moves)) == expected
 
 
-def test_a_wildcard_listed_at_the_head_does_not_name_the_renamed_module():
-    """LOOSE-22, LOOSE-21: only the exact dotted name of the renamed module counts."""
-    assert lines(FORBIDDEN_DEAD, source_modules_of(["shop.db", "shop.*"]), RENAMED_TO_NEW) == changes("source_modules")
+@pytest.mark.parametrize(("wildcard", "expected"), [("shop.*", []), ("other.*", changes("source_modules"))],
+                         ids=["matching the renamed module", "matching neither module"])
+def test_a_wildcard_listed_at_the_head_clears_the_renamed_module_only_by_matching_it(wildcard, expected):
+    """LOOSE-22, LOOSE-21, LOOSE-35: a wildcard is no exact name of the renamed module; it clears the strike only as
+    the matcher's cover of the dropped module."""
+    assert lines(FORBIDDEN_DEAD, source_modules_of(["shop.db", wildcard]), RENAMED_TO_NEW) == expected
 
 
 EMPTY_BASE = {"src/shop/__init__.py", "src/shop/db.py", "src/shop/dead/__init__.py", "src/shop/dead/logic.py"}
