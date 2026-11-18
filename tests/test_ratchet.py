@@ -49,7 +49,7 @@ from tests.support.check import (
 )
 from tests.support.check import check_output as run
 from tests.support.door import CHECK_WORD, FIX_WORDS, check_door, door_in
-from tests.support.git_repositories import make_repo
+from tests.support.git_repositories import build_repo_with_source, make_repo
 from tests.support.source_code import (
     branchy_function,
     long_file,
@@ -75,13 +75,6 @@ def test_without_a_baseline_the_debt_row_counts_the_entries_a_first_recording_wr
     assert code == 0, output
     assert leading_count(area_fact(output, "debt")) == 4
     assert recorded_entries(repo) == 4
-
-
-def build_repo_with_source(build_repo, files: dict[str, str], name: str, source: bytes) -> Path:
-    """A repository tracking `name` with exactly these bytes, which a text fixture cannot carry."""
-    repo = build_repo({**files, name: ""})
-    (repo / name).write_bytes(source)
-    return repo
 
 
 SOURCE_NAME = "src/source.py"

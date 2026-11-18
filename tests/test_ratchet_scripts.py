@@ -1,8 +1,6 @@
 """The functions lizard reads out of a script file: which suffix has a reader, how a function is named and what its
 span and CCN are once a callback's branches are counted in the function that holds it."""
 
-from pathlib import Path
-
 import pytest
 
 from quality.baseline_file import BASELINE_PATH, Metric
@@ -13,16 +11,10 @@ from quality.rules import Rule
 from tests.support.check import check_output as run
 from tests.support.check import refusal_row, rule_findings, rule_notes
 from tests.support.door import FIX_WORDS, door_in
+from tests.support.git_repositories import build_repo_with_source
 from tests.support.source_code import typescript_function
 
 EMPTY_BASELINE = ""
-
-
-def with_bytes(build_repo, files: dict[str, str], name: str, source: bytes) -> Path:
-    """A repository tracking `name` with exactly these bytes, which a text fixture cannot carry."""
-    repo = build_repo({**files, name: ""})
-    (repo / name).write_bytes(source)
-    return repo
 
 
 def reading(suffix: str, code: str) -> list[tuple[str, int, int, int]]:
@@ -164,7 +156,7 @@ MARKUP_AND_SCRIPT = (
 
 
 @pytest.mark.parametrize("code, expected", [*FIXED_DEFECTS, *OPEN_MISREADINGS, *NAMED_ONLY, *CALLBACK_BRANCHES, *KEYS])
-def test_a_typescript_file_is_read_as_the_contract_says(code, expected):
+def test_a_typescript_file_yields_its_named_functions_with_span_ccn_including_callback_branches_and_numbered_keys(code, expected):
     assert reading(".ts", code) == expected
 
 
@@ -218,7 +210,7 @@ NOT_UTF8_SCRIPT = b"export const a = '\xe9';\n"
 
 def test_without_a_baseline_the_size_rule_notes_a_script_file_that_is_not_utf8(build_repo, capsys):
     """C4, SIZE-9: with no baseline a script file that is not UTF-8 is a note `not UTF-8`; the verdict is unchanged."""
-    repo = with_bytes(build_repo, {"src/ok.py": "x = 1\n"}, "src/api.ts", NOT_UTF8_SCRIPT)
+    repo = build_repo_with_source(build_repo, {"src/ok.py": "x = 1\n"}, "src/api.ts", NOT_UTF8_SCRIPT)
     code, output = run(capsys, repo)
     (note,) = rule_notes(repo, Rule.SIZE)
     assert (code, note.path, note.event, note.fact) == (0, "src/api.ts", NoteEvent.NOT_MEASURED, "not UTF-8"), output
@@ -226,7 +218,7 @@ def test_without_a_baseline_the_size_rule_notes_a_script_file_that_is_not_utf8(b
 
 def test_against_a_baseline_a_script_file_that_is_not_utf8_is_unparsable(build_repo, capsys):
     """C4, SIZE-10: with a baseline such a file makes the debt row `✗ not checked`, naming it, exit 2."""
-    repo = with_bytes(build_repo, {BASELINE_PATH: EMPTY_BASELINE}, "src/api.ts", NOT_UTF8_SCRIPT)
+    repo = build_repo_with_source(build_repo, {BASELINE_PATH: EMPTY_BASELINE}, "src/api.ts", NOT_UTF8_SCRIPT)
     code, output = run(capsys, repo)
     assert code == 2
     assert f"{refusal_row('debt')}src/api.ts is not UTF-8" in output
@@ -234,7 +226,7 @@ def test_against_a_baseline_a_script_file_that_is_not_utf8_is_unparsable(build_r
 
 def test_a_fix_refuses_a_script_file_that_is_not_utf8_and_writes_nothing(build_repo, capsys):
     """C4, SIZE-11: a fix refuses such a file with `✗ not fixed`, exit 2, writing no baseline."""
-    repo = with_bytes(build_repo, {}, "src/api.ts", NOT_UTF8_SCRIPT)
+    repo = build_repo_with_source(build_repo, {}, "src/api.ts", NOT_UTF8_SCRIPT)
     assert door_in(repo, *FIX_WORDS) == 2
     assert f"{refusal_row('debt', 'not fixed')}src/api.ts is not UTF-8" in capsys.readouterr().out
     assert not (repo / BASELINE_PATH).exists()
