@@ -1,7 +1,0 @@
-claim_id = "22647db055d8409db11c00fc4d45f1af"
-agent = "Claude a6de7911-f80c-419d-823e-79ada9a83b1e"
-role = "builder"
-base = "ee00914d43ea30397d8be2c8589397fcd70495fe"
-branch = "claude/issue-902-pin-gate-v0-22-1"
-scope = [".github/workflows/gate.yml"]
-opened_commit = "fe6c6b097aec5a64a5503df465a1c7efe54f9b48"
