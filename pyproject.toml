@@ -8,7 +8,8 @@ dependencies = [
     "PyYAML>=6",
     "import-linter==2.15",
     "lizard==1.26.1",
-    "overnightworks-design[po] @ https://github.com/overnightworks/design/releases/download/v0.36.0/overnightworks_design-0.36.0-py3-none-any.whl#sha256=a0b8fe02f2715feca2a307c39c0998036e5a72f6a01f1af8e9a0d5bcbd066b92",
+    # design v0.36.0: the full commit of its release tag, because quality is installed without a lock
+    "overnightworks-design[po] @ git+https://github.com/overnightworks/design@e1b4a448a9e4d86539f4f2ef05f5267a4b52fe36",
     "packaging>=24",
     "ruff==0.17.4",
     "zizmor==1.32.0",
