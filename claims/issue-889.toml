@@ -3,6 +3,6 @@ agent = "Claude a6de7911-f80c-419d-823e-79ada9a83b1e"
 role = "builder"
 base = "e5b85d751f4444fc287ee7410ee61d76dc35dd00"
 branch = "claude/issue-889-logging-rule"
-scope = ["docs/ARCHITECTURE.md", "docs/commands.md", "docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/catalog_rules.py", "src/quality/check.py", "src/quality/logging_rule.py", "src/quality/rules.py", "tests/test_check.py", "tests/test_cli_output.py", "tests/test_fleet_matrix.py", "tests/test_logging_rule.py", "uv.lock"]
+scope = ["docs/ARCHITECTURE.md", "docs/commands.md", "docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/catalog_rules.py", "src/quality/check.py", "src/quality/logging_rule.py", "src/quality/rules.py", "tests/support/layout.py", "tests/test_check.py", "tests/test_cli_output.py", "tests/test_fleet_matrix.py", "tests/test_literal_text_rule.py", "tests/test_logging_rule.py", "tests/test_python_lint_rows.py", "uv.lock"]
 opened_commit = "7e1fb18ddc2c890668a65aea12d0491b634429ad"
 whole_reason = "One rule with its owner module, enum member, wiring, pinned dependency, documents and the three tests that enumerate the rules."
