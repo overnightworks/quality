@@ -23,7 +23,7 @@ def declares_logline(root: Path, tracked: list[str]) -> bool:
 
 
 def check_logging(texts: Mapping[str, str]) -> RuleResult:
-    """The notes of every file in `texts` that is no test file, by path and in source order; the extent is the files judged."""
+    """The notes of every file in `texts`, the text as Python reads it, that is no test file, by path and in source order; the extent is the files judged."""
     judged = sorted(name for name in texts if not Language.PYTHON.is_test_file(PurePosixPath(name)))
     return RuleResult([], len(judged), False, tuple(note for name in judged for note in _notes(name, texts[name])))
 

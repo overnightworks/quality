@@ -433,6 +433,13 @@ def _covered_result(inputs: RunInputs, check: Callable[[catalog_rules.Catalogs],
     return _attempt(lambda: check(catalogs))
 
 
+def _check_logging(linted: python_lint.Lint) -> RuleResult:
+    """The logging rule over the texts as Python reads them, which carry no byte order mark ruff's text keeps."""
+    return logging_rule.check_logging(
+        {name: text.removeprefix(python_lint.BYTE_ORDER_MARK) for name, text in linted.texts.items()}
+    )
+
+
 def _judge_logging(inputs: RunInputs, lint: python_lint.Lint | CannotJudge) -> Judged | None:
     """The logging rule's verdict, None for a repository that does not declare logline; the declaration is read before any file."""
     declared = inputs.logline_declared
@@ -440,7 +447,7 @@ def _judge_logging(inputs: RunInputs, lint: python_lint.Lint | CannotJudge) -> J
         return None
     if isinstance(declared, CannotJudge):
         return declared
-    return _attempt(lambda: _judge_lint(lint, lambda linted: logging_rule.check_logging(linted.texts)))
+    return _attempt(lambda: _judge_lint(lint, _check_logging))
 
 
 def _judge_files(inputs: RunInputs) -> AreaVerdict:

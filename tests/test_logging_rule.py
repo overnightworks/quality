@@ -117,6 +117,14 @@ def test_a_clean_covered_repository_gets_a_row_without_a_note(build_repo, covere
     assert (verdict.notes, verdict.findings, verdict.refusal) == ((), (), None)
 
 
+def test_a_file_that_starts_with_a_byte_order_mark_is_judged_as_python_reads_it(build_repo, covered, broken, capsys):
+    """Python, ruff and the file readers accept the mark; the rule gets its note and the exit stays 0."""
+    repo = build_repo(covered("\ufeff" + broken.source))
+    code = door_in(repo, CHECK_WORD, Area.CODE, locate_ruff=installed_ruff)
+    (row,) = note_rows(capsys.readouterr().out, f"{broken.path}:{broken.line}")
+    assert (code, row.event, row.fact) == (0, NoteEvent.OPEN, broken.rule)
+
+
 def test_a_text_the_check_cannot_parse_refuses_the_rule_naming_the_file(build_repo, covered, broken, capsys):
     """ruff reads a text that nests 250 parentheses; Python's parser refuses it."""
     nested = f"x = {'(' * 250}1{')' * 250}\n"
