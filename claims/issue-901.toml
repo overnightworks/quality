@@ -1,0 +1,8 @@
+claim_id = "373c89a6ea3b4c9f8494c92800d558f5"
+agent = "Claude a6de7911-f80c-419d-823e-79ada9a83b1e"
+role = "builder"
+base = "8a01f2aec4cb5e905a851a306041bad0465ce7d2"
+branch = "claude/issue-901-fleet-pin-git-not-wheel"
+scope = [".github/dependabot.yml", "docs/ARCHITECTURE.md", "docs/release.md", "docs/rules.md", "pyproject.toml", "src/quality/fleet_sources.py", "uv.lock"]
+opened_commit = "8e158b25ddc4f0b33362a348615c1abd7f4ef403"
+whole_reason = "One pin form changed in the standard, the fix text and rule document that cite it, and quality's own manifest, lock and update configuration."
