@@ -1540,6 +1540,34 @@ the rest. It judges independently of `advisory`, so neither refuses the other (S
 
 It first ships in v0.21.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column (FLEET-18).
 
+The `logging` rule, in the `code` area, judges a repository against the machine rules of the fleet standard "Logging" with
+logline's own checker, `logline.check.check` of the logline release quality pins. quality holds no copy of the standard's
+values and runs no logging analysis of its own; a rule's wording and its gaps are logline's README's.
+
+- **Who is judged (LOGGING-1).** A repository whose tracked root `pyproject.toml` declares `overnightworks-logline` in
+  `[project] dependencies`, a group of `[project.optional-dependencies]` or a group of `[dependency-groups]`, the name
+  compared canonicalised. A repository that does not declare it sees no row, and no file of it is judged. This is the
+  declaration, not the standard's "Who is covered": a deployed process that has not adopted logline is not judged, and
+  quality, which declares logline, is, although the standard excludes a pure command-line tool.
+- **Files (LOGGING-2).** Every tracked regular `.py` file that `Language.is_test_file` does not call a test file, the
+  definition `size` uses; the texts are the ones the `code` area's lint read, so no file is read twice and a text that is not
+  valid Python is the lint's refusal.
+- **Notes (LOGGING-3).** Each finding is one `open` [note](output.md#notes) at `<path>:<line>` whose fact is the logline rule
+  value (`event_name_shape`), in path and source order; no finding row stands and the exit stays `0`. The row's extent is
+  the files judged.
+- **Exit 2 (LOGGING-4).** A text logline cannot parse (`SyntaxError`) or exhausts the interpreter on (`RecursionError`),
+  named with the file. Any other exception of the check is not caught. The check runs in quality's process without a time
+  limit.
+- **The pin (LOGGING-5).** quality depends on logline by the full commit of a release tag, the tag named in a comment, as
+  [the fleet standard](release.md#depending-on-a-fleet-package) says for a tool installed without a lock. logline's own
+  dependencies, structlog and opentelemetry-api, enter quality's lock with it, and an advisory against either turns
+  quality's own gate red although quality never runs their code.
+- **Report only (LOGGING-6).** The rule is `report-only`: it changes no verdict. Until a release ships it only main has it
+  (`not released` in the fleet matrix, FLEET-19). The matrix has no coverage signal for it: every repository whose pin has
+  the rule reads `report-only`, covered or not.
+
+Not judged: the standard's "a released logline tag" (`fleet-source` tells no tag from a branch, SOURCE-2).
+
 Every rule is judged, even when another cannot be (CHECK-4), and gives one verdict: clean, findings, unparsable, or
 cannot judge (CHECK-5). Each finding names the file, a fact and a fix. What `quality check` prints, its frame, the
 masking, `-v` and the vet, is [the output contract](output.md).

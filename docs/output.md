@@ -115,7 +115,8 @@ rows, by area:
   A fleet package a `uv.lock` resolves from an index is a `from index` finding at the lock, its fact the package, its
   version and the index ([rules](rules.md)).
 - `code`: a security finding is `insecure`, a `print` or `pprint` is a `print call`, and an owner that names no code
-  found in its file is `unused` ([rules](rules.md)).
+  found in its file is `unused` ([rules](rules.md)). A `logging` finding is no finding row but an `open` note at the
+  file and line, its fact the logline rule it breaks (LOGGING-3).
 
 The `env-file` fix's own wording stands in [rules](rules.md).
 
@@ -151,7 +152,8 @@ findings (ROW-10); the extent of a clean row is:
 - `workflows`: `N workflows · offline audits only`, the workflow files the tree holds, said in the row and in no note
   of its own (O38).
 - `dependencies`: `N lockfiles · M packages`, `0 lockfiles · 0 packages` with none (O48).
-- `code`: `2 rules · N Python files`, the tracked regular `.py` files ruff judged, `0 Python files` with none (ROW-12).
+- `code`: `2 rules · N Python files`, the tracked regular `.py` files ruff judged, `0 Python files` with none (ROW-12); `3 rules`
+  where the repository declares logline (LOGGING-1).
 
 With ` · K allowed` appended where files were allowed, leaks were allowed (secrets), advisories were allowed
 (dependencies) or output owners were honoured (code). Without a ceiling file the debt row is `· debt  not recorded  N
@@ -172,7 +174,7 @@ that cannot check is `✗ <area>  not checked  <reason>` ([Refusals](#refusals))
 
 A note is a `·` row under its area, after the area's findings, aligned with them (ROW-15):
 `· <path[:line]>  <event>  <fact>`, with no `fix:` of its own (ROW-16). Its events are `allowed` (file rules,
-dependencies, secrets and python-print), `not measured` (a Python file the size rule cannot parse, without a ceiling
+dependencies, secrets and python-print), `open` (logging, sonar findings), `not measured` (a Python file the size rule cannot parse, without a ceiling
 file; O22), `unused` and `warning` (import-contract) and `unused` (secret). An allowed advisory and an honoured output
 owner stand as notes, and the clean row counts them (O15, O49):
 
