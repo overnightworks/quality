@@ -1527,7 +1527,7 @@ unmatched and red likewise. The predecessor `pnpm audit --prod` steps are retire
 
 `fleet-source` reads every tracked `uv.lock`, the root one and each nested one, offline. A `[[package]]` whose canonical
 name starts with `overnightworks-` and whose `source` is `registry` is a `from index` finding at the lock's tracked path
-(SOURCE-1), one per package and lock, its fact the package, its version and the index, its fix the two allowed pins
+(SOURCE-1), one per package and lock, its fact the package, its version and the index, its fix the git tag pin
 ([the standard](release.md#depending-on-a-fleet-package)). A `git`, `url`, `editable`, `virtual`, `directory` or `path`
 source is allowed (SOURCE-2), and a package outside the prefix is not read further (SOURCE-3). A lock that is not UTF-8
 TOML or whose packages are not a list of tables, a fleet package without a `source` and a source of another kind are exit `2`, so a future uv never reads green
@@ -1535,7 +1535,7 @@ TOML or whose packages are not a list of tables, a fleet package without a `sour
 is exit `2` (SOURCE-5). A lock tracked under several names is judged once, under the first (SOURCE-6). The row's extent
 is the locks read, and a repository without a `uv.lock` is clean at `0` (SOURCE-7); the rule is on for every
 repository, and the lock's content decides whether it judges anything. It does not check that a `git` source is a tag
-rather than a branch, nor the host of a `url` source: the lock pins a commit or a hash either way, and a reviewer reads
+rather than a branch, nor the host of a `url` source: the lock pins the resolved commit or a hash either way, and a reviewer reads
 the rest. It judges independently of `advisory`, so neither refuses the other (SOURCE-8).
 
 It first ships in v0.21.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column (FLEET-18).

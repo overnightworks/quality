@@ -250,9 +250,12 @@ completed publish; both are completed or deleted by hand.
 
 Ruled by the operator: a library declares another fleet package (an `overnightworks-*` package) by name and version range
 in `[project].dependencies`, and its git URL only in its dev group's `[tool.uv.sources]`. A host pins every fleet package
-its `uv.lock` resolves, direct or transitive, by git tag (`name @ git+https://github.com/overnightworks/<repository>@vX.Y.Z`)
-or by the release's wheel URL with `#sha256=...`, then runs `uv lock`; the host's tag decides the one version, and a tag
-outside a library's range fails the lock loudly. Never from an index: the bare names are not the fleet's, so an unpinned
+its `uv.lock` resolves, direct or transitive, by git tag (`name @ git+https://github.com/overnightworks/<repository>@vX.Y.Z`),
+then runs `uv lock`; the host's tag decides the one version, and a tag outside a library's range fails the lock loudly. A
+host that is itself installed without a lock (today only quality, whose machine runs prepare a pinned release with
+`uv tool run --offline`) pins the tag's full 40-character commit instead, the tag named in a comment beside it, because
+that offline run fails on a git tag even with a warm cache. One exception is ruled: hal keeps appkit's release wheel with
+its content hash. Never from an index: the bare names are not the fleet's, so an unpinned
 host would install a stranger's package. `fleet-source` ([rules](rules.md)) refuses that in every tracked `uv.lock`; the
 library's declaration form is left to review.
 

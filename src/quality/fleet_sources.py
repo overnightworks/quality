@@ -15,8 +15,7 @@ FLEET_PREFIX = "overnightworks-"
 INDEX_SOURCE = "registry"
 PINNED_SOURCES = frozenset({"git", "url", "editable", "virtual", "directory", "path"})
 PIN_FIX = (
-    "pin it by git tag (name @ git+https://github.com/overnightworks/<repository>@vX.Y.Z) or by its release wheel URL "
-    "with #sha256=..., then uv lock"
+    "pin it by git tag (name @ git+https://github.com/overnightworks/<repository>@vX.Y.Z), then uv lock"
 )
 
 
