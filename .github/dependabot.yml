@@ -26,3 +26,5 @@ updates:
           - "zizmor"
           - "lizard"
           - "import-linter"
+    ignore:
+      - dependency-name: "overnightworks-*"
