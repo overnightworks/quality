@@ -1549,6 +1549,8 @@ values and runs no logging analysis of its own; a rule's wording and its gaps ar
   compared canonicalised. A repository that does not declare it sees no row, and no file of it is judged. This is the
   declaration, not the standard's "Who is covered": a deployed process that has not adopted logline is not judged, and
   quality, which declares logline, is, although the standard excludes a pure command-line tool.
+  The root `pyproject.toml` is read before any file, so one that cannot be read or parsed refuses the rule, and the `code`
+  area with it, in every repository.
 - **Files (LOGGING-2).** Every tracked regular `.py` file that `Language.is_test_file` does not call a test file, the
   definition `size` uses; the texts are the ones the `code` area's lint read, so no file is read twice and a text that is not
   valid Python is the lint's refusal.

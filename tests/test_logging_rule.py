@@ -133,6 +133,13 @@ def test_a_text_the_check_cannot_parse_refuses_the_rule_naming_the_file(build_re
     assert check_output(capsys, repo)[0] == 2
 
 
+def test_a_root_pyproject_that_cannot_be_read_refuses_the_rule_naming_the_file(build_repo, broken, capsys):
+    """The declaration is read before any file, in every repository, so a broken root `pyproject.toml` refuses the code area."""
+    repo = build_repo({"pyproject.toml": "[project\n", broken.path: broken.source})
+    assert "pyproject.toml" in refusals(repo)[Rule.LOGGING]
+    assert check_output(capsys, repo)[0] == 2
+
+
 def test_a_text_that_exhausts_the_check_refuses_the_rule_naming_the_file(build_repo, covered, broken, monkeypatch):
     def exhausted(source, path):
         raise RecursionError
