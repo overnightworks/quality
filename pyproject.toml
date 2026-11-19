@@ -10,6 +10,8 @@ dependencies = [
     "lizard>=1.24.1,<1.26",
     # design v0.36.0: the full commit of its release tag, because quality is installed without a lock
     "overnightworks-design[po] @ git+https://github.com/overnightworks/design@e1b4a448a9e4d86539f4f2ef05f5267a4b52fe36",
+    # logline v1.6.0: the full commit of its release tag, because quality is installed without a lock
+    "overnightworks-logline @ git+https://github.com/overnightworks/logline@91662227fbb219d2a249615aea1a4cd0bcb0317e",
     "packaging>=24",
     "ruff==0.17.4",
     "zizmor==1.32.0",
@@ -85,7 +87,7 @@ layers = [
     "pin",
     "advisories",
     "python_lint",
-    "literal_text | locator_text",
+    "literal_text | locator_text | logging_rule",
     "render_pass",
     "catalog_rules",
     "read_attributes | typescript_tokens",

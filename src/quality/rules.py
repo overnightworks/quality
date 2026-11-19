@@ -96,6 +96,7 @@ class Rule(StrEnum):
     PYTHON_FLOOR = "python-floor", Area.FILES, "v0.8.0", Switch.ALWAYS
     PYTHON_SECURITY = "python-security", Area.CODE, "v0.9.0", Switch.ALWAYS
     PYTHON_PRINT = "python-print", Area.CODE, "v0.9.0", Switch.ALWAYS
+    LOGGING = "logging", Area.CODE, None, Switch.REPORT_ONLY
     LEAK = "secret", Area.SECRETS, RELEASE_0_1, Switch.ALWAYS
     WORKFLOW_LINT = "workflow-lint", Area.WORKFLOWS, RELEASE_0_1, Switch.ALWAYS
     WORKFLOW_SECURITY = "workflow-security", Area.WORKFLOWS, RELEASE_0_1, Switch.ALWAYS

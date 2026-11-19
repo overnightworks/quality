@@ -685,5 +685,5 @@ def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces
     assert MATRIX_COLUMNS[5:] == (
         "size", "clone", "job-timeout", "import-contract", "claude-md", "agents-md", "root-layout", "file-suffix",
         "script-name", "script-header", "test-layout", "test-import", "literal-text", "locator-text", "python-floor",
-        "python-security", "python-print", "pr-concurrency", "pytest-workers", "runtime-install", "catalog-check", "render-pass", "advisory", "fleet-source",
+        "python-security", "python-print", "logging", "pr-concurrency", "pytest-workers", "runtime-install", "catalog-check", "render-pass", "advisory", "fleet-source",
     )
