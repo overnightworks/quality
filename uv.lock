@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.14"
 
 [[package]]
@@ -218,22 +218,12 @@ wheels = [
 [[package]]
 name = "overnightworks-design"
 version = "0.36.0"
-source = { url = "https://github.com/overnightworks/design/releases/download/v0.36.0/overnightworks_design-0.36.0-py3-none-any.whl" }
-wheels = [
-    { url = "https://github.com/overnightworks/design/releases/download/v0.36.0/overnightworks_design-0.36.0-py3-none-any.whl", hash = "sha256:a0b8fe02f2715feca2a307c39c0998036e5a72f6a01f1af8e9a0d5bcbd066b92" },
-]
+source = { git = "https://github.com/overnightworks/design?rev=e1b4a448a9e4d86539f4f2ef05f5267a4b52fe36#e1b4a448a9e4d86539f4f2ef05f5267a4b52fe36" }
 
 [package.optional-dependencies]
 po = [
     { name = "babel" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "babel", marker = "extra == 'po'", specifier = ">=2.18,<3" },
-    { name = "overnightworks-design", extras = ["po"], marker = "extra == 'catalogs'" },
-]
-provides-extras = ["catalogs", "po"]
 
 [[package]]
 name = "overnightworks-quality"
@@ -259,7 +249,7 @@ dev = [
 requires-dist = [
     { name = "import-linter", specifier = "==2.15" },
     { name = "lizard", specifier = ">=1.24.1,<1.26" },
-    { name = "overnightworks-design", extras = ["po"], url = "https://github.com/overnightworks/design/releases/download/v0.36.0/overnightworks_design-0.36.0-py3-none-any.whl" },
+    { name = "overnightworks-design", extras = ["po"], git = "https://github.com/overnightworks/design?rev=e1b4a448a9e4d86539f4f2ef05f5267a4b52fe36" },
     { name = "packaging", specifier = ">=24" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "ruff", specifier = "==0.17.4" },
