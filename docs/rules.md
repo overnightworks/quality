@@ -1083,7 +1083,7 @@ v0.17.0 on, and on main, the cell reads `enforced` where the clone declares the 
 The `literal-text` rule, in the `files` area, turns every literal text of a covered repository's pages into a finding: the
 texts a person reads that the markup holds itself instead of taking them from a catalog. A repository is covered as for
 `catalog-check` (the same read of the root `pyproject.toml`, CATALOG-1), so a repository that is not covered sees no row
-and no new verdict, and its `debt` area holds exactly the verdicts of `size`, `clone` and `job-timeout`; the root
+and no new verdict, and its `debt` area holds exactly the verdicts of `size`, `clone`, `job-timeout` and `test-twin`; the root
 `pyproject.toml` is read once for the area, and one that cannot be read refuses the rule with the reason `python-floor` gives,
 `pyproject.toml is not UTF-8 TOML that Python reads (<error>)`, which `catalog-check` and `render-pass` give too (LITERAL-15).
 The rule reads every tracked `*.svelte` file the tree holds, with the standard library's `html.parser` and a fold of the
