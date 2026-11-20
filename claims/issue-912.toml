@@ -1,8 +1,0 @@
-claim_id = "a5569e62620c47ada91834e6ca70133f"
-agent = "Claude a6de7911-f80c-419d-823e-79ada9a83b1e"
-role = "builder"
-base = "376b0fd7db662dbbe74d47d3cf5ca362e55529fa"
-branch = "claude/issue-912-test-twin-report"
-scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/check.py", "src/quality/clones.py", "src/quality/rules.py", "src/quality/twins.py", "tests/support/twins.py", "tests/test_check.py", "tests/test_clones.py", "tests/test_fleet_matrix.py", "tests/test_literal_text_rule.py", "tests/test_twins.py"]
-opened_commit = "f7b150557925a26d9d5879d59859325102c615d3"
-whole_reason = "One report-only rule with its module, the tokenizer seam it reuses, its wiring, documents and the tests that enumerate the debt rules."
