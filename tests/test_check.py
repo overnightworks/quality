@@ -195,17 +195,17 @@ def test_a_python_file_with_a_non_utf8_name_the_size_rule_cannot_parse_is_one_es
 
 def uncovered_rules() -> list[Rule]:
     """The rules a run judges in a repository that is not covered, in run order: all but the rules a catalogs declaration
-    switches on in the `files` area."""
+    switches on in the `files` area and the logging rule, which a logline declaration switches on."""
     return [
         rule
         for rule in sorted(Rule, key=lambda rule: list(Area).index(rule.area))
-        if rule not in {Rule.LITERAL_TEXT, Rule.LOCATOR_TEXT}
+        if rule not in {Rule.LITERAL_TEXT, Rule.LOCATOR_TEXT, Rule.LOGGING}
     ]
 
 
 def test_a_run_without_flags_judges_every_rule(build_repo, capsys):
-    """CHECK-3, LITERAL-15: no scan is ever skipped, so a plain run judges every rule in run order, the literal-text rule
-    and the locator-text rule of a repository that is not covered excepted."""
+    """CHECK-3, LITERAL-15: no scan is ever skipped, so a plain run judges every rule in run order, the literal-text rule,
+    the locator-text rule and the logging rule of a repository that is not covered excepted."""
     verdicts = check_result(build_repo({}), installed_ruff, never_located).verdicts
     assert ([verdict.rule for verdict in verdicts], [verdict.refusal for verdict in verdicts]) == (
         uncovered_rules(),

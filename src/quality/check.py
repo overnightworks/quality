@@ -21,6 +21,7 @@ from quality import (
     layout,
     literal_text,
     locator_text,
+    logging_rule,
     process,
     python_floor,
     python_lint,
@@ -414,6 +415,11 @@ class RunInputs:
         return _attempt(lambda: checkout.index_modes(self.root))
 
     @cached_property
+    def logline_declared(self) -> bool | CannotJudge:
+        """Whether the root `pyproject.toml` declares logline."""
+        return _attempt(lambda: logging_rule.declares_logline(self.root, self.tracked))
+
+    @cached_property
     def catalogs(self) -> catalog_rules.Catalogs | None | CannotJudge:
         """The catalogs declaration of the root `pyproject.toml`, None where it declares none."""
         return _attempt(lambda: catalog_rules.read_catalogs(self.root, self.tracked))
@@ -425,6 +431,23 @@ def _covered_result(inputs: RunInputs, check: Callable[[catalog_rules.Catalogs],
     if catalogs is None or isinstance(catalogs, CannotJudge):
         return catalogs
     return _attempt(lambda: check(catalogs))
+
+
+def _check_logging(linted: python_lint.Lint) -> RuleResult:
+    """The logging rule over the texts as Python reads them, which carry no byte order mark ruff's text keeps."""
+    return logging_rule.check_logging(
+        {name: text.removeprefix(python_lint.BYTE_ORDER_MARK) for name, text in linted.texts.items()}
+    )
+
+
+def _judge_logging(inputs: RunInputs, lint: python_lint.Lint | CannotJudge) -> Judged | None:
+    """The logging rule's verdict, None for a repository that does not declare logline; the declaration is read before any file."""
+    declared = inputs.logline_declared
+    if declared is False:
+        return None
+    if isinstance(declared, CannotJudge):
+        return declared
+    return _attempt(lambda: _judge_lint(lint, _check_logging))
 
 
 def _judge_files(inputs: RunInputs) -> AreaVerdict:
@@ -644,7 +667,12 @@ def _judge_code(inputs: RunInputs) -> AreaVerdict:
         inputs.running, Area.CODE, scanners.RUFF,
         lambda: lint_python(inputs.root, inputs.modes, inputs.locate_ruff, inputs.deadline, log),
     )
-    judged = {Rule.PYTHON_SECURITY: _judge_lint(lint, python_lint.judge_security), Rule.PYTHON_PRINT: _judge_lint(lint, python_lint.judge_print)}
+    logging_verdict = _judge_logging(inputs, lint)
+    judged = {
+        Rule.PYTHON_SECURITY: _judge_lint(lint, python_lint.judge_security),
+        Rule.PYTHON_PRINT: _judge_lint(lint, python_lint.judge_print),
+        **({} if logging_verdict is None else {Rule.LOGGING: logging_verdict}),
+    }
     return _area_verdict(Area.CODE, judged, runs)
 
 

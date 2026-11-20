@@ -86,6 +86,7 @@ def test_every_area_judges_exactly_the_rules_it_owns_but_the_covered_only_rules_
     judged = {area.area: {verdict.rule for verdict in area.verdicts} for area in check_result(build_repo(UNCOVERED)).areas}
     owned = {area: {rule for rule in Rule if rule.area is area} for area in Area}
     owned[Area.FILES] -= {Rule.LITERAL_TEXT, Rule.LOCATOR_TEXT}
+    owned[Area.CODE] -= {Rule.LOGGING}
     assert judged == owned
 
 

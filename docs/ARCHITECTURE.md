@@ -10,8 +10,8 @@ The engineer and the agent run `quality check` locally and in the commit hook. T
 (`quality merge`) to merge past a red gate. Every gated repository's CI calls the reusable `gate.yml`, which
 runs the check, the SonarCloud job and the verdict. Outside quality lie GitHub (its API and Actions), SonarCloud, the
 OSV advisory archives, mise with the three scanners it installs, PyPI, which uv installs quality's own dependencies
-from, and design's git source on GitHub, the second source of a dependency: `design.catalogs` reads the catalogs
-declaration and the catalog files for the languages rules.
+from, and design's and logline's git sources on GitHub, the second source of a dependency: `design.catalogs` reads the
+catalogs declaration and the catalog files for the languages rules, and `logline.check` judges the files of the `logging` rule.
 
 ```mermaid
 flowchart LR
@@ -24,7 +24,7 @@ flowchart LR
     osv["OSV advisory archives"]
     mise["mise and the three scanners"]
     pypi["PyPI via uv"]
-    design["design's git source<br/>pinned by commit"]
+    design["design's and logline's git sources<br/>pinned by commit"]
     engineer --> quality
     operator --> quality
     ci --> quality

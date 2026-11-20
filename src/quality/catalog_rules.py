@@ -121,11 +121,17 @@ def tracked_catalogs(tracked: list[str], directory: PurePosixPath) -> list[str]:
     ]
 
 
-def read_catalogs(root: Path, tracked: list[str]) -> Catalogs | None:
-    """The catalogs declaration of the tracked root `pyproject.toml`, None where it does not declare the generator's
-    distribution with the extra `catalogs`. The file is read whether or not it declares it, so a file that cannot be read
-    refuses in every repository; only `catalogs_directory` validates the table, so a covered repository's bad table refuses
-    its own rules alone."""
+@dataclass(frozen=True)
+class RootPyproject:
+    """The tracked root `pyproject.toml`: its text and each requirement its dependency lists hold."""
+
+    text: str
+    requirements: tuple[Requirement, ...]
+
+
+def read_root_pyproject(root: Path, tracked: list[str]) -> RootPyproject | None:
+    """The tracked root `pyproject.toml`, None where it is not there. A file that cannot be read refuses in every repository,
+    declaration or none."""
     names = checkout.on_disk(root, [name for name in tracked if name == PYPROJECT])
     contents = checkout.read_existing(repository.read_bytes, root, names)
     if PYPROJECT not in contents:
@@ -134,10 +140,17 @@ def read_catalogs(root: Path, tracked: list[str]) -> Catalogs | None:
         document = repository.parse_toml_file(PYPROJECT, contents[PYPROJECT])
     except repository.TomlError as error:
         raise Unparsable(str(error)) from error
-    requirements = list(_requirements(_dependency_entries(document)))
-    if not any(_is_catalogs_declaration(requirement) for requirement in requirements):
+    return RootPyproject(contents[PYPROJECT].decode("utf-8"), tuple(_requirements(_dependency_entries(document))))
+
+
+def read_catalogs(root: Path, tracked: list[str]) -> Catalogs | None:
+    """The catalogs declaration of the tracked root `pyproject.toml`, None where it does not declare the generator's
+    distribution with the extra `catalogs`. Only `catalogs_directory` validates the table, so a covered repository's bad
+    table refuses its own rules alone."""
+    pyproject = read_root_pyproject(root, tracked)
+    if pyproject is None or not any(_is_catalogs_declaration(requirement) for requirement in pyproject.requirements):
         return None
-    return Catalogs(contents[PYPROJECT].decode("utf-8"))
+    return Catalogs(pyproject.text)
 
 
 def declares_catalogs(root: Path, tracked: list[str]) -> bool:
