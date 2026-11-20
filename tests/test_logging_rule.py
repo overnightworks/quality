@@ -105,8 +105,10 @@ def test_the_notes_stand_in_path_and_line_order(build_repo, covered, broken):
     assert [(note.path, note.line) for note in rule_notes(repo, Rule.LOGGING)] == [("src/a.py", 3), ("src/b.py", 3), ("src/b.py", 4)]
 
 
-def test_a_note_leaves_the_code_area_clean_and_prints_its_row_at_its_place(build_repo, covered, broken, capsys):
-    repo = build_repo(covered())
+@pytest.mark.parametrize("prefix", ["", "\ufeff"], ids=["plain", "behind a byte order mark"])
+def test_a_note_leaves_the_code_area_clean_and_prints_its_row_at_its_place(build_repo, covered, broken, capsys, prefix):
+    """Python, ruff and the file readers accept a leading byte order mark; the note and the exit stay the same."""
+    repo = build_repo(covered(prefix + broken.source))
     code = door_in(repo, CHECK_WORD, Area.CODE, locate_ruff=installed_ruff)
     (row,) = note_rows(capsys.readouterr().out, f"{broken.path}:{broken.line}")
     assert (code, row.event, row.fact) == (0, NoteEvent.OPEN, broken.rule)
@@ -115,14 +117,6 @@ def test_a_note_leaves_the_code_area_clean_and_prints_its_row_at_its_place(build
 def test_a_clean_covered_repository_gets_a_row_without_a_note(build_repo, covered):
     (verdict,) = logging_verdicts(build_repo(covered("x = 1\n")))
     assert (verdict.notes, verdict.findings, verdict.refusal) == ((), (), None)
-
-
-def test_a_file_that_starts_with_a_byte_order_mark_is_judged_as_python_reads_it(build_repo, covered, broken, capsys):
-    """Python, ruff and the file readers accept the mark; the rule gets its note and the exit stays 0."""
-    repo = build_repo(covered("\ufeff" + broken.source))
-    code = door_in(repo, CHECK_WORD, Area.CODE, locate_ruff=installed_ruff)
-    (row,) = note_rows(capsys.readouterr().out, f"{broken.path}:{broken.line}")
-    assert (code, row.event, row.fact) == (0, NoteEvent.OPEN, broken.rule)
 
 
 def test_a_text_the_check_cannot_parse_refuses_the_rule_naming_the_file(build_repo, covered, broken, capsys):
@@ -134,7 +128,7 @@ def test_a_text_the_check_cannot_parse_refuses_the_rule_naming_the_file(build_re
 
 
 def test_a_root_pyproject_that_cannot_be_read_refuses_the_rule_naming_the_file(build_repo, broken, capsys):
-    """The declaration is read before any file, in every repository, so a broken root `pyproject.toml` refuses the code area."""
+    """The declaration is checked before logline judges any file, in every repository, so a broken root `pyproject.toml` refuses the code area."""
     repo = build_repo({"pyproject.toml": "[project\n", broken.path: broken.source})
     assert "pyproject.toml" in refusals(repo)[Rule.LOGGING]
     assert check_output(capsys, repo)[0] == 2
