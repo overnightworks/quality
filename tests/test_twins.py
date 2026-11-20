@@ -5,10 +5,11 @@ import pytest
 
 from quality import twins
 from quality.baseline_file import ClonePair, Place, render_baseline
-from quality.report import NoteEvent, RuleResult
+from quality.report import NoteEvent
 from quality.rules import Area, Rule
 from tests.support.baselines import ceiling
 from tests.support.check import check_output, check_result, note_rows, refusals, rule_notes
+from tests.support.git_repositories import make_repo
 from tests.support.twins import helper, twin_test
 
 BASELINE_PATH = "quality/baseline.toml"
@@ -34,6 +35,7 @@ def joined(*sources: str) -> str:
         ({"tests/test_a.py": joined(twin_test("test_one"), twin_test("test_two").replace("run", "other"))}, 0),
         ({"tests/test_a.py": twin_test("test_one"), "tests/test_b.py": twin_test("test_two")}, 0),
         ({"src/a.py": joined(twin_test("test_one"), twin_test("test_two"))}, 0),
+        ({"tests/a.ts": joined(twin_test("test_one"), twin_test("test_two"))}, 0),
         ({"tests/test_a.py": joined(twin_test("check_one"), twin_test("check_two"))}, 0),
         ({"tests/test_a.py": joined(twin_test("test_one", decorator="@one\n"), twin_test("test_two", decorator="@two\n"))}, 1),
         ({"tests/test_a.py": "class TestA:\n" + "".join(f"    {line}\n" for line in joined(twin_test("test_one"), twin_test("test_two")).splitlines())}, 1),
@@ -49,6 +51,7 @@ def joined(*sources: str) -> str:
         "tests that call different names are no twins",
         "tests in two files are no test twins",
         "a function of a non-test file is no test",
+        "a file of another language under tests is skipped",
         "a function not named test is no test",
         "decorators are not compared",
         "a method of a class is a test",
@@ -139,16 +142,24 @@ BASELINES = {
 }
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("state", BASELINES, ids=list(BASELINES))
-def test_every_other_line_and_the_exit_stay_as_the_same_run_without_the_rule(build_repo, capsys, monkeypatch, state):
-    """TWIN-4: the note is the only line the rule adds, in every state of the baseline."""
-    files = {"tests/test_a.py": joined(twin_test("test_one"), twin_test("test_two")), "tests/b.py": helper("a"), "tests/c.py": helper("b")}
-    baseline = BASELINES[state]
-    repo = build_repo({**files, **({} if baseline is None else {BASELINE_PATH: baseline})})
-    code, with_rule = check_output(capsys, repo)
+def test_every_other_line_and_the_exit_stay_as_the_same_run_without_the_rule(tmp_path, capsys, state):
+    """TWIN-4: the note is the only line the rule adds, in every state of the baseline. The second repository has the same
+    size and clone rows, because those streams fold names and literals, and no twin or copied helper."""
+    twins_files = {"tests/test_a.py": joined(twin_test("test_one"), twin_test("test_two")), "tests/b.py": helper("a"), "tests/c.py": helper("b")}
+    plain_files = {
+        "tests/test_a.py": joined(twin_test("test_one"), twin_test("test_two").replace("run", "other")),
+        "tests/b.py": helper("a"),
+        "tests/c.py": helper("b", literal=2),
+    }
+    baseline = {} if BASELINES[state] is None else {BASELINE_PATH: BASELINES[state]}
+    (tmp_path / "with").mkdir()
+    (tmp_path / "without").mkdir()
+    code, with_rule = check_output(capsys, make_repo(tmp_path / "with", {**twins_files, **baseline}))
     assert note_rows(with_rule, ".")
-    monkeypatch.setattr(twins, "check_test_twins", lambda _sources: RuleResult([], 0, False))
-    without_code, without_rule = check_output(capsys, repo)
+    without_code, without_rule = check_output(capsys, make_repo(tmp_path / "without", {**plain_files, **baseline}))
+    assert not note_rows(without_rule, ".")
     kept = [line for line in with_rule.splitlines() if " open  " not in line or "test twins" not in line]
     assert (code, kept) == (without_code, without_rule.splitlines())
 
