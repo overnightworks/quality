@@ -33,6 +33,8 @@ def declaring(path: str, reason: str = "the build reads it by this name", rule: 
 FILES_RULE_IDS = frozenset(rule.value for rule in Rule if rule.area is Area.FILES)
 # the rules a catalogs declaration switches on judge only a covered repository
 UNCOVERED_FILES_RULE_COUNT = len(FILES_RULE_IDS - {Rule.LITERAL_TEXT.value, Rule.LOCATOR_TEXT.value})
+# the logging rule judges only a repository that declares logline
+UNCOVERED_CODE_RULE_COUNT = sum(rule.area is Area.CODE and rule is not Rule.LOGGING for rule in Rule)
 
 
 def rule_ids_in(text: str) -> set[str]:

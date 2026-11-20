@@ -79,6 +79,7 @@ class Rule(StrEnum):
     SIZE = "size", Area.DEBT, RELEASE_0_3, Switch.SIZE_BASELINE
     CLONE = "clone", Area.DEBT, "v0.4.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE)
     JOB_TIMEOUT = "job-timeout", Area.DEBT, RELEASE_0_12, Switch.ALWAYS
+    TEST_TWIN = "test-twin", Area.DEBT, None, Switch.REPORT_ONLY
     IMPORT_CONTRACT = "import-contract", Area.IMPORTS, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
     CLAUDE_MD = "claude-md", Area.FILES, RELEASE_0_3, Switch.ALWAYS
     AGENTS_MD = "agents-md", Area.FILES, RELEASE_0_11, Switch.ALWAYS
@@ -96,6 +97,7 @@ class Rule(StrEnum):
     PYTHON_FLOOR = "python-floor", Area.FILES, "v0.8.0", Switch.ALWAYS
     PYTHON_SECURITY = "python-security", Area.CODE, "v0.9.0", Switch.ALWAYS
     PYTHON_PRINT = "python-print", Area.CODE, "v0.9.0", Switch.ALWAYS
+    LOGGING = "logging", Area.CODE, None, Switch.REPORT_ONLY
     LEAK = "secret", Area.SECRETS, RELEASE_0_1, Switch.ALWAYS
     WORKFLOW_LINT = "workflow-lint", Area.WORKFLOWS, RELEASE_0_1, Switch.ALWAYS
     WORKFLOW_SECURITY = "workflow-security", Area.WORKFLOWS, RELEASE_0_1, Switch.ALWAYS

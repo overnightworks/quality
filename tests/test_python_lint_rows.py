@@ -22,6 +22,7 @@ from tests.support.check import (
     extent_counts,
     installed_ruff,
 )
+from tests.support.layout import UNCOVERED_CODE_RULE_COUNT
 from tests.support.python_lint import EVAL, EVAL_REASON, OWNER, PRINT, PRINT_REASON, fake_ruff, ruff_entry
 
 
@@ -186,8 +187,7 @@ def test_a_clean_code_row_counts_its_rules_and_every_python_file_ruff_judged(dri
     """PRINT-2, ROW-12: a clean code row counts its rules and every Python file ruff judged, for both rules."""
     run = drive_code(files)
     row = area_row(run.out, Area.CODE)
-    rules = sum(rule.area is Area.CODE for rule in Rule)
-    assert (row.glyph, row.event, extent_counts(row.fact), run.err) == (Glyph.CLEAN, cli.AreaEvent.CLEAN, [rules, python_files], "")
+    assert (row.glyph, row.event, extent_counts(row.fact), run.err) == (Glyph.CLEAN, cli.AreaEvent.CLEAN, [UNCOVERED_CODE_RULE_COUNT, python_files], "")
     assert [verdict.extent for verdict in run.area.verdicts] == [python_files] * 2
 
 
@@ -211,10 +211,9 @@ def test_a_clean_code_row_counts_each_honoured_owner_as_allowed(drive_code, file
     reasoned line noqa is no owner."""
     run = drive_code(files)
     row = area_row(run.out, Area.CODE)
-    rules = sum(rule.area is Area.CODE for rule in Rule)
     assert [note.location for note in run.area.notes] == locations
     assert all(note.event is NoteEvent.ALLOWED for note in run.area.notes)
-    assert extent_counts(row.fact) == [rules, python_files, *([len(locations)] if locations else [])]
+    assert extent_counts(row.fact) == [UNCOVERED_CODE_RULE_COUNT, python_files, *([len(locations)] if locations else [])]
     assert_block_prints(area_block(run.out, Area.CODE), (), run.area.notes)
     assert (row.glyph, run.code, run.err) == (Glyph.CLEAN, 0, "")
 

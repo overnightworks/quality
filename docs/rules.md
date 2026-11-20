@@ -1108,7 +1108,7 @@ v0.17.0 on, and on main, the cell reads `enforced` where the clone declares the 
 The `literal-text` rule, in the `files` area, turns every literal text of a covered repository's pages into a finding: the
 texts a person reads that the markup holds itself instead of taking them from a catalog. A repository is covered as for
 `catalog-check` (the same read of the root `pyproject.toml`, CATALOG-1), so a repository that is not covered sees no row
-and no new verdict, and its `debt` area holds exactly the verdicts of `size`, `clone` and `job-timeout`; the root
+and no new verdict, and its `debt` area holds exactly the verdicts of `size`, `clone`, `job-timeout` and `test-twin`; the root
 `pyproject.toml` is read once for the area, and one that cannot be read refuses the rule with the reason `python-floor` gives,
 `pyproject.toml is not UTF-8 TOML that Python reads (<error>)`, which `catalog-check` and `render-pass` give too (LITERAL-15).
 The rule reads every tracked `*.svelte` file the tree holds, with the standard library's `html.parser` and a fold of the
@@ -1366,6 +1366,29 @@ and `workflow_run` as roots, the negation and the `+` of a push filter, a limit 
 step's `timeout-minutes`, and a default branch other than `main`; the jobs of a remote reusable workflow that only
 another repository calls are judged by no rule yet.
 
+The `test-twin` rule, in the `debt` area, counts two kinds of copying in the tracked Python test files and reports them as one
+`open` [note](output.md#notes); it only reports and holds no count.
+
+- **Which functions (TWIN-1).** A file `Language.is_test_file` calls a test is read. A function whose name starts with `test`
+  is a test wherever it stands, a method of any class and a nested function included; every other function of such a file is a
+  helper (a fixture, a function of a support module or `conftest.py`, a method of a fake, a function nested in a test). The
+  token stream of a function is the one `clone` reads (`clones.tokens`): arguments and statements, without the docstring and
+  the decorators.
+- **Test twins (TWIN-2).** Tests of one file whose streams are equal with names kept and literals folded, from 12 tokens, form
+  a group. A case table stands in a decorator and is not compared, so two parametrized tests with one body and two tables are a
+  group; the fix is one table whose case ids name the behaviours.
+- **Copied helpers (TWIN-3).** Helpers of two or more files whose streams are equal with names and literals kept, from 8
+  tokens, form a group, whatever the functions are called. A copy that differs by one literal is no copy here.
+- **The note (TWIN-4).** The unit of both counts is the group. One `open` note under the `debt` area at the location `.` reads
+  `24 groups of test twins · 20 groups of copied test helpers`; a count of zero leaves its half out, and no note stands when both
+  are zero. The rule holds no finding, its extent is 0 and it is never measured only, so every other row, the closing line and the
+  exit are what `size` and `clone` make them, in every state of the baseline, a red area included.
+- **Refusals (TWIN-5).** The rule reads the sources the `debt` area read; when they cannot be read the area is refused as
+  before and no note stands. It needs no baseline, so a baseline that cannot be read refuses `size` and `clone` (CLONE-9) and the
+  note still stands. A file Python cannot parse is skipped without a refusal; `size` and `clone` refuse it.
+- **Report only (TWIN-6).** The rule is `report-only` in the fleet matrix and changes no verdict. It ships in no release yet
+  (`not released`, FLEET-19).
+
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
 and nested, with osv-scanner against the OSV advisory database (dev dependencies count) (ADVISORY-1). `uv.lock` and the
@@ -1564,6 +1587,36 @@ rather than a branch, nor the host of a `url` source: the lock pins the resolved
 the rest. It judges independently of `advisory`, so neither refuses the other (SOURCE-8).
 
 It first ships in v0.21.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column (FLEET-18).
+
+The `logging` rule, in the `code` area, judges a repository against the machine rules of the fleet standard "Logging" with
+logline's own checker, `logline.check.check` of the logline release quality pins. quality holds no copy of the standard's
+values and runs no logging analysis of its own; a rule's wording and its gaps are logline's README's.
+
+- **Who is judged (LOGGING-1).** A repository whose tracked root `pyproject.toml` declares `overnightworks-logline` in
+  `[project] dependencies`, a group of `[project.optional-dependencies]` or a group of `[dependency-groups]`, the name
+  compared canonicalised. A repository that does not declare it sees no row, and no file of it is judged. This is the
+  declaration, not the standard's "Who is covered": a deployed process that has not adopted logline is not judged, and
+  quality, which declares logline, is, although the standard excludes a pure command-line tool.
+  The declaration is checked before logline judges any file, so a root `pyproject.toml` that cannot be read or parsed
+  refuses the rule, and the `code` area with it, in every repository.
+- **Files (LOGGING-2).** Every tracked regular `.py` file that `Language.is_test_file` does not call a test file, the
+  definition `size` uses; the texts are the ones the `code` area's lint read, so no file is read twice and a text that is not
+  valid Python is the lint's refusal.
+- **Notes (LOGGING-3).** Each finding is one `open` [note](output.md#notes) at `<path>:<line>` whose fact is the logline rule
+  value (`event_name_shape`), in path and source order; no finding row stands and the exit stays `0`. The row's extent is
+  the files judged.
+- **Exit 2 (LOGGING-4).** A text logline cannot parse (`SyntaxError`) or exhausts the interpreter on (`RecursionError`),
+  named with the file. Any other exception of the check is not caught. The check runs in quality's process without a time
+  limit.
+- **The pin (LOGGING-5).** quality depends on logline by the full commit of a release tag, the tag named in a comment, as
+  [the fleet standard](release.md#depending-on-a-fleet-package) says for a tool installed without a lock. logline's own
+  dependencies, structlog and opentelemetry-api, enter quality's lock with it, and an advisory against either turns
+  quality's own gate red although quality never runs their code.
+- **Report only (LOGGING-6).** The rule is `report-only`: it changes no verdict. Until a release ships it only main has it
+  (`not released` in the fleet matrix, FLEET-19). The matrix has no coverage signal for it: every repository whose pin has
+  the rule reads `report-only`, covered or not.
+
+Not judged: the standard's "a released logline tag" (`fleet-source` tells no tag from a branch, SOURCE-2).
 
 Every rule is judged, even when another cannot be (CHECK-4), and gives one verdict: clean, findings, unparsable, or
 cannot judge (CHECK-5). Each finding names the file, a fact and a fix. What `quality check` prints, its frame, the

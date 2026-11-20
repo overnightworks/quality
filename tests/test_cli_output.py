@@ -39,7 +39,7 @@ from tests.support.check import (
 )
 from tests.support.clones import function
 from tests.support.door import CHECK_WORD, FIX_WORDS, MODULE_DOOR, PinnedJudging, check_door, door_environment, door_in
-from tests.support.layout import UNCOVERED_FILES_RULE_COUNT
+from tests.support.layout import UNCOVERED_CODE_RULE_COUNT, UNCOVERED_FILES_RULE_COUNT
 from tests.support.merge import ONE_JOB
 from tests.support.processes import process_is_gone
 from tests.support.scanners import fake_scanner, lacking
@@ -428,7 +428,7 @@ def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_re
     assert [line.split()[1] for line in headers(out)] == list(Area)
     assert (code, out[0], out[-1], err) == (0, headers(out)[0], f"✓ clean · 7 areas · {ZERO_SECONDS}", [])
     assert area_row("\n".join(out), Area.CODE).glyph == Glyph.CLEAN
-    assert extent_counts(area_fact("\n".join(out), Area.CODE)) == [sum(rule.area is Area.CODE for rule in Rule), sum(name.endswith(".py") for name in tracked)]
+    assert extent_counts(area_fact("\n".join(out), Area.CODE)) == [UNCOVERED_CODE_RULE_COUNT, sum(name.endswith(".py") for name in tracked)]
     assert extent_counts(area_fact("\n".join(out), Area.DEPENDENCIES)) == [0, 0]
     workflows = area_fact("\n".join(out), Area.WORKFLOWS)
     assert (leading_count(workflows), workflows.endswith(cli.OFFLINE_AUDITS)) == (0, True)

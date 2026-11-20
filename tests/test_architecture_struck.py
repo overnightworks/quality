@@ -467,7 +467,7 @@ STRUCK_CASES = [
      {"pyproject.toml": toml({**LAYERS, "containers": ["shop", "other"], "layers": ["web"]})}, {"shop.dead", "other.dead"}),
     ({"pyproject.toml": toml({**LAYERS, "layers": ["web | (dead)"]})}, {"pyproject.toml": toml({**LAYERS, "layers": ["web"]})}, {"shop.dead"}),
     ({"pyproject.toml": toml(NO_CONTAINER)}, {"pyproject.toml": toml({**NO_CONTAINER, "layers": ["web"]})}, {"dead"}),
-    ({"pyproject.toml": toml(FORBIDDEN_DEAD)}, {"pyproject.toml": toml({**FORBIDDEN_DEAD, "type": "independence", "modules": ["shop.db"]})}, set()),
+    ({"pyproject.toml": toml(FORBIDDEN_DEAD)}, {"pyproject.toml": toml({"type": "independence", "modules": ["shop.db"]})}, set()),
     ({"pyproject.toml": toml(FORBIDDEN_DEAD)}, {}, set()),
     ({}, {"pyproject.toml": toml(FORBIDDEN_DEAD)}, set()),
     ({"pyproject.toml": toml(FORBIDDEN_DEAD)}, {".importlinter": contracts_ini({"guarded": source_modules_of(["shop.db"])})}, {"shop.dead"}),

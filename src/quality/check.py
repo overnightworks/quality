@@ -21,6 +21,7 @@ from quality import (
     layout,
     literal_text,
     locator_text,
+    logging_rule,
     process,
     python_floor,
     python_lint,
@@ -29,6 +30,7 @@ from quality import (
     repository,
     root_layout,
     scanners,
+    twins,
     workflow_rules,
 )
 from quality.config import (
@@ -228,6 +230,12 @@ class Measurement(Enum):
     MEASURED_ONLY = auto()
 
 
+def _decides_measurement(rule: Rule) -> bool:
+    """A rule that a switch turns on or off; one that only reports and never changes its switch leaves the area's state as it is."""
+    release = rule.release
+    return release.switch is not Switch.ALWAYS and not (release.switch is Switch.REPORT_ONLY and not release.switched)
+
+
 @dataclass(frozen=True)
 class AreaVerdict:
     """What the rules of one area said, in run order."""
@@ -274,7 +282,7 @@ class AreaVerdict:
 
     @property
     def measurement(self) -> Measurement:
-        switched = [verdict for verdict in self.verdicts if verdict.rule.release.switch is not Switch.ALWAYS]
+        switched = [verdict for verdict in self.verdicts if _decides_measurement(verdict.rule)]
         judging = [verdict.measured_only for verdict in switched if verdict.refusal is None]
         if judging and all(judging):
             return Measurement.MEASURED_ONLY
@@ -414,6 +422,11 @@ class RunInputs:
         return _attempt(lambda: checkout.index_modes(self.root))
 
     @cached_property
+    def logline_declared(self) -> bool | CannotJudge:
+        """Whether the root `pyproject.toml` declares logline."""
+        return _attempt(lambda: logging_rule.declares_logline(self.root, self.tracked))
+
+    @cached_property
     def catalogs(self) -> catalog_rules.Catalogs | None | CannotJudge:
         """The catalogs declaration of the root `pyproject.toml`, None where it declares none."""
         return _attempt(lambda: catalog_rules.read_catalogs(self.root, self.tracked))
@@ -425,6 +438,23 @@ def _covered_result(inputs: RunInputs, check: Callable[[catalog_rules.Catalogs],
     if catalogs is None or isinstance(catalogs, CannotJudge):
         return catalogs
     return _attempt(lambda: check(catalogs))
+
+
+def _check_logging(linted: python_lint.Lint) -> RuleResult:
+    """The logging rule over the texts as Python reads them, which carry no byte order mark ruff's text keeps."""
+    return logging_rule.check_logging(
+        {name: text.removeprefix(python_lint.BYTE_ORDER_MARK) for name, text in linted.texts.items()}
+    )
+
+
+def _judge_logging(inputs: RunInputs, lint: python_lint.Lint | CannotJudge) -> Judged | None:
+    """The logging rule's verdict, None for a repository that does not declare logline; the declaration is read before any file."""
+    declared = inputs.logline_declared
+    if declared is False:
+        return None
+    if isinstance(declared, CannotJudge):
+        return declared
+    return _attempt(lambda: _judge_lint(lint, _check_logging))
 
 
 def _judge_files(inputs: RunInputs) -> AreaVerdict:
@@ -590,7 +620,8 @@ def _judge_debt(inputs: RunInputs) -> AreaVerdict:
     timeouts = _attempt(
         lambda: workflow_rules.check_job_timeouts(inputs.root, inputs.tracked, made.ceiling if fixed else judged_baseline(inputs.root))
     )
-    judged: dict[Rule, Judged] = {Rule.SIZE: size, Rule.CLONE: clone, Rule.JOB_TIMEOUT: timeouts}
+    twin = sources if isinstance(sources, CannotJudge) else twins.check_test_twins(sources)
+    judged: dict[Rule, Judged] = {Rule.SIZE: size, Rule.CLONE: clone, Rule.JOB_TIMEOUT: timeouts, Rule.TEST_TWIN: twin}
     return _area_verdict(Area.DEBT, judged, ceiling=ceiling)
 
 
@@ -644,7 +675,12 @@ def _judge_code(inputs: RunInputs) -> AreaVerdict:
         inputs.running, Area.CODE, scanners.RUFF,
         lambda: lint_python(inputs.root, inputs.modes, inputs.locate_ruff, inputs.deadline, log),
     )
-    judged = {Rule.PYTHON_SECURITY: _judge_lint(lint, python_lint.judge_security), Rule.PYTHON_PRINT: _judge_lint(lint, python_lint.judge_print)}
+    logging_verdict = _judge_logging(inputs, lint)
+    judged = {
+        Rule.PYTHON_SECURITY: _judge_lint(lint, python_lint.judge_security),
+        Rule.PYTHON_PRINT: _judge_lint(lint, python_lint.judge_print),
+        **({} if logging_verdict is None else {Rule.LOGGING: logging_verdict}),
+    }
     return _area_verdict(Area.CODE, judged, runs)
 
 
