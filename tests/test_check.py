@@ -645,3 +645,24 @@ def test_a_locate_or_version_call_still_running_when_the_time_ends_is_stopped_an
     assert all(verdict.refusal is None for verdict in files_row.verdicts)
     subject = "mise" if located_by_mise else scanner
     assert refusals_of(result)[rule] == f"{subject} did not finish within the run's 2 seconds"
+
+
+@pytest.mark.parametrize(
+    ("verdicts", "expected"),
+    [
+        ((check.RuleVerdict(Rule.SIZE, measured_only=True), check.RuleVerdict(Rule.TEST_TWIN)), check.Measurement.MEASURED_ONLY),
+        ((check.RuleVerdict(Rule.SIZE), check.RuleVerdict(Rule.TEST_TWIN)), check.Measurement.ENFORCED),
+        ((check.RuleVerdict(Rule.SIZE, measured_only=True), check.RuleVerdict(Rule.LOGGING)), check.Measurement.MEASURED_ONLY),
+        ((check.RuleVerdict(Rule.SIZE), check.RuleVerdict(Rule.LOGGING, measured_only=True)), check.Measurement.ENFORCED),
+        ((check.RuleVerdict(Rule.SIZE, measured_only=True), check.RuleVerdict(Rule.CLONE)), check.Measurement.PARTLY_MEASURED_ONLY),
+    ],
+    ids=[
+        "a report-only rule beside a measured one",
+        "a report-only rule beside an enforced one",
+        "another report-only rule beside a measured one",
+        "another measured report-only rule beside an enforced one",
+        "a rule with a switch change counts",
+    ],
+)
+def test_a_rule_that_only_reports_and_never_changes_its_switch_leaves_the_area_measurement_alone(verdicts, expected):
+    assert check.AreaVerdict(Area.DEBT, verdicts).measurement is expected

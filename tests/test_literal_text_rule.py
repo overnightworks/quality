@@ -72,12 +72,12 @@ def test_a_covered_repository_whose_pages_read_every_word_through_a_catalog_is_c
     ids=["no extra", "no pyproject", "a nested project", "a catalogs table without the dependency"],
 )
 def test_a_repository_that_is_not_covered_sees_no_literal_row_and_its_debt_area_is_unchanged(build_repo, capsys, files):
-    """LITERAL-15, CATALOG-6: no declaration, no literal verdict, and `debt` judges exactly `size`, `clone` and `job-timeout`."""
+    """LITERAL-15, CATALOG-6: no declaration, no literal verdict, and `debt` judges exactly `size`, `clone`, `job-timeout` and `test-twin`."""
     repo = build_repo({**files, **PAGES})
     code = door_in(repo, CHECK_WORD, Area.DEBT.value)
     out = capsys.readouterr().out
     areas = {area.area: [verdict.rule for verdict in area.verdicts] for area in check_result(repo).areas}
-    assert (code, Rule.LITERAL_TEXT in areas[Area.FILES], areas[Area.DEBT]) == (0, False, [Rule.SIZE, Rule.CLONE, Rule.JOB_TIMEOUT])
+    assert (code, Rule.LITERAL_TEXT in areas[Area.FILES], areas[Area.DEBT]) == (0, False, [Rule.SIZE, Rule.CLONE, Rule.JOB_TIMEOUT, Rule.TEST_TWIN])
     assert "literal" not in out
 
 
