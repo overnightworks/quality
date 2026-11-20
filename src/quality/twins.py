@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 
 from quality import clones
+from quality.output import counted
 from quality.ratchet import Language, language_of
 from quality.report import Note, NoteEvent, RuleResult
 
@@ -50,15 +51,13 @@ def count_twins(sources: dict[str, bytes]) -> TwinCounts:
     )
 
 
-def _groups(count: int, what: str) -> str:
-    return f"{count} {'group' if count == 1 else 'groups'} of {what}"
-
-
 def check_test_twins(sources: dict[str, bytes]) -> RuleResult:
     """The note with both counts, a count of zero left out and no note when both are zero; no finding, no extent."""
     found = count_twins(sources)
     facts = [
-        _groups(count, what) for count, what in ((found.tests, "test twins"), (found.helpers, "copied test helpers")) if count
+        f"{counted(count, 'group')} of {what}"
+        for count, what in ((found.tests, "test twins"), (found.helpers, "copied test helpers"))
+        if count
     ]
     notes = (Note(NOTE_PATH, NoteEvent.OPEN, " · ".join(facts)),) if facts else ()
     return RuleResult([], 0, False, notes)
