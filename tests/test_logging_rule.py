@@ -146,6 +146,7 @@ def test_any_other_exception_of_the_check_is_not_caught(build_repo, covered, mon
     def broken_check(source, path):
         raise ArithmeticError
 
+    repo = build_repo(covered())
     monkeypatch.setattr(logline_check, "check", broken_check)
     with pytest.raises(ArithmeticError):
-        check_result(build_repo(covered()))
+        check_result(repo)
