@@ -1341,6 +1341,29 @@ and `workflow_run` as roots, the negation and the `+` of a push filter, a limit 
 step's `timeout-minutes`, and a default branch other than `main`; the jobs of a remote reusable workflow that only
 another repository calls are judged by no rule yet.
 
+The `test-twin` rule, in the `debt` area, counts two kinds of copying in the tracked Python test files and reports them as one
+`open` [note](output.md#notes); it only reports and holds no count.
+
+- **Which functions (TWIN-1).** A file `Language.is_test_file` calls a test is read. A function whose name starts with `test`
+  is a test wherever it stands, a method of any class and a nested function included; every other function of such a file is a
+  helper (a fixture, a function of a support module or `conftest.py`, a method of a fake, a function nested in a test). The
+  token stream of a function is the one `clone` reads (`clones.tokens`): arguments and statements, without the docstring and
+  the decorators.
+- **Test twins (TWIN-2).** Tests of one file whose streams are equal with names kept and literals folded, from 12 tokens, form
+  a group. A case table stands in a decorator and is not compared, so two parametrized tests with one body and two tables are a
+  group; the fix is one table whose case ids name the behaviours.
+- **Copied helpers (TWIN-3).** Helpers of two or more files whose streams are equal with names and literals kept, from 8
+  tokens, form a group, whatever the functions are called. A copy that differs by one literal is no copy here.
+- **The note (TWIN-4).** The unit of both counts is the group. One `open` note under the `debt` area at the location `.` reads
+  `24 groups of test twins · 20 groups of copied test helpers`; a count of zero leaves its half out, and no note stands when both
+  are zero. The rule holds no finding, its extent is 0 and it is never measured only, so every other row, the closing line and the
+  exit are what `size` and `clone` make them, in every state of the baseline, a red area included.
+- **Refusals (TWIN-5).** The rule reads the sources the `debt` area read; when they cannot be read the area is refused as
+  before and no note stands. It needs no baseline, so a baseline that cannot be read refuses `size` and `clone` (CLONE-9) and the
+  note still stands. A file Python cannot parse is skipped without a refusal; `size` and `clone` refuse it.
+- **Report only (TWIN-6).** The rule is `report-only` in the fleet matrix and changes no verdict. It ships in no release yet
+  (`not released`, FLEET-19).
+
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
 and nested, with osv-scanner against the OSV advisory database (dev dependencies count) (ADVISORY-1). `uv.lock` and the

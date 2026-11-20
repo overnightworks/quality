@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 import pytest
@@ -52,6 +53,22 @@ def test_a_docstring_does_not_count_towards_the_tokens():
     documented = function("first", "a", "b", passes=1).replace(":\n", ':\n    """Says what it does."""\n', 1)
     files = {"src/a.py": documented, "src/b.py": function("second", "c", "d", passes=1)}
     assert pairs_by_area(files) == {Area.PRODUCTION: 0, Area.TESTS: 0}
+
+
+@pytest.mark.parametrize(
+    ("names_kept", "literals_kept", "stream"),
+    [
+        (False, False, "arguments arg ID FunctionDef arguments arg ID Return Call Attribute ID Name ID keyword ID Constant N keyword ** Name ID"),
+        (False, True, "arguments arg ID FunctionDef arguments arg ID Return Call Attribute ID Name ID keyword ID Constant 2 keyword ** Name ID"),
+        (True, False, "arguments arg a FunctionDef inner arguments arg x Return Call Attribute b Name a keyword k Constant N keyword ** Name x"),
+        (True, True, "arguments arg a FunctionDef inner arguments arg x Return Call Attribute b Name a keyword k Constant 2 keyword ** Name x"),
+    ],
+    ids=["names folded, literals folded", "names folded, literals kept", "names kept, literals folded", "names kept, literals kept"],
+)
+def test_the_token_stream_keeps_names_and_literals_as_asked(names_kept, literals_kept, stream):
+    """CLONE-1: the clone rule keeps neither; a nested `def` emits its name only when names are kept, and a `**` spread has none."""
+    function = ast.parse("def f(a):\n    def inner(x):\n        return a.b(k=2, **x)\n").body[0]
+    assert clones.tokens(function, names_kept, literals_kept) == stream.split()
 
 
 BINARY_OPERATORS = ["+", "-", "*", "/", "//", "%", "**", "<<", ">>", "|", "^", "&", "@"]
