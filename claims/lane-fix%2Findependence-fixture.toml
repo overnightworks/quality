@@ -1,7 +1,0 @@
-claim_id = "62148d99b5a14573bbfcd7a1f44db947"
-agent = "Claude a6de7911-f80c-419d-823e-79ada9a83b1e"
-role = "builder"
-base = "abf5433e3d8ab836c33cb41be56e2ce7216360c9"
-branch = "fix/independence-fixture"
-scope = ["tests/test_architecture_struck.py"]
-opened_commit = "15029f10710ac63371bcc219047c5b0c638acbcb"
