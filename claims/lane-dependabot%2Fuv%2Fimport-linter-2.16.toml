@@ -1,7 +1,0 @@
-claim_id = "251762809f164dddb7de32509edd1d06"
-agent = "Claude a6de7911-f80c-419d-823e-79ada9a83b1e"
-role = "builder"
-base = "c0e1fb681616ee5fea0eab1755d0d952ac8c9f9d"
-branch = "dependabot/uv/import-linter-2.16"
-scope = ["pyproject.toml", "uv.lock"]
-opened_commit = "edb57a6b32b585ec1fffa061247e7adc30f28420"
