@@ -652,9 +652,17 @@ def test_a_locate_or_version_call_still_running_when_the_time_ends_is_stopped_an
     [
         ((check.RuleVerdict(Rule.SIZE, measured_only=True), check.RuleVerdict(Rule.TEST_TWIN)), check.Measurement.MEASURED_ONLY),
         ((check.RuleVerdict(Rule.SIZE), check.RuleVerdict(Rule.TEST_TWIN)), check.Measurement.ENFORCED),
+        ((check.RuleVerdict(Rule.SIZE, measured_only=True), check.RuleVerdict(Rule.LOGGING)), check.Measurement.MEASURED_ONLY),
+        ((check.RuleVerdict(Rule.SIZE), check.RuleVerdict(Rule.LOGGING, measured_only=True)), check.Measurement.ENFORCED),
         ((check.RuleVerdict(Rule.SIZE, measured_only=True), check.RuleVerdict(Rule.CLONE)), check.Measurement.PARTLY_MEASURED_ONLY),
     ],
-    ids=["a report-only rule beside a measured one", "a report-only rule beside an enforced one", "a rule with a switch change counts"],
+    ids=[
+        "a report-only rule beside a measured one",
+        "a report-only rule beside an enforced one",
+        "another report-only rule beside a measured one",
+        "another measured report-only rule beside an enforced one",
+        "a rule with a switch change counts",
+    ],
 )
 def test_a_rule_that_only_reports_and_never_changes_its_switch_leaves_the_area_measurement_alone(verdicts, expected):
     assert check.AreaVerdict(Area.DEBT, verdicts).measurement is expected
