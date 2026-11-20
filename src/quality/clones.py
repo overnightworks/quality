@@ -24,6 +24,7 @@ SIMILARITY_THRESHOLD = 0.9
 IDENTIFIER_PLACEHOLDER = "ID"
 KEYWORD_SPREAD_PLACEHOLDER = "**"
 FUNCTION_NODES = ast.FunctionDef | ast.AsyncFunctionDef
+WRITTEN_NAME_FIELD = {ast.Name: "id", ast.Attribute: "attr", ast.arg: "arg", ast.keyword: "arg"}
 
 
 @dataclass(frozen=True)
@@ -56,18 +57,24 @@ def _literal_class(value: object) -> str:
     return type(value).__name__
 
 
-def _emit(node: ast.AST, tokens: list[str]) -> None:
+def _name_tokens(node: ast.AST, names_kept: bool) -> list[str]:
+    """The name an identifier node carries as written or folded; a nested `def` or `class` carries its name only as written."""
+    if isinstance(node, ast.keyword) and node.arg is None:
+        return [KEYWORD_SPREAD_PLACEHOLDER]
+    if field := WRITTEN_NAME_FIELD.get(type(node)):
+        return [getattr(node, field) if names_kept else IDENTIFIER_PLACEHOLDER]
+    return [node.name] if names_kept and isinstance(node, FUNCTION_NODES | ast.ClassDef) else []
+
+
+def _emit(node: ast.AST, tokens: list[str], names_kept: bool, literals_kept: bool) -> None:
     if isinstance(node, ast.expr_context):
         return
     tokens.append(type(node).__name__)
     if isinstance(node, ast.Constant):
-        tokens.append(_literal_class(node.value))
-    elif isinstance(node, ast.Name | ast.Attribute | ast.arg):
-        tokens.append(IDENTIFIER_PLACEHOLDER)
-    elif isinstance(node, ast.keyword):
-        tokens.append(IDENTIFIER_PLACEHOLDER if node.arg else KEYWORD_SPREAD_PLACEHOLDER)
+        tokens.append(repr(node.value) if literals_kept else _literal_class(node.value))
+    tokens.extend(_name_tokens(node, names_kept))
     for child in ast.iter_child_nodes(node):
-        _emit(child, tokens)
+        _emit(child, tokens, names_kept, literals_kept)
 
 
 def _has_docstring(body: list[ast.stmt]) -> bool:
@@ -79,16 +86,19 @@ def _has_docstring(body: list[ast.stmt]) -> bool:
     )
 
 
-def _tokens(function: FUNCTION_NODES) -> list[str]:
-    tokens: list[str] = []
-    _emit(function.args, tokens)
+def tokens(function: FUNCTION_NODES, names_kept: bool, literals_kept: bool) -> list[str]:
+    """The token stream of a function's arguments and its body without the docstring, in pre-order. Names are folded to
+    `ID` unless `names_kept` (a nested `def` or `class` then also emits its name), literals to their class unless
+    `literals_kept` (then as their `repr`); the clone rule keeps neither."""
+    stream: list[str] = []
+    _emit(function.args, stream, names_kept, literals_kept)
     for statement in function.body[1:] if _has_docstring(function.body) else function.body:
-        _emit(statement, tokens)
-    return tokens
+        _emit(statement, stream, names_kept, literals_kept)
+    return stream
 
 
-def _shingles(tokens: list[str]) -> frozenset[int]:
-    return frozenset(hash(tuple(tokens[start : start + SHINGLE_SIZE])) for start in range(len(tokens) - SHINGLE_SIZE + 1))
+def _shingles(stream: list[str]) -> frozenset[int]:
+    return frozenset(hash(tuple(stream[start : start + SHINGLE_SIZE])) for start in range(len(stream) - SHINGLE_SIZE + 1))
 
 
 def _functions(path: str, tree: ast.Module) -> Iterator[tuple[Place, FUNCTION_NODES]]:
@@ -101,7 +111,7 @@ def _functions(path: str, tree: ast.Module) -> Iterator[tuple[Place, FUNCTION_NO
         yield Place(path, ratchet.nth(qualified, occurrences[qualified])), node
 
 
-def _parsed(path: str, source: bytes) -> ast.Module | None:
+def parsed(path: str, source: bytes) -> ast.Module | None:
     try:
         return ast.parse(ratchet.python_text(source), filename=path)
     except ratchet.PARSE_ERRORS:
@@ -111,11 +121,11 @@ def _parsed(path: str, source: bytes) -> ast.Module | None:
 def _units(sources: dict[str, bytes]) -> list[Unit]:
     units = []
     for path, source in sources.items():
-        if (tree := _parsed(path, source)) is None:
+        if (tree := parsed(path, source)) is None:
             continue
         for place, function in _functions(path, tree):
-            if len(tokens := _tokens(function)) >= MIN_TOKENS:
-                units.append(Unit(place, function.lineno, _shingles(tokens)))
+            if len(stream := tokens(function, names_kept=False, literals_kept=False)) >= MIN_TOKENS:
+                units.append(Unit(place, function.lineno, _shingles(stream)))
     return units
 
 

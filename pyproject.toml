@@ -13,7 +13,7 @@ dependencies = [
     # logline v1.6.0: the full commit of its release tag, because quality is installed without a lock
     "overnightworks-logline @ git+https://github.com/overnightworks/logline@91662227fbb219d2a249615aea1a4cd0bcb0317e",
     "packaging>=24",
-    "ruff==0.17.4",
+    "ruff==0.17.5",
     "zizmor==1.32.0",
 ]
 
@@ -91,6 +91,7 @@ layers = [
     "render_pass",
     "catalog_rules",
     "read_attributes | typescript_tokens",
+    "twins",
     "agent_guidance | architecture | clones | compose | env_file | fleet_sources | layout | pip_requirements | python_floor | root_layout | scanners | workflow_rules",
     "makefile",
     "run_script",

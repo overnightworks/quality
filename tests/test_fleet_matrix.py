@@ -683,7 +683,7 @@ def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces
     _, output = fleet_report(public("any", {}), tags=first_releases())
     assert "Every gate release enforces env-file, compose-port, secret, workflow-lint and workflow-security." in output
     assert MATRIX_COLUMNS[5:] == (
-        "size", "clone", "job-timeout", "import-contract", "claude-md", "agents-md", "root-layout", "file-suffix",
+        "size", "clone", "job-timeout", "test-twin", "import-contract", "claude-md", "agents-md", "root-layout", "file-suffix",
         "script-name", "script-header", "test-layout", "test-import", "literal-text", "locator-text", "python-floor",
         "python-security", "python-print", "logging", "pr-concurrency", "pytest-workers", "runtime-install", "catalog-check", "render-pass", "advisory", "fleet-source",
     )
