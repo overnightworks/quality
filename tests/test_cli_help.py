@@ -555,7 +555,7 @@ def no_gate_call(build_repo, elsewhere: Path) -> Path:
 
 def quality_s_checkout(build_repo, elsewhere: Path) -> Path:
     repo = build_repo({".github/workflows/ci.yml": "on: push\njobs:\n  gate:\n    uses: ./.github/workflows/gate.yml\n"})
-    git(repo, "remote", "add", "origin", f"https://github.com/{checkout.GATE_REPOSITORY}.git")
+    git(repo, "remote", "set-url", "origin", f"https://github.com/{checkout.GATE_REPOSITORY}.git")
     return repo
 
 

@@ -10,11 +10,17 @@ from quality import naming
 from quality.report import FindingEvent
 from quality.rules import Rule
 from tests.support.check import check_output, refusals, rows_of, rule_findings
-from tests.support.git_repositories import GIT_IDENTITY, head_commit
+from tests.support.git_repositories import GIT_IDENTITY, git, head_commit, put
 from tests.support.github_remote import with_github_remote
 
 SHOP = "overnightworks/shop"
 GUIDANCE = {"HEART.md": "# guidance\n"}
+
+
+@pytest.fixture
+def fixture_origin() -> None:
+    """Each test gives its repository the remote it judges, or none."""
+    return
 
 
 def pyproject(name: str | None = "overnightworks-shop", *, scripts: tuple[str, ...] = (), uninstalled: bool = False) -> str:
@@ -183,8 +189,16 @@ def test_a_gitlink_at_a_manifest_path_is_never_entered(build_repo, elsewhere):
     assert rule_findings(repo, Rule.NAMING) == []
 
 
-def test_a_manifest_without_a_name_has_nothing_to_judge(judge):
-    files = {"pyproject.toml": pyproject(None), "web/package.json": json.dumps({"private": True})}
+@pytest.mark.parametrize(
+    "files",
+    [
+        pytest.param({"pyproject.toml": pyproject(None)}, id="a project without a name"),
+        pytest.param({"pyproject.toml": '[tool.uv.workspace]\nmembers = ["worker"]\n', **packages("legal")}, id="a pyproject without a project table"),
+        pytest.param({"web/package.json": json.dumps({"private": True})}, id="a package.json without a name"),
+        pytest.param({"web/package.json": "[]"}, id="a package.json that is no object"),
+    ],
+)
+def test_a_manifest_without_a_name_has_nothing_to_judge(judge, files):
     assert judge(files) == []
 
 
@@ -206,6 +220,12 @@ def test_a_finding_names_the_kind_the_name_found_the_accepted_forms_and_the_stem
     assert 'distribution "wrong"' in finding.fact
     assert 'stem "shop"' in finding.fact
     assert "overnightworks-shop[-<component>]" in str(finding.fix)
+
+
+def test_a_repository_finding_names_where_the_stem_was_read_from_too(build_repo):
+    repo = with_github_remote(build_repo(GUIDANCE), "overnightworks/shop-api")
+    (finding,) = rule_findings(repo, Rule.NAMING)
+    assert "read from remote origin" in finding.fact
 
 
 def test_the_stem_is_the_name_of_origin_and_no_other_remote(build_repo):
@@ -240,9 +260,8 @@ def test_no_github_origin_refuses_a_repository_that_holds_a_name_to_judge(build_
     assert "origin" in reasons[Rule.NAMING]
 
 
-def test_no_github_origin_leaves_a_repository_with_no_name_clean(build_repo):
-    repo = build_repo(GUIDANCE)
-    assert (Rule.NAMING in refusals(repo), rule_findings(repo, Rule.NAMING)) == (False, [])
+def test_no_github_origin_refuses_even_a_repository_with_no_name_to_judge(build_repo):
+    assert "origin" in refusals(build_repo(GUIDANCE))[Rule.NAMING]
 
 
 def test_a_remote_that_is_not_called_origin_does_not_stand_for_it(build_repo):
@@ -250,14 +269,23 @@ def test_a_remote_that_is_not_called_origin_does_not_stand_for_it(build_repo):
     assert "origin" in refusals(repo)[Rule.NAMING]
 
 
-def test_a_pyproject_that_is_not_toml_cannot_be_judged(build_repo):
-    repo = with_github_remote(build_repo({**GUIDANCE, "pyproject.toml": "[project\n"}), SHOP)
-    assert "pyproject.toml" in refusals(repo)[Rule.NAMING]
-
-
-def test_a_package_json_that_is_not_json_cannot_be_judged(build_repo):
-    repo = with_github_remote(build_repo({**GUIDANCE, "web/package.json": "{"}), SHOP)
-    assert "web/package.json" in refusals(repo)[Rule.NAMING]
+@pytest.mark.parametrize(
+    ("path", "content"),
+    [
+        pytest.param("pyproject.toml", "[project\n", id="a pyproject that is not TOML"),
+        pytest.param("pyproject.toml", '[project]\nname = 1\n', id="a project name that is no string"),
+        pytest.param("web/package.json", "{", id="a package.json that is not JSON"),
+        pytest.param("web/package.json", '{"name": 1}', id="an npm name that is no string"),
+        pytest.param("web/package.json", '{"name": null}', id="an npm name that is null"),
+        pytest.param("web/package.json", '{"name": "shop"}'.encode("utf-16"), id="a package.json in UTF-16"),
+        pytest.param("web/package.json", b'\xff{"name": "shop"}', id="a package.json that is no UTF-8"),
+    ],
+)
+def test_a_manifest_that_is_not_read_as_utf_8_with_a_string_name_cannot_be_judged(build_repo, path, content):
+    repo = with_github_remote(build_repo(GUIDANCE), SHOP)
+    put(repo / path, content)
+    git(repo, "add", "-f", path)
+    assert path in refusals(repo)[Rule.NAMING]
 
 
 FIRST_DEVIATION = naming.packaged_deviations()[0]

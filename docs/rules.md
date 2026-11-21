@@ -521,9 +521,9 @@ It applies these rules:
   `origin`, as [naming.md](naming.md) rules (NAMING-1). Only `origin` gives the stem, while `agents-md` keeps reading
   every remote; a remote counts as AGENTS-13 says (NAMING-2). Every finding's fact says `read from remote origin` after
   the stem, so a clone that a rename left behind shows it; re-pointing `origin` is its fix (NAMING-3). A checkout with
-  no GitHub `origin` and a name to judge makes the `files` row [`✗ not checked`](output.md#refusals) ("no GitHub remote
-  called origin names this repository", next step "add the repository's GitHub remote as origin", exit `2`); one with
-  no name to judge is clean (NAMING-4).
+  no GitHub `origin`, whatever files it tracks, makes the `files` row [`✗ not checked`](output.md#refusals) ("no GitHub
+  remote called origin names this repository", next step "add the repository's GitHub remote as origin", exit `2`),
+  because the repository's own name is always judged (NAMING-4).
   Every tracked `pyproject.toml` that `test-layout` finds as a project (the root or a member at any depth) and that
   holds a `[project]` table is judged, a gitlink never entered; a file with `tests`, `fixtures` or `node_modules` among its
   folders is no project's own and is not judged (NAMING-5). Its `name`, after PEP 503 normalisation, is

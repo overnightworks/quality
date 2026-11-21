@@ -524,7 +524,7 @@ def test_the_gate_pin_of_a_checkout_is_one_state(build_repo, files, remotes, set
 def test_the_gate_pin_of_workflow_texts_is_the_gate_pin_of_the_same_files(build_repo, remote, is_quality, uses_lines):
     texts = {".github/workflows/ci.yml": jobs(*uses_lines)}
     repo = build_repo(texts)
-    git(repo, "remote", "add", "origin", remote)
+    git(repo, "remote", "set-url", "origin", remote)
     assert checkout.gate_pin_of(texts, is_quality) == checkout.gate_pin(repo)
 
 

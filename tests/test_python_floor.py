@@ -25,6 +25,7 @@ from tests.support.check import (
 from tests.support.check import check_output as run
 from tests.support.config_refusals import ONE_LINE_NEED
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo
+from tests.support.github_remote import with_github_remote
 from tests.support.layout import UNCOVERED_FILES_RULE_COUNT
 
 
@@ -267,6 +268,7 @@ def test_a_gitlink_is_never_entered(build_repo, capsys, elsewhere, gitlink_path)
     repo = Path(elsewhere) / "outer"
     repo.mkdir()
     subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    with_github_remote(repo, "overnightworks/x")
     subprocess.run(
         ["git", "-C", str(repo), "update-index", "--add", "--cacheinfo", "160000", head_commit(inner), gitlink_path], check=True
     )

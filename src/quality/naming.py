@@ -12,12 +12,13 @@ from pathlib import Path, PurePosixPath
 
 from packaging.utils import canonicalize_name
 
-from quality import checkout, layout, repository
+from quality import layout, repository
+from quality.fleet_sources import FLEET_PREFIX
 from quality.report import CannotJudge, Finding, FindingEvent, Instruction, Unparsable
 from quality.rules import Rule
 
 DEVIATIONS_FILE = Path(__file__).with_name("naming_deviations.toml")
-DISTRIBUTION_PREFIX = "overnightworks-"
+READ_FROM_ORIGIN = "read from remote origin"
 ECOSYSTEM_NPM_PREFIX = "slidev-addon-"
 ROLE_SUFFIXES = ("runtime", "service", "client", "server", "lib", "sdk", "api")
 NOT_JUDGED_DIRECTORIES = frozenset({"node_modules", layout.TESTS_DIRECTORY, layout.FIXTURES_DIRECTORY})
@@ -73,19 +74,23 @@ def packaged_deviations() -> tuple[Deviation, ...]:
     )
 
 
-def check_naming(root: Path, modes: Mapping[str, str], origin: str | None, deviations: Sequence[Deviation]) -> list[Finding]:
-    """Each name a tracked `pyproject.toml` or `package.json` writes, and the repository's name, is a form of the stem
-    unless a deviation covers it. `modes` maps each tracked path to its index mode; a gitlink is never entered.
+def check_naming(
+    modes: Mapping[str, str],
+    pyprojects: Mapping[str, bytes],
+    package_jsons: Mapping[str, bytes],
+    origin: str | None,
+    deviations: Sequence[Deviation],
+) -> list[Finding]:
+    """Each name a `pyproject.toml` or `package.json` writes, and the repository's name, is a form of the stem unless a
+    deviation covers it. `modes` maps each tracked path to its index mode; `pyprojects` and `package_jsons` hold the
+    content of the manifests the tree holds, by tracked path.
 
-    `origin` is the `owner/name` of the remote `origin`, whose name is the stem. A checkout with no such remote cannot
-    be judged once a file holds a name; one with no name to judge is clean.
-    The findings carry the names the files write, the stem and fixed texts.
+    `origin` is the `owner/name` of the remote `origin`, whose name is the stem; a checkout with no such remote cannot
+    be judged. The findings carry the names the files write, the stem and fixed texts.
     """
-    claims = _claims(root, modes)
     if origin is None:
-        if claims:
-            raise CannotJudge(NO_ORIGIN_FACT, (NO_ORIGIN_STEP,))
-        return []
+        raise CannotJudge(NO_ORIGIN_FACT, (NO_ORIGIN_STEP,))
+    claims = _claims(modes, pyprojects, package_jsons)
     stem = origin.partition("/")[2]
     findings = [_misnamed(claim, stem) for claim in claims if not _accepted(claim, stem) and not _deviates(claim, origin, deviations)]
     problem = _repository_problem(stem)
@@ -94,26 +99,18 @@ def check_naming(root: Path, modes: Mapping[str, str], origin: str | None, devia
     return sorted(findings, key=lambda finding: (finding.path, finding.fact))
 
 
-def _claims(root: Path, modes: Mapping[str, str]) -> list[_Claim]:
-    projects = {_file(project.directory, layout.PROJECT_FILE): project.packages for project in layout.python_projects(modes)}
-    pyprojects = {path: packages for path, packages in projects.items() if _is_judged(path)}
-    contents = _read(root, modes, list(pyprojects))
-    claims = [claim for path, content in contents.items() for claim in _python_claims(path, content, pyprojects[path])]
-    package_files = [_file(directory, layout.PACKAGE_FILE) for directory in layout.frontend_projects(modes)]
-    wanted = [path for path in package_files if _is_judged(path)]
-    return [*claims, *(claim for path, content in _read(root, modes, wanted).items() for claim in _npm_claims(path, content))]
+def _claims(modes: Mapping[str, str], pyprojects: Mapping[str, bytes], package_jsons: Mapping[str, bytes]) -> list[_Claim]:
+    packages = {_file(project.directory, layout.PROJECT_FILE): project.packages for project in layout.python_projects(modes)}
+    return [
+        *(claim for path, content in pyprojects.items() if _is_judged(path) for claim in _python_claims(path, content, packages[path])),
+        *(claim for path, content in package_jsons.items() if _is_judged(path) for claim in _npm_claims(path, content)),
+    ]
 
 
 def _is_judged(path: str) -> bool:
     """Whether the manifest at `path` is no dependency's and no test fixture's: none of its folders is `node_modules`,
     `tests` or `fixtures`."""
     return NOT_JUDGED_DIRECTORIES.isdisjoint(PurePosixPath(path).parent.parts)
-
-
-def _read(root: Path, modes: Mapping[str, str], names: list[str]) -> dict[str, bytes]:
-    """The content of each name that is no gitlink and that the tree holds."""
-    present = checkout.on_disk(root, [name for name in names if modes[name] != layout.GITLINK_MODE])
-    return checkout.read_existing(repository.read_bytes, root, present)
 
 
 def _file(directory: str, name: str) -> str:
@@ -132,10 +129,10 @@ def _python_claims(path: str, content: bytes, packages: Sequence[str]) -> list[_
     uninstalled = _table(document, "tool", "uv").get("package") is False
     scripts = _table(project, "scripts")
     named = project.get("name")
-    if named is not None and not isinstance(named, str):
+    if "name" in project and not isinstance(named, str):
         raise Unparsable(f"{path} has a project name that is no string")
     return [
-        *([_Claim(path, NameKind.DISTRIBUTION, named, uninstalled)] if named is not None else []),
+        *([_Claim(path, NameKind.DISTRIBUTION, named, uninstalled)] if "name" in project else []),
         *(_Claim(path, NameKind.IMPORT, package) for package in packages),
         *(_Claim(path, NameKind.CLI, script) for script in scripts),
     ]
@@ -150,12 +147,12 @@ def _table(parent: Mapping[str, object], *keys: str) -> Mapping[str, object]:
 
 def _npm_claims(path: str, content: bytes) -> list[_Claim]:
     try:
-        document = json.loads(content)
+        document = json.loads(content.decode("utf-8-sig"))
     except (UnicodeDecodeError, ValueError, RecursionError) as error:
         raise Unparsable(f"{path} is not UTF-8 JSON that Python reads") from error
-    named = document.get("name") if isinstance(document, dict) else None
-    if named is None:
+    if not isinstance(document, dict) or "name" not in document:
         return []
+    named = document["name"]
     if not isinstance(named, str):
         raise Unparsable(f"{path} has a name that is no string")
     return [_Claim(path, NameKind.NPM, named)]
@@ -170,7 +167,7 @@ def _forms(claim: _Claim, stem: str) -> list[_Form]:
     match claim.kind:
         case NameKind.DISTRIBUTION:
             canonical = canonicalize_name(stem)
-            prefixed = _with_component(f"{DISTRIBUTION_PREFIX}{canonical}", "-")
+            prefixed = _with_component(f"{FLEET_PREFIX}{canonical}", "-")
             return [prefixed, _with_component(canonical, "-")] if claim.uninstalled else [prefixed]
         case NameKind.IMPORT:
             return [_with_component(stem.replace("-", "_"), "_")]
@@ -178,7 +175,7 @@ def _forms(claim: _Claim, stem: str) -> list[_Form]:
             return [_with_component(stem, "-")]
         case _:
             ecosystem = f"{ECOSYSTEM_NPM_PREFIX}{stem}"
-            return [_with_component(f"{DISTRIBUTION_PREFIX}{stem}", "-"), _with_component(stem, "-"), _Form(ecosystem, re.escape(ecosystem))]
+            return [_with_component(f"{FLEET_PREFIX}{stem}", "-"), _with_component(stem, "-"), _Form(ecosystem, re.escape(ecosystem))]
 
 
 def _compared(kind: NameKind, name: str) -> str:
@@ -202,7 +199,7 @@ def _deviates(claim: _Claim, origin: str, deviations: Sequence[Deviation]) -> bo
 
 def _misnamed(claim: _Claim, stem: str) -> Finding:
     forms = " or ".join(form.shown for form in _forms(claim, stem))
-    fact = f'{claim.kind} "{claim.found}" does not fit the stem "{stem}", read from remote origin'
+    fact = f'{claim.kind} "{claim.found}" does not fit the stem "{stem}", {READ_FROM_ORIGIN}'
     return Finding(Rule.NAMING, claim.path, None, fact, f"name it {forms}", event=FindingEvent.MISNAMED)
 
 
@@ -217,4 +214,4 @@ def _repository_problem(stem: str) -> tuple[str, str] | None:
 
 
 def _repository_finding(stem: str, fact: str, fix: str) -> Finding:
-    return Finding(Rule.NAMING, REPOSITORY_SOURCE, None, f'{NameKind.REPOSITORY} name "{stem}" {fact}', fix, event=FindingEvent.MISNAMED)
+    return Finding(Rule.NAMING, REPOSITORY_SOURCE, None, f'{NameKind.REPOSITORY} name "{stem}" {fact}, {READ_FROM_ORIGIN}', fix, event=FindingEvent.MISNAMED)

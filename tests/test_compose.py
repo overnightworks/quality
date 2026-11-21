@@ -19,6 +19,7 @@ from tests.support.check import (
 )
 from tests.support.check import check_output as run
 from tests.support.git_repositories import make_repo
+from tests.support.github_remote import with_github_remote
 from tests.support.merge import ONE_JOB
 
 
@@ -266,7 +267,7 @@ def test_a_tracked_compose_the_filesystem_refuses_to_read_is_exit_2(build_repo, 
 @pytest.mark.integration
 def test_compose_files_are_read_and_parsed_one_at_a_time(tmp_path, capsys):
     """The first file's YAML error is reported although a later file cannot be decoded."""
-    repo = make_repo(tmp_path, {"docs/compose-a.yaml": "a: [\n", "docs/compose-b.yaml": "x"})
+    repo = with_github_remote(make_repo(tmp_path, {"docs/compose-a.yaml": "a: [\n", "docs/compose-b.yaml": "x"}))
     (repo / "docs/compose-b.yaml").write_bytes(b"\xff")
     code, output = run(capsys, repo)
     assert (code, f"{refusal_row('files')}cannot read docs/compose-a.yaml" in output, "compose-b.yaml" in output) == (2, True, False), output

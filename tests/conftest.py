@@ -177,9 +177,10 @@ def summary(tmp_path, monkeypatch) -> Path:
 
 @pytest.fixture
 def fixture_origin() -> str | None:
-    """The `owner/name` of the GitHub remote `origin` that `build_repo` gives its repository; a test module that
-    writes names for the naming rule to judge overrides it, and None leaves the repository with no remote."""
-    return None
+    """The `owner/name` of the GitHub remote `origin` that `build_repo` gives its repository, since the naming rule
+    refuses a checkout without one; a test module that writes names for the rule to judge overrides it, and None
+    leaves the repository with no remote."""
+    return "acme/guidance"
 
 
 @pytest.fixture
