@@ -148,7 +148,7 @@ def _table(parent: Mapping[str, object], *keys: str) -> Mapping[str, object]:
 def _npm_claims(path: str, content: bytes) -> list[_Claim]:
     try:
         document = json.loads(content.decode("utf-8-sig"))
-    except (UnicodeDecodeError, ValueError, RecursionError) as error:
+    except (ValueError, RecursionError) as error:
         raise Unparsable(f"{path} is not UTF-8 JSON that Python reads") from error
     if not isinstance(document, dict) or "name" not in document:
         return []
