@@ -99,6 +99,7 @@ layers = [
     "baseline_file",
     "checkout",
     "fleet_ci_time",
+    "fleet_job_time",
     "output",
     "web",
     "deadline | ci_time",

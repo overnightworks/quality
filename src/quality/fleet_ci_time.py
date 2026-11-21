@@ -1,5 +1,5 @@
 """The weekly CI time of the fleet's repositories: each one's workflow runs of the last seven days read from GitHub,
-grouped by head commit, and the commits' median, p90 and red share."""
+grouped by head commit, and the commits' median, p90 and red shares, then the jobs of a sample of those runs."""
 
 import json
 from collections import defaultdict
@@ -9,20 +9,20 @@ from datetime import date, datetime, timedelta
 from email.message import Message
 from urllib.parse import quote
 
-from quality import ci_time, output
+from quality import ci_time, fleet_job_time, output
 from quality.report import CannotJudge
 
 WINDOW_DAYS = 7
 PAGE_SIZE = 100
-PAGES_PER_REPOSITORY = 10
 CALLS_PER_REPORT = 600
 RUNS_URL = "https://api.github.com/repos/{name}/actions/runs?created={created}&per_page={size}&page={page}"
-COUNTED_EVENTS = frozenset({"pull_request", "push"})
+PULL_REQUEST, PUSH = "pull_request", "push"
+COUNTED_EVENTS = frozenset({PULL_REQUEST, PUSH})
 RED_CONCLUSIONS = frozenset({"failure", "timed_out"})
 CANCELLED = "cancelled"
 UNREADABLE = "cannot read CI time"
 MEDIAN, P90 = 50, 90
-COLUMNS = ("Repo", "Commits", "Median", "p90", "Red (incl. declared-only)")
+COLUMNS = ("Repo", "Commits", "Median", "p90", "Red", "Red on main", "Jobs sampled", "Queue p90", "Over 12 min")
 PARTLY_READ = "partly read"
 DASH = "—"
 
@@ -30,13 +30,26 @@ RunsFetch = Callable[[str, Mapping[str, str], Callable[[Exception], CannotJudge]
 
 
 @dataclass(frozen=True)
+class RedShare:
+    """The commits of one population that are red, of all those the population counted."""
+
+    red: int
+    of: int
+
+    def cell(self) -> str:
+        return f"{round(100 * self.red / self.of)} % ({self.red} of {self.of})" if self.of else DASH
+
+
+@dataclass(frozen=True)
 class WeeklyCiTime:
-    """What a repository's counted commits come to; the walls are None when no commit was counted."""
+    """What a repository's counted commits come to; the walls are None when no commit was counted. `red` is over the
+    commits with a pull_request run, `red_on_main` over those with a push run on the default branch."""
 
     commits: int
     median: timedelta | None
     p90: timedelta | None
-    red: int
+    red: RedShare
+    red_on_main: RedShare
 
 
 @dataclass(frozen=True)
@@ -51,12 +64,16 @@ class FleetCiTime:
     """One entry per repository and the calls the whole read made."""
 
     rows: dict[str, WeeklyCiTime | PartlyRead]
+    jobs: dict[str, fleet_job_time.JobTime | fleet_job_time.JobsUnread | fleet_job_time.JobsCut]
     calls: int
 
 
 @dataclass(frozen=True)
 class _Run:
+    run_id: int
     sha: str
+    event: str
+    branch: str
     created: datetime
     updated: datetime
     finished: bool
@@ -68,46 +85,61 @@ def api_headers(token: str) -> dict[str, str]:
     return {"Accept": "application/vnd.github+json", **({"Authorization": f"Bearer {token}"} if token else {})}
 
 
-def read_fleet_ci_time(names: tuple[str, ...], today: date, token: str, fetch: RunsFetch) -> FleetCiTime:
-    """Each repository's weekly CI time, read page by page within the report's call cap."""
+def read_fleet_ci_time(names: tuple[str, ...], today: date, token: str, fetch: RunsFetch, default_branch: str) -> FleetCiTime:
+    """Each repository's weekly CI time, read page by page within the report's call cap, then the jobs of a sample of
+    each one's runs within what the cap leaves."""
     created = quote(f">={today - timedelta(days=WINDOW_DAYS)}", safe="")
+    headers = api_headers(token)
     rows: dict[str, WeeklyCiTime | PartlyRead] = {}
+    sampled: dict[str, list[fleet_job_time.RunToSample]] = {}
     calls = 0
     for name in names:
-        reading, used = _read_repository(name, created, api_headers(token), fetch, CALLS_PER_REPORT - calls)
-        rows[name] = reading
+        rows[name], sampled[name], used = _read_repository(name, created, headers, fetch, default_branch, CALLS_PER_REPORT - calls)
         calls += used
-    return FleetCiTime(rows, calls)
+    jobs = {}
+    share = sum(bool(runs) for runs in sampled.values())
+    for name, runs in sampled.items():
+        size = fleet_job_time.sample_size(len(runs), CALLS_PER_REPORT - calls, share)
+        if size:
+            jobs[name], used = fleet_job_time.read_job_time(name, fleet_job_time.evenly(runs, size), headers, fetch)
+            calls += used
+        elif runs:
+            jobs[name] = fleet_job_time.JobsCut()
+        share -= bool(runs)
+    return FleetCiTime(rows, jobs, calls)
 
 
-def table_cells(name: str, reading: WeeklyCiTime | PartlyRead) -> tuple[str, ...]:
+def table_cells(name: str, fleet: FleetCiTime) -> tuple[str, ...]:
     """The cells of the repository's row under COLUMNS."""
+    reading = fleet.rows[name]
     if isinstance(reading, PartlyRead):
-        return (name, f"{PARTLY_READ}{output.SEPARATOR}{reading.reason}", DASH, DASH, DASH)
+        return (name, f"{PARTLY_READ}{output.SEPARATOR}{reading.reason}", *[DASH] * (len(COLUMNS) - 2))
     if reading.median is None or reading.p90 is None:
-        return (name, "0", DASH, DASH, DASH)
-    red = f"{round(100 * reading.red / reading.commits)} % ({reading.red} of {reading.commits})"
-    return (name, str(reading.commits), _duration(reading.median), _duration(reading.p90), red)
+        return (name, "0", *[DASH] * (len(COLUMNS) - 2))
+    walls = (str(reading.commits), _duration(reading.median), _duration(reading.p90), reading.red.cell(), reading.red_on_main.cell())
+    return (name, *walls, *fleet_job_time.table_cells(fleet.jobs.get(name)))
 
 
 def _duration(wall: timedelta) -> str:
     return output.format_duration(wall.total_seconds())
 
 
-def _read_repository(name: str, created: str, headers: Mapping[str, str], fetch: RunsFetch, budget: int) -> tuple[WeeklyCiTime | PartlyRead, int]:
+def _read_repository(
+    name: str, created: str, headers: Mapping[str, str], fetch: RunsFetch, default_branch: str, budget: int
+) -> tuple[WeeklyCiTime | PartlyRead, list[fleet_job_time.RunToSample], int]:
     runs: list[_Run] = []
     pages = 0
     try:
-        while pages < PAGES_PER_REPOSITORY and pages < budget:
+        while pages < budget:
             pages += 1
             body, _ = fetch(RUNS_URL.format(name=name, created=created, size=PAGE_SIZE, page=pages), headers, _unreadable)
             answered, total = _parse_page(body)
             runs.extend(answered)
             if pages * PAGE_SIZE >= total:
-                return _weekly(runs), pages
+                return _weekly(runs, default_branch), [fleet_job_time.RunToSample(run.run_id, run.created) for run in runs if run.finished], pages
     except CannotJudge:
-        return PartlyRead(UNREADABLE), pages
-    return PartlyRead(f"{output.counted(pages, 'page')} read"), pages
+        return PartlyRead(UNREADABLE), [], pages
+    return PartlyRead(f"{output.counted(pages, 'page')} read"), [], pages
 
 
 def _unreadable(error: Exception) -> CannotJudge:
@@ -131,19 +163,29 @@ def _run(entry: Mapping[str, object]) -> _Run | None:
     if entry["event"] not in COUNTED_EVENTS:
         return None
     created, updated = ci_time.parsed_moment(entry["created_at"]), ci_time.parsed_moment(entry["updated_at"])
-    if created is None or updated is None or not isinstance(entry["head_sha"], str):
+    run_id, sha, branch = entry["id"], entry["head_sha"], entry["head_branch"] or ""
+    if created is None or updated is None or type(run_id) is not int or not isinstance(sha, str) or not isinstance(branch, str):
         raise _unreadable(ValueError(entry))
     conclusion = entry["conclusion"]
-    return _Run(entry["head_sha"], created, updated, entry["status"] == ci_time.COMPLETED, conclusion if isinstance(conclusion, str) else None)
+    return _Run(run_id, sha, entry["event"], branch, created, updated, entry["status"] == ci_time.COMPLETED, conclusion if isinstance(conclusion, str) else None)
 
 
-def _weekly(runs: list[_Run]) -> WeeklyCiTime:
+def _weekly(runs: list[_Run], default_branch: str) -> WeeklyCiTime:
     by_commit: dict[str, list[_Run]] = defaultdict(list)
     for run in runs:
         by_commit[run.sha].append(run)
     counted = [commit for commit in by_commit.values() if all(run.finished for run in commit) and any(run.conclusion != CANCELLED for run in commit)]
+    none = RedShare(0, 0)
     if not counted:
-        return WeeklyCiTime(0, None, None, 0)
+        return WeeklyCiTime(0, None, None, none, none)
     walls = [max(run.updated for run in commit) - min(run.created for run in commit) for commit in counted]
-    red = sum(any(run.conclusion in RED_CONCLUSIONS for run in commit) for commit in counted)
-    return WeeklyCiTime(len(counted), ci_time.nearest_rank(walls, MEDIAN), ci_time.nearest_rank(walls, P90), red)
+    red = _red_share(counted, lambda run: run.event == PULL_REQUEST)
+    red_on_main = _red_share(counted, lambda run: run.event == PUSH and run.branch == default_branch)
+    return WeeklyCiTime(len(counted), ci_time.nearest_rank(walls, MEDIAN), ci_time.nearest_rank(walls, P90), red, red_on_main)
+
+
+def _red_share(commits: list[list[_Run]], in_population: Callable[[_Run], bool]) -> RedShare:
+    """The commits with a run of the population, and those among them with such a run concluded red."""
+    members = [[run for run in commit if in_population(run)] for commit in commits]
+    members = [runs for runs in members if runs]
+    return RedShare(sum(any(run.conclusion in RED_CONCLUSIONS for run in runs) for runs in members), len(members))
