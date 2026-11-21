@@ -1,8 +1,0 @@
-claim_id = "9fe4b505ecf64835978e75a61a966e99"
-agent = "Claude c337e1ba-7102-43fb-8789-c53cf4a25621"
-role = "builder"
-base = "6058b1ba8bd1bd910a01eeec78d0a77d1e92e71d"
-branch = "claude/issue-931-ci-time-json-on-pages"
-scope = [".github/workflows/report.yml", "docs/ARCHITECTURE.md", "docs/commands.md", "src/quality/cli.py", "src/quality/cli_help.py", "src/quality/fleet.py", "src/quality/fleet_ci_time.py", "tests/conftest.py", "tests/test_cli_help.py", "tests/test_fleet.py", "tests/test_fleet_ci_time.py", "tests/test_fleet_report.py"]
-opened_commit = "08d153caf1cacc8160d0f4a829d75dc8f3a57017"
-whole_reason = "One option, one document and one workflow job share one contract; the tests and docs that pin the old report belong to the same change."
