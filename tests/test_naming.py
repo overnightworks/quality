@@ -207,8 +207,9 @@ def test_a_gitlink_at_a_manifest_path_is_never_entered(build_repo, elsewhere):
         pytest.param({"web/package.json": '["name"]'}, id="a package.json that is no object"),
     ],
 )
-def test_a_manifest_without_a_name_has_nothing_to_judge(judge, files):
-    assert judge(files) == []
+def test_a_manifest_without_a_name_has_nothing_to_judge(build_repo, files):
+    repo = with_github_remote(build_repo({**GUIDANCE, **files}), SHOP)
+    assert (rule_findings(repo, Rule.NAMING), Rule.NAMING in refusals(repo)) == ([], False)
 
 
 def test_each_wrong_kind_is_a_finding_of_its_own_at_its_file(judge):
