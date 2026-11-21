@@ -3,6 +3,6 @@ agent = "Claude c337e1ba-7102-43fb-8789-c53cf4a25621"
 role = "builder"
 base = "02ac8f7d0988c160dc4c1c97be7490f25eed36ab"
 branch = "claude/issue-934-pytest-random-rule"
-scope = ["docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/check.py", "src/quality/fleet_sources.py", "src/quality/pytest_random.py", "src/quality/report.py", "src/quality/rules.py", "src/quality/workflow_rules.py", "tests/test_cli_help.py", "tests/test_fleet_matrix.py", "tests/test_pytest_random.py", "uv.lock"]
+scope = ["docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/check.py", "src/quality/fleet_sources.py", "src/quality/pytest_random.py", "src/quality/report.py", "src/quality/rules.py", "src/quality/workflow_rules.py", "tests/test_check.py", "tests/test_cli_help.py", "tests/test_fleet_matrix.py", "tests/test_pytest_random.py", "tests/test_workflow_rules_pytest.py", "uv.lock"]
 opened_commit = "0eeb4cc93d051569874df89012c484295c9731cc"
 whole_reason = "One rule with its module, wiring and docs, and the adoption that must precede it; the paths are the module, the catalogue and help pins and the docs."
