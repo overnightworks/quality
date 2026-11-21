@@ -223,10 +223,10 @@ def _judged_properties(environment: Mapping[str, str]) -> JudgedProperties:
             off = output.Row(output.Glyph.NOTE, "sonar", SonarEvent.OFF, f"{CONFIG_PATH} sets [gate] sonar = false")
             return JudgedProperties((off,), (output.SONAR_OUTPUT, output.SONAR_OFF), ("off", "nothing reaches SonarCloud"))
         check_properties(root, environment)
+        excluded = excluded_rules(repository.is_on_disk(root, DEPENDABOT_CONFIG))
         run = Run.of(environment)
         if run.kind is RunKind.UNSERVED:
             return JudgedProperties((unserved_row(run),), (output.SONAR_OUTPUT, output.SONAR_OFF), (SonarEvent.UNSERVED,))
-        excluded = excluded_rules(repository.is_on_disk(root, DEPENDABOT_CONFIG))
     except ConfigError as error:
         raise config_refusal(error, PUSH_THE_FIX) from error
     except repository.RepositoryFileError as error:

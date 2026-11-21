@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -323,6 +324,25 @@ def test_the_preflights_refusals_stop_a_run_sonarcloud_serves_nothing_of(monkeyp
         monkeypatch, capsys, build_repo, properties=properties, environment=environment, extra_files=files, step_output=step_output
     )
     assert (code, out, named in err, step_output.exists()) == (2, "", True, False)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 path, so no permission is refused")
+def test_an_unreachable_bot_config_refuses_a_run_sonarcloud_serves_nothing_of(monkeypatch, capsys, build_repo, tmp_path):
+    """SONAR-22, SONAR-129: the inaccessible Dependabot file is refused before the run kind is decided, so an unserved run writes no sonar=off."""
+    step_output = tmp_path / "github_output"
+
+    def lock_github(root: Path) -> None:
+        (root / ".github").mkdir()
+        (root / ".github" / "dependabot.yml").write_text("version: 2\n")
+        (root / ".github").chmod(0)
+
+    try:
+        code, out, err = run_properties(
+            monkeypatch, capsys, build_repo, environment=unserved_environment("workflow_dispatch", "lane"), arrange=lock_github, step_output=step_output
+        )
+    finally:
+        Path(".github").chmod(0o755)
+    assert (code, out, ".github/dependabot.yml" in err, step_output.exists()) == (2, "", True, False)
 
 
 def test_sonar_off_precedes_the_run_kind_so_the_config_needs_no_run_environment(monkeypatch, capsys, build_repo, tmp_path):
