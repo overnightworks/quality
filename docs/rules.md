@@ -13,10 +13,10 @@ row (CHECK-6); the verdict counts only the named areas (`✓ clean · 1 area`) (
 theirs (CHECK-8), so a named run says nothing of the rest. The gate runs all seven ([gate](gate.md#gateyml)).
 
 Three statements hold for each of five declaration tables of `quality/config.toml` and the rule that reads it:
-`[[compose.allow]]`, `[[root.allow]]`, `[[layout.allow]]`, `[[python.allow]]` and `[[workflow.allow]]`. A malformed table other than the
-rule's own is forwarded with its validation error; the values of `[gate]` stay the verdict's to judge. A declaration is
-no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry. A config reader older than the rule refuses
-its table as an unknown key.
+`[[compose.allow]]`, `[[root.allow]]`, `[[layout.allow]]`, `[[python.allow]]` and `[[workflow.allow]]`. A malformed
+table other than the rule's own is forwarded with its validation error; the values of `[gate]` stay the verdict's to
+judge. A declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry. A config reader older
+than the rule refuses its table as an unknown key.
 
 It applies these rules:
 
