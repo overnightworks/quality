@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol
@@ -83,3 +83,9 @@ def _finished_runs(jobs: list[TimedJob]) -> list[_FinishedRun] | None:
             return None
         runs.append(_FinishedRun(job, job.created_at, job.started_at, job.completed_at))
     return runs
+
+
+def nearest_rank(walls: Sequence[timedelta], percent: int) -> timedelta:
+    """The percentile of `walls` by nearest rank: the value at rank ceil(percent/100 x count) of the sorted walls."""
+    ordered = sorted(walls)
+    return ordered[max(-(-percent * len(ordered) // 100), 1) - 1]

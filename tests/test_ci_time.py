@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from quality.ci_time import CiTime, measure, parsed_moment
+from quality.ci_time import CiTime, measure, nearest_rank, parsed_moment
 from quality.verdict import Job
 
 START = datetime.fromisoformat("2026-11-21T10:00:00+00:00")
@@ -58,3 +58,11 @@ def test_a_missing_timestamp_is_not_measured(jobs):
 )
 def test_only_a_stamp_with_a_zone_is_a_moment(text, measured):
     assert (parsed_moment(text) is not None) == measured
+
+
+@pytest.mark.parametrize(
+    ("walls", "percent", "expected"),
+    [([5], 50, 5), ([1, 2, 3, 4], 50, 2), ([1, 2, 3], 50, 2), (list(range(1, 11)), 90, 9), (list(range(1, 12)), 90, 10), ([9, 1, 5], 90, 9)],
+)
+def test_a_percentile_is_the_nearest_rank_of_the_sorted_walls(walls, percent, expected):
+    assert nearest_rank([timedelta(seconds=wall) for wall in walls], percent) == timedelta(seconds=expected)
