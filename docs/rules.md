@@ -235,15 +235,17 @@ It applies these rules:
   the contract's `unmatched_ignore_imports_alerting`: `error` (the default) is a finding
   `unused  contract <name> ignores a -> b`, fix `delete it from the contract's ignore_imports`, `warn` a
   [note row](output.md#notes) `· <config>  unused  contract <name> ignores a -> b`, `none` nothing (IMPORT-6). Each root
-  package is the one tracked `<dir>/<name>/__init__.py` outside the tests (IMPORT-7), and grimp reads it from there even when quality itself has imported a package of that name or an untracked copy comes first on `sys.path` (IMPORT-15). The rule cannot judge (exit `2`,
+  package is the one tracked `<dir>/<name>/__init__.py` outside the tests (IMPORT-7), and grimp reads it from there
+  even when quality itself has imported a package of that name or an untracked copy comes first on `sys.path`
+  (IMPORT-7, IMPORT-26). The rule cannot judge (exit `2`,
   before any caller code runs or any file outside is read) (IMPORT-8) two configs that each hold a section (IMPORT-9),
   a `contract_types` option (plugins would be imported) (IMPORT-10), a type other than forbidden, layers, independence,
   protected and acyclic_siblings (IMPORT-11), invalid contract options (IMPORT-12), a config value of the wrong type or
   any other error of import-linter or grimp (`contract <name> in pyproject.toml cannot be judged: ...` or
   `the config pyproject.toml cannot be judged: ...`) (IMPORT-13), a dotted root
   package, because a root package is one tracked `<name>/__init__.py` and quality judges only top-level ones
-  (IMPORT-14), a root package with no or several such directories (IMPORT-15), a root package whose tracked
-  `__init__.py` the checkout does not hold, a symlink under a root package that leaves the repository, directly or through
+  (IMPORT-14), a root package with no or several such directories, or whose tracked `__init__.py` the checkout does
+  not hold (IMPORT-15), a symlink under a root package that leaves the repository, directly or through
   a link that stays inside (IMPORT-17), and a symlink loop (IMPORT-18), a dangling link (IMPORT-19), and a `.py` file
   that "cannot be examined" (no regular file (IMPORT-20), a name or content that is not valid UTF-8 (IMPORT-21), a
   coding cookie in any spelling but utf-8, utf8, ascii, us-ascii or ansi_x3.4-1968 (accepted in any letter case)

@@ -172,7 +172,7 @@ def judged_package(name: str, directory: str) -> dict[str, str]:
 )
 def test_a_root_package_is_judged_from_its_tracked_directory_whatever_the_process_imported(
         build_repo, capsys, monkeypatch, name, directory, untracked_copy):
-    """IMPORT-15, IMPORT-26: a root package quality has imported, or an untracked copy found first on sys.path, never
+    """IMPORT-7, IMPORT-26: a root package quality has imported, or an untracked copy found first on sys.path, never
     stands in for the tracked directory: its contract is judged on the tracked code, and no message names a local
     path."""
     repo = build_repo(judged_package(name, directory))
@@ -550,11 +550,13 @@ def test_a_config_linked_to_nowhere_cannot_be_judged(build_repo, capsys):
 
 
 def test_a_tracked_package_init_deleted_from_disk_cannot_be_judged_without_a_traceback(build_repo, capsys):
-    """A tracked __init__.py of a root package that is gone from disk is exit 2, never a traceback."""
+    """IMPORT-15, IMPORT-26: a tracked __init__.py of a root package that is gone from disk is exit 2 with its reason,
+    never a traceback."""
     repo = build_repo({**SHOP_DB_IMPORTS_WEB, ".importlinter": ini(FORBIDDEN)})
     (repo / "src/shop/__init__.py").unlink()
     code, output = run(capsys, repo)
-    assert (code, REFUSED in output, "Traceback" in output) == (2, True, False), output
+    assert (code, "Traceback" in output) == (2, False), output
+    assert f"{REFUSED}src/shop/__init__.py cannot be examined: the checkout does not hold it" in output
 
 
 def test_an_error_inside_a_contract_check_names_the_contract_without_a_traceback(build_repo, capsys, monkeypatch):
@@ -597,13 +599,9 @@ def test_a_run_writes_nothing_and_leaves_the_interpreter_as_it_was(build_repo, c
     assert (list(sys.path), dict(sys.modules), grimp_settings.PACKAGE_FINDER) == before
 
 
-def test_a_failing_graph_build_leaves_grimps_package_finder_as_it_was(build_repo, capsys, monkeypatch):
+def test_a_failing_graph_build_leaves_grimps_package_finder_as_it_was(build_repo, capsys):
     """IMPORT-5: an error inside grimp's graph build still restores the package finder."""
-    def fail(*_roots, **_options):
-        raise RuntimeError("build failed")
-
-    repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
-    monkeypatch.setattr(grimp, "build_graph", fail)
+    repo = build_repo({**SHOP, "src/shop/bad.py": "def broken(:\n", ".importlinter": ini(FORBIDDEN)})
     finder_before = grimp_settings.PACKAGE_FINDER
     code, _ = run(capsys, repo)
     assert (code, grimp_settings.PACKAGE_FINDER) == (2, finder_before)
