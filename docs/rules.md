@@ -1624,6 +1624,69 @@ the rest. It judges independently of `advisory`, so neither refuses the other (S
 
 It first ships in v0.21.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column (FLEET-18).
 
+`pytest-random`, in the `dependencies` area, holds the unit and integration layers to the fleet standard's "random order
+with the seed printed" (pytest-randomly). Three readers judge that one decision.
+
+- **The lock (RANDOM-1, RANDOM-2).** Every tracked `uv.lock`, found and read as `fleet-source` finds and reads it
+  (SOURCE-5, SOURCE-6): a lock that holds the package `pytest` and not `pytest-randomly`, names compared canonicalised, is
+  one `missing` finding at the lock (`pytest 9.2.0 is locked without pytest-randomly`), its fix adding the plugin to the dev
+  dependency group, then `uv lock`. A lock with neither package, or with the plugin alone, is clean. The row's extent is the
+  locks read, and a repository without a lock, a `pyproject.toml` or a workflow is clean at `0`. The rule reads the lock,
+  not a layer: R6 binds the unit and integration layers, and the marker (RANDOM-8) is the way out of a flow layer on the
+  workflow side only.
+- **The options (RANDOM-4 to RANDOM-7).** Three sources hold a list of pytest options: `addopts` in `[tool.pytest.ini_options]`
+  of each `pyproject.toml` the `python-floor` rule reads (a list, or a string split as shell words; so a gitlink and a fixture
+  project under another project's `tests/` stay out), a pytest call of a workflow `run:` script (the calls
+  `pytest-workers` finds, PYTEST-3) and `PYTEST_ADDOPTS` (RANDOM-11). Each source is judged alone, and a
+  source is one finding, the no-shuffle problem first. **Deliberate simplification:** pytest joins the verbosity of `addopts`,
+  then `PYTEST_ADDOPTS`, then the call, and the rule does not; it is stricter than R6 only where a `-q` in one source meets a
+  `-v` in another, or where the plugin is loaded again from another source than the one that switched autoload off, a case
+  no fleet repository has.
+  - *No random order, `unshuffled` (RANDOM-5):* `-p no:randomly` or `-pno:randomly`, `--randomly-dont-reorganize`, a fixed seed
+    (`--randomly-seed=<integer>` or `--randomly-seed=last`, the last of them counting) and `--disable-plugin-autoload`
+    unless the source also holds `-p randomly` or `-p pytest_randomly`, which loads the plugin again. `--randomly-seed=default`
+    draws a fresh seed and is clean. `last` is `unshuffled` although a runner without a restored cache draws a new seed: it
+    exists to reproduce a run, and it fixes the order as soon as a cache persists.
+  - *No seed in the log, `unseeded` (RANDOM-6):* the plugin prints its seed only as a report-header line, and pytest prints
+    header lines only from verbosity 0 up. `-v` adds one to the level, `-q` and `--quiet` take one, `--verbosity=<n>` and
+    `--verbosity <n>` set it, read in order of appearance; a level below zero, or `--no-header`, is `unseeded`. So `-q`, `-qq`,
+    `-qn4` and `--verbosity=-1` hide the seed, `-q -v`, `-qv`, `-q --verbosity=0` and `-n auto` show it, and `--verbosity=0 -q` hides it.
+  - *Reading (RANDOM-7):* only the words before the first `--` are options. In a short cluster (`-abc`) each letter is read
+    from the left, and a letter that takes a value (`-p`, `-o`, `-r`, `-k`, `-m`, `-c`, `-W`, `-n`, the set of pytest 9.2.0
+    and pytest-xdist 3.8.0) ends the cluster with the rest of the word, or the next word, as its value: `-kquick`, `-rfq`
+    and `-n4 -k q` are clean, `-qn4` and `-qk quick` are `unseeded`. An option a plugin of the repository adds is not known. A
+    `--randomly-seed` value built with `${{ }}` is chosen at run time and is clean (a named gap), and so is a value of
+    `PYTEST_ADDOPTS` that holds `${{ }}`.
+  - An `addopts` finding stands at the key's line in the `pyproject.toml` (no line where the key is not a plain `addopts =`
+    line of its table), and nothing clears it, since `addopts` holds for every layer (RANDOM-8).
+- **The workflow (RANDOM-9, RANDOM-11).** A call is read with the reader of `pytest-workers` (PYTEST-2, PYTEST-3), through
+  `uv run`, `python -m pytest` and the other runners, at the call's first line. `PYTEST_ADDOPTS` and
+  `PYTEST_DISABLE_PLUGIN_AUTOLOAD` are read where a workflow, a job or a step sets them in `env:`, at the value's line, and
+  as an assignment word of a script, leading a command (`PYTEST_ADDOPTS=-q pytest`, `env PYTEST_ADDOPTS=-q pytest`) or after
+  `export`. Any value of `PYTEST_DISABLE_PLUGIN_AUTOLOAD` that is not empty switches the autoload off, as pytest reads it, so
+  it is `unshuffled`, whatever else `env:` holds. A call behind a script, `make` or a mise task, a
+  `pytest.main([...])`, a flag in `pytest.ini`, `tox.ini` or `setup.cfg` and a plugin disabled in a `conftest.py` are not read.
+- **The marker (RANDOM-8).** A comment `# pytest-random: <reason>`, with a reason that holds a letter, on the line of a
+  workflow call, assignment or `env:` value, or directly above it, clears the finding (the form of `# pytest-workers:`,
+  PYTEST-7). It is the way out of a flow layer (end-to-end, browser, image); it clears nothing in `addopts`, and it has no
+  other form.
+- **Facts and fixes (RANDOM-10).** `unshuffled`: `pytest-randomly is switched off or its order fixed by <source>`, its fix
+  naming what to drop (`-p no:randomly`, `--randomly-dont-reorganize`, `--randomly-seed=<integer or last>`,
+  `--disable-plugin-autoload` and `PYTEST_DISABLE_PLUGIN_AUTOLOAD`). `unseeded`: `pytest-randomly's seed header is hidden by
+  <source>`, its fix `drop -q, --verbosity=-1 and --no-header so the log prints "Using --randomly-seed=N"`. The `<source>` is
+  `addopts`, `the call`, `PYTEST_ADDOPTS` or `PYTEST_DISABLE_PLUGIN_AUTOLOAD`; a workflow finding adds `, or explain on the
+  line above: # pytest-random: <reason>`.
+- **What cannot be read (RANDOM-3, RANDOM-12, RANDOM-13).** A lock or `pyproject.toml` that is no UTF-8 TOML, a lock whose
+  packages are no list of tables and an `addopts` that is neither a string of shell words nor a list of strings are exit `2`
+  naming the file. A workflow whose YAML cannot be read, and an alias or a merge key where it can hide `jobs`, a job, `steps`,
+  a step or an `env:`, are exit `2` naming the file, as for `pytest-workers` (PYTEST-9), and so is an `env:` value of the
+  two variables that is no shell words. A pytest line the shared reading cannot read or finds built at run time is `invalid` for
+  `pytest-workers` (PYTEST-6) and no finding of this rule, so it is red once.
+- **No release, no switch (RANDOM-14).** No configuration switches the rule off and no declaration table exists. The rule has no
+  release yet, so a dependent meets it at the first release that names it. quality's own tree holds no finding of it. Not covered, named: pytest and
+  pytest-randomly locked in different dependency groups where a job installs one group only, a test environment installed
+  from a requirements file instead of the lock, and an option or flag built with `${{ }}`.
+
 The `logging` rule, in the `code` area, judges a repository against the machine rules of the fleet standard "Logging" with
 logline's own checker, `logline.check.check` of the logline release quality pins. quality holds no copy of the standard's
 values and runs no logging analysis of its own; a rule's wording and its gaps are logline's README's.
