@@ -24,13 +24,18 @@ def timed_entry(job_id, name, attempt, created, started, completed):
     [
         pytest.param(
             [timed_entry(1, "checks", 1, 0, 2, 30), timed_entry(2, "quality / sonar", 1, 5, 7, 62)],
-            "· time measured 1m02s wall · slowest quality / sonar 55s · longest wait 2s",
+            "· time measured 1m02s wall · slowest quality / sonar 55s · longest wait 2s · longest chain 1 job 57s",
             id="one attempt",
         ),
         pytest.param(
             [timed_entry(1, "checks", 1, 0, 1, 400), timed_entry(2, "checks", 2, 500, 503, 530)],
-            "· time measured 8m50s wall · slowest checks 27s · longest wait 3s",
+            "· time measured 8m50s wall · slowest checks 27s · longest wait 3s · longest chain 1 job 30s",
             id="a re-run counts from its first attempt",
+        ),
+        pytest.param(
+            [timed_entry(1, "checks", 1, 0, 2, 30), timed_entry(2, "quality / sonar", 1, 30, 31, 62), timed_entry(3, "quality / verdict", 1, 62, 63, 70)],
+            "· time measured 1m10s wall · slowest quality / sonar 31s · longest wait 2s · longest chain 3 jobs 1m10s",
+            id="jobs waiting on each other form the chain",
         ),
         pytest.param([timed_entry(1, "checks", 1, 0, None, 30)], "· time not measured GitHub gave no timestamps", id="a missing timestamp"),
         pytest.param(

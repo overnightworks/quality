@@ -37,6 +37,44 @@ def test_a_re_run_counts_from_its_first_attempt_and_names_the_slowest_job_of_the
     assert seconds(measure(jobs)) == (640, "a", 39, 2)
 
 
+def chain(time: CiTime) -> tuple[int, float]:
+    return time.chain_jobs, time.chain.total_seconds()
+
+
+def test_the_chain_follows_jobs_created_when_another_completed_and_leaves_the_parallel_ones_out():
+    jobs = [
+        timed("tests", created=0, started=1, completed=100),
+        timed("lint", created=0, started=1, completed=20),
+        timed("sonar", created=101, started=102, completed=200),
+        timed("verdict", created=200, started=201, completed=215),
+    ]
+    assert chain(measure(jobs)) == (3, 215)
+
+
+def test_the_chain_of_jobs_that_wait_on_nothing_is_the_last_finished_job_alone():
+    jobs = [timed("a", created=0, started=1, completed=50), timed("b", created=10, started=11, completed=90)]
+    assert chain(measure(jobs)) == (1, 80)
+
+
+def test_the_chain_takes_the_later_of_two_jobs_finishing_in_the_same_second():
+    jobs = [
+        timed("early", created=0, started=1, completed=60),
+        timed("late", created=30, started=31, completed=60),
+        timed("verdict", created=60, started=61, completed=70),
+    ]
+    assert chain(measure(jobs)) == (2, 40)
+
+
+def test_the_chain_of_a_re_run_counts_the_newest_attempt_only():
+    jobs = [
+        timed("a", attempt=1, created=0, started=1, completed=100),
+        timed("b", attempt=1, created=100, started=101, completed=300),
+        timed("a", attempt=2, created=600, started=601, completed=640),
+        timed("b", attempt=2, created=640, started=641, completed=650),
+    ]
+    assert chain(measure(jobs)) == (2, 50)
+
+
 @pytest.mark.parametrize(
     "jobs",
     [

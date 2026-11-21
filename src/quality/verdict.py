@@ -692,7 +692,9 @@ def _time_row(time: ci_time.CiTime | None) -> Row:
     if time is None:
         return Row(Glyph.NOTE, "time", VerdictEvent.NOT_MEASURED, "GitHub gave no timestamps")
     slowest = f"slowest {time.slowest_job} {format_duration(time.slowest.total_seconds())}"
-    fact = SEPARATOR.join((f"{format_duration(time.wall.total_seconds())} wall", slowest, f"longest wait {format_duration(time.longest_wait.total_seconds())}"))
+    wait = f"longest wait {format_duration(time.longest_wait.total_seconds())}"
+    chain = f"longest chain {counted(time.chain_jobs, 'job')} {format_duration(time.chain.total_seconds())}"
+    fact = SEPARATOR.join((f"{format_duration(time.wall.total_seconds())} wall", slowest, wait, chain))
     return Row(Glyph.NOTE, "time", VerdictEvent.MEASURED, fact)
 
 

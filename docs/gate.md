@@ -114,10 +114,14 @@ on stdout, all sharing one subject column (VERDICT-22):
 - the jobs, as one `✓ jobs  success  N mandatory jobs · M gate jobs` row when all are green (VERDICT-27), else one row
   each, its event the job's conclusion in words (VERDICT-28), a conclusion GitHub adds later as `concluded <word>`
   (VERDICT-29);
-- the run's CI time, a note after the jobs, `· time  measured  6m12s wall · slowest quality / sonar 55s · longest wait 2s`
+- the run's CI time, a note after the jobs, `· time  measured  6m12s wall · slowest quality / sonar 55s · longest wait 2s · longest chain 3 jobs 5m35s`
   (VERDICT-74): the wall clock from the first attempt's first job to the last finished job (a re-run counts from its
   first attempt), the slowest finished job of the newest attempt, and the longest a job waited between its creation and
-  its start (runner wait only, since a job behind `needs` is created when its needs finish). A job lacking a timestamp
+  its start (runner wait only, since a job behind `needs` is created when its needs finish), and the longest chain of
+  jobs waiting on each other: a job created within two seconds of another's completion waits on it, and the chain runs
+  in the newest attempt back from its last finished job, each step to the job it waited on that finished later (a tie
+  takes the later listed), printed as its job count and its time from the first job's creation to the last job's
+  completion; a re-run's dependents are created at the re-run, so it shows a shorter chain. A job lacking a timestamp
   GitHub gives makes it `· time  not measured  GitHub gave no timestamps` (VERDICT-75); the exit is the jobs' either way;
 - on a pull request the loosenings, `✓ loosenings  none` or `! loosenings  N undeclared  M declared` (a count of none
   left out) with each loosening below it (VERDICT-30);
