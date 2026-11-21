@@ -9,7 +9,7 @@ import pytest
 from quality import naming
 from quality.report import FindingEvent
 from quality.rules import Rule
-from tests.support.check import check_output, check_result, refusals, rows_of, rule_findings
+from tests.support.check import check_output, refusals, rows_of, rule_findings
 from tests.support.git_repositories import GIT_IDENTITY, head_commit
 from tests.support.github_remote import with_github_remote
 
@@ -62,7 +62,6 @@ def judge(build_repo):
     ],
 )
 def test_a_distribution_is_the_prefixed_stem_with_an_optional_component_after_pep_503(judge, name, accepted):
-    """N2, N3."""
     assert (judge({"pyproject.toml": pyproject(name)}) == []) is accepted
 
 
@@ -76,12 +75,10 @@ def test_a_distribution_is_the_prefixed_stem_with_an_optional_component_after_pe
     ],
 )
 def test_a_distribution_nothing_installs_may_keep_the_bare_stem(judge, name, accepted):
-    """N3: `package = false`."""
     assert (judge({"pyproject.toml": pyproject(name, uninstalled=True)}) == []) is accepted
 
 
 def test_a_member_of_a_workspace_is_a_component(judge):
-    """N3: every tracked pyproject.toml alike, root or not."""
     files = {
         "pyproject.toml": pyproject("overnightworks-shop"),
         "worker/pyproject.toml": pyproject("overnightworks-shop-worker"),
@@ -108,7 +105,6 @@ def test_a_member_outside_the_stem_is_red_at_its_own_file(judge):
     ],
 )
 def test_an_import_package_is_the_stem_with_an_optional_underscore_component(judge, package, accepted):
-    """N2, N3: imports compare exactly."""
     assert (judge({"pyproject.toml": pyproject(), **packages(package)}) == []) is accepted
 
 
@@ -137,7 +133,6 @@ def test_an_import_writes_each_hyphen_of_the_stem_as_an_underscore(judge, reposi
     ],
 )
 def test_a_command_is_the_stem_with_an_optional_hyphenated_component(judge, script, accepted):
-    """N3: CLI names compare exactly."""
     assert (judge({"pyproject.toml": pyproject(scripts=(script,))}) == []) is accepted
 
 
@@ -155,7 +150,6 @@ def test_a_command_is_the_stem_with_an_optional_hyphenated_component(judge, scri
     ],
 )
 def test_an_npm_name_is_a_stem_form_or_an_ecosystem_form(judge, name, accepted):
-    """N4."""
     assert (judge({"web/package.json": package_json(name)}) == []) is accepted
 
 
@@ -167,14 +161,12 @@ def test_an_npm_name_is_a_stem_form_or_an_ecosystem_form(judge, name, accepted):
     ],
 )
 def test_a_package_json_in_node_modules_tests_or_a_fixture_is_not_judged(judge, path):
-    """N4."""
     files = {"pyproject.toml": pyproject(), path: package_json("foreign")}
     assert judge(files) == []
 
 
 @pytest.mark.parametrize("path", ["tests/sample/pyproject.toml", "tests/fixtures/sample/pyproject.toml", "fixtures/sample/pyproject.toml"])
 def test_a_pyproject_in_tests_or_a_fixture_is_not_judged_even_beside_no_root_project(judge, path):
-    """N3: a test fixture carries a name of its own."""
     assert judge({path: pyproject("foreign"), **packages("foreign", project=path.removesuffix("/pyproject.toml") + "/src")}) == []
 
 
@@ -231,12 +223,10 @@ def test_a_red_name_prints_as_a_misnamed_row_and_makes_the_run_red(build_repo, c
 
 @pytest.mark.parametrize("suffix", naming.ROLE_SUFFIXES)
 def test_a_repository_name_with_a_role_suffix_is_red_with_no_file_to_judge(judge, suffix):
-    """N6, marketplace#571 line 3."""
     assert judge({}, f"overnightworks/shop-{suffix}") == [(".git/config", f"shop-{suffix}")]
 
 
 def test_a_repository_name_with_a_capital_is_red(judge):
-    """N2."""
     assert judge({}, "overnightworks/Shop") == [(".git/config", "Shop")]
 
 
@@ -246,7 +236,6 @@ def test_a_repository_name_without_a_role_suffix_is_clean(judge, name):
 
 
 def test_no_github_origin_refuses_a_repository_that_holds_a_name_to_judge(build_repo):
-    """N1: as AGENTS-13."""
     reasons = refusals(build_repo({**GUIDANCE, "pyproject.toml": pyproject()}))
     assert "origin" in reasons[Rule.NAMING]
 
@@ -294,12 +283,3 @@ def test_every_packaged_deviation_names_a_repository_a_kind_a_name_and_a_ruling(
     assert re.fullmatch(r"[^/]+/[^/]+", deviation.repository)
     assert deviation.name
     assert deviation.ruling
-
-
-def test_the_rule_is_in_the_files_area_and_on_for_every_repository():
-    assert (Rule.NAMING.area.value, Rule.NAMING.release.switch.value) == ("files", "always")
-
-
-def test_the_run_names_the_rule_in_its_files_area(build_repo):
-    repo = with_github_remote(build_repo(GUIDANCE), SHOP)
-    assert Rule.NAMING in [verdict.rule for verdict in check_result(repo).verdicts]

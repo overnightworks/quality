@@ -377,7 +377,7 @@ def test_every_configured_remote_names_its_repository_and_none_names_a_repositor
     ],
 )
 def test_origin_repository_is_the_github_repository_of_the_remote_called_origin_and_no_other(tmp_path, remotes, origin):
-    """N1: the stem's owner keeps the remote's name that `github_repositories` drops."""
+    """The stem's owner keeps the remote's name that `github_repositories` drops."""
     repo = make_repo(tmp_path, {})
     for remote, repository in remotes.items():
         with_github_remote(repo, repository, remote=remote)
