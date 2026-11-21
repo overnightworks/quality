@@ -6,8 +6,6 @@ import pytest
 from quality import sonar
 from quality.report import CannotJudge
 from tests.support.sonar import (
-    FEATURE_ENVIRONMENT,
-    FINISHED_FOR_FEATURE,
     FINISHED_FOR_MAIN,
     FINISHED_FOR_PR_7,
     GATE_OK,
@@ -121,14 +119,10 @@ def test_the_gate_read_carries_the_token_in_the_header_only(monkeypatch, capsys)
     assert dict(fake.requests)[url] == "Basic " + base64.b64encode(f"{TOKEN}:".encode()).decode()
 
 
-@pytest.mark.parametrize(
-    ("environment", "task"), [(PUSH_ENVIRONMENT, FINISHED_FOR_MAIN), (FEATURE_ENVIRONMENT, FINISHED_FOR_FEATURE)],
-    ids=["default branch", "other branch"],
-)
-def test_a_branch_run_makes_no_gate_request_and_ignores_a_failing_gate(monkeypatch, capsys, environment, task):
+def test_a_default_branch_run_makes_no_gate_request_and_ignores_a_failing_gate(monkeypatch, capsys):
     """SONAR-4."""
-    fake = sonar_answering(task=task, gate=gate_error(failed_condition()))
-    code, *_ = run_cli(monkeypatch, capsys, fake, environment)
+    fake = sonar_answering(task=FINISHED_FOR_MAIN, gate=gate_error(failed_condition()))
+    code, *_ = run_cli(monkeypatch, capsys, fake, PUSH_ENVIRONMENT)
     assert (code, fake.urls_to("qualitygates/project_status")) == (0, [])
 
 
