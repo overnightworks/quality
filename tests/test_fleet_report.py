@@ -63,14 +63,31 @@ class Answer:
     failure: Exception | None = None
 
 
+NO_RUNS = b'{"total_count": 0, "workflow_runs": []}'
+
+
+def runs_of(*runs: tuple[str, str, str, str]) -> Answer:
+    """GitHub's answer for the runs listing; each run is `(head_sha, created_at, updated_at, conclusion)` of a pull request."""
+    entries = [
+        {"head_sha": sha, "event": "pull_request", "status": "completed", "conclusion": conclusion, "created_at": created, "updated_at": updated}
+        for sha, created, updated, conclusion in runs
+    ]
+    return Answer(json.dumps({"total_count": len(entries), "workflow_runs": entries}).encode())
+
+
 @dataclass
 class Listing:
     """A fake listing fetch: one answer per organization, and the url and headers of every request it got."""
 
     answers: dict[str, Answer]
+    runs: dict[str, Answer] = field(default_factory=dict)
     requests: list[tuple[str, dict[str, str]]] = field(default_factory=list)
+    runs_requests: list[tuple[str, dict[str, str]]] = field(default_factory=list)
 
     def __call__(self, url: str, headers: Mapping[str, str], unreadable: Callable[[Exception], CannotJudge]) -> tuple[bytes, Message]:
+        if "/repos/" in url:
+            self.runs_requests.append((url, dict(headers)))
+            return self._runs_answer(url, unreadable)
         self.requests.append((url, dict(headers)))
         answer = self.answers[url.split("/orgs/")[1].split("/")[0]]
         if answer.failure is not None:
@@ -79,6 +96,12 @@ class Listing:
         if answer.link is not None:
             headers_answered["Link"] = answer.link
         return answer.body, headers_answered
+
+    def _runs_answer(self, url: str, unreadable: Callable[[Exception], CannotJudge]) -> tuple[bytes, Message]:
+        answer = self.runs.get(url.split("/repos/")[1].split("/actions")[0], Answer(NO_RUNS))
+        if answer.failure is not None:
+            raise unreadable(answer.failure)
+        return answer.body, Message()
 
 
 def listed(*entries: tuple[str, ...]) -> Answer:
@@ -146,7 +169,8 @@ def test_a_measured_fleet_prints_its_rows_on_stderr_and_only_the_tables_on_stdou
     ]
     assert lines[9].startswith("Every gate release enforces ")
     assert lines[11].startswith("| Repo | Gate |")
-    assert (len(lines), [line.split(" |")[0] for line in lines[-2:]]) == (15, ["| o/alpha", "| o/beta-repository"])
+    assert lines[16].startswith("**CI time, last 7 days")
+    assert (len(lines), [line.split(" |")[0] for line in lines[-2:]]) == (22, ["| o/alpha", "| o/beta-repository"])
 
 
 def test_a_repository_that_cannot_be_cloned_is_its_row_and_the_pair_after_the_tables(capsys, monkeypatch, tmp_path, public, missing, remotes):
@@ -313,6 +337,8 @@ def test_the_listing_carries_the_job_token_only_when_there_is_one(capsys, monkey
     ((url, headers),) = listing.requests
     assert (url, headers.get("Authorization")) == ("https://api.github.com/orgs/o/repos?type=public&per_page=100", authorization)
     assert "dummy-token" not in printed.err + printed.out
+    ((_, runs_headers),) = listing.runs_requests
+    assert runs_headers.get("Authorization") == authorization
 
 
 @pytest.mark.parametrize(
@@ -475,3 +501,46 @@ def test_an_exclude_entry_of_an_organization_github_did_not_list_waits_for_the_r
         '        organizations = ["overnightworks"]\n'
         "    fix what the error names, then run quality report again\n"
     )
+
+
+def test_the_weekly_ci_time_is_a_third_table_and_leaves_the_exit_as_it_is(capsys, monkeypatch, tmp_path, public):
+    """FLEET-40, FLEET-104: each repository's commits, median, p90 and red share of the last 7 days stand in a third table
+    after the two others, in the step summary too, and a red week raises no finding."""
+    public("alpha", {"a.py": "a = 1\n"})
+    public("beta", {"b.py": "b = 1\n"})
+    slow = [("x", "2026-11-05T10:00:00Z", "2026-11-05T10:03:00Z", "failure"), ("y", "2026-11-05T11:00:00Z", "2026-11-05T11:01:00Z", "success")]
+    listing = Listing({"o": listed(("o/alpha",), ("o/beta",))}, runs={"o/alpha": runs_of(*slow)})
+    summary = tmp_path / "summary.md"
+    printed = report_in(
+        write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(*range(8)),
+        environment={"GITHUB_STEP_SUMMARY": str(summary)}, fetch_listing=listing,
+    )
+    assert printed.code == 0, printed.err
+    third = printed.out.split("**CI time, last 7 days")[1].splitlines()
+    assert third[0] == " · 2 API calls**"
+    assert third[2:] == [
+        "| Repo | Commits | Median | p90 | Red (incl. declared-only) |",
+        "|---|---|---|---|---|",
+        "| o/alpha | 2 | 1m00s | 3m00s | 50 % (1 of 2) |",
+        "| o/beta | 0 | — | — | — |",
+    ]
+    assert "| o/alpha | 2 | 1m00s |" in summary.read_text()
+    assert "created=%3E%3D2026-10-30" in listing.runs_requests[0][0]
+
+
+def test_a_repository_whose_runs_cannot_be_read_is_a_partly_read_row_and_the_exit_stays(capsys, monkeypatch, tmp_path, public):
+    """FLEET-37, FLEET-105: unreadable runs are a stderr row and a partly read table row, the other repository keeps its
+    numbers, and the closing line and exit are those of a report without the table."""
+    public("alpha", {"a.py": "a = 1\n"})
+    public("beta", {"b.py": "b = 1\n"})
+    listing = Listing(
+        {"o": listed(("o/alpha",), ("o/beta",))},
+        runs={"o/alpha": Answer(failure=OSError("down")), "o/beta": runs_of(("x", "2026-11-05T10:00:00Z", "2026-11-05T10:00:30Z", "success"))},
+    )
+    printed = report_in(write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(*range(8)), fetch_listing=listing)
+    assert printed.code == 0, printed.err
+    assert "  ✗ o/alpha  " in printed.err
+    assert "partly read    cannot read CI time" in printed.err
+    assert printed.err.splitlines()[-1].startswith("✓ 2 of 2 repositories measured")
+    assert "| o/alpha | partly read · cannot read CI time | — | — | — |" in printed.out
+    assert "| o/beta | 1 | 30s | 30s | 0 % (0 of 1) |" in printed.out

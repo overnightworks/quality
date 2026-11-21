@@ -170,7 +170,7 @@ def test_a_pipe_in_a_label_is_escaped_and_the_row_keeps_its_columns(fleet_report
     subprocess.run(["git", "-C", str(remotes / name), "add", "a|b.py"], check=True)
     subprocess.run(["git", "-C", str(remotes / name), *GIT_IDENTITY, "commit", "-q", "-m", "link"], check=True)
     _, output = fleet_report(name)
-    lines = [line for line in output.splitlines() if line.startswith("| o/pipe |")]
+    lines = [line for line in output.splitlines() if line.startswith("| o/pipe |")][:2]
     assert [r"a\|b.py" in line for line in lines] == [True, True]
     assert [len(re.split(r"(?<!\\)\|", line.strip("|"))) for line in lines] == [len(COLUMNS), len(MATRIX_COLUMNS)]
 

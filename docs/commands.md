@@ -175,11 +175,20 @@ list (FLEET-31)); the fleet is every public, non-archived, non-fork repository G
 `· fleet  N found  <organizations> · quality/fleet.toml` (without `<organizations> · ` when the file names none)
 (FLEET-33), then a row per repository as it is measured, sorted by name, case-insensitively (FLEET-34):
 `✓ <owner/name>  measured  <commit> · <time>` (FLEET-35), `✗ …  not measured <reason>` (FLEET-36), whose reason for a repository without a commit is `holds no commit` (FLEET-103), or
-`✗ …  partly read  cannot read <files>` (FLEET-37); a failed read of the release tags adds
+`✗ …  partly read  cannot read <files>` (FLEET-37), or, for a repository whose runs could not be read, `✗ …  partly read  cannot read CI time` (FLEET-105); a failed read of the release tags adds
 `✗ release tags  not read <reason>` under the fleet line (FLEET-38). The subjects share one column (FLEET-39). On stdout
-it prints the two markdown tables and nothing else, so `quality report > fleet.md` writes only them (FLEET-40): the size
+it prints the three markdown tables and nothing else, so `quality report > fleet.md` writes only them (FLEET-40): the size
 of every repository under a heading with the date, the quality version and that functions and CCN are measured for
-Python only (FLEET-41), then the same rows as a repo × rule matrix (FLEET-42). With `GITHUB_STEP_SUMMARY` set, the
+Python only (FLEET-41), then the same rows as a repo × rule matrix (FLEET-42), then under the heading
+`CI time, last 7 days · N API calls` one row per repository: `Repo`, `Commits`, `Median`, `p90` and `Red (incl. declared-only)`
+(FLEET-104). A commit is the unit: the runs created in the 7 days before the report's day over the events `pull_request` and
+`push`, grouped by head commit; its wall is its latest `updated_at` minus its earliest `created_at`, so a re-run counts from
+its first attempt. A commit with a run still in progress and a commit whose runs are all `cancelled` are left out. Median and
+p90 are nearest-rank over the walls; the red share is the commits with a run concluded `failure` or `timed_out` over the
+counted ones, a commit red only through a verdict of declared loosenings included. A repository reads at most 10 pages of 100
+runs and the report at most 600 calls; one a cap stops, or whose runs cannot be read, shows `partly read` and the pages read
+or `cannot read CI time` in place of its numbers, and the table raises no finding and changes no exit (FLEET-105). Private
+repositories are not read, and a commit whose runs begin before the window counts by its runs inside it. With `GITHUB_STEP_SUMMARY` set, the
 tables are appended there (FLEET-43). Every cell puts a backslash before `` \ ` * _ ~ [ ] < > & | ``, so repository text
 opens no HTML comment, link or new cell (FLEET-44); a bare URL still renders as a link to its own address. The run ends
 on stderr with `✓ N of N repositories measured · <time>` (`repository` for one, exit `0`) (FLEET-45) or with `error: `
