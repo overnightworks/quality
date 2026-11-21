@@ -120,15 +120,16 @@ def test_the_report_help_stands_in_its_frame(capsys):
     """HELP-4, HELP-11: the report help stands in a frame of its own, and -h prints the same."""
     help_text = help_of(capsys, ["report"])
     assert help_text == (
-        "usage: quality report [-v]\n"
+        "usage: quality report [--ci-time-json PATH] [-v]\n"
         "\n"
         "Measure every fleet repository quality/fleet.toml selects: size, debt, the gate\n"
-        "release it pins. A row per repository goes to stderr, the two markdown tables\n"
-        "to stdout and to the step summary.\n"
+        "release it pins, the CI time of the last 7 days. A row per repository goes to\n"
+        "stderr, the three markdown tables to stdout and to the step summary.\n"
         "\n"
         "Options:\n"
-        "  -v          show the raw scanner output; the report runs no scanner\n"
-        "  -h, --help  show this help\n"
+        "  --ci-time-json PATH  also write the weekly CI time as JSON to PATH\n"
+        "  -v                   show the raw scanner output; the report runs no scanner\n"
+        "  -h, --help           show this help\n"
         "\n"
         "Exit codes: 0 every repository measured, 2 could not answer, 130 interrupted.\n"
     )

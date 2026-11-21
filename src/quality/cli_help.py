@@ -85,15 +85,16 @@ Exit codes: 0 merged, 1 refused, 2 could not check or do, 130 interrupted.
 """
 
 REPORT_HELP = f"""\
-usage: quality report [-v]
+usage: quality report [--ci-time-json PATH] [-v]
 
 Measure every fleet repository {fleet.FLEET_PATH} selects: size, debt, the gate
-release it pins. A row per repository goes to stderr, the two markdown tables
-to stdout and to the step summary.
+release it pins, the CI time of the last 7 days. A row per repository goes to
+stderr, the three markdown tables to stdout and to the step summary.
 
 Options:
-  -v          show the raw scanner output; the report runs no scanner
-  -h, --help  show this help
+  --ci-time-json PATH  also write the weekly CI time as JSON to PATH
+  -v                   show the raw scanner output; the report runs no scanner
+  -h, --help           show this help
 
 Exit codes: 0 every repository measured, 2 could not answer, 130 interrupted.
 """

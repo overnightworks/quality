@@ -547,3 +547,83 @@ def test_a_repository_whose_runs_cannot_be_read_is_a_partly_read_row_and_the_exi
     assert printed.err.splitlines()[-1].startswith("✓ 2 of 2 repositories measured")
     assert "| o/alpha | partly read · cannot read CI time | — | — | — | — | — | — | — |" in printed.out
     assert "| o/beta | 1 | 30s | 30s | 0 % (0 of 1) | — | 1 | 7s | none |" in printed.out
+
+
+SLOW_WEEK = runs_of(("x", "2026-11-05T10:00:00Z", "2026-11-05T10:11:00Z", "success"))
+
+
+def fleet_of_two(tmp_path, public):
+    """A fleet of a repository with a week of 11-minute CI and one without runs, and the listing that serves it."""
+    public("alpha", {"a.py": "a = 1\n"})
+    public("beta", {"b.py": "b = 1\n"})
+    listing = Listing({"o": listed(("o/alpha",), ("o/beta",))}, runs={"o/alpha": SLOW_WEEK})
+    return write_organizations(tmp_path / "fleet", ["o"]), listing
+
+
+def test_the_option_writes_the_weekly_document_and_leaves_stdout_and_stderr_as_they_are(capsys, monkeypatch, tmp_path, public):
+    """FLEET-106, FLEET-107, FLEET-40: `--ci-time-json PATH` writes the document and prints nothing of its own; without
+    it the same report writes no file."""
+    folder, listing = fleet_of_two(tmp_path, public)
+    without = report_in(folder, capsys, monkeypatch, ticks(*range(8)), fetch_listing=listing)
+    assert sorted(path.name for path in folder.iterdir()) == ["quality"]
+    target = tmp_path / "site.json"
+    with_option = report_in(folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json", str(target)), fetch_listing=listing)
+    assert with_option == without
+    written = json.loads(target.read_text(encoding="utf-8"))
+    assert (written["generated_at"], written["window_start"], written["complete"]) == ("2026-11-06T12:00:00Z", "2026-10-30T00:00:00Z", True)
+    assert written["repositories"] == [
+        {"name": "o/alpha", "median_seconds": 660, "commits_sampled": 1, "measured": True, "breach": True},
+        {"name": "o/beta", "median_seconds": 0, "commits_sampled": 0, "measured": False, "breach": False},
+    ]
+
+
+@pytest.mark.parametrize("kind", ["a directory", "a folder that does not exist"])
+def test_a_path_that_cannot_be_written_is_the_pair_after_the_tables(capsys, monkeypatch, tmp_path, public, kind):
+    """FLEET-109: an unwritable PATH, a missing parent included, is `error: <path> is not writable · <reason>` with the
+    rerun step, exit 2, after the tables."""
+    folder, listing = fleet_of_two(tmp_path, public)
+    target = tmp_path / "a-directory" if kind == "a directory" else tmp_path / "missing" / "site.json"
+    if kind == "a directory":
+        target.mkdir()
+    printed = report_in(folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json", str(target)), fetch_listing=listing)
+    assert (printed.code, "| o/alpha |" in printed.out) == (2, True)
+    assert printed.err.endswith(RERUN_NEXT)
+    assert printed.err.splitlines()[-2].startswith(f"error: {target} is not writable · [Errno ")
+
+
+def test_an_unwritable_step_summary_leaves_no_document(capsys, monkeypatch, tmp_path, public):
+    """FLEET-47, FLEET-110: an unwritable step summary ends the report before the document is written."""
+    folder, listing = fleet_of_two(tmp_path, public)
+    summary = tmp_path / "a-directory"
+    summary.mkdir()
+    target = tmp_path / "site.json"
+    printed = report_in(
+        folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json", str(target)),
+        environment={"GITHUB_STEP_SUMMARY": str(summary)}, fetch_listing=listing,
+    )
+    assert (printed.code, target.exists()) == (2, False)
+
+
+def test_a_red_report_still_writes_the_document_and_a_repository_not_measured_by_size_keeps_its_ci_time(capsys, monkeypatch, tmp_path, public, missing):
+    """FLEET-110: a repository that cannot be cloned makes the report exit 2 yet the document is written, its row
+    following its CI-time reading."""
+    alpha = public("alpha", {"a.py": "a = 1\n"})
+    listing = Listing({}, runs={missing: SLOW_WEEK})
+    target = tmp_path / "site.json"
+    printed = report_in(
+        write_fleet(tmp_path / "fleet", [alpha, missing]), capsys, monkeypatch, ticks(*range(8)),
+        words=("--ci-time-json", str(target)), fetch_listing=listing,
+    )
+    assert printed.code == 2
+    rows = json.loads(target.read_text(encoding="utf-8"))["repositories"]
+    assert [(entry["name"], entry["measured"], entry["breach"]) for entry in rows] == [(alpha, False, False), (missing, True, True)]
+
+
+def test_a_private_repository_is_in_no_row_of_the_document(capsys, monkeypatch, tmp_path, public):
+    """FLEET-110: the public document names no private repository."""
+    public("alpha", {"a.py": "a = 1\n"})
+    listing = Listing({"o": listed(("o/alpha",), ("o/hidden-name", "private"))})
+    target = tmp_path / "site.json"
+    printed = report_in(write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json", str(target)), fetch_listing=listing)
+    assert printed.code == 0, printed.err
+    assert [entry["name"] for entry in json.loads(target.read_text(encoding="utf-8"))["repositories"]] == ["o/alpha"]
