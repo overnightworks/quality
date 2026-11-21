@@ -18,8 +18,6 @@ from tests.support.merge import (
 )
 from tests.support.merge import sonar as merge_sonar
 from tests.support.sonar import (
-    FEATURE_ENVIRONMENT,
-    FINISHED_FOR_FEATURE,
     FINISHED_FOR_MAIN,
     KEY,
     LEGACY_COUNT,
@@ -68,23 +66,11 @@ def test_a_dependabot_rule_finding_counts_like_any_other(monkeypatch, capsys, ar
     assert (code, out, err) == (1, f"{analysis}{COUNTED_LINE}{legacy}{gate}! red · new 1 · legacy 0 · <1s\n", "")
 
 
-@pytest.mark.parametrize(
-    ("environment", "task", "code", "listing", "summary"),
-    [
-        (PUSH_ENVIRONMENT, FINISHED_FOR_MAIN, 1, COUNTED_LINE.replace("new ", "open"), "\n! red · 1 open on main · <1s\n"),
-        (
-            FEATURE_ENVIRONMENT, FINISHED_FOR_FEATURE, 0,
-            f"  · open          1 finding      report only\n    · Dockerfile:3  open  docker:S8431: {MESSAGE}\n",
-            "\n✓ report only · 1 open on feat/a · <1s\n",
-        ),
-    ],
-    ids=["default branch", "another branch"],
-)
-def test_every_run_kind_counts_the_dependabot_rule_finding(monkeypatch, capsys, environment, task, code, listing, summary):
-    """SONAR-27: the default branch and another branch list the finding as an ordinary one."""
+def test_the_default_branch_counts_the_dependabot_rule_finding(monkeypatch, capsys):
+    """SONAR-27: the default branch lists the finding as an ordinary one."""
     write_bot_config()
-    result = run_cli(monkeypatch, capsys, findings_of(bot_issue(), task=task), environment)
-    assert (result[0], listing in result[1], result[1].endswith(summary), result[2]) == (code, True, True, "")
+    code, out, err, _ = run_cli(monkeypatch, capsys, findings_of(bot_issue(), task=FINISHED_FOR_MAIN), PUSH_ENVIRONMENT)
+    assert (code, COUNTED_LINE.replace("new ", "open") in out, out.endswith("\n! red · 1 open on main · <1s\n"), err) == (1, True, True, "")
 
 
 @pytest.mark.parametrize("has_bot_config", [True, False], ids=["bot config", "no bot config"])

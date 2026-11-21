@@ -1,5 +1,6 @@
-"""The SonarCloud job's step before the scan, `quality sonar properties`: the properties and the token are checked and the
-scan's arguments reach the step output; it prints its rows and one closing line, or the pair."""
+"""The SonarCloud job's step before the scan, `quality sonar properties`: the properties and the token are checked, the
+run's kind is decided and the scan's arguments or `sonar=off` reach the step output; it prints its rows and one closing
+line, or the pair."""
 
 import re
 from collections.abc import Callable, Mapping
@@ -15,10 +16,13 @@ from quality.sonar import (
     SCANNER_WORK_DIRECTORY,
     TASK_FILE,
     TOKEN_VARIABLE,
+    Run,
+    RunKind,
     SonarEvent,
     project_of,
     refused,
     require_token,
+    unserved_row,
 )
 
 # Sonar's own sensor drops this rule only when its scanner has indexed a bot config, which a pull-request analysis
@@ -220,6 +224,9 @@ def _judged_properties(environment: Mapping[str, str]) -> JudgedProperties:
             return JudgedProperties((off,), (output.SONAR_OUTPUT, output.SONAR_OFF), ("off", "nothing reaches SonarCloud"))
         check_properties(root, environment)
         excluded = excluded_rules(repository.is_on_disk(root, DEPENDABOT_CONFIG))
+        run = Run.of(environment)
+        if run.kind is RunKind.UNSERVED:
+            return JudgedProperties((unserved_row(run),), (output.SONAR_OUTPUT, output.SONAR_OFF), (SonarEvent.UNSERVED,))
     except ConfigError as error:
         raise config_refusal(error, PUSH_THE_FIX) from error
     except repository.RepositoryFileError as error:

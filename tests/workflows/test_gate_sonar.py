@@ -6,7 +6,7 @@ import pytest
 import yaml
 
 from quality import output, sonar, sonar_properties, sonar_scanner
-from tests.support.sonar import run_properties
+from tests.support.sonar import CLEAN_PROPERTIES, run_properties, unserved_environment
 
 ROOT = Path(__file__).parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -139,13 +139,21 @@ def test_the_sonar_job_and_its_properties_step_run_for_every_actor(gate, sonar_s
     assert "if" not in step_named(sonar_steps, "Refuse a token")
 
 
-def test_the_scan_and_findings_skip_on_exactly_the_output_the_door_writes(monkeypatch, capsys, build_repo, tmp_path, sonar_steps):
-    """CALLER-9: every token-holding step after the properties step skips only on the output and value the real door writes, and
-    only through `!=`, so a missing output runs the scan."""
+@pytest.mark.parametrize(
+    ("properties", "environment", "files"),
+    [
+        pytest.param(None, {}, {"quality/config.toml": '[gate]\nmandatory_jobs = ["check"]\nsonar = false\n'}, id="sonar switched off"),
+        pytest.param(CLEAN_PROPERTIES, unserved_environment("workflow_dispatch", "claude/lane"), {}, id="a run SonarCloud serves nothing of"),
+    ],
+)
+def test_the_scan_and_findings_skip_on_exactly_the_output_the_door_writes(
+    monkeypatch, capsys, build_repo, tmp_path, sonar_steps, properties, environment, files
+):
+    """CALLER-9, SONAR-129: every token-holding step after the properties step skips only on the output and value the real door
+    writes for a switched-off Sonar and for a run SonarCloud serves nothing of, and only through `!=`, so a missing output runs the scan."""
     step_output = tmp_path / "github_output"
     run_properties(
-        monkeypatch, capsys, build_repo, properties=None, environment={}, step_output=step_output,
-        extra_files={"quality/config.toml": '[gate]\nmandatory_jobs = ["check"]\nsonar = false\n'},
+        monkeypatch, capsys, build_repo, properties=properties, environment=environment, step_output=step_output, extra_files=files
     )
     name, value = step_output.read_text().strip().split("=")
     preflight_id = step_named(sonar_steps, "Refuse a token")["id"]
@@ -194,18 +202,19 @@ def test_the_coverage_the_tests_upload_is_the_report_the_scan_reads():
     assert f"sonar.python.coverage.reportPaths={uploads[0]['with']['path']}" in (ROOT / "sonar-project.properties").read_text().splitlines()
 
 
-def test_only_the_findings_step_binds_the_default_branch_from_the_event(gate):
-    """SONAR-30, SONAR-31: the findings step reads the default branch name from the event, never assumes main, and no other step sees it"""
+def test_only_the_preflight_and_the_findings_step_bind_the_default_branch_from_the_event(gate):
+    """SONAR-30, SONAR-31, SONAR-129: the properties step and the findings step read the default branch name from the event, never assume main, and no other step sees it"""
     binders = [
         (job_name, step["name"])
         for job_name, job in gate["jobs"].items()
         for step in job["steps"]
         if "DEFAULT_BRANCH" in step.get("env", {})
     ]
-    findings = step_named(gate["jobs"]["sonar"]["steps"], "Findings")
-    assert binders == [("sonar", findings["name"])]
-    assert findings["env"]["DEFAULT_BRANCH"] == "${{ github.event.repository.default_branch }}"
-    assert "main" not in str(findings)
+    deciders = [step_named(gate["jobs"]["sonar"]["steps"], name) for name in ("Refuse a token", "Findings")]
+    assert binders == [("sonar", step["name"]) for step in deciders]
+    for step in deciders:
+        assert step["env"]["DEFAULT_BRANCH"] == "${{ github.event.repository.default_branch }}"
+        assert "main" not in str(step)
 
 
 BASE_SHA_EXPRESSION = re.compile(r"\$\{\{ github\.event_name == '(?P<event>\w+)' && (?P<value>[\w.]+) \|\| '' \}\}")
