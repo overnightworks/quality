@@ -63,14 +63,15 @@ class Answer:
     failure: Exception | None = None
 
 
+JOB = {"name": "tests", "conclusion": "success", "created_at": "2026-11-05T10:00:00Z", "started_at": "2026-11-05T10:00:07Z", "completed_at": "2026-11-05T10:01:00Z"}
 NO_RUNS = b'{"total_count": 0, "workflow_runs": []}'
 
 
 def runs_of(*runs: tuple[str, str, str, str]) -> Answer:
     """GitHub's answer for the runs listing; each run is `(head_sha, created_at, updated_at, conclusion)` of a pull request."""
     entries = [
-        {"head_sha": sha, "event": "pull_request", "status": "completed", "conclusion": conclusion, "created_at": created, "updated_at": updated}
-        for sha, created, updated, conclusion in runs
+        {"id": number, "head_branch": "feature", "head_sha": sha, "event": "pull_request", "status": "completed", "conclusion": conclusion, "created_at": created, "updated_at": updated}
+        for number, (sha, created, updated, conclusion) in enumerate(runs, 1)
     ]
     return Answer(json.dumps({"total_count": len(entries), "workflow_runs": entries}).encode())
 
@@ -85,6 +86,8 @@ class Listing:
     runs_requests: list[tuple[str, dict[str, str]]] = field(default_factory=list)
 
     def __call__(self, url: str, headers: Mapping[str, str], unreadable: Callable[[Exception], CannotJudge]) -> tuple[bytes, Message]:
+        if "/jobs?" in url:
+            return json.dumps({"total_count": 1, "jobs": [JOB]}).encode(), Message()
         if "/repos/" in url:
             self.runs_requests.append((url, dict(headers)))
             return self._runs_answer(url, unreadable)
@@ -517,12 +520,12 @@ def test_the_weekly_ci_time_is_a_third_table_and_leaves_the_exit_as_it_is(capsys
     )
     assert printed.code == 0, printed.err
     third = printed.out.split("**CI time, last 7 days")[1].splitlines()
-    assert third[0] == " · 2 API calls**"
+    assert third[0] == " · 4 API calls**"
     assert third[2:] == [
-        "| Repo | Commits | Median | p90 | Red (incl. declared-only) |",
-        "|---|---|---|---|---|",
-        "| o/alpha | 2 | 1m00s | 3m00s | 50 % (1 of 2) |",
-        "| o/beta | 0 | — | — | — |",
+        "| Repo | Commits | Median | p90 | Red | Red on main | Jobs sampled | Queue p90 | Over 12 min |",
+        "|---|---|---|---|---|---|---|---|---|",
+        "| o/alpha | 2 | 1m00s | 3m00s | 50 % (1 of 2) | — | 2 | 7s | none |",
+        "| o/beta | 0 | — | — | — | — | — | — | — |",
     ]
     assert "| o/alpha | 2 | 1m00s |" in summary.read_text()
     assert "created=%3E%3D2026-10-30" in listing.runs_requests[0][0]
@@ -542,5 +545,5 @@ def test_a_repository_whose_runs_cannot_be_read_is_a_partly_read_row_and_the_exi
     assert "  ✗ o/alpha  " in printed.err
     assert "partly read    cannot read CI time" in printed.err
     assert printed.err.splitlines()[-1].startswith("✓ 2 of 2 repositories measured")
-    assert "| o/alpha | partly read · cannot read CI time | — | — | — |" in printed.out
-    assert "| o/beta | 1 | 30s | 30s | 0 % (0 of 1) |" in printed.out
+    assert "| o/alpha | partly read · cannot read CI time | — | — | — | — | — | — | — |" in printed.out
+    assert "| o/beta | 1 | 30s | 30s | 0 % (0 of 1) | — | 1 | 7s | none |" in printed.out

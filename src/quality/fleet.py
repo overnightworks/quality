@@ -476,7 +476,7 @@ def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTag
     ci_table = [
         table_line(fleet_ci_time.COLUMNS),
         "|---" * len(fleet_ci_time.COLUMNS) + "|",
-        *(table_line(fleet_ci_time.table_cells(name, reading)) for name, reading in ci_time.rows.items()),
+        *(table_line(fleet_ci_time.table_cells(name, ci_time)) for name in ci_time.rows),
     ]
     return (heading, "", *table, "", matrix_heading, "", every_release, "", *matrix, "", ci_heading, "", *ci_table)
 
@@ -505,7 +505,7 @@ def run_report(
         measured = measure_repository(name)
         show((report_row(measured, pins, clock() - began),))
         rows.append(measured)
-    ci_time = fleet_ci_time.read_fleet_ci_time(names, today, environment.get(LISTING_CREDENTIAL_VARIABLE, ""), fetch_listing)
+    ci_time = fleet_ci_time.read_fleet_ci_time(names, today, environment.get(LISTING_CREDENTIAL_VARIABLE, ""), fetch_listing, checkout.DEFAULT_BRANCH)
     show(tuple(_unread_ci_time_row(name, reading) for name, reading in ci_time.rows.items() if reading == fleet_ci_time.PartlyRead(fleet_ci_time.UNREADABLE)))
     tables = render(rows, today, tags, ci_time)
     output.write_lines(tables, channels.out)
