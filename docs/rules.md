@@ -1634,7 +1634,7 @@ with the seed printed" (pytest-randomly). Three readers judge that one decision.
   not a layer: R6 binds the unit and integration layers, and the marker (RANDOM-8) is the way out of a flow layer on the
   workflow side only.
 - **The options (RANDOM-4 to RANDOM-7).** Three sources hold a list of pytest options: `addopts` in `[tool.pytest.ini_options]`
-  of each `pyproject.toml` the `python-floor` rule reads (a list, or a string split as shell words; so a gitlink and a fixture
+  or in the native table `[tool.pytest]` (pytest refuses both in one file) of each `pyproject.toml` the `python-floor` rule reads (a list, or a string split as shell words; so a gitlink and a fixture
   project under another project's `tests/` stay out), a pytest call of a workflow `run:` script (the calls
   `pytest-workers` finds, PYTEST-3) and `PYTEST_ADDOPTS` (RANDOM-11). Each source is judged alone, and a
   source is one finding, the no-shuffle problem first. **Deliberate simplification:** pytest joins the verbosity of `addopts`,
@@ -1655,16 +1655,16 @@ with the seed printed" (pytest-randomly). Three readers judge that one decision.
     and pytest-xdist 3.8.0) ends the cluster with the rest of the word, or the next word, as its value: `-kquick`, `-rfq`
     and `-n4 -k q` are clean, `-qn4` and `-qk quick` are `unseeded`. An option a plugin of the repository adds is not known. A
     `--randomly-seed` value built with `${{ }}` is chosen at run time and is clean (a named gap), and so is a value of
-    `PYTEST_ADDOPTS` that holds `${{ }}`.
+    `PYTEST_ADDOPTS` that holds `${{ }}`. `PYTEST_ADDOPTS` is split as shell words, as pytest splits it, so `-p "no:randomly"` is read as `-p no:randomly`.
   - An `addopts` finding stands at the key's line in the `pyproject.toml` (no line where the key is not a plain `addopts =`
     line of its table), and nothing clears it, since `addopts` holds for every layer (RANDOM-8).
 - **The workflow (RANDOM-9, RANDOM-11).** A call is read with the reader of `pytest-workers` (PYTEST-2, PYTEST-3), through
   `uv run`, `python -m pytest` and the other runners, at the call's first line. `PYTEST_ADDOPTS` and
   `PYTEST_DISABLE_PLUGIN_AUTOLOAD` are read where a workflow, a job or a step sets them in `env:`, at the value's line, and
   as an assignment word of a script, leading a command (`PYTEST_ADDOPTS=-q pytest`, `env PYTEST_ADDOPTS=-q pytest`) or after
-  `export`. Any value of `PYTEST_DISABLE_PLUGIN_AUTOLOAD` that is not empty switches the autoload off, as pytest reads it, so
+  `export`. Any value of `PYTEST_DISABLE_PLUGIN_AUTOLOAD` that is not empty (a blank one included) switches the autoload off, as pytest reads it, so
   it is `unshuffled`, whatever else `env:` holds. A call behind a script, `make` or a mise task, a
-  `pytest.main([...])`, a flag in `pytest.ini`, `tox.ini` or `setup.cfg` and a plugin disabled in a `conftest.py` are not read.
+  `pytest.main([...])`, a flag in `pytest.ini`, `.pytest.ini`, `pytest.toml`, `.pytest.toml`, `tox.ini` or `setup.cfg` and a plugin disabled in a `conftest.py` are not read.
 - **The marker (RANDOM-8).** A comment `# pytest-random: <reason>`, with a reason that holds a letter, on the line of a
   workflow call, assignment or `env:` value, or directly above it, clears the finding (the form of `# pytest-workers:`,
   PYTEST-7). It is the way out of a flow layer (end-to-end, browser, image); it clears nothing in `addopts`, and it has no
@@ -1679,7 +1679,7 @@ with the seed printed" (pytest-randomly). Three readers judge that one decision.
   packages are no list of tables and an `addopts` that is neither a string of shell words nor a list of strings are exit `2`
   naming the file. A workflow whose YAML cannot be read, and an alias or a merge key where it can hide `jobs`, a job, `steps`,
   a step or an `env:`, are exit `2` naming the file, as for `pytest-workers` (PYTEST-9), and so is an `env:` value of the
-  two variables that is no shell words. A pytest line the shared reading cannot read or finds built at run time is `invalid` for
+  two variables, or a script assignment of `PYTEST_ADDOPTS`, that is no shell words. A pytest line the shared reading cannot read or finds built at run time is `invalid` for
   `pytest-workers` (PYTEST-6) and no finding of this rule, so it is red once.
 - **No release, no switch (RANDOM-14).** No configuration switches the rule off and no declaration table exists. The rule has no
   release yet, so a dependent meets it at the first release that names it. quality's own tree holds no finding of it. Not covered, named: pytest and

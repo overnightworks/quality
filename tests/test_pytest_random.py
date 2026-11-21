@@ -26,6 +26,7 @@ FLAG_CASES = [
     pytest.param("--randomly-seed=1234", UNSHUFFLED, id="fixed seed"),
     pytest.param("--randomly-seed 1234", UNSHUFFLED, id="fixed seed, next word"),
     pytest.param("--randomly-seed=last", UNSHUFFLED, id="last seed"),
+    pytest.param("--randomly-seed=default --randomly-seed=1234", UNSHUFFLED, id="fixed seed last"),
     pytest.param("--disable-plugin-autoload", UNSHUFFLED, id="autoload off"),
     pytest.param("-q", UNSEEDED, id="quiet"),
     pytest.param("-qq", UNSEEDED, id="quieter"),
@@ -41,7 +42,9 @@ FLAG_CASES = [
     pytest.param("-p no:cacheprovider", None, id="another plugin off"),
     pytest.param("--randomly-seed=default", None, id="fresh seed"),
     pytest.param("-n auto", None, id="workers"),
+    pytest.param("--randomly-seed=1234 --randomly-seed=default", None, id="fresh seed last"),
     pytest.param("-q -v", None, id="quiet, verbose"),
+    pytest.param("-q --verbose", None, id="quiet, verbose long"),
     pytest.param("-qv", None, id="quiet, verbose glued"),
     pytest.param("-vq", None, id="verbose, quiet glued"),
     pytest.param("-v", None, id="verbose"),
@@ -67,9 +70,12 @@ def lock(*names: str) -> str:
     return f"version = 1\n{packages}"
 
 
-def pyproject(addopts: str) -> str:
+PYTEST_TABLES = ["tool.pytest.ini_options", "tool.pytest"]
+
+
+def pyproject(addopts: str, table: str = PYTEST_TABLES[0]) -> str:
     """A pyproject whose `addopts` key is line 5."""
-    return f"[project]\nname = \"x\"\n\n[tool.pytest.ini_options]\naddopts = {addopts}\n"
+    return f"[project]\nname = \"x\"\n\n[{table}]\naddopts = {addopts}\n"
 
 
 def head() -> str:
@@ -171,11 +177,12 @@ def test_a_finding_is_exit_one_and_an_unreadable_file_exit_two(build_repo, capsy
     assert run(capsys, build_repo({"uv.lock": "version = [\n"}))[0] == 2
 
 
+@pytest.mark.parametrize("table", PYTEST_TABLES)
 @pytest.mark.parametrize("quoting", [json.dumps, lambda flags: json.dumps(shlex.split(flags))], ids=["string", "list"])
 @pytest.mark.parametrize(("flags", "event"), FLAG_CASES)
-def test_addopts_are_judged_at_the_key_that_holds_them(build_repo, quoting, flags, event):
-    """RANDOM-4, RANDOM-5, RANDOM-6, RANDOM-7: the switches and the quiet flags of `addopts`, a list or a string."""
-    findings = judged(build_repo, {"pyproject.toml": pyproject(quoting(flags))})
+def test_addopts_are_judged_at_the_key_that_holds_them(build_repo, table, quoting, flags, event):
+    """RANDOM-4, RANDOM-5, RANDOM-6, RANDOM-7: the switches and the quiet flags of `addopts`, a list or a string, in either table pytest reads."""
+    findings = judged(build_repo, {"pyproject.toml": pyproject(quoting(flags), table)})
     assert shape(findings) == expected(event, "pyproject.toml", ADDOPTS_LINE)
 
 
@@ -300,7 +307,7 @@ def test_pytest_addopts_in_an_env_is_judged_at_its_value(build_repo, level, flag
 
 
 @pytest.mark.parametrize("level", LEVELS)
-@pytest.mark.parametrize(("value", "event"), [('"1"', UNSHUFFLED), ("1", UNSHUFFLED), ('"0"', UNSHUFFLED), ('""', None)])
+@pytest.mark.parametrize(("value", "event"), [('"1"', UNSHUFFLED), ("1", UNSHUFFLED), ('"0"', UNSHUFFLED), ('" "', UNSHUFFLED), ('""', None)])
 def test_disabled_plugin_autoload_in_an_env_is_no_random_order_unless_empty(build_repo, level, value, event):
     """RANDOM-6, RANDOM-11: PYTEST_DISABLE_PLUGIN_AUTOLOAD with any value pytest reads as set is `unshuffled`."""
     text, line = env_workflow(level, "PYTEST_DISABLE_PLUGIN_AUTOLOAD", value)
@@ -355,14 +362,22 @@ def test_a_script_assignment_of_pytest_addopts_is_judged_at_its_line(build_repo,
         ("PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -n auto", UNSHUFFLED),
         ("export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1", UNSHUFFLED),
         ("PYTEST_DISABLE_PLUGIN_AUTOLOAD= pytest -n auto", None),
+        ("PYTEST_DISABLE_PLUGIN_AUTOLOAD=' ' pytest -n auto", UNSHUFFLED),
+        ("""PYTEST_ADDOPTS='-p "no:randomly"' pytest -n auto""", UNSHUFFLED),
         ("echo PYTEST_ADDOPTS=-q", None),
         ("PYTEST_ADDOPTS=${{ matrix.opts }} pytest -n auto", None),
     ],
-    ids=["with a call", "exported", "empty", "echoed", "built at run time"],
+    ids=["with a call", "exported", "empty", "blank", "quoted option value", "echoed", "built at run time"],
 )
 def test_a_script_assignment_is_read_only_as_an_assignment(build_repo, line, event):
     """RANDOM-11: only an assignment word is read, and an empty autoload value is not set."""
     assert shape(workflow_judged(build_repo, script(line))) == expected(event, WORKFLOW, SCRIPT_LINE)
+
+
+def test_a_script_assignment_of_pytest_addopts_that_is_no_shell_words_refuses_the_rule(build_repo):
+    """RANDOM-12: pytest splits `PYTEST_ADDOPTS` as shell words, so a value it cannot split is exit 2."""
+    reason = refusals(build_repo({WORKFLOW: script("""PYTEST_ADDOPTS='-k "a' pytest""")}))[RULE]
+    assert "PYTEST_ADDOPTS in a run script is not shell words" in reason
 
 
 @pytest.mark.parametrize("flags", ["-p no:randomly", "--randomly-seed=1234", "--randomly-seed=last", "-q"])

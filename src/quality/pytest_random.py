@@ -49,8 +49,9 @@ UNSEEDED_FIX = 'drop -q, --verbosity=-1 and --no-header so the log prints "Using
 MARKER_FIX = ", or explain on the line above: # pytest-random: <reason>"
 SWITCHES_OFF_FACT = "pytest-randomly is switched off or its order fixed by {}"
 HIDES_HEADER_FACT = "pytest-randomly's seed header is hidden by {}"
-SECTIONS = ("tool", "pytest", "ini_options")
-INI_TABLE = re.compile(r"\s*\[\s*tool\s*\.\s*pytest\s*\.\s*ini_options\s*\]")
+# Pytest reads its configuration from `[tool.pytest.ini_options]` (ini strings) or from `[tool.pytest]` (native TOML types).
+TABLES = (("tool", "pytest", "ini_options"), ("tool", "pytest"))
+PYTEST_TABLE = re.compile(r"\s*\[\s*tool\s*\.\s*pytest\s*(\.\s*ini_options\s*)?\]")
 ADDOPTS_ASSIGNMENT = re.compile(r"\s*addopts\s*=")
 WHOLE_NUMBER = re.compile(r"[+-]?\d+", re.ASCII)
 # The short options that take a value, read from the parsers of pytest 9.2.0 and pytest-xdist 3.8.0: `-p`, `-o`, `-r`,
@@ -147,10 +148,8 @@ def _addopts_findings(name: str, content: bytes) -> list[Finding]:
         document = repository.parse_toml_file(name, content)
     except repository.TomlError as error:
         raise CannotJudge(str(error)) from error
-    table = document
-    for section in SECTIONS:
-        table = table.get(section) if isinstance(table, dict) else None
-    if not isinstance(table, dict) or ADDOPTS_KEY not in table:
+    table = next((table for path in TABLES if ADDOPTS_KEY in (table := _table(path, document))), None)
+    if table is None:
         return []
     problem = flags_problem(_addopts_words(name, table[ADDOPTS_KEY]), "addopts")
     if problem is None:
@@ -158,6 +157,13 @@ def _addopts_findings(name: str, content: bytes) -> list[Finding]:
     event, fact = problem
     line = _addopts_line(content.decode("utf-8"))
     return [Finding(Rule.PYTEST_RANDOM, name, line, fact, _fix(event), event=event)]
+
+
+def _table(path: Sequence[str], document: dict) -> dict:
+    table = document
+    for section in path:
+        table = table.get(section) if isinstance(table, dict) else None
+    return table if isinstance(table, dict) else {}
 
 
 def _addopts_words(name: str, addopts: object) -> list[str]:
@@ -175,7 +181,7 @@ def _addopts_line(text: str) -> int | None:
     in_table = False
     for number, line in enumerate(text.splitlines(), 1):
         if line.lstrip().startswith("["):
-            in_table = INI_TABLE.match(line) is not None
+            in_table = PYTEST_TABLE.match(line) is not None
         elif in_table and ADDOPTS_ASSIGNMENT.match(line):
             return number
     return None
@@ -205,7 +211,15 @@ def _assignment_problems(words: tuple[str, ...]) -> Iterator[Problem | None]:
     assigned = [*words[:start], *(words[start + 1 :] if words[start : start + 1] == ("export",) else ())]
     for word in assigned:
         variable, _, value = word.partition("=")
-        yield _variable_problem(variable, value, value.split())
+        yield _variable_problem(variable, value, _shell_words(value) if variable == ADDOPTS_VARIABLE else [])
+
+
+def _shell_words(value: str) -> list[str]:
+    """The words pytest reads from `PYTEST_ADDOPTS`: `shlex.split`, which keeps the quotes a script's own lexing left inside the value."""
+    try:
+        return shlex.split(value)
+    except ValueError as error:
+        raise CannotJudge(f"{ADDOPTS_VARIABLE} in a run script is not shell words ({error})") from error
 
 
 def _variable_problem(variable: str, value: str, words: Sequence[str]) -> Problem | None:
@@ -262,4 +276,4 @@ def _environment_problem(name: str, variable: str, value: str) -> Problem | None
         words = shlex.split(value)
     except ValueError as error:
         raise unreadable(name, f"{variable} is not shell words ({error})") from error
-    return _variable_problem(variable, value.strip(), words)
+    return _variable_problem(variable, value, words)
