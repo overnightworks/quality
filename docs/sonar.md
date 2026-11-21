@@ -97,7 +97,7 @@ download, the job and the verdict (SONAR-94).
 an allowlist (`sonar.organization`, `sonar.projectKey`, `sonar.projectName`, `sonar.sources`, `sonar.tests`, the
 inclusion/exclusion keys, `sonar.sourceEncoding`, `sonar.python.version` and the two coverage report path keys)
 (SONAR-57), any value containing a `${...}` substitution after decoding (the scanner would expand `${env.SONAR_TOKEN}`)
-(SONAR-58), a `sonar.organization` or `sonar.projectKey` other than `<owner>` and `<owner>_<repo>` (SONAR-59), a tracked
+(SONAR-58), a `sonar.organization` or `sonar.projectKey` other than `<owner>` and `<owner>_<repo>` (SONAR-59; the procedure that changes a key is P2 in [naming.md](naming.md)), a tracked
 `.scannerwork/` (SONAR-60), a tracked file that differs from the checked-out commit, and an empty token (SONAR-61). The
 file is read with the `java.util.Properties` grammar (`=`, `:` or whitespace separators, `\` continuation, `\uXXXX` and
 `\` escapes) (SONAR-62). The file is read inside the checkout; a link leading out of it is refused (SONAR-63), and every
