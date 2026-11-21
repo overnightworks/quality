@@ -23,6 +23,7 @@ NOT_LISTED_FLAG = "cancel-in-progress is not a listed form"
 JOBS = "permissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n      - run: 'true'\n"
 ON_PULL_REQUEST = "on: pull_request\n"
 ON_COMBINED = "on: [pull_request, pull_request_review]\n"
+GATE_CALL = f"  gate:\n    uses: overnightworks/quality/.github/workflows/gate.yml@{'a' * 40}\n"
 
 
 def block(group: str, flag: str) -> str:
@@ -94,7 +95,7 @@ def test_a_workflow_no_pull_request_triggers_is_outside_in_every_state_of_concur
 )
 def test_the_canonical_block_passes_for_every_trigger_set(build_repo, capsys, on):
     """CONCURRENCY-3, CONCURRENCY-4, CONCURRENCY-7: the repository is clean under every rule."""
-    code, output = run(capsys, build_repo({WORKFLOW: workflow(on, block(GROUP, FLAG))}))
+    code, output = run(capsys, build_repo({WORKFLOW: workflow(on, block(GROUP, FLAG)) + GATE_CALL}))
     assert (code, is_clean(output)) == (0, True), output
 
 

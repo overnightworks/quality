@@ -23,6 +23,7 @@ from quality import (
     locator_text,
     logging_rule,
     naming,
+    pr_workflows,
     process,
     python_floor,
     python_lint,
@@ -683,6 +684,7 @@ def _judge_workflows(inputs: RunInputs) -> AreaVerdict:
         for rule, scanner in scanners.WORKFLOW_SCANNERS.items()
     }
     judged[Rule.PR_CONCURRENCY] = _attempt(lambda: workflow_rules.check_pr_concurrency(inputs.root, inputs.tracked))
+    judged[Rule.PR_WORKFLOWS] = _attempt(lambda: pr_workflows.check_pr_workflows(inputs.root, inputs.tracked, _required(inputs.allow_lists).workflow))
     judged[Rule.PYTEST_WORKERS] = _attempt(lambda: workflow_rules.check_pytest_workers(inputs.root, inputs.tracked))
     judged[Rule.RUNTIME_INSTALL] = _attempt(lambda: workflow_rules.check_runtime_install(inputs.root, inputs.tracked))
     judged[Rule.CATALOG_CHECK] = _attempt(lambda: catalog_rules.check_catalog_call(inputs.root, inputs.tracked))

@@ -17,11 +17,12 @@ WHOLE_AND_STAGED: tuple[Loader, ...] = ("allow_lists", "gate", "staged")
 ITEM_NEED = "item as #<number> or <owner>/<repo>#<number>"
 DATE_NEED = "date as a TOML date without a time"
 ONE_LINE_NEED = "a non-empty one-line reason"
+WORKFLOW_FILE_NEED = "file as the exact tracked path of one workflow: no folder, pattern, .. or absolute path"
 FILE_PATH_NEED = "path as the exact tracked path of one file: no folder, pattern, .. or absolute path"
 LAYOUT_RULE_NEED = "rule as one of agents-md, file-suffix, script-header, script-name, test-import, test-layout"
 KNOWN_KEYS = (
     "only [gate] mandatory_jobs, [gate] legacy, [gate] sonar, [[gate.loosened]], [secrets] allow, [[advisories.allow]], "
-    "[[root.allow]], [[layout.allow]], [[python.allow]], [[compose.allow]], [[size.generated]] and [languages] render_pass exist"
+    "[[root.allow]], [[layout.allow]], [[python.allow]], [[compose.allow]], [[workflow.allow]], [[size.generated]] and [languages] render_pass exist"
 )
 
 
@@ -124,6 +125,13 @@ ARRAY_TABLES = (
         'declares service = "web" of file = "compose.yaml" twice; one declaration per file and service',
     ),
     ArrayTable(
+        "workflow.allow", config.WORKFLOW_ALLOWANCE_EXAMPLE, {"file": ".github/workflows/preview.yml", "reason": "ruled"},
+        "exactly a file and a reason",
+        (({"file": ".github/workflows/"}, WORKFLOW_FILE_NEED), ({"file": ".github/workflows/*.yml"}, WORKFLOW_FILE_NEED),
+         ({"reason": "two\nlines"}, ONE_LINE_NEED)),
+        'declares file = ".github/workflows/preview.yml" twice; one entry per workflow',
+    ),
+    ArrayTable(
         "size.generated", config.GENERATED_FILE_EXAMPLE,
         {"path": "types.ts", "job": "checks", "item": "#1", "date": DATE, "reason": "ruled"},
         "exactly a path, a job, an item, a date and a reason",
@@ -137,6 +145,7 @@ NOT_A_LIST_TEXT = {
     "gate.loosened": GATE + 'loosened = "x"\n', "advisories.allow": '[advisories]\nallow = "x"\n',
     "root.allow": '[root]\nallow = "x"\n', "layout.allow": '[layout]\nallow = "x"\n',
     "python.allow": '[python]\nallow = "x"\n', "compose.allow": '[compose]\nallow = "x"\n',
+    "workflow.allow": '[workflow]\nallow = "x"\n',
     "size.generated": '[size]\ngenerated = "x"\n',
 }
 
@@ -160,7 +169,7 @@ SECRET_NEEDS = (
 TABLE_VALUES = (("gate", config.EXAMPLE), ("secrets", config.ALLOWANCE_EXAMPLE), ("advisories", config.ADVISORY_ALLOWANCE_EXAMPLE),
                        ("root", config.ROOT_ALLOWANCE_EXAMPLE), ("layout", config.LAYOUT_ALLOWANCE_EXAMPLE),
                        ("python", config.PYTHON_ALLOWANCE_EXAMPLE), ("compose", config.COMPOSE_ALLOWANCE_EXAMPLE),
-                       ("size", config.GENERATED_FILE_EXAMPLE))
+                       ("workflow", config.WORKFLOW_ALLOWANCE_EXAMPLE), ("size", config.GENERATED_FILE_EXAMPLE))
 
 
 def parser_message(text: str) -> str:
@@ -221,7 +230,7 @@ def _unknown_key_refusals() -> list[Refusal]:
     ]
     for table, example in (("root", config.ROOT_ALLOWANCE_EXAMPLE), ("layout", config.LAYOUT_ALLOWANCE_EXAMPLE),
                            ("python", config.PYTHON_ALLOWANCE_EXAMPLE), ("compose", config.COMPOSE_ALLOWANCE_EXAMPLE),
-                           ("size", config.GENERATED_FILE_EXAMPLE)):
+                           ("workflow", config.WORKFLOW_ALLOWANCE_EXAMPLE), ("size", config.GENERATED_FILE_EXAMPLE)):
         refusals.append(Refusal(f"{table} unknown key", f"[{table}]\nignore = []\n", f"{where} ignore - {KNOWN_KEYS}", example))
     return refusals
 

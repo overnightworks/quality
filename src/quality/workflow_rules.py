@@ -15,7 +15,7 @@ local `uses:`, declares `timeout-minutes` as a plain number of at most 15, or of
 
 import math
 import re
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from enum import Enum, auto
@@ -92,9 +92,18 @@ def check_pr_concurrency(root: Path, tracked: list[str]) -> RuleResult:
     return RuleResult(findings, roots, False)
 
 
+def pull_request_workflows(texts: Mapping[str, str | checkout.Unread]) -> list[str]:
+    """The paths of the workflows a pull request triggers among `texts` (`checkout.workflow_texts`' mapping), in its order."""
+    return [name for name, text in _readable(texts) if checkout.pull_request_events(_document(name, text))]
+
+
 def _readable_workflows(root: Path, tracked: list[str]) -> Iterator[tuple[str, str]]:
-    """Each tracked workflow with its text; one gone from the tree is skipped and one the reader refuses cannot be judged."""
-    for name, text in checkout.workflow_texts(root, tracked).items():
+    return _readable(checkout.workflow_texts(root, tracked))
+
+
+def _readable(texts: Mapping[str, str | checkout.Unread]) -> Iterator[tuple[str, str]]:
+    """Each workflow with its text; one gone from the tree is skipped and one the reader refuses cannot be judged."""
+    for name, text in texts.items():
         if text is checkout.Unread.REFUSED:
             raise _unreadable(name, "the file cannot be read")
         if text is not checkout.Unread.ABSENT:
