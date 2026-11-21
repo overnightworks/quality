@@ -1,0 +1,8 @@
+claim_id = "b2c84b31a9ce4c8fbd1a1c3fe07df182"
+agent = "Claude 65a296cd-8f9a-4dec-985b-649ce7144e62"
+role = "builder"
+base = "6058b1ba8bd1bd910a01eeec78d0a77d1e92e71d"
+branch = "claude/issue-928-pr-workflows-rule"
+scope = ["docs/gate.md", "docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/check.py", "src/quality/config.py", "src/quality/pr_workflows.py", "src/quality/rules.py", "src/quality/workflow_rules.py", "tests/support/config_refusals.py", "tests/test_catalog_rules.py", "tests/test_cli_fix_dry_run.py", "tests/test_cli_fix_renames.py", "tests/test_cli_help.py", "tests/test_config.py", "tests/test_fleet_matrix.py", "tests/test_pr_workflows.py", "tests/test_workflow_rules.py", "tests/test_workflow_rules_timeout.py"]
+opened_commit = "9815b6b2bcb71017f37a5eead1dccc6dec5dea0a"
+whole_reason = "One rule with its declaration table and docs; the paths are one module, its wiring, the docs and the test modules that pin the config shape and the rule catalogue."
