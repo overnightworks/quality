@@ -9,6 +9,7 @@ from pathlib import Path
 import grimp
 import pytest
 import yaml
+from grimp.application.config import settings as grimp_settings
 from importlinter.contracts.forbidden import ForbiddenContract
 
 import quality
@@ -156,38 +157,33 @@ def test_the_import_contract_rule_judges_the_contracts(build_repo, capsys, files
     assert str(repo) not in output
 
 
-def collision(name: str, directory: str, other_place: str) -> str:
-    return (f"{REFUSED}root package {name} is {directory}{name}/__init__.py, but Python finds it {other_place};"
-            " judging it would read the wrong package")
+def judged_package(name: str, directory: str) -> dict[str, str]:
+    """A tracked root package whose module `a` imports `b`, against a contract forbidding exactly that."""
+    contract = {"type": "forbidden", "source_modules": [f"{name}.a"], "forbidden_modules": [f"{name}.b"]}
+    return {f"{directory}{name}/__init__.py": "", f"{directory}{name}/a.py": f"import {name}.b\n",
+            f"{directory}{name}/b.py": "", ".importlinter": ini(contract, roots=(name,))}
 
 
 @pytest.mark.parametrize(
-    ("files", "untracked", "expected"),
-    [
-        ({"yaml/__init__.py": "", ".importlinter": ini({"type": "independence", "modules": ["yaml.a"]}, roots=("yaml",))},
-         None, collision("yaml", "", "outside the repository at site-packages/yaml/__init__.py")),
-        ({"src/quality/__init__.py": "",
-          ".importlinter": ini({"type": "independence", "modules": ["quality.a"]}, roots=("quality",))},
-         None, collision("quality", "src/", "outside the repository at src/quality/__init__.py")),
-        ({"src/a/__init__.py": "", "b/__init__.py": "",
-          ".importlinter": ini({"type": "independence", "modules": ["a", "b"]}, roots=("a", "b"))},
-         "src/b/__init__.py", collision("b", "", "at src/b/__init__.py")),
-    ],
-    ids=["a root package quality already imported", "quality from a second checkout",
-         "an untracked copy inside the repository found first"],
+    ("name", "directory", "untracked_copy"),
+    [("logline", "src/", False), ("yaml", "", False), ("quality", "src/", False), ("shop", "src/", True)],
+    ids=["a root package quality imported itself", "a root package a dependency imported", "quality from a second checkout",
+         "an untracked copy found first on sys.path"],
 )
-def test_a_root_package_python_finds_elsewhere_names_both_places_without_a_local_path(
-        build_repo, capsys, files, untracked, expected):
-    """IMPORT-15, IMPORT-16, IMPORT-26: a root package Python finds in another place is exit 2 naming the tracked place
-    and the other place repository-relative, the latter from its sys.path entry when it lies outside, never by a local
+def test_a_root_package_is_judged_from_its_tracked_directory_whatever_the_process_imported(
+        build_repo, capsys, monkeypatch, name, directory, untracked_copy):
+    """IMPORT-15, IMPORT-26: a root package quality has imported, or an untracked copy found first on sys.path, never
+    stands in for the tracked directory: its contract is judged on the tracked code, and no message names a local
     path."""
-    repo = build_repo(files)
-    if untracked:
-        (repo / untracked).parent.mkdir(parents=True, exist_ok=True)
-        (repo / untracked).write_text("")
+    repo = build_repo(judged_package(name, directory))
+    if untracked_copy:
+        (repo / "copy" / name).mkdir(parents=True)
+        for module in ("__init__", "a", "b"):
+            (repo / "copy" / name / f"{module}.py").write_text("")
+        monkeypatch.syspath_prepend(str(repo / "copy"))
     code, output = run(capsys, repo)
-    assert code == 2, output
-    assert expected in output, output
+    assert code == 1, output
+    assert "broken  contract guarded" in output, output
     local_places = (str(Path(os.path.realpath(module.__file__)).parent.parent) for module in (yaml, quality))
     assert [place for place in (*local_places, str(repo), "../") if place in output] == [], output
 
@@ -271,15 +267,15 @@ def test_the_imports_row_counts_the_contracts_the_config_declares_and_the_judgem
 
 
 def test_a_dotted_root_package_never_runs_its_parent(build_repo, tmp_path, capsys, monkeypatch):
-    """IMPORT-8, IMPORT-14: finding a dotted root package would import its parent, so the rule refuses it and the
-    parent's code never runs."""
+    """IMPORT-8, IMPORT-14: a root package is one tracked top-level `<name>/__init__.py`, so a dotted one is refused
+    and its parent's code never runs."""
     marker = tmp_path.parent / f"{tmp_path.name}-parent-ran"
     repo = build_repo({**SHOP, "src/shop/__init__.py": f"open({str(marker)!r}, 'w').close()\n",
                        ".importlinter": ini(INDEPENDENCE, roots=("shop.web",))})
     monkeypatch.syspath_prepend(str(repo / "src"))
     code, output = run(capsys, repo)
     assert code == 2, output
-    assert f"{REFUSED}root package shop.web is dotted; finding it would import shop" in output
+    assert f"{REFUSED}root package shop.web is dotted; quality judges only top-level root packages" in output
     assert not marker.exists()
 
 
@@ -589,15 +585,28 @@ def test_a_malformed_config_value_cannot_be_judged_without_a_traceback(build_rep
 
 
 @pytest.mark.parametrize("files", [SHOP, SHOP_DB_IMPORTS_WEB], ids=["kept", "broken"])
-def test_a_run_writes_nothing_and_restores_sys_path(build_repo, capsys, files):
-    """IMPORT-5: a run, kept or broken, writes no cache, changes nothing in the checkout and leaves sys.path
-    as it was."""
+def test_a_run_writes_nothing_and_leaves_the_interpreter_as_it_was(build_repo, capsys, files):
+    """IMPORT-5: a run, kept or broken, writes no cache, changes nothing in the checkout and leaves sys.path,
+    sys.modules and grimp's package finder as they were."""
     repo = build_repo({**files, ".importlinter": ini(FORBIDDEN)})
-    path_before = list(sys.path)
+    before = (list(sys.path), dict(sys.modules), grimp_settings.PACKAGE_FINDER)
     run(capsys, repo)
     status = subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "--ignored"],
                             capture_output=True, text=True, check=True)
-    assert (status.stdout, (repo / ".import_linter_cache").exists(), sys.path) == ("", False, path_before)
+    assert (status.stdout, (repo / ".import_linter_cache").exists()) == ("", False)
+    assert (list(sys.path), dict(sys.modules), grimp_settings.PACKAGE_FINDER) == before
+
+
+def test_a_failing_graph_build_leaves_grimps_package_finder_as_it_was(build_repo, capsys, monkeypatch):
+    """IMPORT-5: an error inside grimp's graph build still restores the package finder."""
+    def fail(*_roots, **_options):
+        raise RuntimeError("build failed")
+
+    repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
+    monkeypatch.setattr(grimp, "build_graph", fail)
+    finder_before = grimp_settings.PACKAGE_FINDER
+    code, _ = run(capsys, repo)
+    assert (code, grimp_settings.PACKAGE_FINDER) == (2, finder_before)
 
 
 @pytest.mark.integration
