@@ -1421,8 +1421,8 @@ The `test-twin` rule, in the `debt` area, counts two kinds of copying in the tra
 - **Refusals (TWIN-5).** The rule reads the sources the `debt` area read; when they cannot be read the area is refused as
   before and no note stands. It needs no baseline, so a baseline that cannot be read refuses `size` and `clone` (CLONE-9) and the
   note still stands. A file Python cannot parse is skipped without a refusal; `size` and `clone` refuse it.
-- **Report only (TWIN-6).** The rule is `report-only` in the fleet matrix and changes no verdict. It ships in no release yet
-  (`not released`, FLEET-19).
+- **Report only (TWIN-6).** The rule is `report-only` in the fleet matrix and changes no verdict. It first ships in v0.23.0, so a gate
+  pinned below that release shows `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `report-only` (FLEET-18).
 
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
@@ -1647,8 +1647,8 @@ values and runs no logging analysis of its own; a rule's wording and its gaps ar
   [the fleet standard](release.md#depending-on-a-fleet-package) says for a tool installed without a lock. logline's own
   dependencies, structlog and opentelemetry-api, enter quality's lock with it, and an advisory against either turns
   quality's own gate red although quality never runs their code.
-- **Report only (LOGGING-6).** The rule is `report-only`: it changes no verdict. Until a release ships it only main has it
-  (`not released` in the fleet matrix, FLEET-19). The matrix has no coverage signal for it: every repository whose pin has
+- **Report only (LOGGING-6).** The rule is `report-only`: it changes no verdict. It first ships in v0.23.0, so a gate
+  pinned below that release shows `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `report-only` (FLEET-18). The matrix has no coverage signal for it: every repository whose pin has
   the rule reads `report-only`, covered or not.
 
 Not judged: the standard's "a released logline tag" (`fleet-source` tells no tag from a branch, SOURCE-2).
