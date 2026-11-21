@@ -1,5 +1,5 @@
 claim_id = "9fe4b505ecf64835978e75a61a966e99"
-agent = "Claude 65a296cd-8f9a-4dec-985b-649ce7144e62"
+agent = "Claude c337e1ba-7102-43fb-8789-c53cf4a25621"
 role = "builder"
 base = "6058b1ba8bd1bd910a01eeec78d0a77d1e92e71d"
 branch = "claude/issue-931-ci-time-json-on-pages"
