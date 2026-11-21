@@ -1648,8 +1648,8 @@ values and runs no logging analysis of its own; a rule's wording and its gaps ar
   dependencies, structlog and opentelemetry-api, enter quality's lock with it, and an advisory against either turns
   quality's own gate red although quality never runs their code.
 - **Report only (LOGGING-6).** The rule is `report-only`: it changes no verdict. It first ships in v0.23.0, so a gate
-  pinned below that release shows `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `report-only` (FLEET-18). The matrix has no coverage signal for it: every repository whose pin has
-  the rule reads `report-only`, covered or not.
+  pinned below that release shows `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `report-only` (FLEET-18).
+  The matrix has no coverage signal for it: every repository whose pin has the rule reads `report-only`, covered or not.
 
 Not judged: the standard's "a released logline tag" (`fleet-source` tells no tag from a branch, SOURCE-2).
 
