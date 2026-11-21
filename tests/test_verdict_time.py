@@ -37,6 +37,21 @@ def timed_entry(job_id, name, attempt, created, started, completed):
             "· time measured 1m10s wall · slowest quality / sonar 31s · longest wait 2s · longest chain 3 jobs 1m10s",
             id="jobs waiting on each other form the chain",
         ),
+        pytest.param(
+            [
+                timed_entry(1, "checks", 1, 0, 2, 100),
+                timed_entry(2, "coverage", 1, 101, 100, 100) | {"conclusion": "skipped"},
+                timed_entry(3, "quality / check", 1, 100, 101, 150),
+                timed_entry(4, "quality / verdict", 1, 150, 151, 170),
+            ],
+            "· time measured 2m50s wall · slowest checks 1m38s · longest wait 2s · longest chain 3 jobs 2m50s",
+            id="a skipped job finishing with the job it followed leaves the chain whole",
+        ),
+        pytest.param(
+            [timed_entry(1, "checks", 1, 0, 1, 60), timed_entry(2, "late", 1, 30, 31, 60), timed_entry(3, "verdict", 1, 60, 61, 70)],
+            "· time measured 1m10s wall · slowest checks 59s · longest wait 1s · longest chain not measured",
+            id="a job created as two jobs of different ancestry finished prints the chain as not measured",
+        ),
         pytest.param([timed_entry(1, "checks", 1, 0, None, 30)], "· time not measured GitHub gave no timestamps", id="a missing timestamp"),
         pytest.param(
             [timed_entry(1, "checks", 1, 0, 2, 30), timed_entry(2, "quality / sonar", 1, 5, 7, 62) | {"completed_at": "garbage"}],
