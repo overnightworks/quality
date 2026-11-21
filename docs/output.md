@@ -187,6 +187,8 @@ owner stand as notes, and the clean row counts them (O15, O49):
     · src/shop/cli.py:3  allowed  output owner · the command line owns its output
 ```
 
+The verdict's `time` row is a note whose events are `measured` and `not measured` ([the gate](gate.md)).
+
 ## Glyphs
 
 Ruled by the operator:
