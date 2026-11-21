@@ -164,7 +164,7 @@ cannot judge.
   SonarCloud backdates an issue raised on an unchanged line, so it cannot fail on one, and at the pinned scanner a
   properties file can still reach the token. Reopens when the hosted gate fails on such a finding and the pinned scanner
   no longer lets a properties file reach the token.
-- Skipping the `sonar` job, by a job `if:` or by repository visibility: a job `if:` cannot read the config, so every scan would wait for its check and the verdict and the door would need a second meaning of `skipped`; visibility is no scanning intent and bypasses the config comparison. Reopens when a job `if:` can read the caller's files.
+- Skipping the `sonar` job, by a job `if:` or by repository visibility: a job `if:` cannot read the config, so every scan would wait for its check and the verdict and the door would need a second meaning of `skipped`; visibility is no scanning intent and bypasses the config comparison. Reopens when a job `if:` can read the caller's files. A run SonarCloud serves nothing of (neither a pull request nor on the default branch) is no reason to skip the job either: the verdict reads a skipped job as red, and the properties step, which already judges the token and the properties, decides the run's kind and hands the job `sonar=off`.
 - Downloading the coverage artifact outside the checkout, or reading the config from git in the `sonar` job: the scanner
   reads each report at the checkout-relative path the properties file names, so quality would have to copy reports in, and
   reading the config from git guards one key but not a planted source or properties file. The properties check refuses a

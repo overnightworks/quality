@@ -6,11 +6,14 @@ from quality import cli
 from tests.support.sonar import (
     CLEAN_PROPERTIES,
     PULL_REQUEST_ENVIRONMENT,
+    PUSH_ENVIRONMENT,
     TOKEN,
+    UNSERVED_RUNS,
     environment_without_token,
     run_properties,
     set_environment,
     sonar_off_files,
+    unserved_environment,
     work_in_scratch_directory,
 )
 
@@ -252,6 +255,83 @@ def test_properties_with_sonar_off_and_an_unwritable_output_cannot_judge(monkeyp
         step_output=tmp_path,
     )
     assert (code, "GITHUB_OUTPUT is not writable" in err) == (2, True)
+
+
+@pytest.mark.parametrize(("event", "ref"), UNSERVED_RUNS)
+def test_properties_on_a_run_sonarcloud_serves_nothing_of_writes_off_and_the_unserved_note(
+    monkeypatch, capsys, build_repo, tmp_path, event, ref
+):
+    """SONAR-129: a run that is neither a pull request nor on the default branch hands the job sonar=off, names the ref and exits 0."""
+    step_output = tmp_path / "github_output"
+    code, out, err = run_properties(
+        monkeypatch, capsys, build_repo, environment=unserved_environment(event, ref), step_output=step_output
+    )
+    note = f"  · sonar         unserved       {ref} · SonarCloud serves only pull requests and main\n✓ unserved · <1s\n"
+    assert (code, out, err, step_output.read_text()) == (0, note, "", "sonar=off\n")
+
+
+@pytest.mark.parametrize(
+    "environment",
+    [PUSH_ENVIRONMENT, {**PUSH_ENVIRONMENT, "GITHUB_EVENT_NAME": "workflow_dispatch"}, {**PUSH_ENVIRONMENT, "GITHUB_EVENT_NAME": "schedule"}],
+    ids=["push", "dispatch", "schedule"],
+)
+def test_properties_on_the_default_branch_hands_the_scan_its_arguments(monkeypatch, capsys, build_repo, tmp_path, environment):
+    """SONAR-129: a run on the default branch is scanned and read whatever started it."""
+    step_output = tmp_path / "github_output"
+    code, out, _ = run_properties(monkeypatch, capsys, build_repo, environment=environment, step_output=step_output)
+    assert (code, out.endswith("✓ clean · <1s\n"), step_output.read_text()) == (0, True, "scanner-arguments=\n")
+
+
+def test_properties_decides_a_pull_request_from_the_event_alone(monkeypatch, capsys, build_repo, tmp_path):
+    """SONAR-130: the pull request's number belongs to the findings step; the preflight runs without it and still scans."""
+    step_output = tmp_path / "github_output"
+    environment = {name: value for name, value in PULL_REQUEST_ENVIRONMENT.items() if name != "PULL_REQUEST_NUMBER"}
+    code, _, _ = run_properties(monkeypatch, capsys, build_repo, environment=environment, step_output=step_output)
+    assert (code, step_output.read_text()) == (0, "scanner-arguments=\n")
+
+
+@pytest.mark.parametrize("name", ["GITHUB_EVENT_NAME", "GITHUB_REF_NAME", "DEFAULT_BRANCH"])
+@pytest.mark.parametrize("set_empty", [False, True], ids=["unset", "empty"])
+def test_properties_without_the_run_environment_is_exit_two_and_writes_nothing(monkeypatch, capsys, build_repo, tmp_path, name, set_empty):
+    """SONAR-130: an unset or empty event, ref or default branch is exit 2 naming it, whatever the other two say."""
+    step_output = tmp_path / "github_output"
+    environment = {key: value for key, value in unserved_environment("push", "feat/a").items() if key != name}
+    if set_empty:
+        environment[name] = ""
+    code, out, err = run_properties(monkeypatch, capsys, build_repo, environment=environment, step_output=step_output)
+    assert (code, out, name in err, step_output.exists()) == (2, "", True, False)
+
+
+@pytest.mark.parametrize(
+    ("environment", "properties", "files", "named"),
+    [
+        pytest.param({**unserved_environment("workflow_dispatch", "lane"), "SONAR_TOKEN": ""}, CLEAN_PROPERTIES, {}, "SONAR_TOKEN is empty", id="an empty token"),
+        pytest.param(
+            unserved_environment("workflow_dispatch", "lane"), CLEAN_PROPERTIES, {".scannerwork/report-task.txt": "ceTaskId=x\n"}, ".scannerwork",
+            id="a tracked scanner directory",
+        ),
+        pytest.param(
+            unserved_environment("workflow_dispatch", "lane"), CLEAN_PROPERTIES + "sonar.host.url=https://evil.example\n", {}, "sonar.host.url",
+            id="a steering property",
+        ),
+    ],
+)
+def test_the_preflights_refusals_stop_a_run_sonarcloud_serves_nothing_of(monkeypatch, capsys, build_repo, tmp_path, environment, properties, files, named):
+    """SONAR-129: the unserved note comes after every refusal, so a token or properties fault on such a run is never skipped silently."""
+    step_output = tmp_path / "github_output"
+    code, out, err = run_properties(
+        monkeypatch, capsys, build_repo, properties=properties, environment=environment, extra_files=files, step_output=step_output
+    )
+    assert (code, out, named in err, step_output.exists()) == (2, "", True, False)
+
+
+def test_sonar_off_precedes_the_run_kind_so_the_config_needs_no_run_environment(monkeypatch, capsys, build_repo, tmp_path):
+    """SONAR-129, SONAR-130: [gate] sonar = false prints its own row with the run environment empty, never the unserved note."""
+    step_output = tmp_path / "github_output"
+    code, out, _ = run_properties(
+        monkeypatch, capsys, build_repo, properties=None, environment={}, extra_files=sonar_off_files(), step_output=step_output
+    )
+    assert (code, "unserved" in out, step_output.read_text()) == (0, False, "sonar=off\n")
 
 
 def test_properties_refuses_a_malformed_sonar_key(monkeypatch, capsys, build_repo):

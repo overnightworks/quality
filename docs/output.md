@@ -176,7 +176,7 @@ that cannot check is `✗ <area>  not checked  <reason>` ([Refusals](#refusals))
 
 A note is a `·` row under its area, after the area's findings, aligned with them (ROW-15):
 `· <path[:line]>  <event>  <fact>`, with no `fix:` of its own (ROW-16). Its events are `allowed` (file rules,
-dependencies, secrets and python-print), `open` (logging, test-twin, sonar findings), `not measured` (a Python file the size rule cannot parse, without a ceiling
+dependencies, secrets and python-print), `open` (logging, test-twin), `not measured` (a Python file the size rule cannot parse, without a ceiling
 file; O22), `unused` and `warning` (import-contract) and `unused` (secret). An allowed advisory and an honoured output
 owner stand as notes, and the clean row counts them (O15, O49):
 
