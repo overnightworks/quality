@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 import pytest
@@ -43,8 +44,9 @@ def test_a_re_run_counts_from_its_first_attempt_and_names_the_slowest_job_of_the
         [timed("verdict", completed=None)],
         [timed("a", completed=5), timed("b", created=None, completed=5)],
         [timed("a", completed=5), timed("b", started=None, completed=5)],
+        [timed("a", completed=5), replace(timed("b", completed=5), completed_at=None)],
     ],
-    ids=["no jobs", "nothing completed", "a job without created_at", "a completed job without started_at"],
+    ids=["no jobs", "nothing completed", "a job without created_at", "a completed job without started_at", "a completed job without completed_at"],
 )
 def test_a_missing_timestamp_is_not_measured(jobs):
     assert measure(jobs) is None

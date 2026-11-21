@@ -56,7 +56,7 @@ MAX_REREADS = 12
 REREAD_INTERVAL_SECONDS = 10
 NEXT_LINK = re.compile(r'<([^>]+)>;\s*rel="next"')
 SUCCESS = "success"
-COMPLETED = "completed"
+COMPLETED = ci_time.COMPLETED
 PROGRESS_OF_STATUS = MappingProxyType({"in_progress": 1, COMPLETED: 2})
 FIRST_SERVER_ERROR = 500
 PERMISSION_REFUSALS = frozenset({403, 404})
