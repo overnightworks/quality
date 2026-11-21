@@ -103,7 +103,7 @@ def read_fleet_ci_time(names: tuple[str, ...], today: date, token: str, fetch: R
         if size:
             jobs[name], used = fleet_job_time.read_job_time(name, fleet_job_time.evenly(runs, size), headers, fetch)
             calls += used
-        share -= 1
+        share -= bool(runs)
     return FleetCiTime(rows, jobs, calls)
 
 
