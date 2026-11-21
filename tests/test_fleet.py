@@ -579,8 +579,10 @@ def test_the_workflow_measures_read_only_and_only_the_publish_job_writes_pages()
     assert all(re.fullmatch(r"[0-9a-f]{40}", action.split("@")[1]) for action in used)
     assert len(re.findall(r"uses: \S+@[0-9a-f]{40} # v\d+\.\d+\.\d+", text)) == len(used)
     upload = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/upload-pages-artifact@"))
-    assert upload["with"]["path"] == "site"
-    assert "hashFiles('site/fleet-ci-time.json')" in upload["if"]
+    measuring = next(step for step in job["steps"] if step["name"] == "Measure the fleet")
+    produced = re.search(r"--ci-time-json (\S+)", measuring["run"])[1]
+    assert f"hashFiles('{produced}')" in upload["if"]
+    assert Path(produced).parent == Path(upload["with"]["path"])
 
 
 @pytest.mark.parametrize(

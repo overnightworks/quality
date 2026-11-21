@@ -63,8 +63,9 @@ class PartlyRead:
 
 @dataclass(frozen=True)
 class FleetCiTime:
-    """One entry per repository and the calls the whole read made."""
+    """One entry per repository, the calls the whole read made and the window start the runs query used."""
 
+    window_start: datetime
     rows: dict[str, WeeklyCiTime | PartlyRead]
     jobs: dict[str, fleet_job_time.JobTime | fleet_job_time.JobsUnread | fleet_job_time.JobsCut]
     calls: int
@@ -90,7 +91,8 @@ def api_headers(token: str) -> dict[str, str]:
 def read_fleet_ci_time(names: tuple[str, ...], today: date, token: str, fetch: RunsFetch, default_branch: str) -> FleetCiTime:
     """Each repository's weekly CI time, read page by page within the report's call cap, then the jobs of a sample of
     each one's runs within what the cap leaves."""
-    created = quote(f">={today - timedelta(days=WINDOW_DAYS)}", safe="")
+    window_start = datetime.combine(today - timedelta(days=WINDOW_DAYS), time.min, UTC)
+    created = quote(f">={window_start.date()}", safe="")
     headers = api_headers(token)
     rows: dict[str, WeeklyCiTime | PartlyRead] = {}
     sampled: dict[str, list[fleet_job_time.RunToSample]] = {}
@@ -108,7 +110,7 @@ def read_fleet_ci_time(names: tuple[str, ...], today: date, token: str, fetch: R
         elif runs:
             jobs[name] = fleet_job_time.JobsCut()
         share -= bool(runs)
-    return FleetCiTime(rows, jobs, calls)
+    return FleetCiTime(window_start, rows, jobs, calls)
 
 
 def table_cells(name: str, fleet: FleetCiTime) -> tuple[str, ...]:
@@ -129,12 +131,11 @@ def document(fleet: FleetCiTime, generated_at: datetime) -> str:
     cut by the call cap or could not be read. The window is what the runs query reads: midnight UTC seven days before
     the report's day, up to the moment the document is made."""
     generated = generated_at.astimezone(UTC)
-    window_start = datetime.combine(generated.date() - timedelta(days=WINDOW_DAYS), time.min, UTC)
     return json.dumps(
         {
             "schema": DOCUMENT_SCHEMA,
             "generated_at": _instant(generated),
-            "window_start": _instant(window_start),
+            "window_start": _instant(fleet.window_start),
             "window_end": _instant(generated),
             "limit_seconds": int(LIMIT.total_seconds()),
             "complete": not any(isinstance(reading, PartlyRead) for reading in fleet.rows.values()),

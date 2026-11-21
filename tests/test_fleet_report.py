@@ -549,14 +549,15 @@ def test_a_repository_whose_runs_cannot_be_read_is_a_partly_read_row_and_the_exi
     assert "| o/beta | 1 | 30s | 30s | 0 % (0 of 1) | — | 1 | 7s | none |" in printed.out
 
 
-SLOW_WEEK = runs_of(("x", "2026-11-05T10:00:00Z", "2026-11-05T10:11:00Z", "success"))
+def slow_week() -> Answer:
+    return runs_of(("x", "2026-11-05T10:00:00Z", "2026-11-05T10:11:00Z", "success"))
 
 
 def fleet_of_two(tmp_path, public):
     """A fleet of a repository with a week of 11-minute CI and one without runs, and the listing that serves it."""
     public("alpha", {"a.py": "a = 1\n"})
     public("beta", {"b.py": "b = 1\n"})
-    listing = Listing({"o": listed(("o/alpha",), ("o/beta",))}, runs={"o/alpha": SLOW_WEEK})
+    listing = Listing({"o": listed(("o/alpha",), ("o/beta",))}, runs={"o/alpha": slow_week()})
     return write_organizations(tmp_path / "fleet", ["o"]), listing
 
 
@@ -608,7 +609,7 @@ def test_a_red_report_still_writes_the_document_and_a_repository_not_measured_by
     """FLEET-110: a repository that cannot be cloned makes the report exit 2 yet the document is written, its row
     following its CI-time reading."""
     alpha = public("alpha", {"a.py": "a = 1\n"})
-    listing = Listing({}, runs={missing: SLOW_WEEK})
+    listing = Listing({}, runs={missing: slow_week()})
     target = tmp_path / "site.json"
     printed = report_in(
         write_fleet(tmp_path / "fleet", [alpha, missing]), capsys, monkeypatch, ticks(*range(8)),
