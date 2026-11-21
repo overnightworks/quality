@@ -1,0 +1,8 @@
+claim_id = "5c1b0ae9106a43a3b6b38bca9ab17aee"
+agent = "Claude c337e1ba-7102-43fb-8789-c53cf4a25621"
+role = "builder"
+base = "5b391e449b79e1e665127837577a5def7bf8cd73"
+branch = "claude/issue-940-release-v0-23-1"
+scope = [".github/workflows/gate.yml", "docs/rules.md", "src/quality/rules.py", "tests/test_fleet_matrix.py"]
+opened_commit = "6a105a2a81e6f6796230de10126c9df137b9d9ab"
+whole_reason = "One release: the pin, the release facts and the matrix test that reads them change together."
