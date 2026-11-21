@@ -34,11 +34,12 @@ COVERED_MAKEFILE = (
 MISSING = (WORKFLOWS_DIRECTORY, None, FindingEvent.MISSING, MISSING_FACT)
 MISSING_LINE = f"! {WORKFLOWS_DIRECTORY} missing {MISSING_FACT}"
 DECLARED = 'dependencies = ["overnightworks-design[catalogs]>=1"]'
+GATE_CALL = f"  gate:\n    uses: overnightworks/quality/.github/workflows/gate.yml@{'a' * 40}\n"
 HEAD = (
     "on: {on}\npermissions: {{}}\n"
     "concurrency:\n  group: ${{{{ github.workflow }}}}-${{{{ github.event.pull_request.number || github.run_id }}}}\n"
     "  cancel-in-progress: ${{{{ github.event.pull_request.number != null }}}}\n"
-    "jobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n"
+    "jobs:\n" + GATE_CALL + "  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n"
 )
 
 

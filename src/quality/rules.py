@@ -57,7 +57,7 @@ class Area(StrEnum):
     DEBT = "debt", "size, near copies and job time limits against the debt ceiling (quality/baseline.toml)"
     IMPORTS = "imports", "the import contracts"
     SECRETS = "secrets", "secrets in the committed history"
-    WORKFLOWS = "workflows", "GitHub workflows: lint, security, concurrency, pytest -n, run-time installs, the languages standard's catalog-check and render-pass"
+    WORKFLOWS = "workflows", "GitHub workflows: lint, security, concurrency, the workflows a pull request triggers, pytest -n, run-time installs, the languages standard's catalog-check and render-pass"
     DEPENDENCIES = "dependencies", "known advisories and fleet package sources in the lockfiles"
     CODE = "code", "Python source: security findings and print calls"
 
@@ -103,6 +103,7 @@ class Rule(StrEnum):
     WORKFLOW_LINT = "workflow-lint", Area.WORKFLOWS, RELEASE_0_1, Switch.ALWAYS
     WORKFLOW_SECURITY = "workflow-security", Area.WORKFLOWS, RELEASE_0_1, Switch.ALWAYS
     PR_CONCURRENCY = "pr-concurrency", Area.WORKFLOWS, RELEASE_0_11, Switch.ALWAYS
+    PR_WORKFLOWS = "pr-workflows", Area.WORKFLOWS, None, Switch.ALWAYS
     PYTEST_WORKERS = "pytest-workers", Area.WORKFLOWS, RELEASE_0_11, Switch.ALWAYS
     RUNTIME_INSTALL = "runtime-install", Area.WORKFLOWS, RELEASE_0_12, Switch.ALWAYS
     CATALOG_CHECK = (
