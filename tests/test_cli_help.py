@@ -252,12 +252,14 @@ def test_the_verdict_help_stands_in_its_frame(capsys):
             "coverage report or tracked .scannerwork/ the scan must not start with, then\n"
             "hand the scan its arguments in the step output. With [gate] sonar = false in\n"
             "quality/config.toml it refuses a properties file or a passed token instead.\n"
+            "On a run that is neither a pull request nor on the default branch it hands\n"
+            "over sonar=off after those refusals: SonarCloud serves no other run.\n"
             "\n"
             "Options:\n"
             "  -v          show the raw scanner output; the step runs no scanner\n"
             "  -h, --help  show this help\n"
             "\n"
-            "Exit codes: 0 clean, 2 could not judge, 130 interrupted.\n",
+            "Exit codes: 0 clean, off or unserved, 2 could not judge, 130 interrupted.\n",
             id="sonar properties",
         ),
         pytest.param(
@@ -285,13 +287,15 @@ def test_the_verdict_help_stands_in_its_frame(capsys):
             "Run by the gate after the scan: wait for this run's own analysis\n"
             "(.scannerwork/report-task.txt), then judge its open findings, the default\n"
             "branch's legacy count and, on a pull request, SonarCloud's quality gate. It\n"
-            "needs quality/config.toml with [gate] mandatory_jobs.\n"
+            "needs quality/config.toml with [gate] mandatory_jobs. On a run that is\n"
+            "neither a pull request nor on the default branch it asks SonarCloud for\n"
+            "nothing and prints the unserved note.\n"
             "\n"
             "Options:\n"
             "  -v          show the raw scanner output; the step runs no scanner\n"
             "  -h, --help  show this help\n"
             "\n"
-            "Exit codes: 0 clean or report only, 1 findings, 2 could not judge,\n"
+            "Exit codes: 0 clean or unserved, 1 findings, 2 could not judge,\n"
             "130 interrupted.\n",
             id="sonar findings",
         ),

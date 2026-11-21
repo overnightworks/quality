@@ -11,8 +11,6 @@ from quality.output import SEPARATOR
 from quality.report import CannotJudge
 from tests.support.sonar import (
     ANALYSED_MAIN,
-    FEATURE_ENVIRONMENT,
-    FINISHED_FOR_FEATURE,
     FINISHED_FOR_MAIN,
     FINISHED_FOR_PR_7,
     KEY,
@@ -21,6 +19,7 @@ from tests.support.sonar import (
     PUSH_ENVIRONMENT,
     TASK_FIXTURE,
     TOKEN,
+    UNSERVED_RUNS,
     FakeSonar,
     Responder,
     issue,
@@ -31,6 +30,7 @@ from tests.support.sonar import (
     run_cli,
     set_environment,
     sonar_answering,
+    unserved_environment,
     violations,
     work_in_scratch_directory,
 )
@@ -82,15 +82,16 @@ def test_counts_findings_across_pages(monkeypatch, capsys, pages, expected_count
 
 def test_asks_for_statuses_a_person_may_have_accepted_and_encodes_the_scope(monkeypatch, capsys):
     """SONAR-69, SONAR-72: asks for issueStatuses a person may have accepted and url-encodes the scope"""
+    branch = "trunk/a&b#c%d"
     fake = sonar_answering(
-        task={**FINISHED_FOR_PR_7, "pullRequest": None, "branch": "feat/a&b#c%d"}, issues=issues_page(0)
+        task={**FINISHED_FOR_MAIN, "branch": branch}, issues=issues_page(0), branches=({**ANALYSED_MAIN, "name": branch},)
     )
-    environment = {**PUSH_ENVIRONMENT, "GITHUB_REF_NAME": "feat/a&b#c%d"}
+    environment = {**PUSH_ENVIRONMENT, "GITHUB_REF_NAME": branch, "DEFAULT_BRANCH": branch}
     code, *_ = run_cli(monkeypatch, capsys, fake, environment)
     query = parse_qs(urlparse(fake.urls_to("issues/search")[0]).query)
     assert code == 0
     assert query["issueStatuses"] == ["OPEN,CONFIRMED,ACCEPTED,FALSE_POSITIVE"]
-    assert query["branch"] == ["feat/a&b#c%d"]
+    assert query["branch"] == [branch]
     assert "statuses" not in query
     assert query["componentKeys"] == [KEY]
 
@@ -260,7 +261,6 @@ def test_waits_for_its_own_task_before_reading_findings(monkeypatch, capsys, sta
 RUN_KINDS = [
     (PULL_REQUEST_ENVIRONMENT, FINISHED_FOR_PR_7),
     (PUSH_ENVIRONMENT, FINISHED_FOR_MAIN),
-    (FEATURE_ENVIRONMENT, FINISHED_FOR_FEATURE),
 ]
 
 
@@ -294,7 +294,7 @@ def test_a_search_above_the_measure_is_used_as_it_stands(monkeypatch, capsys):
     assert (code, sleeps, len(fake.urls_to("issues/search"))) == (1, [], 1)
 
 
-@pytest.mark.parametrize(("environment", "task"), RUN_KINDS, ids=["pull request", "default branch", "other branch"])
+@pytest.mark.parametrize(("environment", "task"), RUN_KINDS, ids=["pull request", "default branch"])
 def test_a_search_that_never_reaches_the_measure_is_exit_two_with_a_rerun_step(monkeypatch, capsys, environment, task):
     """SONAR-112: never agreeing is the fact and the step re-run this run's failed jobs, nothing on stdout"""
     fake = lagging(task, "1", issues_page(0))
@@ -382,7 +382,7 @@ def test_a_measure_that_lags_high_is_read_again_and_ends_clean(monkeypatch, caps
         (PULL_REQUEST_ENVIRONMENT, FINISHED_FOR_PR_7 | {"organization": "someone-else"}),
         (PULL_REQUEST_ENVIRONMENT, {key: value for key, value in FINISHED_FOR_PR_7.items() if key != "organization"}),
         (PULL_REQUEST_ENVIRONMENT, FINISHED_FOR_PR_7 | {"pullRequest": None, "branch": "7"}),
-        (FEATURE_ENVIRONMENT, FINISHED_FOR_FEATURE | {"branch": "other"}),
+        (PUSH_ENVIRONMENT, FINISHED_FOR_MAIN | {"branch": "other"}),
     ],
     ids=["other pull request", "no pull request", "other component", "other organization", "no organization", "branch only", "other branch"],
 )
@@ -401,12 +401,11 @@ def test_a_finished_task_that_is_not_this_runs_is_refused(monkeypatch, capsys, e
         (PUSH_ENVIRONMENT, FINISHED_FOR_MAIN, 25, 1, "\n! red · 25 open on main · <1s\n", False),
         (PUSH_ENVIRONMENT, FINISHED_FOR_MAIN, 0, 0, "\n✓ clean · 0 open on main · <1s\n", False),
         ({**PUSH_ENVIRONMENT, "PULL_REQUEST_NUMBER": "7"}, FINISHED_FOR_MAIN, 1, 1, "\n! red · 1 open on main · <1s\n", False),
-        (FEATURE_ENVIRONMENT, FINISHED_FOR_FEATURE, 3, 0, "\n✓ report only · 3 open on feat/a · <1s\n", False),
     ],
-    ids=["pull request with a finding", "default branch with findings", "clean default branch", "push ignores a pull request number", "other branch with findings"],
+    ids=["pull request with a finding", "default branch with findings", "clean default branch", "push ignores a pull request number"],
 )
-def test_findings_fail_a_pull_request_and_the_default_branch_but_only_report_on_another_branch(monkeypatch, capsys, environment, task, findings, code, line, asks_legacy):
-    """SONAR-34, SONAR-35, SONAR-36, SONAR-37, SONAR-38: any open finding fails a pull request and the default branch, lists it, and counts legacy only on a pull request; another branch only reports"""
+def test_findings_fail_a_pull_request_and_the_default_branch(monkeypatch, capsys, environment, task, findings, code, line, asks_legacy):
+    """SONAR-34, SONAR-35, SONAR-36, SONAR-37: any open finding fails a pull request and the default branch, lists it, and counts legacy only on a pull request"""
     fake = sonar_answering(task=task)
     fake.answers["issues/search"] = [issues_page(findings, *range(1, min(findings, 100) + 1)), issues_page(findings)]
     result = run_cli(monkeypatch, capsys, fake, environment)
@@ -456,11 +455,40 @@ def test_a_legacy_value_other_than_report_or_fail_is_exit_two_before_any_request
     assert "legacy" in err
 
 
-def test_another_branch_never_reads_the_branch_list(monkeypatch, capsys):
-    """SONAR-44: only pull requests and default-branch runs read project_branches/list"""
-    fake = sonar_answering(task=FINISHED_FOR_FEATURE)
-    run_cli(monkeypatch, capsys, fake, FEATURE_ENVIRONMENT)
-    assert fake.urls_to("project_branches/list") == []
+@pytest.mark.parametrize(("event", "ref"), UNSERVED_RUNS)
+def test_a_run_sonarcloud_serves_nothing_of_prints_the_unserved_note_and_asks_for_nothing(monkeypatch, capsys, event, ref):
+    """SONAR-44, SONAR-129: findings on such a run is the note and exit 0 with no request, so no branch list is read either"""
+    fake = sonar_answering()
+    code, out, err, sleeps = run_cli(monkeypatch, capsys, fake, unserved_environment(event, ref))
+    note = f"  · sonar         unserved       {ref} · SonarCloud serves only pull requests and main\n✓ unserved · <1s\n"
+    assert (code, out, err, fake.requests, sleeps) == (0, note, "", [], [])
+
+
+@pytest.mark.parametrize(
+    ("environment", "config_text", "named"),
+    [
+        pytest.param({**unserved_environment("push", "feat/a"), "SONAR_TOKEN": ""}, legacy_config_absent, "SONAR_TOKEN is empty", id="an empty token"),
+        pytest.param({**unserved_environment("push", "feat/a"), "DEFAULT_BRANCH": ""}, legacy_config_absent, "DEFAULT_BRANCH", id="no default branch"),
+        pytest.param(unserved_environment("push", "feat/a"), legacy_config("warn"), "legacy", id="a config it cannot read"),
+    ],
+)
+def test_a_run_sonarcloud_serves_nothing_of_still_meets_the_local_refusals_of_findings(monkeypatch, capsys, environment, config_text, named):
+    """SONAR-129: the note comes after findings' own refusals of config, token and default branch, so none of them turns into exit 0"""
+    fake = sonar_answering()
+    code, out, err, _ = run_cli(monkeypatch, capsys, fake, environment, config_text=config_text)
+    assert (code, out, fake.requests, named in err) == (2, "", [], True)
+
+
+@pytest.mark.parametrize("name", ["GITHUB_EVENT_NAME", "GITHUB_REF_NAME"])
+@pytest.mark.parametrize("set_empty", [False, True], ids=["unset", "empty"])
+def test_findings_without_the_event_or_the_ref_is_exit_two_before_any_request(monkeypatch, capsys, name, set_empty):
+    """SONAR-130: an unset or empty event or ref names the variable and asks nothing"""
+    environment = {key: value for key, value in PUSH_ENVIRONMENT.items() if key != name}
+    if set_empty:
+        environment[name] = ""
+    fake = sonar_answering()
+    code, _, err, _ = run_cli(monkeypatch, capsys, fake, environment)
+    assert (code, fake.requests, name in err) == (2, [], True)
 
 
 @pytest.mark.parametrize("environment", [PULL_REQUEST_ENVIRONMENT, PUSH_ENVIRONMENT], ids=["pull request", "default branch"])

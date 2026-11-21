@@ -21,8 +21,6 @@ from quality.report import (
     Finding,
     FindingEvent,
     Instruction,
-    Note,
-    NoteEvent,
     Reason,
     config_refusal,
 )
@@ -56,9 +54,12 @@ MAXIMUM_FINDINGS_PAGES = FINDINGS_SEARCH_LIMIT // FINDINGS_PAGE_SIZE
 OPEN_ISSUE_STATUSES = "OPEN,CONFIRMED,ACCEPTED,FALSE_POSITIVE"
 
 PULL_REQUEST_EVENT = "pull_request"
+EVENT_VARIABLE = "GITHUB_EVENT_NAME"
+REF_VARIABLE = "GITHUB_REF_NAME"
 TOKEN_VARIABLE = "SONAR_TOKEN"  # noqa: S105 - the name of an environment variable and not a secret
 TOKEN_STEP = Instruction(f"set the {TOKEN_VARIABLE} secret and pass it to gate.yml, then run the gate again")
-# gate.yml passes github.event.repository.default_branch; an absent expression renders as an empty string.
+# gate.yml passes github.event.repository.default_branch to the properties step and the findings step; an absent
+# expression renders as an empty string.
 DEFAULT_BRANCH_VARIABLE = "DEFAULT_BRANCH"
 
 SCANNER_WORK_DIRECTORY = ".scannerwork"
@@ -79,6 +80,7 @@ class SonarEvent(StrEnum):
     NONE = "none"
     FINDING = "finding"
     OPEN = "open"
+    UNSERVED = "unserved"
     UNKNOWN = "unknown"
     PASSED = "passed"
     FAILED = "failed"
@@ -126,9 +128,6 @@ class Scope:
     def is_pull_request(self) -> bool:
         return self.parameter == "pullRequest"
 
-    def is_branch(self, name: str) -> bool:
-        return self.parameter == "branch" and self.value == name
-
 
 @dataclass(frozen=True)
 class Project:
@@ -137,19 +136,49 @@ class Project:
 
 
 class RunKind(StrEnum):
-    """What the run is: the one answer to which findings fail it and whether legacy can be judged."""
+    """What the run is: the one answer to which findings fail it and whether SonarCloud holds anything of it."""
 
     PULL_REQUEST = "pull request"
     DEFAULT_BRANCH = "default branch"
-    OTHER_BRANCH = "other branch"
+    UNSERVED = "unserved"
+
+
+@dataclass(frozen=True)
+class Run:
+    """The gate run, as its event, its ref and the repository's default branch say; nothing else decides its kind."""
+
+    event: str
+    ref: str
+    default_branch: str
+
+    @classmethod
+    def of(cls, environment: Mapping[str, str]) -> Run:
+        return cls(*(require_set(environment, name) for name in (EVENT_VARIABLE, REF_VARIABLE, DEFAULT_BRANCH_VARIABLE)))
 
     @property
-    def judges_legacy(self) -> bool:
-        return self is not RunKind.OTHER_BRANCH
+    def kind(self) -> RunKind:
+        # SonarCloud answers a read of any other branch with HTTP 403, so such a run is neither scanned nor read.
+        if self.event == PULL_REQUEST_EVENT:
+            return RunKind.PULL_REQUEST
+        return RunKind.DEFAULT_BRANCH if self.ref == self.default_branch else RunKind.UNSERVED
+
+
+def require_set(environment: Mapping[str, str], name: str) -> str:
+    value = environment.get(name, "")
+    if not value:
+        raise CannotJudge(f"{name} is not set")
+    return value
+
+
+def unserved_row(run: Run) -> output.Row:
+    fact = (run.ref, f"SonarCloud serves only pull requests and {run.default_branch}")
+    return output.Row(output.Glyph.NOTE, "sonar", SonarEvent.UNSERVED, output.SEPARATOR.join(fact))
 
 
 @dataclass(frozen=True)
 class Analysis:
+    """The analysis of a run SonarCloud serves: a pull request or the default branch, as `scope_of` chose."""
+
     project: Project
     scope: Scope
     task_id: str
@@ -158,9 +187,7 @@ class Analysis:
 
     @property
     def kind(self) -> RunKind:
-        if self.scope.is_pull_request:
-            return RunKind.PULL_REQUEST
-        return RunKind.DEFAULT_BRANCH if self.scope.is_branch(self.default_branch) else RunKind.OTHER_BRANCH
+        return RunKind.PULL_REQUEST if self.scope.is_pull_request else RunKind.DEFAULT_BRANCH
 
 
 @dataclass(frozen=True)
@@ -229,20 +256,13 @@ def require_token(environment: Mapping[str, str]) -> None:
         raise CannotJudge(f"{TOKEN_VARIABLE} is empty: an anonymous reader is told zero findings", (TOKEN_STEP,))
 
 
-def analyse(
-    environment: Mapping[str, str],
-    legacy_mode: LegacyMode,
-    transport: Transport,
-    sleep: Sleep,
-) -> SonarResult:
-    """The local configuration and destination checks run before the token is sent anywhere."""
-    analysis = read_analysis(environment)
+def analyse(analysis: Analysis, legacy_mode: LegacyMode, transport: Transport, sleep: Sleep) -> SonarResult:
     analysis_id = wait_for_own_task(analysis, transport, sleep)
     resolved = require_resolved(analysis, transport)
     kind = analysis.kind
     gate = quality_gate_status(analysis, analysis_id, transport) if kind is RunKind.PULL_REQUEST else None
-    default_analysed = kind.judges_legacy and default_branch_analysed(analysis, transport)
-    unknown = kind.judges_legacy and not default_analysed
+    default_analysed = default_branch_analysed(analysis, transport)
+    unknown = not default_analysed
     if unknown and legacy_mode is LegacyMode.FAIL:
         raise CannotJudge(legacy_unknown(analysis.default_branch))
     findings = findings_reaching_the_measure(analysis, resolved, transport, sleep)
@@ -256,10 +276,17 @@ def run_findings(
     environment: Mapping[str, str], transport: Transport, sleep: Sleep, clock: Callable[[], float], channels: output.Channels
 ) -> int:
     """Runs after the scan: this run's own analysis, its findings, the legacy count and the quality gate as rows, then
-    the closing line; a refusal is the pair."""
+    the closing line; a run SonarCloud serves nothing of is the unserved note, asked of no one; a refusal is the pair.
+    The local configuration and destination checks run before the token is sent anywhere."""
     started = clock()
     try:
-        result = analyse(environment, _legacy_mode(), transport, sleep)
+        legacy_mode = _legacy_mode()
+        analysis = read_analysis(environment)
+        if isinstance(analysis, Run):
+            output.write_rows((unserved_row(analysis),), channels.out)
+            output.write_closing_line(output.Glyph.CLEAN, (SonarEvent.UNSERVED, output.format_duration(clock() - started)), channels.out)
+            return EXIT_CLEAN
+        result = analyse(analysis, legacy_mode, transport, sleep)
     except CannotJudge as refusal:
         return refused(refusal.reason, FIX_THEN_RERUN, channels)
     write_result(result, channels.out)
@@ -284,11 +311,7 @@ def _legacy_mode() -> LegacyMode:
 def write_result(result: SonarResult, channel: output.Channel) -> None:
     """The analysis row and the findings row with what it lists, then the legacy and quality gate rows that apply."""
     output.write_rows((_analysis_row(result.analysis), _findings_row(result)), channel)
-    listed = result.findings.listed
-    if result.analysis.kind is RunKind.OTHER_BRANCH:
-        output.write_findings_and_notes((), [Note(finding.path, NoteEvent.OPEN, finding.fact, finding.line) for finding in listed], channel)
-    else:
-        output.write_findings_and_notes(listed, (), channel)
+    output.write_findings_and_notes(result.findings.listed, (), channel)
     output.write_rows((*_legacy_rows(result), *_gate_rows(result.gate)), channel)
 
 
@@ -299,13 +322,11 @@ def _analysis_row(analysis: Analysis) -> output.Row:
 
 
 def _findings_row(result: SonarResult) -> output.Row:
-    """`new` on a pull request, `open` on a branch; another branch's findings are reported, never asked of anyone."""
-    kind, count = result.analysis.kind, result.findings.count
-    subject = "new" if kind is RunKind.PULL_REQUEST else "open"
+    """`new` on a pull request, `open` on the default branch."""
+    subject = "new" if result.analysis.kind is RunKind.PULL_REQUEST else "open"
+    count = result.findings.count
     if not count:
         return output.Row(output.Glyph.CLEAN, subject, SonarEvent.NONE)
-    if kind is RunKind.OTHER_BRANCH:
-        return output.Row(output.Glyph.NOTE, subject, SonarEvent.FINDING, "report only", count=count)
     return output.Row(output.Glyph.NEEDS_YOU, subject, SonarEvent.FINDING, count=count)
 
 
@@ -335,8 +356,6 @@ def _gate_rows(gate: GateStatus | None) -> list[output.Row]:
 def closing(result: SonarResult) -> tuple[output.Glyph, tuple[str, ...]]:
     """The closing line's glyph and its parts before the duration."""
     kind, count, branch = result.analysis.kind, result.findings.count, result.analysis.scope.value
-    if kind is RunKind.OTHER_BRANCH:
-        return output.Glyph.CLEAN, ("report only", f"{count} open on {branch}")
     glyph, word = (output.Glyph.NEEDS_YOU, "red") if result.fails_the_run else (output.Glyph.CLEAN, "clean")
     unknown = ("legacy unknown",) if result.legacy_unknown else ()
     if kind is RunKind.DEFAULT_BRANCH:
@@ -345,7 +364,8 @@ def closing(result: SonarResult) -> tuple[output.Glyph, tuple[str, ...]]:
     return glyph, (word, f"new {count}", *(unknown or (f"legacy {result.legacy}",)), *gate_failed)
 
 
-def read_analysis(environment: Mapping[str, str]) -> Analysis:
+def read_analysis(environment: Mapping[str, str]) -> Analysis | Run:
+    """The analysis this run asks about, or the run itself when SonarCloud serves nothing of it."""
     project = project_of(environment)
     settings = read_task_file()
     if settings.get("projectKey") != project.key:
@@ -357,11 +377,11 @@ def read_analysis(environment: Mapping[str, str]) -> Analysis:
     if not settings.get("ceTaskId"):
         raise CannotJudge(f"{TASK_FILE.name} names no ceTaskId")
     require_token(environment)
-    default_branch = environment.get(DEFAULT_BRANCH_VARIABLE, "")
-    if not default_branch:
-        raise CannotJudge(f"{DEFAULT_BRANCH_VARIABLE} is empty: the gate passes github.event.repository.default_branch")
+    run = Run.of(environment)
+    if run.kind is RunKind.UNSERVED:
+        return run
     return Analysis(
-        project, scope_of(environment), settings["ceTaskId"], basic_authorization(environment[TOKEN_VARIABLE]), default_branch
+        project, scope_of(run, environment), settings["ceTaskId"], basic_authorization(environment[TOKEN_VARIABLE]), run.default_branch
     )
 
 
@@ -372,13 +392,11 @@ def project_of(environment: Mapping[str, str]) -> Project:
     return Project(owner, f"{owner}_{repository}")
 
 
-def scope_of(environment: Mapping[str, str]) -> Scope:
-    try:
-        if environment["GITHUB_EVENT_NAME"] == PULL_REQUEST_EVENT:
-            return Scope("pullRequest", environment["PULL_REQUEST_NUMBER"])
-        return Scope("branch", environment["GITHUB_REF_NAME"])
-    except KeyError as error:
-        raise CannotJudge(f"{error.args[0]} is not set") from error
+def scope_of(run: Run, environment: Mapping[str, str]) -> Scope:
+    """The scope of a run SonarCloud serves: its pull request, or the default branch."""
+    if run.kind is RunKind.PULL_REQUEST:
+        return Scope("pullRequest", require_set(environment, "PULL_REQUEST_NUMBER"))
+    return Scope("branch", run.ref)
 
 
 def read_task_file() -> dict[str, str]:
