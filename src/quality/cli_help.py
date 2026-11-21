@@ -88,7 +88,7 @@ REPORT_HELP = f"""\
 usage: quality report [--ci-time-json] [-v]
 
 Measure every fleet repository {fleet.FLEET_PATH} selects: size, debt, the gate
-release it pins, the CI time of the last 7 days. A row per repository goes to
+release it pins, the CI time of the last {fleet_ci_time.WINDOW_DAYS} days. A row per repository goes to
 stderr, the three markdown tables to stdout and to the step summary.
 
 Options:
