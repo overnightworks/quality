@@ -1,17 +1,17 @@
 # Naming
 
-Reference for the engineer or head who names a package or renames a repository: which name each ecosystem gets, where the rule bends, and how a Sonar key changes. Nothing in quality checks these names yet; the document is the rule's text, not a gate.
+Reference for the engineer or head who names a package or renames a repository: which name each ecosystem gets, where the rule bends, and how a Sonar key changes. quality does not check the shared rule yet; the document is its text, not a gate. Only the Sonar key is checked already, by SONAR-59.
 
 ## The stem
 
-Every repository has one stem: its GitHub name, a lowercase word or a hyphenated pair. The name carries no role suffix (`-runtime`, `-service`, `-client`, `-server`, `-lib`, `-sdk`, `-api`); the role lives in the repository's description and in `role`, never in the name. Every other name the repository owns derives from the stem.
+Every repository has one stem: its GitHub name, a lowercase word or a hyphenated pair. The name carries no role suffix (`-runtime`, `-service`, `-client`, `-server`, `-lib`, `-sdk`, `-api`); the role lives in the repository's description, never in the name. Every other name the repository owns derives from the stem.
 
 ## The forms
 
 | Namespace | Form | Why |
 |---|---|---|
-| Python distribution | `overnightworks-<stem>[-<component>]`; bare `<stem>` only under `[tool.uv] package = false` | the prefixed names are free on PyPI and cannot shadow a taken one; a distribution nothing installs cannot clash |
-| Python import | `<stem>[_<component>]` | a valid identifier that names its repository |
+| Python distribution | `overnightworks-<stem>[-<component>]`; bare `<stem>` only for a distribution nothing installs (`[tool.uv] package = false`, or one run only from its own checkout) | the prefixed names are free on PyPI and cannot shadow a taken one; a distribution nothing installs cannot clash |
+| Python import | `<stem>[_<component>]`, each `-` of the stem or component written `_` (`gmail_cleanup`, `speech_fetch_hearing_model`) | a valid identifier that names its repository |
 | CLI | `<stem>[-<component>]`; features are subcommands | one command per repository; a separately installed process stays visibly part of it |
 | npm name of a packed `package.json` | `overnightworks-<stem>[-<component>]`, unscoped | the same prefix as the Python distribution |
 | Sonar project key | `overnightworks_<stem>` | SonarCloud's org-key form; its check is SONAR-59 in [sonar.md](sonar.md) |
@@ -25,8 +25,8 @@ The ecosystem finds these only in its own form, so they are the only exceptions:
 
 ## Fixed points
 
-- hopin and songmaker keep their bare distributions `hopin` and `songmaker` (operator, 09.11.2026, marketplace#571, A): a distribution nothing installs keeps the bare stem.
-- ACE-Step-1.5 is a fork and keeps its upstream names.
+- hopin and songmaker keep their bare distributions `hopin` and `songmaker` (operator, 16.10.2026, edge#24); the bare stem for a distribution nothing installs, or one run only from its own checkout, is ruled in marketplace#571, A (operator, 09.11.2026).
+- ACE-Step-1.5 is upstream and keeps its upstream names (operator, 16.10.2026, edge#24).
 
 ## Import clashes
 
