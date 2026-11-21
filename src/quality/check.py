@@ -62,14 +62,16 @@ def _python_floor_result(root: Path, modes: dict[str, str] | CannotJudge, allow_
     return python_floor.check_python_floor(_pyproject_contents(root, _required(modes)), _required(allow_lists).python)
 
 
-def _pyproject_contents(root: Path, modes: dict[str, str]) -> dict[str, bytes]:
-    """The content of the `pyproject.toml` of each project that the tree holds; a gitlink is never entered."""
-    return _tracked_contents(root, modes, [_in(project.directory, layout.PROJECT_FILE) for project in layout.python_projects(modes)])
+def _pyproject_contents(root: Path, modes: dict[str, str], wanted: Callable[[str], bool] = lambda _: True) -> dict[str, bytes]:
+    """The content of the `pyproject.toml` of each project that the tree holds and `wanted` accepts; a gitlink is never entered."""
+    names = [_in(project.directory, layout.PROJECT_FILE) for project in layout.python_projects(modes)]
+    return _tracked_contents(root, modes, [name for name in names if wanted(name)])
 
 
-def _package_json_contents(root: Path, modes: dict[str, str]) -> dict[str, bytes]:
-    """The content of each project's `package.json` that the tree holds; a gitlink is never entered."""
-    return _tracked_contents(root, modes, [_in(directory, layout.PACKAGE_FILE) for directory in layout.frontend_projects(modes)])
+def _package_json_contents(root: Path, modes: dict[str, str], wanted: Callable[[str], bool] = lambda _: True) -> dict[str, bytes]:
+    """The content of each project's `package.json` that the tree holds and `wanted` accepts; a gitlink is never entered."""
+    names = [_in(directory, layout.PACKAGE_FILE) for directory in layout.frontend_projects(modes)]
+    return _tracked_contents(root, modes, [name for name in names if wanted(name)])
 
 
 def _in(directory: str, name: str) -> str:
@@ -79,7 +81,11 @@ def _in(directory: str, name: str) -> str:
 def _naming_findings(root: Path, modes: dict[str, str] | CannotJudge) -> list[Finding]:
     modes = _required(modes)
     return naming.check_naming(
-        modes, _pyproject_contents(root, modes), _package_json_contents(root, modes), checkout.origin_repository(root), naming.packaged_deviations()
+        modes,
+        _pyproject_contents(root, modes, naming.is_judged),
+        _package_json_contents(root, modes, naming.is_judged),
+        checkout.origin_repository(root),
+        naming.packaged_deviations(),
     )
 
 

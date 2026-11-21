@@ -83,7 +83,7 @@ def check_naming(
 ) -> list[Finding]:
     """Each name a `pyproject.toml` or `package.json` writes, and the repository's name, is a form of the stem unless a
     deviation covers it. `modes` maps each tracked path to its index mode; `pyprojects` and `package_jsons` hold the
-    content of the manifests the tree holds, by tracked path.
+    content of the manifests the tree holds that `is_judged`, by tracked path.
 
     `origin` is the `owner/name` of the remote `origin`, whose name is the stem; a checkout with no such remote cannot
     be judged. The findings carry the names the files write, the stem and fixed texts.
@@ -102,12 +102,12 @@ def check_naming(
 def _claims(modes: Mapping[str, str], pyprojects: Mapping[str, bytes], package_jsons: Mapping[str, bytes]) -> list[_Claim]:
     packages = {_file(project.directory, layout.PROJECT_FILE): project.packages for project in layout.python_projects(modes)}
     return [
-        *(claim for path, content in pyprojects.items() if _is_judged(path) for claim in _python_claims(path, content, packages[path])),
-        *(claim for path, content in package_jsons.items() if _is_judged(path) for claim in _npm_claims(path, content)),
+        *(claim for path, content in pyprojects.items() for claim in _python_claims(path, content, packages[path])),
+        *(claim for path, content in package_jsons.items() for claim in _npm_claims(path, content)),
     ]
 
 
-def _is_judged(path: str) -> bool:
+def is_judged(path: str) -> bool:
     """Whether the manifest at `path` is no dependency's and no test fixture's: none of its folders is `node_modules`,
     `tests` or `fixtures`."""
     return NOT_JUDGED_DIRECTORIES.isdisjoint(PurePosixPath(path).parent.parts)

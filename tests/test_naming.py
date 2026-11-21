@@ -1,6 +1,7 @@
 """The naming rule: the names a repository writes itself, judged against the stem its remote `origin` names."""
 
 import json
+import os
 import re
 import subprocess
 
@@ -174,6 +175,14 @@ def test_a_package_json_in_node_modules_tests_or_a_fixture_is_not_judged(judge, 
 @pytest.mark.parametrize("path", ["tests/sample/pyproject.toml", "tests/fixtures/sample/pyproject.toml", "fixtures/sample/pyproject.toml"])
 def test_a_pyproject_in_tests_or_a_fixture_is_not_judged_even_beside_no_root_project(judge, path):
     assert judge({path: pyproject("foreign"), **packages("foreign", project=path.removesuffix("/pyproject.toml") + "/src")}) == []
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 file, so no permission is refused")
+@pytest.mark.parametrize("path", ["fixtures/sample/package.json", "tests/sample/pyproject.toml", "web/node_modules/dep/package.json"])
+def test_a_manifest_that_is_not_judged_is_never_read_and_the_repository_name_is_still_judged(build_repo, path):
+    repo = with_github_remote(build_repo({**GUIDANCE, path: "{}"}), "overnightworks/shop-api")
+    (repo / path).chmod(0)
+    assert (len(rule_findings(repo, Rule.NAMING)), Rule.NAMING in refusals(repo)) == (1, False)
 
 
 def test_a_gitlink_at_a_manifest_path_is_never_entered(build_repo, elsewhere):
