@@ -10,7 +10,7 @@ import pytest
 from quality import cli
 from quality.config import CONFIG_PATH
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, put
-from tests.support.verdict import CHECKS_GREEN, declaration, gate_config, jobs_page, without_release_row
+from tests.support.verdict import CHECKS_GREEN, declaration, gate_config, jobs_page, without_standing_rows
 
 pytestmark = pytest.mark.integration
 
@@ -42,7 +42,7 @@ def frame(capsys, run_env):
         clock = clock or ticks(0, 0)
         code = cli.main(["verdict"], fetcher_for=lambda token: lambda url: (page, None), sleep=lambda seconds: None, clock=clock)
         printed = capsys.readouterr()
-        return code, without_release_row(printed.out), printed.err, without_release_row(summary.read_text()) if summary.is_file() else None
+        return code, without_standing_rows(printed.out), printed.err, without_standing_rows(summary.read_text()) if summary.is_file() else None
 
     return run
 

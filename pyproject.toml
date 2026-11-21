@@ -100,7 +100,7 @@ layers = [
     "checkout",
     "output",
     "web",
-    "deadline",
+    "deadline | ci_time",
     "report",
     "config",
     "repository",
