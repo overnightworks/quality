@@ -1,0 +1,8 @@
+claim_id = "f4415c4d58a84889a9da165f4a2989fe"
+agent = "Claude 65a296cd-8f9a-4dec-985b-649ce7144e62"
+role = "builder"
+base = "6058b1ba8bd1bd910a01eeec78d0a77d1e92e71d"
+branch = "claude/issue-930-sonar-unserved-branch-runs"
+scope = [".github/workflows/gate.yml", "docs/ARCHITECTURE.md", "docs/gate.md", "docs/output.md", "docs/sonar.md", "src/quality/cli_help.py", "src/quality/sonar.py", "src/quality/sonar_properties.py", "tests/support/sonar.py", "tests/test_cli_help.py", "tests/test_sonar.py", "tests/test_sonar_exception.py", "tests/test_sonar_gate_status.py", "tests/test_sonar_properties.py", "tests/test_sonar_rows.py", "tests/workflows/test_gate_sonar.py"]
+opened_commit = "8737849130f95f7612c0643ec15ab149a8040dab"
+whole_reason = "One decision (which runs the Sonar part reads) touches its owner module, the preflight, one workflow env line, and the tests and documents that pin the removed other-branch output; none splits without leaving a red pin."
