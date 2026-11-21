@@ -63,4 +63,5 @@ def test_the_time_row_stands_between_the_jobs_and_the_loosenings_in_print_and_su
     for text in (printed, summary.read_text()):
         words = [line.split()[1] for line in text.splitlines() if line.startswith("  ")]
         at = words.index("time")
-        assert words[at - 1] not in {"release", "base"} and words[at + 1] == "loosenings"
+        assert words[at - 1] not in {"release", "base"}
+        assert words[at + 1] == "loosenings"
