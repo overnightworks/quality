@@ -1,0 +1,8 @@
+claim_id = "cda2902dac9f441f91946708b1e198d1"
+agent = "Claude b436a2ec-d087-4ca0-bdb8-ca0fd02816a8"
+role = "builder"
+base = "469e9d14cd6b99506d650d800da9fd8f2700f37b"
+branch = "claude/issue-926-naming-rule"
+scope = ["docs/VISION.md", "docs/naming.md", "docs/rules.md", "src/quality/check.py", "src/quality/checkout.py", "src/quality/naming.py", "src/quality/naming_deviations.toml", "src/quality/rules.py", "tests/test_checkout.py", "tests/test_naming.py"]
+opened_commit = "91fe4bdf72dd90afe5935c72db6fc7d7cd947e85"
+whole_reason = "One rule with its reader, its deviations data and its documents; the reader change and the data file have no other caller."
