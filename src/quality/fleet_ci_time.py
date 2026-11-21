@@ -5,8 +5,9 @@ import json
 from collections import defaultdict
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from email.message import Message
+from pathlib import Path
 from urllib.parse import quote
 
 from quality import ci_time, fleet_job_time, output
@@ -25,6 +26,9 @@ MEDIAN, P90 = 50, 90
 COLUMNS = ("Repo", "Commits", "Median", "p90", "Red", "Red on main", "Jobs sampled", "Queue p90", "Over 12 min")
 PARTLY_READ = "partly read"
 DASH = "—"
+LIMIT = timedelta(minutes=10)
+DOCUMENT_SCHEMA = 1
+DOCUMENT_PATH = Path("site") / "fleet-ci-time.json"
 
 RunsFetch = Callable[[str, Mapping[str, str], Callable[[Exception], CannotJudge]], tuple[bytes, Message]]
 
@@ -61,8 +65,9 @@ class PartlyRead:
 
 @dataclass(frozen=True)
 class FleetCiTime:
-    """One entry per repository and the calls the whole read made."""
+    """One entry per repository, the calls the whole read made and the window start the runs query used."""
 
+    window_start: datetime
     rows: dict[str, WeeklyCiTime | PartlyRead]
     jobs: dict[str, fleet_job_time.JobTime | fleet_job_time.JobsUnread | fleet_job_time.JobsCut]
     calls: int
@@ -88,7 +93,8 @@ def api_headers(token: str) -> dict[str, str]:
 def read_fleet_ci_time(names: tuple[str, ...], today: date, token: str, fetch: RunsFetch, default_branch: str) -> FleetCiTime:
     """Each repository's weekly CI time, read page by page within the report's call cap, then the jobs of a sample of
     each one's runs within what the cap leaves."""
-    created = quote(f">={today - timedelta(days=WINDOW_DAYS)}", safe="")
+    window_start = datetime.combine(today - timedelta(days=WINDOW_DAYS), time.min, UTC)
+    created = quote(f">={window_start.date()}", safe="")
     headers = api_headers(token)
     rows: dict[str, WeeklyCiTime | PartlyRead] = {}
     sampled: dict[str, list[fleet_job_time.RunToSample]] = {}
@@ -106,7 +112,7 @@ def read_fleet_ci_time(names: tuple[str, ...], today: date, token: str, fetch: R
         elif runs:
             jobs[name] = fleet_job_time.JobsCut()
         share -= bool(runs)
-    return FleetCiTime(rows, jobs, calls)
+    return FleetCiTime(window_start, rows, jobs, calls)
 
 
 def table_cells(name: str, fleet: FleetCiTime) -> tuple[str, ...]:
@@ -118,6 +124,43 @@ def table_cells(name: str, fleet: FleetCiTime) -> tuple[str, ...]:
         return (name, "0", *[DASH] * (len(COLUMNS) - 2))
     walls = (str(reading.commits), _duration(reading.median), _duration(reading.p90), reading.red.cell(), reading.red_on_main.cell())
     return (name, *walls, *fleet_job_time.table_cells(fleet.jobs.get(name)))
+
+
+def document(fleet: FleetCiTime, generated_at: datetime) -> str:
+    """The weekly numbers as the JSON document platform's alert reads: one flat row per repository in the report's order,
+    only numbers and booleans beside the name. A repository is measured when it has a median over at least one counted
+    commit, and breaches when that median is strictly above LIMIT; `complete` is false when any repository's runs were
+    cut by the call cap or could not be read. The window is what the runs query reads: midnight UTC seven days before
+    the report's day, up to the moment the document is made."""
+    generated = generated_at.astimezone(UTC)
+    return json.dumps(
+        {
+            "schema": DOCUMENT_SCHEMA,
+            "generated_at": _instant(generated),
+            "window_start": _instant(fleet.window_start),
+            "window_end": _instant(generated),
+            "limit_seconds": int(LIMIT.total_seconds()),
+            "complete": not any(isinstance(reading, PartlyRead) for reading in fleet.rows.values()),
+            "repositories": [_document_row(name, reading) for name, reading in fleet.rows.items()],
+        },
+        indent=2,
+    ) + "\n"
+
+
+def write_document(fleet: FleetCiTime, generated_at: datetime) -> None:
+    """Writes the document to DOCUMENT_PATH, creating its folder when it is missing; raises OSError when it cannot."""
+    DOCUMENT_PATH.parent.mkdir(exist_ok=True)
+    DOCUMENT_PATH.write_text(document(fleet, generated_at), encoding="utf-8")
+
+
+def _document_row(name: str, reading: WeeklyCiTime | PartlyRead) -> dict[str, str | int | bool]:
+    if isinstance(reading, WeeklyCiTime) and reading.median is not None:
+        return {"name": name, "median_seconds": int(reading.median.total_seconds()), "commits_sampled": reading.commits, "measured": True, "breach": reading.median > LIMIT}
+    return {"name": name, "median_seconds": 0, "commits_sampled": 0, "measured": False, "breach": False}
+
+
+def _instant(moment: datetime) -> str:
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _duration(wall: timedelta) -> str:

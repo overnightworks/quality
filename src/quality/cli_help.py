@@ -2,7 +2,7 @@
 
 import textwrap
 
-from quality import baseline_file, fleet, sonar
+from quality import baseline_file, fleet, fleet_ci_time, sonar
 from quality.rules import Area
 
 QUALITY_HELP = """\
@@ -85,15 +85,16 @@ Exit codes: 0 merged, 1 refused, 2 could not check or do, 130 interrupted.
 """
 
 REPORT_HELP = f"""\
-usage: quality report [-v]
+usage: quality report [--ci-time-json] [-v]
 
 Measure every fleet repository {fleet.FLEET_PATH} selects: size, debt, the gate
-release it pins. A row per repository goes to stderr, the two markdown tables
-to stdout and to the step summary.
+release it pins, the CI time of the last {fleet_ci_time.WINDOW_DAYS} days. A row per repository goes to
+stderr, the three markdown tables to stdout and to the step summary.
 
 Options:
-  -v          show the raw scanner output; the report runs no scanner
-  -h, --help  show this help
+  --ci-time-json  also write the weekly CI time to {fleet_ci_time.DOCUMENT_PATH}
+  -v              show the raw scanner output; the report runs no scanner
+  -h, --help      show this help
 
 Exit codes: 0 every repository measured, 2 could not answer, 130 interrupted.
 """

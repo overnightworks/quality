@@ -17,7 +17,7 @@ from typing import ClassVar
 import pytest
 import yaml
 
-from quality import __version__, cli
+from quality import __version__, cli, fleet_ci_time
 from quality.fleet import anonymous_environment, parse_fleet, read_fleet
 from quality.output import SEPARATOR
 from quality.report import CannotJudge
@@ -548,26 +548,42 @@ def pinned_actions(document: dict) -> set[str]:
     return {step["uses"] for job in document["jobs"].values() for step in job.get("steps", []) if "uses" in step}
 
 
-def test_the_workflow_reads_only_and_pins_what_ci_pins():
-    """FLEET-50: contents: read, no secrets, no persisted credentials, the token in the measuring step alone, ci.yml's
-    SHAs, a timeout, concurrency."""
+def test_the_workflow_measures_read_only_and_only_the_publish_job_writes_pages():
+    """FLEET-50, FLEET-111: contents: read for the workflow, the token in the measuring step alone, no persisted
+    credentials, pinned actions, timeouts, concurrency; Pages and id-token write in the publish job alone, which deploys
+    only from the default branch."""
     report_workflow = workflow("report.yml")
     text = (WORKFLOWS / "report.yml").read_text()
-    (job,) = report_workflow["jobs"].values()
+    job, publish = report_workflow["jobs"]["report"], report_workflow["jobs"]["publish"]
+    assert set(report_workflow["jobs"]) == {"report", "publish"}
     triggers = report_workflow[True]  # YAML 1.1 reads the key `on` as True
     assert set(triggers) == {"workflow_dispatch", "schedule"}
     assert triggers["schedule"] == [{"cron": "17 5 * * 1"}]
     assert report_workflow["permissions"] == {"contents": "read"}
+    assert "permissions" not in job
+    assert publish["permissions"] == {"pages": "write", "id-token": "write"}
     assert "secrets." not in text
     carriers = [step["name"] for step in job["steps"] if "GITHUB_TOKEN" in step.get("env", {})]
     assert carriers == ["Measure the fleet"]
+    assert "GITHUB_TOKEN" not in str(publish)
     assert job["timeout-minutes"] == 15
+    assert "timeout-minutes" in publish
     assert "concurrency" in report_workflow
     checkout = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@"))
     assert checkout["with"]["persist-credentials"] is False
+    assert publish["needs"] == "report"
+    assert "github.ref_name == github.event.repository.default_branch" in publish["if"]
+    assert publish["environment"]["name"] == "github-pages"
     used = pinned_actions(report_workflow)
-    assert used <= pinned_actions(workflow("ci.yml"))
-    assert {action.split("@")[0] for action in used} == {"actions/checkout", "astral-sh/setup-uv"}
+    assert {action.split("@")[0] for action in used} == {"actions/checkout", "astral-sh/setup-uv", "actions/upload-pages-artifact", "actions/deploy-pages"}
+    assert {action for action in used if action.split("@")[0] in {"actions/checkout", "astral-sh/setup-uv"}} <= pinned_actions(workflow("ci.yml"))
+    assert all(re.fullmatch(r"[0-9a-f]{40}", action.split("@")[1]) for action in used)
+    assert len(re.findall(r"uses: \S+@[0-9a-f]{40} # v\d+\.\d+\.\d+", text)) == len(used)
+    upload = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/upload-pages-artifact@"))
+    measuring = next(step for step in job["steps"] if step["name"] == "Measure the fleet")
+    assert re.search(r"quality report --ci-time-json$", measuring["run"].strip())
+    assert f"hashFiles('{fleet_ci_time.DOCUMENT_PATH}')" in upload["if"]
+    assert fleet_ci_time.DOCUMENT_PATH.parent == Path(upload["with"]["path"])
 
 
 @pytest.mark.parametrize(
