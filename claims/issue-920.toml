@@ -1,0 +1,8 @@
+claim_id = "642181e4d61a4726a1bbcd8fc810c5f6"
+agent = "Claude b436a2ec-d087-4ca0-bdb8-ca0fd02816a8"
+role = "builder"
+base = "3324c115230fd28a6f918d9ff3ecaa9afc1296f8"
+branch = "claude/issue-920-verdict-time-row"
+scope = ["docs/gate.md", "docs/output.md", "src/quality/ci_time.py", "src/quality/verdict.py", "tests/test_ci_time.py", "tests/test_verdict.py"]
+opened_commit = "b11c41ed0bb67fb4660398cdd143cfe871387ef4"
+whole_reason = "The time row is one flow: the arithmetic module, its one caller in the verdict, its tests and the two documents that name the row and its event words."
