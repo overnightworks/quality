@@ -547,9 +547,8 @@ It applies these rules:
   string make the `files` row `✗ not checked` with the file and its reason (exit `2`) (NAMING-19). Not read, and waiting
   for usage evidence: import clashes with a third party's package, plugin manifests, a Dockerfile's or a workflow's
   names; forks and archived repositories are outside the coverage and the rule detects neither, so a fork that calls
-  the gate carries a deviation (NAMING-20). No configuration switches the rule off, and the fleet matrix cell reads
-  what the pinned release does with it: `not released` while only main has the rule, `not in <tag>` below its first
-  release, `enforced` from it (FLEET-18, FLEET-19).
+  the gate carries a deviation (NAMING-20). No configuration switches the rule off. It first ships in v0.23.0, so a gate pinned
+  below that release shows `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `enforced` (FLEET-18).
 
   Ruled by the operator: coverage is every non-archived repository of the organisation except forks, private ones
   included, and a new repository conforms from its first pull request. The rule ships as `Switch.ALWAYS` in its first
@@ -880,8 +879,8 @@ CodeQL's caller is `unused` (PRWORKFLOW-5). A declaration is no loosening: movin
 caller into a declared workflow leaves that job missing from the run (VERDICT-7), and dropping it from `mandatory_jobs`
 is a loosening (VERDICT-13). A workflow whose YAML or file cannot be read, and an alias or a merge key where it can hide
 the top mapping or `on:`, are exit `2` naming the file (PRWORKFLOW-6). The clean row of `workflows` keeps its words, and
-the rule's extent is the number of pull-request workflows. The rule has no release yet, so a dependent meets it at the
-first release that names it. No configuration switches the rule off.
+the rule's extent is the number of pull-request workflows. No configuration switches the rule off. It first ships in v0.23.0, so a gate pinned below that release shows
+`not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `enforced` (FLEET-18).
 
 The `pytest-workers` rule judges every pytest call in a `run:` step of every tracked workflow, whether or not a pull
 request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a composite
