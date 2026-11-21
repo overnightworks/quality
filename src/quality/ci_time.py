@@ -44,21 +44,42 @@ def measure(jobs: Iterable[TimedJob]) -> CiTime | None:
     """None when any stamp the numbers need is missing or unusable, a completed job's included. A job still running (the
     verdict's own) counts only for the moment it was created, so a re-run counts from its first attempt."""
     every = list(jobs)
-    finished = [job for job in every if job.status == COMPLETED]
-    newest = max((job.run_attempt for job in every), default=0)
-    finished_newest = [job for job in finished if job.run_attempt == newest]
-    created = [job.created_at for job in every]
-    started = [job.started_at for job in finished]
-    completed = [job.completed_at for job in finished]
-    if not (finished_newest and None not in created and None not in started and None not in completed):
+    created = _present([job.created_at for job in every])
+    finished = _finished_runs(every)
+    if created is None or finished is None:
         return None
-    first = min(job.created_at for job in every if job.created_at)
-    last = max(job.completed_at for job in finished if job.completed_at)
-    slowest = max(finished_newest, key=_job_time)
-    longest_wait = max(job.started_at - job.created_at for job in finished if job.started_at and job.created_at)
-    return CiTime(last - first, slowest.name, _job_time(slowest), longest_wait)
+    newest = max((job.run_attempt for job in every), default=0)
+    newest_runs = [run for run in finished if run.job.run_attempt == newest]
+    if not newest_runs:
+        return None
+    slowest = max(newest_runs, key=lambda run: run.duration)
+    longest_wait = max(run.started - run.created for run in finished)
+    return CiTime(max(run.completed for run in finished) - min(created), slowest.job.name, slowest.duration, longest_wait)
 
 
-def _job_time(job: TimedJob) -> timedelta:
-    assert job.completed_at is not None and job.started_at is not None
-    return job.completed_at - job.started_at
+@dataclass(frozen=True)
+class _FinishedRun:
+    job: TimedJob
+    created: datetime
+    started: datetime
+    completed: datetime
+
+    @property
+    def duration(self) -> timedelta:
+        return self.completed - self.started
+
+
+def _present(moments: list[datetime | None]) -> list[datetime] | None:
+    kept = [moment for moment in moments if moment is not None]
+    return kept if len(kept) == len(moments) else None
+
+
+def _finished_runs(jobs: list[TimedJob]) -> list[_FinishedRun] | None:
+    runs = []
+    for job in jobs:
+        if job.status != COMPLETED:
+            continue
+        if job.created_at is None or job.started_at is None or job.completed_at is None:
+            return None
+        runs.append(_FinishedRun(job, job.created_at, job.started_at, job.completed_at))
+    return runs
