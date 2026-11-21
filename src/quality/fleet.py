@@ -17,7 +17,6 @@ import urllib.error
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date
-from email.message import Message
 from enum import Enum, StrEnum
 from functools import partial
 from pathlib import Path
@@ -123,7 +122,7 @@ class FleetEvent(StrEnum):
     NOT_READ = "not read"
 
 
-ListingFetch = Callable[[str, Mapping[str, str], Callable[[Exception], CannotJudge]], tuple[bytes, Message]]
+ListingFetch = fleet_ci_time.RunsFetch
 
 
 def fleet_refusal(fact: str, *, shape: bool = True, rerun: bool = False) -> CannotJudge:
