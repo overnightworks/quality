@@ -25,12 +25,18 @@ from tests.support.check import (
 from tests.support.check import check_output as run
 from tests.support.config_refusals import ONE_LINE_NEED
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo
+from tests.support.github_remote import with_github_remote
 from tests.support.layout import UNCOVERED_FILES_RULE_COUNT
+
+
+@pytest.fixture
+def fixture_origin() -> str:
+    return "overnightworks/x"
 
 
 def project(requires_python: str | None = ">=3.14") -> str:
     clause = "" if requires_python is None else f"requires-python = {requires_python!r}\n"
-    return f'[project]\nname = "x"\nversion = "1"\n{clause}'
+    return f'[project]\nname = "overnightworks-x"\nversion = "1"\n{clause}'
 
 
 def allow(path: str, reason: str = "qwen-tts has no cp314 wheel") -> str:
@@ -98,7 +104,7 @@ def test_a_no_floor_finding_names_the_value_it_found(build_repo):
 
 @pytest.mark.parametrize(
     "text",
-    [project("<3.15"), project(""), project(None), '[project]\nname = "x"\ndynamic = ["requires-python"]\n'],
+    [project("<3.15"), project(""), project(None), '[project]\nname = "overnightworks-x"\ndynamic = ["requires-python"]\n'],
     ids=["an upper bound only", "empty", "absent", "dynamic"],
 )
 def test_a_project_without_a_floor_admits_every_python(build_repo, capsys, text):
@@ -262,6 +268,7 @@ def test_a_gitlink_is_never_entered(build_repo, capsys, elsewhere, gitlink_path)
     repo = Path(elsewhere) / "outer"
     repo.mkdir()
     subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    with_github_remote(repo, "overnightworks/x")
     subprocess.run(
         ["git", "-C", str(repo), "update-index", "--add", "--cacheinfo", "160000", head_commit(inner), gitlink_path], check=True
     )

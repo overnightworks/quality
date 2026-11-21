@@ -517,6 +517,44 @@ It applies these rules:
 
   Ruled by the operator: every tracked `pyproject.toml` that `test-layout` finds as a project is judged, the root and
   each member alike (FLOOR-1).
+- `naming` judges the names a repository writes itself against its stem, the repository name of the remote called
+  `origin`, as [naming.md](naming.md) rules (NAMING-1). Only `origin` gives the stem, while `agents-md` keeps reading
+  every remote; a remote counts as AGENTS-13 says (NAMING-2). Every finding's fact says `read from remote origin` after
+  the stem, so a clone that a rename left behind shows it; re-pointing `origin` is its fix (NAMING-3). A checkout with
+  no GitHub `origin`, whatever files it tracks, makes the `files` row [`✗ not checked`](output.md#refusals) ("no GitHub
+  remote called origin names this repository", next step "add the repository's GitHub remote as origin", exit `2`),
+  because the repository's own name is always judged (NAMING-4).
+  Every tracked `pyproject.toml` that `test-layout` finds as a project (the root or a member at any depth) and that
+  holds a `[project]` table is judged, a gitlink never entered; a file with `tests`, `fixtures` or `node_modules` among its
+  folders is no project's own and is not judged (NAMING-5). Its `name`, after PEP 503 normalisation, is
+  `overnightworks-<stem>` or `overnightworks-<stem>-<component>`; under `[tool.uv] package = false` the bare `<stem>` or
+  `<stem>-<component>` is also accepted (NAMING-6). Each import package under its `src/` is `<stem>` or
+  `<stem>_<component>`, each `-` of the stem written `_` (NAMING-7); each name in `[project.scripts]` is `<stem>` or
+  `<stem>-<component>` (NAMING-8). A component is one or more words of lower-case letters and digits, joined by `-` or,
+  for an import, `_` (NAMING-9); imports, commands and npm names compare exactly (NAMING-10). The `name` of each tracked
+  `package.json` outside those folders is
+  `overnightworks-<stem>[-<component>]`, `<stem>[-<component>]` or `slidev-addon-<stem>` (NAMING-11); a manifest with
+  no name has nothing to judge (NAMING-12). The repository's own name is red with a capital or with a role suffix
+  (`-runtime`, `-service`, `-client`, `-server`, `-lib`, `-sdk`, `-api`), at `.git/config`, whatever files it tracks
+  (NAMING-13). `sonar.projectKey` stays SONAR-59's.
+  One finding per name, `misnamed`, at its file, says the kind (`distribution`, `import`, `CLI`, `npm` or `repository`),
+  the name found and the stem, and its fix names the accepted forms (NAMING-14); they print sorted by path (NAMING-15).
+  A deviation is an entry of `src/quality/naming_deviations.toml` (repository, kind, name, the item holding the
+  operator's ruling) and covers exactly that name of that kind in that repository, a distribution compared after PEP 503
+  (NAMING-16). The file is quality's: no `quality/config.toml` table, `[[layout.allow]]` or `[[gate.loosened]]` declares
+  one, and a new entry takes effect with a quality release (NAMING-17); [naming.md](naming.md) lists the entries
+  (NAMING-18). A `pyproject.toml` that is not UTF-8 TOML, a `package.json` that is not UTF-8 JSON and a `name` that is no
+  string make the `files` row `✗ not checked` with the file and its reason (exit `2`) (NAMING-19). Not read, and waiting
+  for usage evidence: import clashes with a third party's package, plugin manifests, a Dockerfile's or a workflow's
+  names; forks and archived repositories are outside the coverage and the rule detects neither, so a fork that calls
+  the gate carries a deviation (NAMING-20). No configuration switches the rule off, and the fleet matrix cell reads
+  what the pinned release does with it: `not released` while only main has the rule, `not in <tag>` below its first
+  release, `enforced` from it (FLEET-18, FLEET-19).
+
+  Ruled by the operator: coverage is every non-archived repository of the organisation except forks, private ones
+  included, and a new repository conforms from its first pull request. The rule ships as `Switch.ALWAYS` in its first
+  release with no report-only phase, and no deviation entry, held baseline table or `[[gate.loosened]]` entry covers a
+  name red when it ships (NAMING-21).
 - `python-security` judges every tracked regular `.py` file in any directory with the `S` codes of quality's own ruff
   (SECURITY-1) (an exact pin in quality's `pyproject.toml` that serves its own lint too): the ruff binary of quality's
   installation, never one on `PATH` (SECURITY-2), at [the pinned version](commands.md#scanners), runs `ruff check

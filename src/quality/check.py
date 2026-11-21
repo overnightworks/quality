@@ -22,6 +22,7 @@ from quality import (
     literal_text,
     locator_text,
     logging_rule,
+    naming,
     process,
     python_floor,
     python_lint,
@@ -58,10 +59,39 @@ from quality.rules import Area, Rule, Switch
 
 
 def _python_floor_result(root: Path, modes: dict[str, str] | CannotJudge, allow_lists: AllowLists | CannotJudge) -> python_floor.FloorResult:
+    return python_floor.check_python_floor(_pyproject_contents(root, _required(modes)), _required(allow_lists).python)
+
+
+def _pyproject_contents(root: Path, modes: dict[str, str], wanted: Callable[[str], bool] = lambda _: True) -> dict[str, bytes]:
+    """The content of the `pyproject.toml` of each project that the tree holds and `wanted` accepts; a gitlink is never entered."""
+    names = [_in(project.directory, layout.PROJECT_FILE) for project in layout.python_projects(modes)]
+    return _tracked_contents(root, modes, [name for name in names if wanted(name)])
+
+
+def _package_json_contents(root: Path, modes: dict[str, str], wanted: Callable[[str], bool] = lambda _: True) -> dict[str, bytes]:
+    """The content of each project's `package.json` that the tree holds and `wanted` accepts; a gitlink is never entered."""
+    names = [_in(directory, layout.PACKAGE_FILE) for directory in layout.frontend_projects(modes)]
+    return _tracked_contents(root, modes, [name for name in names if wanted(name)])
+
+
+def _in(directory: str, name: str) -> str:
+    return str(PurePosixPath(directory) / name)
+
+
+def _naming_findings(root: Path, modes: dict[str, str] | CannotJudge) -> list[Finding]:
     modes = _required(modes)
-    names = [str(PurePosixPath(project.directory) / layout.PROJECT_FILE) for project in layout.python_projects(modes)]
+    return naming.check_naming(
+        modes,
+        _pyproject_contents(root, modes, naming.is_judged),
+        _package_json_contents(root, modes, naming.is_judged),
+        checkout.origin_repository(root),
+        naming.packaged_deviations(),
+    )
+
+
+def _tracked_contents(root: Path, modes: dict[str, str], names: list[str]) -> dict[str, bytes]:
     present = checkout.on_disk(root, [name for name in names if modes[name] != layout.GITLINK_MODE])
-    return python_floor.check_python_floor(checkout.read_existing(repository.read_bytes, root, present), _required(allow_lists).python)
+    return checkout.read_existing(repository.read_bytes, root, present)
 
 
 def _read_declarations(root: Path) -> Declarations:
@@ -481,6 +511,7 @@ def _judge_files(inputs: RunInputs) -> AreaVerdict:
             Rule.TEST_LAYOUT: _attempt(lambda: layout.check_test_layout(_required(modes), _required(allow_lists).layout)),
             Rule.TEST_IMPORT: _content_findings(root, modes, allow_lists, layout.test_import_candidates, layout.check_test_import),
             Rule.PYTHON_FLOOR: _attempt(lambda: _python_floor_result(root, modes, allow_lists)),
+            Rule.NAMING: _attempt(lambda: _naming_findings(root, modes)),
         },
     )
 

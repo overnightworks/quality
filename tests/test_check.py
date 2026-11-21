@@ -306,7 +306,7 @@ def test_an_index_record_quality_cannot_read_refuses_exactly_the_rules_that_read
     verdicts = check_result(repo, installed_ruff, never_located).verdicts
     refused = [(verdict.rule, str(verdict.refusal)) for verdict in verdicts if verdict.refusal is not None]
     assert [rule for rule, _ in refused] == [
-        "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "python-security", "python-print",
+        "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "naming", "python-security", "python-print",
     ]
     assert all("git ls-files -s printed an index record quality cannot read" in reason for _, reason in refused)
 

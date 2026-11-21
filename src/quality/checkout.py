@@ -41,6 +41,7 @@ QUALITY_REMOTE = re.compile(
     r"(?P<name>[^/]+/[^/]+?)(?:\.git)?/?",
     re.IGNORECASE,
 )
+ORIGIN_REMOTE = "origin"
 BLOCK_STYLES = frozenset({"|", ">"})
 LINE_BREAKS = re.compile("[\r\n\x85\u2028\u2029]")
 NOT_PINNED_STEP = Instruction("pin the gate as docs/gate.md shows: @<commit sha> # v<tag>")
@@ -517,13 +518,27 @@ def _github_repository(url: str) -> str | None:
     return named["name"] if named else None
 
 
-def github_repositories(root: Path) -> list[str]:
-    """The `owner/name` of each configured remote that names a GitHub repository; the URLs read as configured, before
-    any `insteadOf`."""
+def _github_remotes(root: Path) -> list[tuple[str, str]]:
+    """The name and the `owner/name` of each configured remote that names a GitHub repository; the URLs read as
+    configured, before any `insteadOf`."""
     # exit 1 is git's answer for no matching key: no remote is configured
     listing = _git_listing(root, ["config", "-z", "--get-regexp", r"^remote\..*\.url$"], frozenset({0, 1})).stdout
-    urls = (os.fsdecode(record).partition("\n")[2] for record in listing.split(b"\0") if record)
-    return [repository for url in urls if (repository := _github_repository(url))]
+    remotes = []
+    for record in listing.split(b"\0"):
+        key, _, url = os.fsdecode(record).partition("\n")
+        if record and (repository := _github_repository(url)):
+            remotes.append((key.removeprefix("remote.").removesuffix(".url"), repository))
+    return remotes
+
+
+def github_repositories(root: Path) -> list[str]:
+    """The `owner/name` of each configured remote that names a GitHub repository."""
+    return [repository for _, repository in _github_remotes(root)]
+
+
+def origin_repository(root: Path) -> str | None:
+    """The `owner/name` the remote called `origin` names on GitHub, as configured; None where `origin` names none."""
+    return next((repository for remote, repository in _github_remotes(root) if remote == ORIGIN_REMOTE), None)
 
 
 def is_quality_checkout(root: Path) -> bool:

@@ -161,6 +161,7 @@ def scene(tmp_path) -> Scene:
     git(tags, "tag", RELEASE)
     commit = head_commit(tags)
     judged = new_repo(tmp_path / "shop", {**gate_ci(commit), "README.md": "shop\n"})
+    git(judged, "remote", "add", "origin", "https://github.com/acme/shop")
     built = Scene(tmp_path, tags, commit, judged)
     (tmp_path / "bin").mkdir()
     fake_uv = tmp_path / "bin" / "uv"

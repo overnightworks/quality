@@ -95,6 +95,7 @@ class Rule(StrEnum):
     )
     LOCATOR_TEXT = "locator-text", Area.FILES, RELEASE_0_21, Switch.CATALOG_DECLARATION
     PYTHON_FLOOR = "python-floor", Area.FILES, "v0.8.0", Switch.ALWAYS
+    NAMING = "naming", Area.FILES, None, Switch.ALWAYS
     PYTHON_SECURITY = "python-security", Area.CODE, "v0.9.0", Switch.ALWAYS
     PYTHON_PRINT = "python-print", Area.CODE, "v0.9.0", Switch.ALWAYS
     LOGGING = "logging", Area.CODE, None, Switch.REPORT_ONLY
