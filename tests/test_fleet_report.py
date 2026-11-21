@@ -539,7 +539,8 @@ def test_a_repository_whose_runs_cannot_be_read_is_a_partly_read_row_and_the_exi
     )
     printed = report_in(write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(*range(8)), fetch_listing=listing)
     assert printed.code == 0, printed.err
-    assert "  ✗ o/alpha  " in printed.err and "partly read    cannot read CI time" in printed.err
+    assert "  ✗ o/alpha  " in printed.err
+    assert "partly read    cannot read CI time" in printed.err
     assert printed.err.splitlines()[-1].startswith("✓ 2 of 2 repositories measured")
     assert "| o/alpha | partly read · cannot read CI time | — | — | — |" in printed.out
     assert "| o/beta | 1 | 30s | 30s | 0 % (0 of 1) |" in printed.out
