@@ -476,7 +476,7 @@ def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTag
     ci_table = [
         table_line(fleet_ci_time.COLUMNS),
         "|---" * len(fleet_ci_time.COLUMNS) + "|",
-        *(table_line(fleet_ci_time.table_cells(name, reading)) for name, reading in ci_time.rows.items()),
+        *(table_line(fleet_ci_time.table_cells(name, ci_time)) for name in ci_time.rows),
     ]
     return (heading, "", *table, "", matrix_heading, "", every_release, "", *matrix, "", ci_heading, "", *ci_table)
 
