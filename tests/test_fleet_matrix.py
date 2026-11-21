@@ -494,22 +494,35 @@ def test_locator_text_on_main_reads_whether_the_clone_declares_catalogs(declares
     assert rule_cell(LOCATOR_TEXT, Gate.MAIN, declared(declares_catalogs=declares_catalogs)) == words
 
 
-RULES_FIRST_RELEASED_IN_V0_21 = [Rule.LOCATOR_TEXT.release, Rule.FLEET_SOURCE.release]
+RULES_FIRST_RELEASED_IN_V0_21_OR_LATER = [
+    Rule.LOCATOR_TEXT.release, Rule.FLEET_SOURCE.release, Rule.NAMING.release, Rule.PR_WORKFLOWS.release
+]
+REPORT_ONLY_RULES_FIRST_RELEASED_IN_V0_23 = [Rule.TEST_TWIN.release, Rule.LOGGING.release]
 
 
-@pytest.mark.parametrize("rule_release", RULES_FIRST_RELEASED_IN_V0_21, ids=lambda release: release.rule)
+@pytest.mark.parametrize(
+    "rule_release", [*RULES_FIRST_RELEASED_IN_V0_21_OR_LATER, *REPORT_ONLY_RULES_FIRST_RELEASED_IN_V0_23], ids=lambda release: release.rule
+)
 def test_a_rule_first_shipped_in_a_release_reads_not_in_the_tag_of_an_older_pin(rule_release):
     """FLEET-18: a gate pinned below the release that names the rule has no such rule."""
     release = gate_release((gate_call(NEWEST),), False, FIRST_RELEASES)
     assert rule_cell(rule_release, release, declared(declares_catalogs=True)) == "not in v0.3.1"
 
 
-@pytest.mark.parametrize("rule_release", RULES_FIRST_RELEASED_IN_V0_21, ids=lambda release: release.rule)
+@pytest.mark.parametrize("rule_release", RULES_FIRST_RELEASED_IN_V0_21_OR_LATER, ids=lambda release: release.rule)
 def test_a_rule_first_shipped_in_a_release_reads_its_switch_under_that_release(rule_release):
     """FLEET-18: a gate pinned at the release that names the rule reads the rule's switch."""
     tags = {**FIRST_RELEASES, rule_release.first_release: FIRST_RELEASE_COMMIT}
     release = gate_release((gate_call(FIRST_RELEASE_COMMIT),), False, tags)
     assert rule_cell(rule_release, release, declared(declares_catalogs=True)) == "enforced"
+
+
+@pytest.mark.parametrize("rule_release", REPORT_ONLY_RULES_FIRST_RELEASED_IN_V0_23, ids=lambda release: release.rule)
+def test_a_report_only_rule_first_shipped_in_a_release_reads_report_only_under_that_release(rule_release):
+    """FLEET-18: a gate pinned at the release that names a report-only rule reads `report-only`."""
+    tags = {**FIRST_RELEASES, rule_release.first_release: FIRST_RELEASE_COMMIT}
+    release = gate_release((gate_call(FIRST_RELEASE_COMMIT),), False, tags)
+    assert rule_cell(rule_release, release, declared(declares_catalogs=True)) == "report-only"
 
 
 LITERAL_SWITCH_PIN = "7" * 40

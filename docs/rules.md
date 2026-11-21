@@ -547,9 +547,8 @@ It applies these rules:
   string make the `files` row `✗ not checked` with the file and its reason (exit `2`) (NAMING-19). Not read, and waiting
   for usage evidence: import clashes with a third party's package, plugin manifests, a Dockerfile's or a workflow's
   names; forks and archived repositories are outside the coverage and the rule detects neither, so a fork that calls
-  the gate carries a deviation (NAMING-20). No configuration switches the rule off, and the fleet matrix cell reads
-  what the pinned release does with it: `not released` while only main has the rule, `not in <tag>` below its first
-  release, `enforced` from it (FLEET-18, FLEET-19).
+  the gate carries a deviation (NAMING-20). No configuration switches the rule off. It first ships in v0.23.0, so a gate pinned
+  below that release shows `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `enforced` (FLEET-18).
 
   Ruled by the operator: coverage is every non-archived repository of the organisation except forks, private ones
   included, and a new repository conforms from its first pull request. The rule ships as `Switch.ALWAYS` in its first
@@ -880,8 +879,8 @@ CodeQL's caller is `unused` (PRWORKFLOW-5). A declaration is no loosening: movin
 caller into a declared workflow leaves that job missing from the run (VERDICT-7), and dropping it from `mandatory_jobs`
 is a loosening (VERDICT-13). A workflow whose YAML or file cannot be read, and an alias or a merge key where it can hide
 the top mapping or `on:`, are exit `2` naming the file (PRWORKFLOW-6). The clean row of `workflows` keeps its words, and
-the rule's extent is the number of pull-request workflows. The rule has no release yet, so a dependent meets it at the
-first release that names it. No configuration switches the rule off.
+the rule's extent is the number of pull-request workflows. No configuration switches the rule off. It first ships in v0.23.0, so a gate pinned below that release shows
+`not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `enforced` (FLEET-18).
 
 The `pytest-workers` rule judges every pytest call in a `run:` step of every tracked workflow, whether or not a pull
 request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a composite
@@ -1422,8 +1421,8 @@ The `test-twin` rule, in the `debt` area, counts two kinds of copying in the tra
 - **Refusals (TWIN-5).** The rule reads the sources the `debt` area read; when they cannot be read the area is refused as
   before and no note stands. It needs no baseline, so a baseline that cannot be read refuses `size` and `clone` (CLONE-9) and the
   note still stands. A file Python cannot parse is skipped without a refusal; `size` and `clone` refuse it.
-- **Report only (TWIN-6).** The rule is `report-only` in the fleet matrix and changes no verdict. It ships in no release yet
-  (`not released`, FLEET-19).
+- **Report only (TWIN-6).** The rule is `report-only` in the fleet matrix and changes no verdict. It first ships in v0.23.0, so a gate
+  pinned below that release shows `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `report-only` (FLEET-18).
 
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
@@ -1711,9 +1710,9 @@ values and runs no logging analysis of its own; a rule's wording and its gaps ar
   [the fleet standard](release.md#depending-on-a-fleet-package) says for a tool installed without a lock. logline's own
   dependencies, structlog and opentelemetry-api, enter quality's lock with it, and an advisory against either turns
   quality's own gate red although quality never runs their code.
-- **Report only (LOGGING-6).** The rule is `report-only`: it changes no verdict. Until a release ships it only main has it
-  (`not released` in the fleet matrix, FLEET-19). The matrix has no coverage signal for it: every repository whose pin has
-  the rule reads `report-only`, covered or not.
+- **Report only (LOGGING-6).** The rule is `report-only`: it changes no verdict. It first ships in v0.23.0, so a gate
+  pinned below that release shows `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `report-only` (FLEET-18).
+  The matrix has no coverage signal for it: every repository whose pin has the rule reads `report-only`, covered or not.
 
 Not judged: the standard's "a released logline tag" (`fleet-source` tells no tag from a branch, SOURCE-2).
 
