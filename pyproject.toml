@@ -98,6 +98,7 @@ layers = [
     "ratchet",
     "baseline_file",
     "checkout",
+    "fleet_ci_time",
     "output",
     "web",
     "deadline | ci_time",
