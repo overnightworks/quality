@@ -20,7 +20,7 @@ DEVIATIONS_FILE = Path(__file__).with_name("naming_deviations.toml")
 DISTRIBUTION_PREFIX = "overnightworks-"
 ECOSYSTEM_NPM_PREFIX = "slidev-addon-"
 ROLE_SUFFIXES = ("runtime", "service", "client", "server", "lib", "sdk", "api")
-EXCLUDED_NPM_DIRECTORIES = frozenset({"node_modules", layout.FIXTURES_DIRECTORY})
+NOT_JUDGED_DIRECTORIES = frozenset({"node_modules", layout.TESTS_DIRECTORY, layout.FIXTURES_DIRECTORY})
 REPOSITORY_SOURCE = ".git/config"
 NO_ORIGIN_FACT = "no GitHub remote called origin names this repository"
 NO_ORIGIN_STEP = Instruction("add the repository's GitHub remote as origin")
@@ -95,12 +95,19 @@ def check_naming(root: Path, modes: Mapping[str, str], origin: str | None, devia
 
 
 def _claims(root: Path, modes: Mapping[str, str]) -> list[_Claim]:
-    pyprojects = {_file(project.directory, layout.PROJECT_FILE): project.packages for project in layout.python_projects(modes)}
+    projects = {_file(project.directory, layout.PROJECT_FILE): project.packages for project in layout.python_projects(modes)}
+    pyprojects = {path: packages for path, packages in projects.items() if _is_judged(path)}
     contents = _read(root, modes, list(pyprojects))
     claims = [claim for path, content in contents.items() for claim in _python_claims(path, content, pyprojects[path])]
     package_files = [_file(directory, layout.PACKAGE_FILE) for directory in layout.frontend_projects(modes)]
-    wanted = [path for path in package_files if EXCLUDED_NPM_DIRECTORIES.isdisjoint(PurePosixPath(path).parts)]
+    wanted = [path for path in package_files if _is_judged(path)]
     return [*claims, *(claim for path, content in _read(root, modes, wanted).items() for claim in _npm_claims(path, content))]
+
+
+def _is_judged(path: str) -> bool:
+    """Whether the manifest at `path` is no dependency's and no test fixture's: none of its folders is `node_modules`,
+    `tests` or `fixtures`."""
+    return NOT_JUDGED_DIRECTORIES.isdisjoint(PurePosixPath(path).parent.parts)
 
 
 def _read(root: Path, modes: Mapping[str, str], names: list[str]) -> dict[str, bytes]:

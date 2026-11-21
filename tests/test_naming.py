@@ -2,6 +2,7 @@
 
 import json
 import re
+import subprocess
 
 import pytest
 
@@ -9,6 +10,7 @@ from quality import naming
 from quality.report import FindingEvent
 from quality.rules import Rule
 from tests.support.check import check_output, check_result, refusals, rows_of, rule_findings
+from tests.support.git_repositories import GIT_IDENTITY, head_commit
 from tests.support.github_remote import with_github_remote
 
 SHOP = "overnightworks/shop"
@@ -157,11 +159,36 @@ def test_an_npm_name_is_a_stem_form_or_an_ecosystem_form(judge, name, accepted):
     assert (judge({"web/package.json": package_json(name)}) == []) is accepted
 
 
-@pytest.mark.parametrize("path", ["web/node_modules/dep/package.json", "fixtures/sample/package.json", "tests/fixtures/sample/package.json"])
-def test_a_package_json_in_node_modules_or_a_fixture_is_not_judged(judge, path):
+@pytest.mark.parametrize(
+    "path",
+    [
+        "web/node_modules/dep/package.json", "fixtures/sample/package.json", "tests/fixtures/sample/package.json", "tests/sample/package.json",
+        "web/tests/sample/package.json",
+    ],
+)
+def test_a_package_json_in_node_modules_tests_or_a_fixture_is_not_judged(judge, path):
     """N4."""
     files = {"pyproject.toml": pyproject(), path: package_json("foreign")}
     assert judge(files) == []
+
+
+@pytest.mark.parametrize("path", ["tests/sample/pyproject.toml", "tests/fixtures/sample/pyproject.toml", "fixtures/sample/pyproject.toml"])
+def test_a_pyproject_in_tests_or_a_fixture_is_not_judged_even_beside_no_root_project(judge, path):
+    """N3: a test fixture carries a name of its own."""
+    assert judge({path: pyproject("foreign"), **packages("foreign", project=path.removesuffix("/pyproject.toml") + "/src")}) == []
+
+
+def test_a_gitlink_at_a_manifest_path_is_never_entered(build_repo, elsewhere):
+    """A submodule's own files carry its own names."""
+    inner = build_repo({"pyproject.toml": pyproject("foreign")})
+    repo = elsewhere / "outer"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    with_github_remote(repo, SHOP)
+    subprocess.run(["git", "-C", str(repo), "update-index", "--add", "--cacheinfo", "160000", head_commit(inner), "vendor/pyproject.toml"], check=True)
+    subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, "commit", "-q", "-m", "outer"], check=True)
+    (repo / "vendor" / "pyproject.toml").mkdir(parents=True)
+    assert rule_findings(repo, Rule.NAMING) == []
 
 
 def test_a_manifest_without_a_name_has_nothing_to_judge(judge):

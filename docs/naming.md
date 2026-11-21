@@ -17,7 +17,7 @@ Every repository has one stem: its GitHub name, a lowercase word or a hyphenated
 | Sonar project key | `overnightworks_<stem>` | SonarCloud's org-key form; its check is SONAR-59 in [sonar.md](sonar.md) |
 | Container image path | derived from the repository, see IMAGE-2 in [release.md](release.md) | one owner for the path |
 
-A component may be several words (`speech-service`, `speech-fetch-hearing-model`): the suffix ban is on the repository name, not on a component. The check reads a distribution as installed unless `[tool.uv] package = false` says otherwise, judges every tracked `package.json` whether private or not, and accepts `<stem>[-<component>]` there beside the prefixed form; a distribution run only from its own checkout that does not say `package = false` is a deviation.
+A component may be several words (`speech-service`, `speech-fetch-hearing-model`): the suffix ban is on the repository name, not on a component. The check reads a distribution as installed unless `[tool.uv] package = false` says otherwise, judges every tracked manifest outside a `tests`, `fixtures` or `node_modules` folder, `package.json` whether private or not, and accepts `<stem>[-<component>]` there beside the prefixed form; a distribution run only from its own checkout that does not say `package = false` is a deviation.
 
 ## Names the ecosystem dictates
 

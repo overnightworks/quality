@@ -525,13 +525,14 @@ It applies these rules:
   called origin names this repository", next step "add the repository's GitHub remote as origin", exit `2`); one with
   no name to judge is clean (NAMING-4).
   Every tracked `pyproject.toml` that `test-layout` finds as a project (the root or a member at any depth) and that
-  holds a `[project]` table is judged, a gitlink never entered (NAMING-5). Its `name`, after PEP 503 normalisation, is
+  holds a `[project]` table is judged, a gitlink never entered; a file with `tests`, `fixtures` or `node_modules` among its
+  folders is no project's own and is not judged (NAMING-5). Its `name`, after PEP 503 normalisation, is
   `overnightworks-<stem>` or `overnightworks-<stem>-<component>`; under `[tool.uv] package = false` the bare `<stem>` or
   `<stem>-<component>` is also accepted (NAMING-6). Each import package under its `src/` is `<stem>` or
   `<stem>_<component>`, each `-` of the stem written `_` (NAMING-7); each name in `[project.scripts]` is `<stem>` or
   `<stem>-<component>` (NAMING-8). A component is one or more words of lower-case letters and digits, joined by `-` or,
   for an import, `_` (NAMING-9); imports, commands and npm names compare exactly (NAMING-10). The `name` of each tracked
-  `package.json` that lies in no project's `tests/`, under no `node_modules` and no `fixtures` folder, is
+  `package.json` outside those folders is
   `overnightworks-<stem>[-<component>]`, `<stem>[-<component>]` or `slidev-addon-<stem>` (NAMING-11); a manifest with
   no name has nothing to judge (NAMING-12). The repository's own name is red with a capital or with a role suffix
   (`-runtime`, `-service`, `-client`, `-server`, `-lib`, `-sdk`, `-api`), at `.git/config`, whatever files it tracks
