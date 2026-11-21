@@ -12,8 +12,8 @@ once, however they are named; with none it judges all seven (CHECK-3). An area n
 row (CHECK-6); the verdict counts only the named areas (`✓ clean · 1 area`) (CHECK-7) and the exit is the worst of
 theirs (CHECK-8), so a named run says nothing of the rest. The gate runs all seven ([gate](gate.md#gateyml)).
 
-Three statements hold for each of four declaration tables of `quality/config.toml` and the rule that reads it:
-`[[compose.allow]]`, `[[root.allow]]`, `[[layout.allow]]` and `[[python.allow]]`. A malformed table other than the
+Three statements hold for each of five declaration tables of `quality/config.toml` and the rule that reads it:
+`[[compose.allow]]`, `[[root.allow]]`, `[[layout.allow]]`, `[[python.allow]]` and `[[workflow.allow]]`. A malformed table other than the
 rule's own is forwarded with its validation error; the values of `[gate]` stay the verdict's to judge. A declaration is
 no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry. A config reader older than the rule refuses
 its table as an unknown key.
@@ -859,6 +859,29 @@ are exit `2` naming the file (CONCURRENCY-6). The clean row of `workflows` keeps
 quality's own checkout carries the block in `ci.yml` and `code-scanning.yml`. No configuration
 switches the rule off.
 It first ships in v0.11.0, so a dependent meets it at its first bump to that release.
+
+The `pr-workflows` rule judges the same workflows as `pr-concurrency` (a `pull_request`, `pull_request_target` or
+`pull_request_review` trigger, read as CONCURRENCY-1 reads it): each is the gate's caller (a job whose `uses:` is the
+repository's own `gate.yml` or quality's pinned `gate.yml`), CodeQL's caller (the same for `codeql.yml`), or declared in
+`quality/config.toml` with its reason (PRWORKFLOW-1). A workflow that is none is `unlisted`, at the workflow with no
+line, and its fix names both ways out with the block to copy; the reason is the person's to write (PRWORKFLOW-2):
+
+```toml
+[[workflow.allow]]
+file = ".github/workflows/preview.yml"
+reason = "it deploys the pull request preview and no check belongs to it"
+```
+
+`file` is the exact tracked path of one workflow, no folder, pattern, `..` or absolute path; `reason` is one non-empty
+line; one entry per file (PRWORKFLOW-3). A workflow no pull request triggers (`push` alone, `schedule`,
+`workflow_dispatch`, `merge_group`, `workflow_call` alone) is outside, so a workflow reached only through a reusable call
+is judged as its caller (PRWORKFLOW-4). A declaration whose file is no such workflow, is absent, or is the gate's or
+CodeQL's caller is `unused` (PRWORKFLOW-5). A declaration is no loosening: moving a mandatory job out of the gate's
+caller into a declared workflow leaves that job missing from the run (VERDICT-7), and dropping it from `mandatory_jobs`
+is a loosening (VERDICT-13). A workflow whose YAML or file cannot be read, and an alias or a merge key where it can hide
+the top mapping or `on:`, are exit `2` naming the file (PRWORKFLOW-6). The clean row of `workflows` keeps its words, and
+the rule's extent is the number of pull-request workflows. The rule has no release yet, so a dependent meets it at the
+first release that names it. No configuration switches the rule off.
 
 The `pytest-workers` rule judges every pytest call in a `run:` step of every tracked workflow, whether or not a pull
 request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a composite

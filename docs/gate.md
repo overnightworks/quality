@@ -76,6 +76,9 @@ mandatory_jobs = ["checks"]
 
 - `mandatory_jobs` is a non-empty list of job names as the run lists them: the job's `name:`, else its id, and a matrix
   leg as `check (3.12)` (VERDICT-3). A missing file or key is exit `2` (VERDICT-4), and `next:` shows this example.
+  A job a workflow splits into shards keeps its name as an aggregator job that needs every shard: a name the run holds
+  only as legs (`checks (3.12)` for `checks`) is `missing  not in the run` (VERDICT-7), and dropping the name from the
+  config is a loosening (VERDICT-13). Whether the aggregator fails on a failed or skipped shard is not machine-read.
 - Each job must conclude `success` in its newest attempt up to the verdict's own (VERDICT-5). A job the run lists
   several times in that attempt is green only when every entry succeeded (VERDICT-6). A job that is missing from the run
   is the row `! x  missing  not in the run` (VERDICT-7); one that failed, was skipped or cancelled is red (VERDICT-8).

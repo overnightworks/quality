@@ -105,7 +105,10 @@ rows, by area:
   run time, design-catalogs --check cannot be read`), its fix naming the step or the make target ([rules](rules.md)); a
   `render-pass` finding is `missing` at `quality/config.toml` with no line (`N catalogs and no render pass declared`,
   `render pass "x" is no job of a tracked workflow`, `render pass "x" is not a mandatory job`), its fix naming the
-  declaration, a job a workflow holds or the `[gate] mandatory_jobs` entry ([rules](rules.md)).
+  declaration, a job a workflow holds or the `[gate] mandatory_jobs` entry ([rules](rules.md)); a `pr-workflows` finding
+  is `unlisted` at a workflow a pull request triggers that is neither the gate's caller nor CodeQL's (`a pull request
+  triggers it, and it is neither the gate's caller nor CodeQL's`), its fix the `[[workflow.allow]]` block to copy, or
+  `unused` at a declaration that names no other such workflow, its fix deleting the entry ([rules](rules.md)).
 - `dependencies`: an advisory is an `affected` row, its fact the package and version, the group's id and where it
   lists them the versions that fix it, its fix per lock kind (O41); the id is the group's first, never an alias (O42);
   a nested lock's fix names its folder (O43); the fix of a pnpm or requirements lock is the same hint for every
