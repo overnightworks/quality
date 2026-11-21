@@ -1,0 +1,8 @@
+claim_id = "4b7f40feafe045b4bbd10887bdc21e60"
+agent = "Claude 65a296cd-8f9a-4dec-985b-649ce7144e62"
+role = "builder"
+base = "7f6b3a16217ed49d630ff6a9c8182bbaa0227ac3"
+branch = "claude/issue-933-release-v0-23-0"
+scope = [".github/workflows/gate.yml", "docs/rules.md", "src/quality/rules.py", "tests/test_fleet_matrix.py"]
+opened_commit = "3082247ce9fc6ac69bca775773d9ce87d8cb463c"
+whole_reason = "one release: the two rule facts, the gate pins, the doc lines and the matrix test that name them"
