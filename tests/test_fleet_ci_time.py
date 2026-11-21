@@ -19,6 +19,7 @@ from quality.report import CannotJudge
 
 TODAY = date(2026, 11, 21)
 START = datetime(2026, 11, 20, 10, tzinfo=UTC)
+DEFAULT_BRANCH = "trunk"
 
 
 def run(sha, created=0, updated=60, event="pull_request", status="completed", conclusion="success", branch="feature", run_id=1):
@@ -59,7 +60,7 @@ class Runs:
 
 def read(served, *names, jobs=None):
     fetch = Runs(served, jobs or {})
-    return read_fleet_ci_time(names or tuple(served), TODAY, "", fetch), fetch
+    return read_fleet_ci_time(names or tuple(served), TODAY, "", fetch, DEFAULT_BRANCH), fetch
 
 
 def weekly(served, name="o/a"):
@@ -146,7 +147,7 @@ def test_an_answer_of_the_wrong_shape_is_partly_read_and_the_others_stay(body):
             return json.dumps(body).encode(), Message()
         return Runs(served)(url, headers, unreadable)
 
-    reading = read_fleet_ci_time(("o/a", "o/b"), TODAY, "", fetch)
+    reading = read_fleet_ci_time(("o/a", "o/b"), TODAY, "", fetch, DEFAULT_BRANCH)
     assert (reading.rows["o/a"], reading.rows["o/b"].commits) == (PartlyRead("cannot read CI time"), 1)
 
 
@@ -169,9 +170,9 @@ def test_the_red_share_splits_into_pull_request_commits_and_push_commits_on_main
     runs = [
         run("pr-red", conclusion="failure"),
         run("pr-green"),
-        run("main-red", event="push", branch="main", conclusion="failure"),
-        run("main-green", event="push", branch="main"),
-        run("main-green-too", event="push", branch="main"),
+        run("main-red", event="push", branch=DEFAULT_BRANCH, conclusion="failure"),
+        run("main-green", event="push", branch=DEFAULT_BRANCH),
+        run("main-green-too", event="push", branch=DEFAULT_BRANCH),
         run("side-red", event="push", branch="feature", conclusion="failure"),
     ]
     counted = weekly({"o/a": runs})
@@ -179,7 +180,7 @@ def test_the_red_share_splits_into_pull_request_commits_and_push_commits_on_main
 
 
 def test_a_pull_request_run_red_on_a_commit_whose_push_on_main_is_green_is_red_in_the_pull_request_share_only():
-    counted = weekly({"o/a": [run("x", conclusion="failure"), run("x", event="push", branch="main")]})
+    counted = weekly({"o/a": [run("x", conclusion="failure"), run("x", event="push", branch=DEFAULT_BRANCH)]})
     assert (counted.red, counted.red_on_main) == (RedShare(1, 1), RedShare(0, 1))
 
 

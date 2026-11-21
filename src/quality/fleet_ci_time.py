@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 from email.message import Message
 from urllib.parse import quote
 
-from quality import checkout, ci_time, fleet_job_time, output
+from quality import ci_time, fleet_job_time, output
 from quality.report import CannotJudge
 
 WINDOW_DAYS = 7
@@ -85,7 +85,7 @@ def api_headers(token: str) -> dict[str, str]:
     return {"Accept": "application/vnd.github+json", **({"Authorization": f"Bearer {token}"} if token else {})}
 
 
-def read_fleet_ci_time(names: tuple[str, ...], today: date, token: str, fetch: RunsFetch) -> FleetCiTime:
+def read_fleet_ci_time(names: tuple[str, ...], today: date, token: str, fetch: RunsFetch, default_branch: str) -> FleetCiTime:
     """Each repository's weekly CI time, read page by page within the report's call cap, then the jobs of a sample of
     each one's runs within what the cap leaves."""
     created = quote(f">={today - timedelta(days=WINDOW_DAYS)}", safe="")
@@ -94,7 +94,7 @@ def read_fleet_ci_time(names: tuple[str, ...], today: date, token: str, fetch: R
     sampled: dict[str, list[fleet_job_time.RunToSample]] = {}
     calls = 0
     for name in names:
-        rows[name], sampled[name], used = _read_repository(name, created, headers, fetch, CALLS_PER_REPORT - calls)
+        rows[name], sampled[name], used = _read_repository(name, created, headers, fetch, default_branch, CALLS_PER_REPORT - calls)
         calls += used
     jobs = {}
     share = sum(bool(runs) for runs in sampled.values())
@@ -123,7 +123,7 @@ def _duration(wall: timedelta) -> str:
 
 
 def _read_repository(
-    name: str, created: str, headers: Mapping[str, str], fetch: RunsFetch, budget: int
+    name: str, created: str, headers: Mapping[str, str], fetch: RunsFetch, default_branch: str, budget: int
 ) -> tuple[WeeklyCiTime | PartlyRead, list[fleet_job_time.RunToSample], int]:
     runs: list[_Run] = []
     pages = 0
@@ -134,7 +134,7 @@ def _read_repository(
             answered, total = _parse_page(body)
             runs.extend(answered)
             if pages * PAGE_SIZE >= total:
-                return _weekly(runs), [fleet_job_time.RunToSample(run.run_id, run.created) for run in runs if run.finished], pages
+                return _weekly(runs, default_branch), [fleet_job_time.RunToSample(run.run_id, run.created) for run in runs if run.finished], pages
     except CannotJudge:
         return PartlyRead(UNREADABLE), [], pages
     return PartlyRead(f"{output.counted(pages, 'page')} read"), [], pages
@@ -168,7 +168,7 @@ def _run(entry: Mapping[str, object]) -> _Run | None:
     return _Run(run_id, sha, entry["event"], branch, created, updated, entry["status"] == ci_time.COMPLETED, conclusion if isinstance(conclusion, str) else None)
 
 
-def _weekly(runs: list[_Run]) -> WeeklyCiTime:
+def _weekly(runs: list[_Run], default_branch: str) -> WeeklyCiTime:
     by_commit: dict[str, list[_Run]] = defaultdict(list)
     for run in runs:
         by_commit[run.sha].append(run)
@@ -178,7 +178,7 @@ def _weekly(runs: list[_Run]) -> WeeklyCiTime:
         return WeeklyCiTime(0, None, None, none, none)
     walls = [max(run.updated for run in commit) - min(run.created for run in commit) for commit in counted]
     red = _red_share(counted, lambda run: run.event == PULL_REQUEST)
-    red_on_main = _red_share(counted, lambda run: run.event == PUSH and run.branch == checkout.DEFAULT_BRANCH)
+    red_on_main = _red_share(counted, lambda run: run.event == PUSH and run.branch == default_branch)
     return WeeklyCiTime(len(counted), ci_time.nearest_rank(walls, MEDIAN), ci_time.nearest_rank(walls, P90), red, red_on_main)
 
 

@@ -505,7 +505,7 @@ def run_report(
         measured = measure_repository(name)
         show((report_row(measured, pins, clock() - began),))
         rows.append(measured)
-    ci_time = fleet_ci_time.read_fleet_ci_time(names, today, environment.get(LISTING_CREDENTIAL_VARIABLE, ""), fetch_listing)
+    ci_time = fleet_ci_time.read_fleet_ci_time(names, today, environment.get(LISTING_CREDENTIAL_VARIABLE, ""), fetch_listing, checkout.DEFAULT_BRANCH)
     show(tuple(_unread_ci_time_row(name, reading) for name, reading in ci_time.rows.items() if reading == fleet_ci_time.PartlyRead(fleet_ci_time.UNREADABLE)))
     tables = render(rows, today, tags, ci_time)
     output.write_lines(tables, channels.out)
