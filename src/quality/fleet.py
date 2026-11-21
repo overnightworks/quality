@@ -30,6 +30,7 @@ from quality import (
     checkout,
     clones,
     config,
+    fleet_ci_time,
     layout,
     output,
     process,
@@ -285,8 +286,7 @@ def listing_failure(index: int, organization: str, error: Exception) -> ListingF
 def list_organization(index: int, organization: str, token: str, fetch_listing: ListingFetch) -> tuple[str, ...]:
     """The public, non-archived, non-fork repositories GitHub lists for the organization, as `owner/name`, from one
     page. The token goes to GitHub's API only, never to git; a local run lists anonymously."""
-    headers = {"Accept": "application/vnd.github+json", **({"Authorization": f"Bearer {token}"} if token else {})}
-    body, answer = fetch_listing(LISTING_URL.format(organization=organization), headers, partial(listing_failure, index, organization))
+    body, answer = fetch_listing(LISTING_URL.format(organization=organization), fleet_ci_time.api_headers(token), partial(listing_failure, index, organization))
     if NEXT_PAGE.search(answer.get("Link", "")):
         raise ListingFault(f"{organization} has more than 100 public repositories{output.SEPARATOR}quality reads one page")
     malformed = ListingFault(f"GitHub's listing of {organization} is not a list of repositories")
@@ -462,7 +462,7 @@ def git(
     return process.run([*ANONYMOUS_GIT, *arguments], cwd=scratch, env=environment, timeout=timeout)
 
 
-def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTagsError) -> tuple[str, ...]:
+def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTagsError, ci_time: fleet_ci_time.FleetCiTime) -> tuple[str, ...]:
     heading = f"**Fleet report, {today.isoformat()}, quality {__version__} — {FUNCTION_SCOPE}**"
     table = [table_line(COLUMNS), "|---" * len(COLUMNS) + "|", *(table_line(cells(row)) for row in rows)]
     pins = release_tags_or_none(tags)
@@ -473,7 +473,13 @@ def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTag
         "|---" * len(MATRIX_COLUMNS) + "|",
         *(table_line(matrix_cells(row, pins)) for row in rows),
     ]
-    return (heading, "", *table, "", matrix_heading, "", every_release, "", *matrix)
+    ci_heading = f"**CI time, last {fleet_ci_time.WINDOW_DAYS} days{output.SEPARATOR}{output.counted(ci_time.calls, 'API call')}**"
+    ci_table = [
+        table_line(fleet_ci_time.COLUMNS),
+        "|---" * len(fleet_ci_time.COLUMNS) + "|",
+        *(table_line(fleet_ci_time.table_cells(name, reading)) for name, reading in ci_time.rows.items()),
+    ]
+    return (heading, "", *table, "", matrix_heading, "", every_release, "", *matrix, "", ci_heading, "", *ci_table)
 
 
 def run_report(
@@ -500,7 +506,9 @@ def run_report(
         measured = measure_repository(name)
         show((report_row(measured, pins, clock() - began),))
         rows.append(measured)
-    tables = render(rows, today, tags)
+    ci_time = fleet_ci_time.read_fleet_ci_time(names, today, environment.get(LISTING_CREDENTIAL_VARIABLE, ""), fetch_listing)
+    show(tuple(_unread_ci_time_row(name, reading) for name, reading in ci_time.rows.items() if reading == fleet_ci_time.PartlyRead(fleet_ci_time.UNREADABLE)))
+    tables = render(rows, today, tags, ci_time)
     output.write_lines(tables, channels.out)
     try:
         output.append_step_summary(tables, environment)
@@ -514,6 +522,10 @@ def run_report(
     whole = f"{len(rows)} of {output.counted(len(rows), 'repository', 'repositories')} measured"
     output.write_closing_line(output.Glyph.CLEAN, (whole, output.format_duration(clock() - started)), channels.err)
     return EXIT_MEASURED
+
+
+def _unread_ci_time_row(name: str, reading: fleet_ci_time.PartlyRead) -> output.Row:
+    return output.Row(output.Glyph.COULD_NOT_CHECK, name, FleetEvent.PARTLY_READ, reading.reason, descriptive=True)
 
 
 def _read_tags(release_tags: TagReader, show: Callable[[tuple[output.Row, ...]], None]) -> checkout.ReleaseTags | ReleaseTagsError:

@@ -130,3 +130,8 @@ def test_a_run_without_its_moments_cannot_be_read():
 def test_the_window_starts_seven_days_before_the_report_day():
     _, fetch = read({"o/a": []})
     assert "created=%3E%3D2026-11-14" in fetch.urls[0]
+
+
+def test_a_request_that_failed_still_counts_as_a_call():
+    reading, _ = read({"o/a": OSError("down")})
+    assert reading.calls == 1

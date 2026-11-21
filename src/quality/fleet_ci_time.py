@@ -99,8 +99,8 @@ def _read_repository(name: str, created: str, headers: Mapping[str, str], fetch:
     pages = 0
     try:
         while pages < PAGES_PER_REPOSITORY and pages < budget:
-            body, _ = fetch(RUNS_URL.format(name=name, created=created, size=PAGE_SIZE, page=pages + 1), headers, _unreadable)
             pages += 1
+            body, _ = fetch(RUNS_URL.format(name=name, created=created, size=PAGE_SIZE, page=pages), headers, _unreadable)
             answered, total = _parse_page(body)
             runs.extend(answered)
             if pages * PAGE_SIZE >= total:
