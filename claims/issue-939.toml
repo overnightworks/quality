@@ -1,8 +1,0 @@
-claim_id = "620a1bda58c94f28a518d6580d4769e7"
-agent = "Claude c337e1ba-7102-43fb-8789-c53cf4a25621"
-role = "builder"
-base = "86441a37e0e96c891a8e693b185897f2e0fd33d9"
-branch = "claude/issue-939-imports-tracked-directory-finder"
-scope = ["docs/rules.md", "pyproject.toml", "src/quality/architecture.py", "tests/test_architecture.py", "uv.lock"]
-opened_commit = "e952832db4875e32e699c9f9cd9c979f4238e19f"
-whole_reason = "The finder, its pin, its spec lines and its test are one decision; split, the pin or the spec would describe code that is not there."
