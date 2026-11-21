@@ -1,0 +1,8 @@
+claim_id = "076d68d702cc44b9a6d744a1d678fe10"
+agent = "Claude b436a2ec-d087-4ca0-bdb8-ca0fd02816a8"
+role = "builder"
+base = "469e9d14cd6b99506d650d800da9fd8f2700f37b"
+branch = "claude/issue-924-further-ci-numbers"
+scope = ["docs/commands.md", "docs/gate.md", "docs/output.md", "pyproject.toml", "src/quality/ci_time.py", "src/quality/fleet.py", "src/quality/fleet_ci_time.py", "src/quality/fleet_job_time.py", "src/quality/verdict.py", "tests/test_ci_time.py", "tests/test_fleet_ci_time.py", "tests/test_fleet_job_time.py", "tests/test_fleet_matrix.py", "tests/test_fleet_report.py", "tests/test_verdict_time.py"]
+opened_commit = "014aa69ab3811496be6051ebd220d0ca43666824"
+whole_reason = "M1's further numbers share one reading of job timestamps between the verdict's row and the weekly report; the plan splits it into chain first and weekly second only if it passes 400 production lines."
