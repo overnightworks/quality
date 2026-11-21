@@ -59,8 +59,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      pages: write
-      id-token: write
+      pages: write # deploys the Pages artifact
+      id-token: write # proves to Pages that this run made the artifact
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
