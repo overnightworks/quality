@@ -7,6 +7,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from email.message import Message
+from pathlib import Path
 from urllib.parse import quote
 
 from quality import ci_time, fleet_job_time, output
@@ -27,6 +28,7 @@ PARTLY_READ = "partly read"
 DASH = "—"
 LIMIT = timedelta(minutes=10)
 DOCUMENT_SCHEMA = 1
+DOCUMENT_PATH = Path("site") / "fleet-ci-time.json"
 
 RunsFetch = Callable[[str, Mapping[str, str], Callable[[Exception], CannotJudge]], tuple[bytes, Message]]
 
@@ -143,6 +145,12 @@ def document(fleet: FleetCiTime, generated_at: datetime) -> str:
         },
         indent=2,
     ) + "\n"
+
+
+def write_document(fleet: FleetCiTime, generated_at: datetime) -> None:
+    """Writes the document to DOCUMENT_PATH, creating its folder when it is missing; raises OSError when it cannot."""
+    DOCUMENT_PATH.parent.mkdir(exist_ok=True)
+    DOCUMENT_PATH.write_text(document(fleet, generated_at), encoding="utf-8")
 
 
 def _document_row(name: str, reading: WeeklyCiTime | PartlyRead) -> dict[str, str | int | bool]:

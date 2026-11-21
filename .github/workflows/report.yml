@@ -41,8 +41,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           exec 2>&1
-          mkdir site
-          uv run --locked quality report --ci-time-json site/fleet-ci-time.json
+          uv run --locked quality report --ci-time-json
 
       # A red report still uploads the file it wrote; a run that wrote none uploads nothing.
       - name: Upload the CI-time file

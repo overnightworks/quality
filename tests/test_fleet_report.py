@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import __version__, cli, web
+from quality import __version__, cli, fleet_ci_time, web
 from quality.fleet import ListingFetch, ReleaseTagsError, TagReader
 from quality.report import CannotJudge
 from tests.support.fleet import NEWEST, RELEASES, row, write_fleet
@@ -561,16 +561,15 @@ def fleet_of_two(tmp_path, public):
     return write_organizations(tmp_path / "fleet", ["o"]), listing
 
 
-def test_the_option_writes_the_weekly_document_and_leaves_stdout_and_stderr_as_they_are(capsys, monkeypatch, tmp_path, public):
-    """FLEET-106, FLEET-107, FLEET-40: `--ci-time-json PATH` writes the document and prints nothing of its own; without
-    it the same report writes no file."""
+def test_the_switch_writes_the_weekly_document_and_leaves_stdout_and_stderr_as_they_are(capsys, monkeypatch, tmp_path, public):
+    """FLEET-106, FLEET-107, FLEET-40: `--ci-time-json` creates the missing folder, writes the document and prints nothing
+    of its own; without it the same report writes no file."""
     folder, listing = fleet_of_two(tmp_path, public)
     without = report_in(folder, capsys, monkeypatch, ticks(*range(8)), fetch_listing=listing)
     assert sorted(path.name for path in folder.iterdir()) == ["quality"]
-    target = tmp_path / "site.json"
-    with_option = report_in(folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json", str(target)), fetch_listing=listing)
-    assert with_option == without
-    written = json.loads(target.read_text(encoding="utf-8"))
+    with_switch = report_in(folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json",), fetch_listing=listing)
+    assert with_switch == without
+    written = json.loads((folder / fleet_ci_time.DOCUMENT_PATH).read_text(encoding="utf-8"))
     assert (written["generated_at"], written["window_start"], written["complete"]) == ("2026-11-06T12:00:00Z", "2026-10-30T00:00:00Z", True)
     assert written["repositories"] == [
         {"name": "o/alpha", "median_seconds": 660, "commits_sampled": 1, "measured": True, "breach": True},
@@ -578,18 +577,20 @@ def test_the_option_writes_the_weekly_document_and_leaves_stdout_and_stderr_as_t
     ]
 
 
-@pytest.mark.parametrize("kind", ["a directory", "a folder that does not exist"])
-def test_a_path_that_cannot_be_written_is_the_pair_after_the_tables(capsys, monkeypatch, tmp_path, public, kind):
-    """FLEET-109: an unwritable PATH, a missing parent included, is `error: <path> is not writable · <reason>` with the
+@pytest.mark.parametrize("blocker", ["the folder is a file", "the file is a directory"])
+def test_a_document_that_cannot_be_written_is_the_pair_after_the_tables(capsys, monkeypatch, tmp_path, public, blocker):
+    """FLEET-109: a folder or a file in the way of the document is `error: <path> is not writable · <reason>` with the
     rerun step, exit 2, after the tables."""
     folder, listing = fleet_of_two(tmp_path, public)
-    target = tmp_path / "a-directory" if kind == "a directory" else tmp_path / "missing" / "site.json"
-    if kind == "a directory":
-        target.mkdir()
-    printed = report_in(folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json", str(target)), fetch_listing=listing)
-    assert (printed.code, "| o/alpha |" in printed.out) == (2, True)
+    if blocker == "the folder is a file":
+        (folder / fleet_ci_time.DOCUMENT_PATH.parent).write_text("")
+    else:
+        (folder / fleet_ci_time.DOCUMENT_PATH).mkdir(parents=True)
+    printed = report_in(folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json",), fetch_listing=listing)
+    assert printed.code == 2
+    assert "| o/alpha |" in printed.out
     assert printed.err.endswith(RERUN_NEXT)
-    assert printed.err.splitlines()[-2].startswith(f"error: {target} is not writable · [Errno ")
+    assert printed.err.splitlines()[-2].startswith(f"error: {fleet_ci_time.DOCUMENT_PATH} is not writable · [Errno ")
 
 
 def test_an_unwritable_step_summary_leaves_no_document(capsys, monkeypatch, tmp_path, public):
@@ -597,12 +598,12 @@ def test_an_unwritable_step_summary_leaves_no_document(capsys, monkeypatch, tmp_
     folder, listing = fleet_of_two(tmp_path, public)
     summary = tmp_path / "a-directory"
     summary.mkdir()
-    target = tmp_path / "site.json"
     printed = report_in(
-        folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json", str(target)),
+        folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json",),
         environment={"GITHUB_STEP_SUMMARY": str(summary)}, fetch_listing=listing,
     )
-    assert (printed.code, target.exists()) == (2, False)
+    assert printed.code == 2
+    assert not (folder / fleet_ci_time.DOCUMENT_PATH).exists()
 
 
 def test_a_red_report_still_writes_the_document_and_a_repository_not_measured_by_size_keeps_its_ci_time(capsys, monkeypatch, tmp_path, public, missing):
@@ -610,13 +611,10 @@ def test_a_red_report_still_writes_the_document_and_a_repository_not_measured_by
     following its CI-time reading."""
     alpha = public("alpha", {"a.py": "a = 1\n"})
     listing = Listing({}, runs={missing: slow_week()})
-    target = tmp_path / "site.json"
-    printed = report_in(
-        write_fleet(tmp_path / "fleet", [alpha, missing]), capsys, monkeypatch, ticks(*range(8)),
-        words=("--ci-time-json", str(target)), fetch_listing=listing,
-    )
+    folder = write_fleet(tmp_path / "fleet", [alpha, missing])
+    printed = report_in(folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json",), fetch_listing=listing)
     assert printed.code == 2
-    rows = json.loads(target.read_text(encoding="utf-8"))["repositories"]
+    rows = json.loads((folder / fleet_ci_time.DOCUMENT_PATH).read_text(encoding="utf-8"))["repositories"]
     assert [(entry["name"], entry["measured"], entry["breach"]) for entry in rows] == [(alpha, False, False), (missing, True, True)]
 
 
@@ -624,7 +622,7 @@ def test_a_private_repository_is_in_no_row_of_the_document(capsys, monkeypatch, 
     """FLEET-110: the public document names no private repository."""
     public("alpha", {"a.py": "a = 1\n"})
     listing = Listing({"o": listed(("o/alpha",), ("o/hidden-name", "private"))})
-    target = tmp_path / "site.json"
-    printed = report_in(write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json", str(target)), fetch_listing=listing)
+    folder = write_organizations(tmp_path / "fleet", ["o"])
+    printed = report_in(folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json",), fetch_listing=listing)
     assert printed.code == 0, printed.err
-    assert [entry["name"] for entry in json.loads(target.read_text(encoding="utf-8"))["repositories"]] == ["o/alpha"]
+    assert [entry["name"] for entry in json.loads((folder / fleet_ci_time.DOCUMENT_PATH).read_text(encoding="utf-8"))["repositories"]] == ["o/alpha"]

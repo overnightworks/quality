@@ -483,11 +483,11 @@ def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTag
 
 def run_report(
     release_tags: TagReader, fetch_listing: ListingFetch, clock: Callable[[], float], now: datetime, channels: output.Channels,
-    environment: Mapping[str, str], ci_time_json: Path | None = None,
+    environment: Mapping[str, str], write_ci_time: bool = False,
 ) -> int:
     """Measures the fleet `quality/fleet.toml` selects where the door runs: the fleet line and a row on stderr as each
     repository is measured, then the tables on stdout and in the step summary, then the weekly CI time as JSON at
-    `ci_time_json` when given, then the closing line or the pair."""
+    `fleet_ci_time.DOCUMENT_PATH` when asked, then the closing line or the pair."""
     started = clock()
     today = now.date()
     try:
@@ -517,11 +517,11 @@ def run_report(
     except OSError as error:
         output.write_pair(f"{output.STEP_SUMMARY_VARIABLE} is not writable{output.SEPARATOR}{error}", (FIX_THEN_RERUN,), channels.err)
         return EXIT_NOT_MEASURED
-    if ci_time_json is not None:
+    if write_ci_time:
         try:
-            ci_time_json.write_text(fleet_ci_time.document(ci_time, now), encoding="utf-8")
+            fleet_ci_time.write_document(ci_time, now)
         except OSError as error:
-            output.write_pair(f"{ci_time_json} is not writable{output.SEPARATOR}{error}", (FIX_THEN_RERUN,), channels.err)
+            output.write_pair(f"{fleet_ci_time.DOCUMENT_PATH} is not writable{output.SEPARATOR}{error}", (FIX_THEN_RERUN,), channels.err)
             return EXIT_NOT_MEASURED
     problems = report_problems(rows, pins, tags)
     if problems:

@@ -351,7 +351,7 @@ def build_parser() -> DoorParser:
     merge_parser.add_argument("-v", dest="verbose", action="store_true")
     report_parser = commands.add_parser("report", allow_abbrev=False)
     report_parser.ruled_help = REPORT_HELP
-    report_parser.add_argument("--ci-time-json", dest="ci_time_json", type=Path, metavar="PATH")
+    report_parser.add_argument("--ci-time-json", dest="ci_time_json", action="store_true")
     report_parser.add_argument("-v", dest="verbose", action="store_true")
     verdict_parser = commands.add_parser("verdict", allow_abbrev=False)
     verdict_parser.ruled_help = VERDICT_HELP
