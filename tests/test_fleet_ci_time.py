@@ -201,10 +201,9 @@ def test_the_jobs_of_a_sample_of_runs_spread_over_the_window_give_the_queue_p90_
     assert [url.split("/runs/")[1].split("/jobs")[0] for url in fetch.urls if "/jobs?" in url] == [str(number) for number in range(10)]
 
 
-def test_a_repository_without_runs_takes_no_share_of_the_calls_left_for_jobs(monkeypatch):
-    monkeypatch.setattr("quality.fleet_ci_time.CALLS_PER_REPORT", 40)
-    runs = lambda name: [run(f"{name}{number}", created=number, run_id=number) for number in range(30)]
-    served = {"o/empty": [], "o/a": runs("a"), "o/b": runs("b"), "o/c": runs("c")}
+def test_a_repository_without_runs_takes_no_share_of_the_calls_left_for_jobs():
+    names = [f"o/r{number}" for number in range(31)]
+    served = {"o/empty": [], **{name: [run(f"{name}-{number}", created=number, run_id=number) for number in range(30)] for name in names}}
     _, fetch = read(served)
-    job_calls = {name: sum(f"/repos/{name}/" in url and "/jobs?" in url for url in fetch.urls) for name in ("o/a", "o/b", "o/c")}
-    assert job_calls == {"o/a": 12, "o/b": 12, "o/c": 12}
+    job_calls = [sum(f"/repos/{name}/" in url and "/jobs?" in url for url in fetch.urls) for name in names]
+    assert job_calls[:20] == [(CALLS_PER_REPORT - len(served)) // len(names)] * 20
