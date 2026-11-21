@@ -204,7 +204,7 @@ def test_a_gitlink_at_a_manifest_path_is_never_entered(build_repo, elsewhere):
         pytest.param({"pyproject.toml": pyproject(None)}, id="a project without a name"),
         pytest.param({"pyproject.toml": '[tool.uv.workspace]\nmembers = ["worker"]\n', **packages("legal")}, id="a pyproject without a project table"),
         pytest.param({"web/package.json": json.dumps({"private": True})}, id="a package.json without a name"),
-        pytest.param({"web/package.json": "[]"}, id="a package.json that is no object"),
+        pytest.param({"web/package.json": '["name"]'}, id="a package.json that is no object"),
     ],
 )
 def test_a_manifest_without_a_name_has_nothing_to_judge(judge, files):
