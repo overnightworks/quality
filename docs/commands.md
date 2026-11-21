@@ -187,13 +187,13 @@ commit; its wall is its latest `updated_at` minus its earliest `created_at`, so 
 commit with a run still in progress and a commit whose runs are all `cancelled` are left out. `Commits`, `Median` and `p90`
 are over every counted commit, median and p90 nearest-rank over the walls. `Red` is the share of the counted commits
 with a `pull_request` run that have one concluded `failure` or `timed_out`, `Red on main` the same over the commits with a
-`push` run on the default branch; each cell reads `N % (K of M)` over its own population, a push run on another branch is in
+`push` run on the default branch; each cell reads `N % (K of M)` over its own population, a push run on another branch, or on none (a null `head_branch`), is in
 neither, and a commit red only through a verdict of declared loosenings counts as red. After every repository's runs are
 read, the jobs listing reads a sample of its runs spread evenly over the window (at most 20, an even share of the calls the
 report's cap of 600 leaves): `Jobs sampled` is the sample's size, `Queue p90` the nearest-rank 90th percentile of the time
 the sampled jobs waited between creation and start (a skipped or cancelled job is left out), counted apart from their
 running time, and `Over 12 min` each job name with at least 5 samples whose running time is above 12 minutes at its 90th
-percentile, the slowest first, or `none`; a repository whose jobs cannot be read shows `cannot read jobs`. The report reads
+percentile, the slowest first, or `none`; a repository whose jobs cannot be read shows `cannot read jobs`, and one whose runs were read but whose jobs the cap left no call for shows `not sampled · call cap` in all three cells. The report reads
 runs without a page cap per repository, within its 600 calls; a repository the cap stops shows `partly read` and the pages
 read, or `cannot read CI time` where its runs cannot be read, in place of its numbers, and the table raises no finding and
 changes no exit (FLEET-105). One large repository can use up the cap and leave those read after it `partly read`, in the

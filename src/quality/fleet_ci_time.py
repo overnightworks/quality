@@ -64,7 +64,7 @@ class FleetCiTime:
     """One entry per repository and the calls the whole read made."""
 
     rows: dict[str, WeeklyCiTime | PartlyRead]
-    jobs: dict[str, fleet_job_time.JobTime | fleet_job_time.JobsUnread]
+    jobs: dict[str, fleet_job_time.JobTime | fleet_job_time.JobsUnread | fleet_job_time.JobsCut]
     calls: int
 
 
@@ -103,6 +103,8 @@ def read_fleet_ci_time(names: tuple[str, ...], today: date, token: str, fetch: R
         if size:
             jobs[name], used = fleet_job_time.read_job_time(name, fleet_job_time.evenly(runs, size), headers, fetch)
             calls += used
+        elif runs:
+            jobs[name] = fleet_job_time.JobsCut()
         share -= bool(runs)
     return FleetCiTime(rows, jobs, calls)
 
@@ -161,7 +163,7 @@ def _run(entry: Mapping[str, object]) -> _Run | None:
     if entry["event"] not in COUNTED_EVENTS:
         return None
     created, updated = ci_time.parsed_moment(entry["created_at"]), ci_time.parsed_moment(entry["updated_at"])
-    run_id, sha, branch = entry["id"], entry["head_sha"], entry["head_branch"]
+    run_id, sha, branch = entry["id"], entry["head_sha"], entry["head_branch"] or ""
     if created is None or updated is None or type(run_id) is not int or not isinstance(sha, str) or not isinstance(branch, str):
         raise _unreadable(ValueError(entry))
     conclusion = entry["conclusion"]

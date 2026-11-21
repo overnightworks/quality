@@ -18,6 +18,7 @@ NOT_RAN = frozenset({"skipped", "cancelled"})
 FEWEST_SAMPLES_PER_JOB = 5
 QUEUE, JOB = 90, 90
 UNREADABLE = "cannot read jobs"
+CUT_BY_CAP = "not sampled · call cap"
 DASH = "—"
 
 JobsFetch = Callable[[str, Mapping[str, str], Callable[[Exception], CannotJudge]], tuple[bytes, Message]]
@@ -48,6 +49,11 @@ class JobsUnread:
     reason: str
 
 
+@dataclass(frozen=True)
+class JobsCut:
+    """A repository with runs whose jobs the report's call cap kept from a sample."""
+
+
 def sample_size(runs_available: int, budget: int, repositories: int) -> int:
     """How many runs one of `repositories` reads: an even share of the `budget`, at most JOBS_PER_REPOSITORY."""
     return min(runs_available, JOBS_PER_REPOSITORY, budget // max(repositories, 1))
@@ -76,9 +82,11 @@ def read_job_time(name: str, runs: Sequence[RunToSample], headers: Mapping[str, 
     return JobTime(len(runs), ci_time.nearest_rank(queues, QUEUE) if queues else None, _over_limit(durations)), calls
 
 
-def table_cells(reading: JobTime | JobsUnread | None) -> tuple[str, str, str]:
-    """The sample size, the queue p90 and the jobs above the limit under their columns; a repository without a
-    sample shows dashes."""
+def table_cells(reading: JobTime | JobsUnread | JobsCut | None) -> tuple[str, str, str]:
+    """The sample size, the queue p90 and the jobs above the limit under their columns; a repository without runs
+    shows dashes and one the call cap left unsampled says so."""
+    if isinstance(reading, JobsCut):
+        return (CUT_BY_CAP, CUT_BY_CAP, CUT_BY_CAP)
     if isinstance(reading, JobsUnread):
         return (reading.reason, DASH, DASH)
     if reading is None or reading.queue_p90 is None:

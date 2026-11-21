@@ -14,6 +14,7 @@ from quality.fleet_ci_time import (
     RedShare,
     WeeklyCiTime,
     read_fleet_ci_time,
+    table_cells,
 )
 from quality.report import CannotJudge
 
@@ -120,6 +121,12 @@ def test_the_calls_of_the_whole_report_are_capped_and_the_repository_it_stops_is
     reading, fetch = read(served)
     assert (reading.calls, len(fetch.urls)) == (CALLS_PER_REPORT, CALLS_PER_REPORT)
     assert reading.rows[f"o/r{CALLS_PER_REPORT // 30}"] == PartlyRead(f"{29} pages read")
+    assert table_cells("o/r0", reading)[-3:] == ("not sampled · call cap",) * 3
+
+
+def test_a_run_without_a_head_branch_counts_in_neither_red_cell_of_the_default_branch_and_does_not_hide_the_repository():
+    counted = weekly({"o/a": [run("x", event="push", branch=None, conclusion="failure"), run("y", event="push", branch=DEFAULT_BRANCH)]})
+    assert (counted.commits, counted.red_on_main) == (2, RedShare(0, 1))
 
 
 @pytest.mark.parametrize("failure", [OSError("down"), ValueError("not json")], ids=["request", "answer"])
