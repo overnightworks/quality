@@ -122,7 +122,7 @@ def test_a_refusal_outside_the_named_areas_changes_nothing(build_repo, capsys, f
         pytest.param(Area.IMPORTS, ("allow_lists", "modes", "sources"), id="imports"),
         pytest.param(Area.WORKFLOWS, ("modes", "sources"), id="workflows"),
         pytest.param(Area.SECRETS, ("modes", "sources"), id="secrets"),
-        pytest.param(Area.DEPENDENCIES, ("modes", "sources"), id="dependencies"),
+        pytest.param(Area.DEPENDENCIES, ("sources",), id="dependencies"),
         pytest.param(Area.CODE, ("allow_lists", "sources"), id="code"),
         pytest.param(Area.DEBT, ("modes",), id="debt"),
         pytest.param(Area.FILES, ("sources",), id="files"),
