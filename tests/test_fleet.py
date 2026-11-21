@@ -17,7 +17,7 @@ from typing import ClassVar
 import pytest
 import yaml
 
-from quality import __version__, cli
+from quality import __version__, cli, fleet_ci_time
 from quality.fleet import anonymous_environment, parse_fleet, read_fleet
 from quality.output import SEPARATOR
 from quality.report import CannotJudge
@@ -566,7 +566,8 @@ def test_the_workflow_measures_read_only_and_only_the_publish_job_writes_pages()
     carriers = [step["name"] for step in job["steps"] if "GITHUB_TOKEN" in step.get("env", {})]
     assert carriers == ["Measure the fleet"]
     assert "GITHUB_TOKEN" not in str(publish)
-    assert job["timeout-minutes"] == 15 and "timeout-minutes" in publish
+    assert job["timeout-minutes"] == 15
+    assert "timeout-minutes" in publish
     assert "concurrency" in report_workflow
     checkout = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@"))
     assert checkout["with"]["persist-credentials"] is False
@@ -580,9 +581,9 @@ def test_the_workflow_measures_read_only_and_only_the_publish_job_writes_pages()
     assert len(re.findall(r"uses: \S+@[0-9a-f]{40} # v\d+\.\d+\.\d+", text)) == len(used)
     upload = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/upload-pages-artifact@"))
     measuring = next(step for step in job["steps"] if step["name"] == "Measure the fleet")
-    produced = re.search(r"--ci-time-json (\S+)", measuring["run"])[1]
-    assert f"hashFiles('{produced}')" in upload["if"]
-    assert Path(produced).parent == Path(upload["with"]["path"])
+    assert re.search(r"quality report --ci-time-json$", measuring["run"].strip())
+    assert f"hashFiles('{fleet_ci_time.DOCUMENT_PATH}')" in upload["if"]
+    assert fleet_ci_time.DOCUMENT_PATH.parent == Path(upload["with"]["path"])
 
 
 @pytest.mark.parametrize(
