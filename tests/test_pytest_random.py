@@ -378,6 +378,7 @@ def test_a_script_assignment_of_pytest_addopts_that_is_no_shell_words_refuses_th
     """RANDOM-12: pytest splits `PYTEST_ADDOPTS` as shell words, so a value it cannot split is exit 2."""
     reason = refusals(build_repo({WORKFLOW: script("""PYTEST_ADDOPTS='-k "a' pytest""")}))[RULE]
     assert "PYTEST_ADDOPTS in a run script is not shell words" in reason
+    assert WORKFLOW in reason
 
 
 @pytest.mark.parametrize("flags", ["-p no:randomly", "--randomly-seed=1234", "--randomly-seed=last", "-q"])

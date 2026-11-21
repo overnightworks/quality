@@ -330,7 +330,11 @@ def judge_scripts(script_rule: ScriptRule, root: Path, tracked: list[str]) -> Ru
         for step, run in _run_steps(name, composed(name, text)):
             if not script_rule.marker.clears_step(file_lines, step):
                 lines = list(logical_lines(physical_lines(run)))
-                findings.extend(_script_findings(script_rule, name, lines, script_rule.marker.per_line_marks(file_lines, marked, step, run)))
+                marks = script_rule.marker.per_line_marks(file_lines, marked, step, run)
+                try:
+                    findings.extend(_script_findings(script_rule, name, lines, marks))
+                except CannotJudge as error:
+                    raise unreadable(name, error.reason.fact) from error
     return RuleResult(findings, read, False)
 
 
