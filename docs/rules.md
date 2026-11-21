@@ -228,23 +228,24 @@ It applies these rules:
   the exit stays `0`, and the [verdict line](output.md#the-closing-line) says `imports not enforced` before the
   duration, after debt's note. A config with contracts that are kept is
   [`✓ imports  clean  N contracts`](output.md#area-rows) (a config without a contract: `0 contracts`). import-linter
-  2.15 runs inside quality as a library, never its CLI, and writes nothing to the checkout (no `.import_linter_cache`)
+  2.16 runs inside quality as a library, never its CLI, and writes nothing to the checkout (no `.import_linter_cache`)
   (IMPORT-5). A broken contract is one finding `! <config>  broken  contract <name>`, with the lines import-linter
   renders for it (the chain, `shop.db -> shop.web (l.1)`, and the contract's guidance) under the [row](output.md#rows)
   behind `| `, fix `change the import or the contract`, exit `1`. An `ignore_imports` entry no import matches follows
   the contract's `unmatched_ignore_imports_alerting`: `error` (the default) is a finding
   `unused  contract <name> ignores a -> b`, fix `delete it from the contract's ignore_imports`, `warn` a
   [note row](output.md#notes) `· <config>  unused  contract <name> ignores a -> b`, `none` nothing (IMPORT-6). Each root
-  package is the one tracked `<dir>/<name>/__init__.py` outside the tests (IMPORT-7). The rule cannot judge (exit `2`,
+  package is the one tracked `<dir>/<name>/__init__.py` outside the tests (IMPORT-7), and grimp reads it from there
+  even when quality itself has imported a package of that name or an untracked copy comes first on `sys.path`
+  (IMPORT-7, IMPORT-26). The rule cannot judge (exit `2`,
   before any caller code runs or any file outside is read) (IMPORT-8) two configs that each hold a section (IMPORT-9),
   a `contract_types` option (plugins would be imported) (IMPORT-10), a type other than forbidden, layers, independence,
   protected and acyclic_siblings (IMPORT-11), invalid contract options (IMPORT-12), a config value of the wrong type or
   any other error of import-linter or grimp (`contract <name> in pyproject.toml cannot be judged: ...` or
   `the config pyproject.toml cannot be judged: ...`) (IMPORT-13), a dotted root
-  package (IMPORT-14), a root package with no or several such directories, one Python finds in another place (IMPORT-15)
-  (`root package yaml is src/yaml/__init__.py, but Python finds it outside the repository at
-  site-packages/yaml/__init__.py`, a place outside named from the `sys.path` entry it lies under; a place inside is
-  named repository-relative) (IMPORT-16), a symlink under a root package that leaves the repository, directly or through
+  package, because a root package is one tracked `<name>/__init__.py` and quality judges only top-level ones
+  (IMPORT-14), a root package with no or several such directories, or whose tracked `__init__.py` the checkout does
+  not hold (IMPORT-15), a symlink under a root package that leaves the repository, directly or through
   a link that stays inside (IMPORT-17), and a symlink loop (IMPORT-18), a dangling link (IMPORT-19), and a `.py` file
   that "cannot be examined" (no regular file (IMPORT-20), a name or content that is not valid UTF-8 (IMPORT-21), a
   coding cookie in any spelling but utf-8, utf8, ascii, us-ascii or ansi_x3.4-1968 (accepted in any letter case)

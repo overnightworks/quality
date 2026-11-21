@@ -1,23 +1,22 @@
-"""Judges a repository's import-linter contracts, with import-linter 2.15 as a library and never its CLI.
+"""Judges a repository's import-linter contracts, with import-linter 2.16 as a library and never its CLI.
 
-import-linter's own reader parses the config from a private temporary copy, grimp builds the graph with the
-repository's source roots first on sys.path only while it runs and without a cache, so nothing is written to the
-checkout. Caller code never runs: a plugin contract type, a dotted root package, a root package Python would find
-elsewhere, a symlink out of the repository (also through a link inside it) and a symlink loop are refused before
-grimp reads anything. Every message names paths repository-relative. The private import-linter helpers used here are
-pinned by the exact version in pyproject.toml.
+import-linter's own reader parses the config from a private temporary copy, and grimp builds the graph without a
+cache, so nothing is written to the checkout. grimp reads each root package from its tracked directory, handed in
+through a package finder of quality's own, so neither sys.path nor sys.modules is consulted and no caller code runs:
+a package quality has itself imported is judged from the repository like any other. A plugin contract type, a dotted
+root package, a symlink out of the repository (also through a link inside it) and a symlink loop are refused before
+grimp reads anything. Every message names paths repository-relative. The private import-linter helpers and grimp's
+package-finder port used here are pinned by the exact versions in pyproject.toml.
 """
 
 import codecs
 import copy
 import errno
-import importlib.util
 import io
 import logging
 import os
 import re
 import stat
-import sys
 import tempfile
 import tokenize
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -28,6 +27,9 @@ from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 
 import grimp
+from grimp.application.config import settings as grimp_settings
+from grimp.application.ports.filesystem import AbstractFileSystem
+from grimp.application.ports.packagefinder import AbstractPackageFinder
 from grimp.exceptions import SourceSyntaxError
 from importlinter import configuration
 from importlinter.application import output, use_cases
@@ -488,7 +490,7 @@ def _contract(config: Config, index: int, options: dict) -> Contract:
 def _source_root(tracked: Iterable[str], package: str) -> str:
     """The one production directory holding the package's tracked __init__.py, repository-relative ("" at the top)."""
     if "." in package:
-        raise ContractError(f"root package {package} is dotted; finding it would import {package.rpartition('.')[0]}")
+        raise ContractError(f"root package {package} is dotted; quality judges only top-level root packages")
     init = PurePosixPath(package, PACKAGE_INIT)
     directories = sorted({
         str(PurePosixPath(name).parent.parent) for name in tracked
@@ -500,27 +502,49 @@ def _source_root(tracked: Iterable[str], package: str) -> str:
     return "" if directories[0] == "." else directories[0]
 
 
+class _TrackedDirectoryFinder(AbstractPackageFinder):
+    """Hands grimp each root package at the tracked directory IMPORT-7 decided, never where Python would find it."""
+
+    def __init__(self, directories: Mapping[str, str]) -> None:
+        self._directories = directories
+
+    def determine_package_directories(self, package_name: str, file_system: AbstractFileSystem) -> set[str]:
+        return {self._directories[package_name]}
+
+
+@contextmanager
+def _grimp_reading(directories: Mapping[str, str]) -> Iterator[None]:
+    finder = grimp_settings.PACKAGE_FINDER
+    grimp_settings.configure(PACKAGE_FINDER=_TrackedDirectoryFinder(directories))
+    try:
+        yield
+    finally:
+        grimp_settings.configure(PACKAGE_FINDER=finder)
+
+
 def _build_graph(repository: str, roots: Mapping[str, str], options: UserOptions) -> grimp.ImportGraph:
-    for package, directory in roots.items():
-        _refuse_links_out(repository, os.path.join(repository, directory, package))
-    with _first_on_path([os.path.join(repository, directory) for directory in dict.fromkeys(roots.values())]):
-        for package, directory in roots.items():
-            _refuse_foreign_location(repository, package, directory)
-        try:
+    package_directories = {package: os.path.join(repository, directory, package) for package, directory in roots.items()}
+    for package_directory in package_directories.values():
+        init = os.path.join(package_directory, PACKAGE_INIT)
+        if not os.path.lexists(init):
+            raise _cannot_be_examined(repository, init, "the checkout does not hold it")
+        _refuse_links_out(repository, package_directory)
+    try:
+        with _grimp_reading(package_directories):
             return grimp.build_graph(
                 *roots,
                 include_external_packages=bool(use_cases._get_include_external_packages(options)),
                 exclude_type_checking_imports=use_cases._get_exclude_type_checking_imports(options),
                 cache_dir=None,
             )
-        except BaseException as error:
-            # last resort: _refuse_unreadable_source stops the known triggers. The panic type derives from
-            # BaseException and lives in `pyo3_runtime`, which cannot be imported; the Rust panic hook has already
-            # written its native diagnostic (with an absolute path) to fd 2 and redirecting fds would hide grimp's own output
-            if type(error).__module__ != PANIC_MODULE:
-                raise
-            raise ContractError("grimp panicked while reading the root packages;"
-                                " a source file it cannot read or decode cannot be judged") from error
+    except BaseException as error:
+        # last resort: _refuse_unreadable_source stops the known triggers. The panic type derives from
+        # BaseException and lives in `pyo3_runtime`, which cannot be imported; the Rust panic hook has already
+        # written its native diagnostic (with an absolute path) to fd 2 and redirecting fds would hide grimp's own output
+        if type(error).__module__ != PANIC_MODULE:
+            raise
+        raise ContractError("grimp panicked while reading the root packages;"
+                            " a source file it cannot read or decode cannot be judged") from error
 
 
 def _refuse_links_out(repository: str, package_directory: str) -> None:
@@ -647,49 +671,6 @@ def _library_warnings(repository: str) -> Iterator[list[str]]:
     finally:
         logger.removeHandler(collected)
         logger.propagate = propagates
-
-
-@contextmanager
-def _first_on_path(directories: list[str]) -> Iterator[None]:
-    saved = list(sys.path)
-    sys.path[:0] = directories
-    try:
-        yield
-    finally:
-        sys.path[:] = saved
-
-
-def _refuse_foreign_location(repository: str, package: str, directory: str) -> None:
-    """A name the interpreter already imported (or finds before the roots) would make grimp read another package.
-
-    The collision is named rather than worked around: there is no custom finder, and sys.modules stays as it is.
-    """
-    expected = os.path.join(directory, package, PACKAGE_INIT)
-    spec = importlib.util.find_spec(package)
-    found = os.path.realpath(spec.origin) if spec is not None and spec.origin and os.path.isabs(spec.origin) else None
-    if found != os.path.join(repository, expected):
-        raise ContractError(f"root package {package} is {expected}, but Python finds it {_place(found, repository)};"
-                            " judging it would read the wrong package")
-
-
-def _place(found: str | None, repository: str) -> str:
-    """Where Python found a root package: inside, repository-relative; outside, from the sys.path entry it lies under,
-    so the place is named without an absolute local path."""
-    if found is None:
-        return "without a source file"
-    if Path(found).is_relative_to(repository):
-        return f"at {os.path.relpath(found, repository)}"
-    entry = _path_entry_holding(found)
-    if entry is None:
-        return "outside the repository"
-    return f"outside the repository at {os.path.relpath(found, entry.parent)}"
-
-
-def _path_entry_holding(found: str) -> Path | None:
-    """The deepest sys.path entry a file lies under, which is the one its package was found in."""
-    entries = [Path(os.path.realpath(entry)) for entry in sys.path if entry]
-    holding = [entry for entry in entries if Path(found).is_relative_to(entry)]
-    return max(holding, key=lambda entry: len(entry.parts), default=None)
 
 
 def _check(contract: Contract, graph: grimp.ImportGraph, config_name: str, repository: str) -> RuleResult:

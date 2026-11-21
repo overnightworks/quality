@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.14"
 
 [[package]]
@@ -253,6 +253,7 @@ dependencies = [
 name = "overnightworks-quality"
 source = { editable = "." }
 dependencies = [
+    { name = "grimp" },
     { name = "import-linter" },
     { name = "lizard" },
     { name = "overnightworks-design", extra = ["po"] },
@@ -272,6 +273,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "grimp", specifier = "==3.20" },
     { name = "import-linter", specifier = "==2.16" },
     { name = "lizard", specifier = ">=1.24.1,<1.26" },
     { name = "overnightworks-design", extras = ["po"], git = "https://github.com/overnightworks/design?rev=e1b4a448a9e4d86539f4f2ef05f5267a4b52fe36" },
