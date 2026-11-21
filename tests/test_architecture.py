@@ -596,7 +596,8 @@ def test_a_run_writes_nothing_and_leaves_the_interpreter_as_it_was(build_repo, c
     status = subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "--ignored"],
                             capture_output=True, text=True, check=True)
     assert (status.stdout, (repo / ".import_linter_cache").exists()) == ("", False)
-    assert (list(sys.path), dict(sys.modules), grimp_settings.PACKAGE_FINDER) == before
+    after = (list(sys.path), dict(sys.modules), grimp_settings.PACKAGE_FINDER)
+    assert after == before
 
 
 def test_a_failing_graph_build_leaves_grimps_package_finder_as_it_was(build_repo, capsys):
