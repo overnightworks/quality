@@ -1,8 +1,0 @@
-claim_id = "09311ff7405646ffb1fe687a24533914"
-agent = "Claude b436a2ec-d087-4ca0-bdb8-ca0fd02816a8"
-role = "builder"
-base = "56bd01a503fd71c96f23c8200b3441792108d2c3"
-branch = "claude/issue-918-naming-document"
-scope = ["AGENTS.md", "docs/VISION.md", "docs/naming.md", "docs/sonar.md"]
-opened_commit = "6d050b0f92e3740980e60fe14c9c760d9c6d9f9f"
-whole_reason = "One new document and the three one-line pointers to it, which only make sense together."
