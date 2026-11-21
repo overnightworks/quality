@@ -173,7 +173,7 @@ def main(
     if arguments.command == "verdict":
         return run_verdict(fetcher_for, sleep, clock, channels, environment)
     if arguments.command == "report":
-        return fleet.run_report(release_tags, fetch_listing, clock, now().date(), channels, environment)
+        return fleet.run_report(release_tags, fetch_listing, clock, now(), channels, environment, arguments.ci_time_json)
     if arguments.command == "sonar":
         if arguments.sonar_command == "properties":
             return sonar_properties.run_properties(environment, clock, channels)
@@ -351,6 +351,7 @@ def build_parser() -> DoorParser:
     merge_parser.add_argument("-v", dest="verbose", action="store_true")
     report_parser = commands.add_parser("report", allow_abbrev=False)
     report_parser.ruled_help = REPORT_HELP
+    report_parser.add_argument("--ci-time-json", dest="ci_time_json", action="store_true")
     report_parser.add_argument("-v", dest="verbose", action="store_true")
     verdict_parser = commands.add_parser("verdict", allow_abbrev=False)
     verdict_parser.ruled_help = VERDICT_HELP

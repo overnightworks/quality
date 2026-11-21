@@ -208,8 +208,34 @@ tables say so`, and `next: quality report` (exit `2`) (FLEET-46); an unwritable 
 `fix what the error names, then run quality report again` under `next:`) (FLEET-47). `-v` adds nothing: the report runs
 no scanner (FLEET-48). The fleet's selection lives once, in `quality/fleet.toml` (FLEET-49);
 `.github/workflows/report.yml` runs it every Monday at 05:17 UTC and on dispatch; the tables stand in that run's
-summary. The run only reports: it writes to no repository and lists with its own read-only job token (`GITHUB_TOKEN`,
+summary. The report writes to no repository and lists with its own read-only job token (`GITHUB_TOKEN`,
 sent to `api.github.com` only, never to git); a local run lists anonymously (FLEET-50).
+
+`quality report --ci-time-json` also writes the CI time as one JSON document to the fixed relative path
+`site/fleet-ci-time.json`, creating `site/` when it is missing, after the step summary, in UTF-8 with a trailing newline,
+and prints nothing of its own; without the switch no file is written. The switch takes no path, so no caller chooses
+where the file lands. The top level holds, in this
+order, `schema` (`1`; a change of any key goes through it), `generated_at` and `window_start` and `window_end` (RFC 3339 UTC
+instants: `window_start` is midnight UTC seven days before the report's day, the bound of the runs query, and `window_end`
+equals `generated_at`), `limit_seconds` (`600`, the one limit the CI-time module owns), `complete` and `repositories`, a flat
+array with one row per repository of the report's selection in the table's order, each with `name`, `median_seconds`,
+`commits_sampled`, `measured` and `breach`: only the name, whole numbers and booleans, no commit author and no reason
+text (FLEET-106). A repository with a median over at least one counted commit is `measured` with that median in whole
+seconds and its count of commits, and `breach` is true when the median is strictly above `limit_seconds`; a repository whose
+runs the cap left `partly read`, whose runs `cannot read CI time`, or with no counted commit is not measured and carries
+`0`, `0` and `breach` false, so a thin week is judged by `commits_sampled` and never by a minimum the file applies
+(FLEET-107). `complete` is false when any repository's CI time is `partly read` or `cannot read CI time`, and true
+otherwise, zero counted commits included; the size rows do not touch it (FLEET-108). An unwritable path (`site` a file, no
+write permission) is `error: site/fleet-ci-time.json is not writable · <reason>` with `fix what the error names, then run quality report
+again` under `next:`, exit `2`, after the tables (FLEET-109). An unwritable step summary ends the report before the
+document is written, and a report that ends with a repository not measured still writes it. Private repositories are not
+read, so the public document names none; that is a named gap, not a list (FLEET-110).
+`report.yml` passes the bare switch, uploads `site/` as the Pages artifact whenever the file
+exists, and its `publish` job deploys it to the repository's GitHub Pages at `https://overnightworks.github.io/quality/fleet-ci-time.json`
+(`application/json`, no token): the workflow keeps `contents: read`, and the `publish` job alone adds `pages: write` and
+`id-token: write` and runs only on the repository's default branch, so a dispatch from another branch uploads the
+artifact and never deploys. A run that wrote no file deploys nothing and leaves the last file in place (FLEET-111). The
+Pages source (GitHub Actions) is a repository setting that no code owns.
 A missing (FLEET-51), unreadable (a directory, a dangling link, not UTF-8) (FLEET-52), malformed (FLEET-53), duplicating
 (also across case, and across `repositories` and `exclude`: `exclude[0] repeats repositories[1]`) (FLEET-54), empty
 (`selects no repository`) (FLEET-55) or badly named (FLEET-56) `quality/fleet.toml` is the pair, exit `2`, before any

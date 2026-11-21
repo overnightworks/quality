@@ -3,16 +3,19 @@
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta, timezone
 from email.message import Message
+from urllib.parse import unquote
 
 import pytest
 
 from quality.fleet_ci_time import (
     CALLS_PER_REPORT,
+    FleetCiTime,
     PartlyRead,
     RedShare,
     WeeklyCiTime,
+    document,
     read_fleet_ci_time,
     table_cells,
 )
@@ -215,3 +218,80 @@ def test_a_repository_without_runs_takes_no_share_of_the_calls_left_for_jobs():
     _, fetch = read(served)
     job_calls = [sum(f"/repos/{name}/" in url and "/jobs?" in url for url in fetch.urls) for name in names]
     assert job_calls[:20] == [(CALLS_PER_REPORT - len(served)) // len(names)] * 20
+
+
+def counted_week(seconds: int, commits: int = 12) -> WeeklyCiTime:
+    wall = timedelta(seconds=seconds)
+    return WeeklyCiTime(commits, wall, wall, RedShare(0, 0), RedShare(0, 0))
+
+
+def quiet_week() -> WeeklyCiTime:
+    return WeeklyCiTime(0, None, None, RedShare(0, 0), RedShare(0, 0))
+
+
+def written_text(rows: dict[str, WeeklyCiTime | PartlyRead]) -> str:
+    return document(FleetCiTime(datetime(2026, 11, 14, tzinfo=UTC), rows, {}, 0), datetime(2026, 11, 21, 5, 17, 42, tzinfo=UTC))
+
+
+def written(rows: dict[str, WeeklyCiTime | PartlyRead]) -> dict:
+    return json.loads(written_text(rows))
+
+
+@pytest.mark.parametrize(
+    ("reading", "expected"),
+    [
+        (counted_week(660), {"median_seconds": 660, "commits_sampled": 12, "measured": True, "breach": True}),
+        (counted_week(600), {"median_seconds": 600, "commits_sampled": 12, "measured": True, "breach": False}),
+        (counted_week(599), {"median_seconds": 599, "commits_sampled": 12, "measured": True, "breach": False}),
+        (counted_week(601, commits=1), {"median_seconds": 601, "commits_sampled": 1, "measured": True, "breach": True}),
+        (PartlyRead("29 pages read"), {"median_seconds": 0, "commits_sampled": 0, "measured": False, "breach": False}),
+        (PartlyRead("cannot read CI time"), {"median_seconds": 0, "commits_sampled": 0, "measured": False, "breach": False}),
+        (quiet_week(), {"median_seconds": 0, "commits_sampled": 0, "measured": False, "breach": False}),
+    ],
+    ids=["above the limit", "exactly the limit", "below the limit", "one counted commit", "cut by the cap", "unreadable", "no counted commit"],
+)
+def test_a_repository_is_a_row_of_numbers_and_breaches_only_above_ten_minutes(reading, expected):
+    """FLEET-107: a measured repository carries its median and commits and breaches when the median is strictly above
+    600 seconds; one the cap or a failed read left unmeasured, or with no counted commit, is 0, 0, false, false."""
+    assert written({"o/a": reading})["repositories"] == [{"name": "o/a", **expected}]
+
+
+def test_the_document_holds_the_agreed_keys_in_order_and_flat_values_only():
+    """FLEET-106: schema 1, the window as RFC 3339 UTC instants ending at the generation moment, the limit, the
+    completeness and one row per repository in the order of the report; nothing nested, no reason text."""
+    rows = {"o/a": counted_week(660), "o/b": PartlyRead("cannot read CI time"), "o/c": counted_week(30)}
+    text = written_text(rows)
+    parsed = json.loads(text)
+    assert list(parsed) == ["schema", "generated_at", "window_start", "window_end", "limit_seconds", "complete", "repositories"]
+    assert (parsed["schema"], parsed["limit_seconds"]) == (1, 600)
+    assert (parsed["generated_at"], parsed["window_end"], parsed["window_start"]) == ("2026-11-21T05:17:42Z", "2026-11-21T05:17:42Z", "2026-11-14T00:00:00Z")
+    assert [list(entry) for entry in parsed["repositories"]] == [["name", "median_seconds", "commits_sampled", "measured", "breach"]] * 3
+    assert [entry["name"] for entry in parsed["repositories"]] == ["o/a", "o/b", "o/c"]
+    assert all(isinstance(value, str | int | bool) for entry in parsed["repositories"] for value in entry.values())
+    assert text.endswith("}\n")
+    assert "cannot read" not in text
+
+
+@pytest.mark.parametrize(
+    ("rows", "complete"),
+    [
+        ({"o/a": counted_week(30), "o/b": quiet_week()}, True),
+        ({"o/a": counted_week(30), "o/b": PartlyRead("29 pages read")}, False),
+        ({"o/a": counted_week(30), "o/b": PartlyRead("cannot read CI time")}, False),
+    ],
+    ids=["a quiet repository", "cut by the cap", "unreadable"],
+)
+def test_the_document_is_complete_unless_a_repository_is_partly_read(rows, complete):
+    """FLEET-108: `complete` is false when any repository's CI time was cut by the cap or could not be read; zero counted
+    commits leave it true."""
+    assert written(rows)["complete"] is complete
+
+
+@pytest.mark.parametrize("zone", [UTC, timezone(timedelta(hours=-10)), timezone(timedelta(hours=13))], ids=["UTC", "ten hours behind", "thirteen hours ahead"])
+def test_the_document_window_starts_where_the_runs_query_starts_whatever_the_clock_zone(zone):
+    """FLEET-106: `window_start` is the midnight UTC the runs query's `created>=` bound names, taken from the report's
+    day and not from the instant or the zone the document is made in."""
+    reading, fetch = read({"o/a": [run("c1")]})
+    text = document(reading, datetime.combine(TODAY, time(0, 30), zone))
+    bound = unquote(fetch.urls[0].split("created=")[1].split("&")[0]).removeprefix(">=")
+    assert json.loads(text)["window_start"] == f"{bound}T00:00:00Z"
