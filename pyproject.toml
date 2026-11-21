@@ -21,7 +21,7 @@ dependencies = [
 quality = "quality.cli:run"
 
 [dependency-groups]
-dev = ["pytest", "pytest-cov", "pytest-xdist"]
+dev = ["pytest", "pytest-cov", "pytest-randomly", "pytest-xdist"]
 
 [build-system]
 requires = ["hatchling==1.33.0", "hatch-vcs==0.5.0", "setuptools-scm==10.3.4", "vcs-versioning==2.6.0"]
@@ -90,7 +90,7 @@ layers = [
     "literal_text | locator_text | logging_rule",
     "render_pass",
     "catalog_rules",
-    "pr_workflows",
+    "pr_workflows | pytest_random",
     "read_attributes | typescript_tokens",
     "twins",
     "naming",

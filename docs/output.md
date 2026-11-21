@@ -117,6 +117,12 @@ rows, by area:
   `unused` finding there (O46).
   A fleet package a `uv.lock` resolves from an index is a `from index` finding at the lock, its fact the package, its
   version and the index ([rules](rules.md)).
+  A `pytest-random` finding is `missing` at a `uv.lock` that locks pytest without pytest-randomly (`pytest <version> is
+  locked without pytest-randomly`), `unshuffled` at the `addopts` of a `pyproject.toml`, a workflow pytest call or a
+  `PYTEST_ADDOPTS` or `PYTEST_DISABLE_PLUGIN_AUTOLOAD` value that switches the plugin off or fixes its order, and `unseeded`
+  where the same places hide its seed header; its fix names what to drop, and a workflow finding the
+  `# pytest-random: <reason>` marker ([rules](rules.md)). A pytest line `pytest-workers` reports as `invalid` carries no
+  `pytest-random` row, so it is red once.
 - `code`: a security finding is `insecure`, a `print` or `pprint` is a `print call`, and an owner that names no code
   found in its file is `unused` ([rules](rules.md)). A `logging` finding is no finding row but an `open` note at the
   file and line, its fact the logline rule it breaks (LOGGING-3).

@@ -671,7 +671,7 @@ def test_a_finding_prints_its_event_fact_and_the_flag_and_the_marker_as_its_fix(
 
 def test_a_conforming_repository_is_clean_under_every_rule(build_repo, capsys):
     """PYTEST-11."""
-    code, output = run(capsys, build_repo({WORKFLOW: block_run("uv run --locked pytest -q -n auto --cov")}))
+    code, output = run(capsys, build_repo({WORKFLOW: block_run("uv run --locked pytest -n auto --cov")}))
     assert (code, is_clean(output)) == (0, True), output
 
 
