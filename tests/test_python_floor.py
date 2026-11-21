@@ -28,9 +28,14 @@ from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo
 from tests.support.layout import UNCOVERED_FILES_RULE_COUNT
 
 
+@pytest.fixture
+def fixture_origin() -> str:
+    return "overnightworks/x"
+
+
 def project(requires_python: str | None = ">=3.14") -> str:
     clause = "" if requires_python is None else f"requires-python = {requires_python!r}\n"
-    return f'[project]\nname = "x"\nversion = "1"\n{clause}'
+    return f'[project]\nname = "overnightworks-x"\nversion = "1"\n{clause}'
 
 
 def allow(path: str, reason: str = "qwen-tts has no cp314 wheel") -> str:
@@ -98,7 +103,7 @@ def test_a_no_floor_finding_names_the_value_it_found(build_repo):
 
 @pytest.mark.parametrize(
     "text",
-    [project("<3.15"), project(""), project(None), '[project]\nname = "x"\ndynamic = ["requires-python"]\n'],
+    [project("<3.15"), project(""), project(None), '[project]\nname = "overnightworks-x"\ndynamic = ["requires-python"]\n'],
     ids=["an upper bound only", "empty", "absent", "dynamic"],
 )
 def test_a_project_without_a_floor_admits_every_python(build_repo, capsys, text):

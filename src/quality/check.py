@@ -22,6 +22,7 @@ from quality import (
     literal_text,
     locator_text,
     logging_rule,
+    naming,
     process,
     python_floor,
     python_lint,
@@ -481,6 +482,7 @@ def _judge_files(inputs: RunInputs) -> AreaVerdict:
             Rule.TEST_LAYOUT: _attempt(lambda: layout.check_test_layout(_required(modes), _required(allow_lists).layout)),
             Rule.TEST_IMPORT: _content_findings(root, modes, allow_lists, layout.test_import_candidates, layout.check_test_import),
             Rule.PYTHON_FLOOR: _attempt(lambda: _python_floor_result(root, modes, allow_lists)),
+            Rule.NAMING: _attempt(lambda: naming.check_naming(root, _required(modes), checkout.origin_repository(root), naming.packaged_deviations())),
         },
     )
 

@@ -22,6 +22,7 @@ from tests.support.advisories import PublishedDatabases, advisory, zipped
 from tests.support.door import check_door
 from tests.support.fleet import GITHUB_BASE_VARIABLE, GITHUB_REDIRECT, RELEASES, TEST_OWNER, write_fleet
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo, put
+from tests.support.github_remote import with_github_remote
 from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_scanner, serving, write_mise
 from tests.support.secrets import FAKE_KEY
 from tests.support.terminal import PseudoTerminal
@@ -175,8 +176,19 @@ def summary(tmp_path, monkeypatch) -> Path:
 
 
 @pytest.fixture
-def build_repo(tmp_path: Path) -> RepoBuilder:
-    return lambda files: make_repo(tmp_path, files)
+def fixture_origin() -> str | None:
+    """The `owner/name` of the GitHub remote `origin` that `build_repo` gives its repository; a test module that
+    writes names for the naming rule to judge overrides it, and None leaves the repository with no remote."""
+    return None
+
+
+@pytest.fixture
+def build_repo(tmp_path: Path, fixture_origin: str | None) -> RepoBuilder:
+    def build(files: dict[str, str]) -> Path:
+        repo = make_repo(tmp_path, files)
+        return repo if fixture_origin is None else with_github_remote(repo, fixture_origin)
+
+    return build
 
 
 @pytest.fixture

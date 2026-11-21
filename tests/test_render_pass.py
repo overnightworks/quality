@@ -13,8 +13,13 @@ LANGUAGES = '[languages]\nrender_pass = "Render pages"\n'
 SETTING_FIX = "name the job that renders each page once per language in [languages] render_pass"
 
 
+@pytest.fixture
+def fixture_origin() -> str:
+    return "overnightworks/app"
+
+
 def pyproject(body: str = DECLARED, table: str = "") -> str:
-    return f'[project]\nname = "app"\nversion = "0.1"\nrequires-python = ">=3.14"\n{body}\n{table}'
+    return f'[project]\nname = "overnightworks-app"\nversion = "0.1"\nrequires-python = ">=3.14"\n{body}\n{table}'
 
 
 def workflow(*jobs: str) -> str:

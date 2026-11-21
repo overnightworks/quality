@@ -42,8 +42,13 @@ HEAD = (
 )
 
 
+@pytest.fixture
+def fixture_origin() -> str:
+    return "overnightworks/app"
+
+
 def pyproject(body: str) -> str:
-    return f'[project]\nname = "app"\nversion = "0.1"\nrequires-python = ">=3.14"\n{body}\n'
+    return f'[project]\nname = "overnightworks-app"\nversion = "0.1"\nrequires-python = ">=3.14"\n{body}\n'
 
 
 def workflow(run: str, *step_lines: str, on: str = "pull_request") -> str:

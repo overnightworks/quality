@@ -9,7 +9,7 @@ decision. Every project releases on the same checked path: the check first, then
 release. Where an established tool already does a job, quality runs it instead of rebuilding it, and it builds only what
 no tool does; the scans of markup the fleet's languages standard assigns to it are ones quality owns because no tool the fleet runs does them. Every repository is judged by the newest rules within a fixed time of their release; until then it takes a new release when it chooses. Its commands say in plain words what they do, and it asks for little upkeep.
 
-quality owns the fleet's shared naming rule, written in [naming.md](naming.md).
+quality owns and judges the fleet's shared naming rule, written in [naming.md](naming.md).
 
 ## Who uses it today
 

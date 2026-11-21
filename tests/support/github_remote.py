@@ -10,6 +10,8 @@ SCP = "git@github.com:{repository}.git"
 def with_github_remote(
     repo: Path, repository: str = "acme/guidance", form: str = HTTPS, remote: str = "origin"
 ) -> Path:
-    """Adds the GitHub remote `remote` for `repository`, spelled as `form`, to `repo` and returns it."""
-    git(repo, "remote", "add", remote, form.format(repository=repository))
+    """Adds the GitHub remote `remote` for `repository`, spelled as `form`, to `repo`, or points the one it has there,
+    and returns it."""
+    verb = "set-url" if remote in git(repo, "remote").stdout.split() else "add"
+    git(repo, "remote", verb, remote, form.format(repository=repository))
     return repo

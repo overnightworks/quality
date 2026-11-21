@@ -366,6 +366,31 @@ def test_every_configured_remote_names_its_repository_and_none_names_a_repositor
     assert sorted(checkout.github_repositories(repo)) == ["acme/tool", "me/tool"]
 
 
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("remotes", "origin"),
+    [
+        pytest.param({"origin": "acme/tool"}, "acme/tool", id="origin alone"),
+        pytest.param({"upstream": "acme/tool", "origin": "me/tool"}, "me/tool", id="origin beside an upstream"),
+        pytest.param({"upstream": "acme/tool"}, None, id="no remote called origin"),
+        pytest.param({}, None, id="no remote"),
+    ],
+)
+def test_origin_repository_is_the_github_repository_of_the_remote_called_origin_and_no_other(tmp_path, remotes, origin):
+    """N1: the stem's owner keeps the remote's name that `github_repositories` drops."""
+    repo = make_repo(tmp_path, {})
+    for remote, repository in remotes.items():
+        with_github_remote(repo, repository, remote=remote)
+    assert checkout.origin_repository(repo) == origin
+
+
+@pytest.mark.integration
+def test_origin_repository_is_none_for_an_origin_that_is_no_github_url(tmp_path):
+    repo = make_repo(tmp_path, {})
+    git(repo, "remote", "add", "origin", "/srv/git/acme/tool.git")
+    assert checkout.origin_repository(repo) is None
+
+
 def unknown(fact: str, step: str) -> checkout.UnknownGatePin:
     return checkout.UnknownGatePin(Reason(fact, (Instruction(step),)))
 
