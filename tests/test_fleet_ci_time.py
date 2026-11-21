@@ -122,6 +122,28 @@ def test_a_repository_that_cannot_be_read_is_partly_read_and_the_others_stay(fai
     assert (reading.rows["o/a"], reading.rows["o/b"].commits) == (PartlyRead("cannot read CI time"), 1)
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"total_count": "many", "workflow_runs": []},
+        {"total_count": 1},
+        {"total_count": 1, "workflow_runs": ["not an object"]},
+        {"total_count": 1, "workflow_runs": [{"event": "push"}]},
+    ],
+    ids=["total-not-integer", "runs-missing", "run-not-object", "run-missing-fields"],
+)
+def test_an_answer_of_the_wrong_shape_is_partly_read_and_the_others_stay(body):
+    served = {"o/b": [run("x")]}
+
+    def fetch(url, headers, unreadable):
+        if "/o/a/" in url:
+            return json.dumps(body).encode(), Message()
+        return Runs(served)(url, headers, unreadable)
+
+    reading = read_fleet_ci_time(("o/a", "o/b"), TODAY, "", fetch)
+    assert (reading.rows["o/a"], reading.rows["o/b"].commits) == (PartlyRead("cannot read CI time"), 1)
+
+
 def test_a_run_without_its_moments_cannot_be_read():
     broken = {**run("x"), "created_at": None}
     assert weekly({"o/a": [broken]}) == PartlyRead("cannot read CI time")
