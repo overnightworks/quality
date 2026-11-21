@@ -3,6 +3,6 @@ agent = "Claude b436a2ec-d087-4ca0-bdb8-ca0fd02816a8"
 role = "builder"
 base = "43a0ddd38d5d9211880285ea814d1d622b197ba9"
 branch = "claude/issue-922-weekly-ci-time"
-scope = ["docs/commands.md", "docs/output.md", "src/quality/ci_time.py", "src/quality/fleet.py", "src/quality/fleet_ci_time.py", "tests/test_ci_time.py", "tests/test_fleet_ci_time.py", "tests/test_fleet_report.py"]
+scope = ["docs/commands.md", "docs/output.md", "pyproject.toml", "src/quality/ci_time.py", "src/quality/fleet.py", "src/quality/fleet_ci_time.py", "tests/test_ci_time.py", "tests/test_fleet_ci_time.py", "tests/test_fleet_matrix.py", "tests/test_fleet_report.py"]
 opened_commit = "c93292d302633769f837458b7294dec04ebd2e92"
 whole_reason = "Reading the runs, computing the weekly numbers and printing the table are one flow, which the plan says does not split."
