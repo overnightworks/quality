@@ -1,5 +1,5 @@
 claim_id = "1d4e647cb4fb461c87ea70d5513863ac"
-agent = "Claude b436a2ec-d087-4ca0-bdb8-ca0fd02816a8"
+agent = "Claude 65a296cd-8f9a-4dec-985b-649ce7144e62"
 role = "builder"
 base = "ee00914d43ea30397d8be2c8589397fcd70495fe"
 branch = "claude/issue-884-script-function-metrics"
