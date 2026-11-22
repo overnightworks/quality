@@ -268,7 +268,7 @@ def test_two_installs_are_two_findings_and_one_call_is_one(build_repo):
         (("apt-get install \\", f"  -y x {MARKER}"), []),
         ((MARKER, "echo a", "apt-get install -y x"), [(BLOCK_LINE + 2, INSTALLS)]),
         ((f"apt-get install -y x {MARKER}", "echo a", "apt-get install -y y"), [(BLOCK_LINE + 2, INSTALLS)]),
-        ((f"apt-get install -y x {MARKER}", "apt-get install -y y"), []),
+        ((f"apt-get install -y x {MARKER}", "apt-get install -y y"), [(BLOCK_LINE + 1, INSTALLS)]),
         (("# runtime-install: x", "apt-get install -y x"), []),
         (("#runtime-install:   reason", "apt-get install -y x"), []),
         (("# runtime-install: ärger", "apt-get install -y x"), []),

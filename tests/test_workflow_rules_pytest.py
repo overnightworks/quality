@@ -530,6 +530,18 @@ def test_a_marker_with_a_reason_on_or_directly_above_a_line_clears_its_calls(bui
     assert judged(build_repo, block_run(*script)) == []
 
 
+def test_a_marker_trailing_the_previous_steps_line_clears_that_step_only(build_repo):
+    """PYTEST-7: a marker on another command's line does not clear the call on the next line."""
+    text = head() + f"      - run: pytest -n auto -m e2e {MARKER}\n      - run: pytest\n"
+    assert shape(judged(build_repo, text)) == [(SERIAL, QUOTED_LINE + 1, WITHOUT_N)]
+
+
+def test_a_comment_only_marker_line_clears_the_call_below_and_a_trailing_marker_the_call_on_its_line(build_repo):
+    """PYTEST-7."""
+    text = head() + f"      {MARKER}\n      - run: pytest\n      - run: pytest {MARKER}\n"
+    assert judged(build_repo, text) == []
+
+
 @pytest.mark.parametrize("on_run_line", [True, False], ids=["after the value", "above the key"])
 def test_a_marker_clears_a_plain_scalar_call_beside_or_above_its_key(build_repo, on_run_line):
     """PYTEST-7."""

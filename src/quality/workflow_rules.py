@@ -243,7 +243,7 @@ WORKERS_FLAG = re.compile(r"(?:-n|--numprocesses)(?:=(.*))?|-n(.+)", re.DOTALL)
 WHOLE_NUMBER = re.compile(r"\d+", re.ASCII)
 PYTEST = Tool(commands=frozenset({"pytest", "py.test"}), module="pytest")
 AUTOMATIC_COUNTS = frozenset({"auto", "logical"})
-
+MARK_ABOVE = re.compile(r"[ \t]*(-[ \t]+)?#|.*\brun:[ \t]*[|>][-+\d]*[ \t]+#")  # a comment-only line, or a block scalar's `run: |` line
 Problem = tuple[FindingEvent, str]
 
 
@@ -261,6 +261,12 @@ class Marker:
     def lines(self, file_lines: list[str]) -> frozenset[int]:
         """The numbers of the file lines that carry the marker."""
         return frozenset(number for number, line in enumerate(file_lines, 1) if self.pattern.search(line))
+
+    def clears(self, file_lines: list[str], marked: frozenset[int], first: int, last: int) -> bool:
+        """Whether a mark stands on a line of `first..last`, or directly above on a comment-only line or a block scalar's `run:` line; a mark trailing another command clears that command only."""
+        return any(number in marked for number in range(first, last + 1)) or (
+            first - 1 in marked and MARK_ABOVE.match(file_lines[first - 2]) is not None
+        )
 
     def per_line_marks(self, file_lines: list[str], marked: frozenset[int], step: yaml.Node, run: yaml.Node) -> frozenset[int]:
         """The marked lines the per-line form reads for the step's `run:`; where the rule has a step form, the line above a step whose `run:` stands on the step's own first line after its `-` (`- run: x`), and the line above a flow step, is read by the step form alone."""
@@ -332,7 +338,7 @@ def judge_scripts(script_rule: ScriptRule, root: Path, tracked: list[str]) -> Ru
                 lines = list(logical_lines(physical_lines(run)))
                 marks = script_rule.marker.per_line_marks(file_lines, marked, step, run)
                 try:
-                    findings.extend(_script_findings(script_rule, name, lines, marks))
+                    findings.extend(_script_findings(script_rule, name, lines, file_lines, marks))
                 except CannotJudge as error:
                     raise unreadable(name, error.reason.fact) from error
     return RuleResult(findings, read, False)
@@ -383,11 +389,11 @@ def _script(name: str, document: Document, run: yaml.Node) -> yaml.ScalarNode:
     return run
 
 
-def _script_findings(script_rule: ScriptRule, name: str, lines: list[ScriptLine], marked: frozenset[int]) -> Iterator[Finding]:
+def _script_findings(script_rule: ScriptRule, name: str, lines: list[ScriptLine], file_lines: list[str], marked: frozenset[int]) -> Iterator[Finding]:
     reading = script_rule.reading
     holds_hidden_word = reading.holds_hidden_word("\n".join(line.text for line in lines))
     for line in lines:
-        if any(number in marked for number in range(line.first - 1, line.last + 1)):
+        if script_rule.marker.clears(file_lines, marked, line.first, line.last):
             continue
         for event, fact in line_problems(line.text, reading, holds_hidden_word):
             yield Finding(script_rule.rule, name, line.first, fact, script_rule.fix, event=event)

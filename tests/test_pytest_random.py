@@ -246,6 +246,21 @@ def test_a_marker_with_a_reason_clears_a_workflow_call(build_repo, lines):
     assert workflow_judged(build_repo, script(*lines)) == []
 
 
+def test_a_marker_trailing_another_commands_line_clears_that_command_only(build_repo):
+    """RANDOM-8: the marker clears the line it trails, not the call on the next line."""
+    assert [finding.line for finding in workflow_judged(build_repo, script(f"pytest -q {MARKER}", "pytest -q"))] == [11]
+
+
+@pytest.mark.parametrize(
+    ("line", "event"),
+    [("pytest --collect-only -q", None), ("pytest --co -q", None), ("pytest -q", UNSEEDED), ("pytest -q -- --collect-only", UNSEEDED)],
+    ids=["collect-only", "co", "a run", "after the separator"],
+)
+def test_a_listing_only_call_is_not_judged(build_repo, line, event):
+    """RANDOM-9: a call that only lists tests runs none, so its quiet flag hides no seed."""
+    assert shape(workflow_judged(build_repo, script(line))) == expected(event, WORKFLOW, 10)
+
+
 @pytest.mark.parametrize(
     "lines",
     [
