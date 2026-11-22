@@ -939,7 +939,9 @@ call, judged once (PYTEST-6). A second substitution on a command line (`cp $(a) 
 is no command word; the same `$(…)` after the `)` of a `case` pattern is read the same way, a named gap.
 
 A comment `# pytest-workers: <reason>`, with a reason that holds a letter, clears every call of the logical line it
-stands on or directly above: for a plain or quoted value, a YAML comment above `run:` or after its value; for a block
+stands on, or that directly follows a line holding only the comment; a marker that trails another command's line
+clears that command only, so the unmarked call of the next line is reported. The marker stands, for a plain or quoted
+value, as a YAML comment above `run:` or after its value; for a block
 scalar (`|`, `>`), a YAML comment above the `run:` key clears nothing, so the marker goes on the `run: |` line (it
 covers the script's first line) or on a block line directly above the line it clears; for a command joined by
 backslashes, above its first line or on any of its lines. Without the id, without a reason, with a reason of no letter,
@@ -999,8 +1001,8 @@ form: the marker stands on the line directly above a step's first line, the line
 column of that `-`, and clears every finding of the step's `run:`; a `#` in another column clears nothing, a comment
 in the `-` column that follows the previous step and stands directly above the next step clears the next step, and a
 step whose `-` stands alone on its line or that stands in a flow sequence (`steps: [{run: x}]`) has no step form. The
-per-line form is that of `pytest-workers`: the marker on a call's logical line or directly above its first line clears
-that call, for a block scalar on the `run: |` line (it covers the first line) or on a block line directly above the
+per-line form is that of `pytest-workers`: the marker on a call's logical line, or alone on the line directly above its first
+line, clears that call (a marker trailing another command's line clears that command only), for a block scalar on the `run: |` line (it covers the first line) or on a block line directly above the
 call; the line above a step whose `run:` stands on the step's own first line (`- run: x`, a flow step) belongs
 to the step form alone, so that step takes a marker on its own line only, while a marker on the `-` line of a step
 whose `run:` stands on the next line (`- # runtime-install: reason`) clears that call; a marker between a step's
@@ -1670,10 +1672,12 @@ with the seed printed" (pytest-randomly). Three readers judge that one decision.
   or after `export`. Any value of `PYTEST_DISABLE_PLUGIN_AUTOLOAD` that is not empty (a blank one included) switches the
   autoload off, as pytest reads it, so it is `unshuffled`, whatever else `env:` holds. A call behind a script, `make` or
   a mise task, a `pytest.main([...])`, a flag in `pytest.ini`, `.pytest.ini`, `pytest.toml`, `.pytest.toml`, `tox.ini` or
-  `setup.cfg` and a plugin disabled in a `conftest.py` are not read.
+  `setup.cfg` and a plugin disabled in a `conftest.py` are not read. A call with `--collect-only` or `--co` before the
+  first `--` only lists tests, runs none and is not judged (`pytest --collect-only -q` is clean, `pytest -q -- --collect-only`
+  is `unseeded`).
 - **The marker (RANDOM-8).** A comment `# pytest-random: <reason>`, with a reason that holds a letter, on the line of a
-  workflow call, assignment or `env:` value, or directly above it, clears the finding (the form of `# pytest-workers:`,
-  PYTEST-7). It is the way out of a flow layer (end-to-end, browser, image); it clears nothing in `addopts`, and it has
+  workflow call, assignment or `env:` value, or alone on the line directly above it, clears the finding (the form of
+  `# pytest-workers:`, PYTEST-7); a marker that trails another command's line clears that command only. It is the way out of a flow layer (end-to-end, browser, image); it clears nothing in `addopts`, and it has
   no other form.
 - **Facts and fixes (RANDOM-10).** `unshuffled`: `pytest-randomly is switched off or its order fixed by <source>`, its
   fix naming what to drop (`-p no:randomly`, `--randomly-dont-reorganize`, `--randomly-seed=<integer or last>`,

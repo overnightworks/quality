@@ -246,6 +246,21 @@ def test_a_marker_with_a_reason_clears_a_workflow_call(build_repo, lines):
     assert workflow_judged(build_repo, script(*lines)) == []
 
 
+def test_a_marker_trailing_another_commands_line_clears_that_command_only(build_repo):
+    """RANDOM-8: the marker clears the line it trails, not the call on the next line."""
+    assert [finding.line for finding in workflow_judged(build_repo, script(f"pytest -q {MARKER}", "pytest -q"))] == [11]
+
+
+@pytest.mark.parametrize(
+    ("line", "event"),
+    [("pytest --collect-only -q", None), ("pytest --co -q", None), ("pytest -q", UNSEEDED), ("pytest -q -- --collect-only", UNSEEDED)],
+    ids=["collect-only", "co", "a run", "after the separator"],
+)
+def test_a_listing_only_call_is_not_judged(build_repo, line, event):
+    """RANDOM-9: a call that only lists tests runs none, so its quiet flag hides no seed."""
+    assert shape(workflow_judged(build_repo, script(line))) == expected(event, WORKFLOW, 10)
+
+
 @pytest.mark.parametrize(
     "lines",
     [
@@ -324,6 +339,16 @@ def test_a_marker_clears_an_env_value_on_its_line_or_directly_above(build_repo, 
     above = "\n".join([*lines[: line - 1], MARKER, *lines[line - 1 :]])
     beside = "\n".join([*lines[: line - 1], f"{lines[line - 1]}  {MARKER}", *lines[line:]])
     assert workflow_judged(build_repo, above) == [] == workflow_judged(build_repo, beside)
+
+
+@pytest.mark.parametrize("level", LEVELS)
+def test_a_marker_trailing_the_previous_env_value_does_not_clear_the_next(build_repo, level):
+    """RANDOM-8: a marker trailing another line's env value clears that line only."""
+    text, line = env_workflow(level, "PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+    lines = text.split("\n")
+    indent = lines[line - 1][: len(lines[line - 1]) - len(lines[line - 1].lstrip())]
+    marked = "\n".join([*lines[: line - 1], f"{indent}OTHER: x  {MARKER}", *lines[line - 1 :]])
+    assert shape(workflow_judged(build_repo, marked)) == expected(UNSHUFFLED, WORKFLOW, line + 1)
 
 
 def test_an_env_value_built_at_run_time_is_not_read(build_repo):

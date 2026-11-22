@@ -17,10 +17,9 @@ from packaging.utils import canonicalize_name
 from quality import checkout, fleet_sources, repository
 from quality.report import CannotJudge, Finding, FindingEvent, RuleResult
 from quality.rules import Rule
-from quality.run_script import Segment, command_start, command_words
+from quality.run_script import Marker, Segment, command_start, command_words
 from quality.workflow_rules import (
     PYTEST_RULE,
-    Marker,
     Problem,
     ScriptRule,
     composed,
@@ -39,7 +38,7 @@ ADDOPTS_VARIABLE = "PYTEST_ADDOPTS"
 AUTOLOAD_VARIABLE = "PYTEST_DISABLE_PLUGIN_AUTOLOAD"
 ADDOPTS_KEY = "addopts"
 EVENTS = frozenset({FindingEvent.UNSHUFFLED, FindingEvent.UNSEEDED})
-MARKER = Marker.of(Rule.PYTEST_RANDOM, above_step=False)
+MARKER = Marker.of(Rule.PYTEST_RANDOM.value, above_step=False)
 MISSING_FIX = "add pytest-randomly to the dev dependency group, then uv lock"
 UNSHUFFLED_FIX = (
     "drop -p no:randomly, --randomly-dont-reorganize, --randomly-seed=<integer or last>, --disable-plugin-autoload "
@@ -61,6 +60,7 @@ LONG_VALUE_OPTIONS = frozenset({"--verbosity", "--randomly-seed"})
 PLUGIN_OFF = "no:randomly"
 PLUGIN_LOADS = frozenset({"randomly", "pytest_randomly"})
 LAST_SEED = "last"
+LISTING_FLAGS = frozenset({"--collect-only", "--co"})
 
 Option = tuple[str, str]
 
@@ -201,8 +201,13 @@ def _call_findings(root: Path, tracked: Sequence[str]) -> list[Finding]:
 def _segment_problem(parts: Sequence[Segment], index: int) -> Problem | None:
     segment = parts[index]
     arguments = pytest_arguments(command_words(segment))
-    call = None if arguments is None else flags_problem(arguments, "the call")
+    call = None if arguments is None or _lists_only(arguments) else flags_problem(arguments, "the call")
     return next((problem for problem in (*_assignment_problems(segment.words), call) if problem is not None), None)
+
+
+def _lists_only(arguments: Sequence[str]) -> bool:
+    """Whether the call lists tests and runs none: `--collect-only` or `--co` before the first `--`."""
+    return not LISTING_FLAGS.isdisjoint(arguments[: arguments.index("--")] if "--" in arguments else arguments)
 
 
 def _assignment_problems(words: tuple[str, ...]) -> Iterator[Problem | None]:
@@ -241,10 +246,11 @@ def _environment_findings(root: Path, tracked: Sequence[str]) -> list[Finding]:
     """The two variables in the `env:` of a workflow, a job or a step, each at its value's line unless a marker clears it."""
     findings = []
     for name, text in readable_workflows(root, list(tracked)):
-        marked = MARKER.lines(text.split("\n"))
+        file_lines = text.split("\n")
+        marked = MARKER.lines(file_lines)
         for variable, value, line in _environment_values(name, composed(name, text)):
             problem = _environment_problem(name, variable, value)
-            if problem is not None and not {line - 1, line} & marked:
+            if problem is not None and not MARKER.clears(file_lines, marked, line, line):
                 event, fact = problem
                 findings.append(Finding(Rule.PYTEST_RANDOM, name, line, fact, _fix(event, marker=True), event=event))
     return findings
