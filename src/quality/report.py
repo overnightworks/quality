@@ -173,6 +173,8 @@ class FindingEvent(StrEnum):
     AFFECTED = "affected"
     CONFLICT = "conflict"
     FROM_INDEX = "from index"
+    UNSHUFFLED = "unshuffled"
+    UNSEEDED = "unseeded"
     SECRET = "secret"  # noqa: S105 - the event word of a secret finding and no password
     PRINT_CALL = "print call"
     OPEN = "open"

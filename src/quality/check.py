@@ -25,6 +25,7 @@ from quality import (
     naming,
     pr_workflows,
     process,
+    pytest_random,
     python_floor,
     python_lint,
     ratchet,
@@ -699,7 +700,11 @@ def _judge_dependencies(inputs: RunInputs) -> AreaVerdict:
         partial(check_advisories, inputs.root, inputs.tracked, inputs.allow_lists, inputs.deadline, log, inputs.cache),
     )
     fleet_source = _attempt(lambda: fleet_sources.check_fleet_sources(inputs.root, inputs.tracked))
-    return _area_verdict(Area.DEPENDENCIES, {Rule.ADVISORY: advisory, Rule.FLEET_SOURCE: fleet_source}, runs)
+    pytest_random_result = _attempt(
+        lambda: pytest_random.check_pytest_random(inputs.root, inputs.tracked, _pyproject_contents(inputs.root, _required(inputs.modes)))
+    )
+    rules = {Rule.ADVISORY: advisory, Rule.FLEET_SOURCE: fleet_source, Rule.PYTEST_RANDOM: pytest_random_result}
+    return _area_verdict(Area.DEPENDENCIES, rules, runs)
 
 
 def _judge_code(inputs: RunInputs) -> AreaVerdict:
