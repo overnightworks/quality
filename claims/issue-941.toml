@@ -3,6 +3,6 @@ agent = "Claude 270388b5-f023-43f0-aeae-bfc00150dada"
 role = "builder"
 base = "1c9dfdca3a12c301b7376c40872bed7bf2b19d89"
 branch = "claude/issue-941-marker-and-listing-only"
-scope = ["docs/rules.md", "src/quality/pytest_random.py", "src/quality/workflow_rules.py", "tests/test_pytest_random.py", "tests/test_workflow_rules_pytest.py"]
+scope = ["docs/rules.md", "src/quality/pytest_random.py", "src/quality/run_script.py", "src/quality/workflow_rules.py", "tests/test_pytest_random.py", "tests/test_workflow_rules_install.py", "tests/test_workflow_rules_pytest.py"]
 opened_commit = "e0dc432be2fdd1ee9c6493c79e54c186685facaf"
 whole_reason = "Two false readings of the same workflow pytest calls, fixed before v0.24.0 ships pytest-random: the shared marker and the listing-only call, with their spec lines and tests."
