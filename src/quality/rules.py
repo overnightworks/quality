@@ -46,6 +46,7 @@ RELEASE_0_17 = "v0.17.0"
 RELEASE_0_20 = "v0.20.0"
 RELEASE_0_21 = "v0.21.0"
 RELEASE_0_23 = "v0.23.0"
+RELEASE_0_24 = "v0.24.0"
 
 
 class Area(StrEnum):
@@ -113,7 +114,7 @@ class Rule(StrEnum):
     RENDER_PASS = "render-pass", Area.WORKFLOWS, RELEASE_0_17, Switch.CATALOG_DECLARATION
     ADVISORY = "advisory", Area.DEPENDENCIES, RELEASE_0_3, Switch.ALWAYS
     FLEET_SOURCE = "fleet-source", Area.DEPENDENCIES, RELEASE_0_21, Switch.ALWAYS
-    PYTEST_RANDOM = "pytest-random", Area.DEPENDENCIES, None, Switch.ALWAYS
+    PYTEST_RANDOM = "pytest-random", Area.DEPENDENCIES, RELEASE_0_24, Switch.ALWAYS
 
     def __new__(
         cls, rule_id: str, area: Area, first_release: str | None, switch: Switch, *switched: SwitchChange

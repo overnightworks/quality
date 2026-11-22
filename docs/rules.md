@@ -1694,7 +1694,8 @@ with the seed printed" (pytest-randomly). Three readers judge that one decision.
   the shared reading cannot read or finds built at run time is `invalid` for `pytest-workers` (PYTEST-6) and no finding
   of this rule, so it is red once.
 - **No release, no switch (RANDOM-14).** No configuration switches the rule off and no declaration table exists. The rule
-  has no release yet, so a dependent meets it at the first release that names it. quality's own tree holds no finding of
+  first ships in v0.24.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column (FLEET-18)
+  and a dependent meets it at its bump to it. quality's own tree holds no finding of
   it. Not covered, named: pytest and pytest-randomly locked in different dependency groups where a job installs one group
   only, a test environment installed from a requirements file instead of the lock, and an option or flag built with
   `${{ }}`.
