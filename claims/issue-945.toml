@@ -1,8 +1,0 @@
-claim_id = "add79378a00a4dcd871d20cf2c6f80f4"
-agent = "Claude 270388b5-f023-43f0-aeae-bfc00150dada"
-role = "builder"
-base = "45cd3cb2097eb0e872adb68e78782a0454915dca"
-branch = "claude/issue-945-release-v0-24-0"
-scope = [".github/workflows/gate.yml", "docs/rules.md", "src/quality/rules.py", "tests/test_fleet_matrix.py"]
-opened_commit = "4a13a94bbc363826c96e5b4a9d43b5d5ff9f2cf1"
-whole_reason = "One release pull request: the rule's first release, its spec line, the gate pin and the matrix that reads it, which must change together."
