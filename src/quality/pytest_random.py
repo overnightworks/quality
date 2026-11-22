@@ -17,10 +17,9 @@ from packaging.utils import canonicalize_name
 from quality import checkout, fleet_sources, repository
 from quality.report import CannotJudge, Finding, FindingEvent, RuleResult
 from quality.rules import Rule
-from quality.run_script import Segment, command_start, command_words
+from quality.run_script import Marker, Segment, command_start, command_words
 from quality.workflow_rules import (
     PYTEST_RULE,
-    Marker,
     Problem,
     ScriptRule,
     composed,
@@ -39,7 +38,7 @@ ADDOPTS_VARIABLE = "PYTEST_ADDOPTS"
 AUTOLOAD_VARIABLE = "PYTEST_DISABLE_PLUGIN_AUTOLOAD"
 ADDOPTS_KEY = "addopts"
 EVENTS = frozenset({FindingEvent.UNSHUFFLED, FindingEvent.UNSEEDED})
-MARKER = Marker.of(Rule.PYTEST_RANDOM, above_step=False)
+MARKER = Marker.of(Rule.PYTEST_RANDOM.value, above_step=False)
 MISSING_FIX = "add pytest-randomly to the dev dependency group, then uv lock"
 UNSHUFFLED_FIX = (
     "drop -p no:randomly, --randomly-dont-reorganize, --randomly-seed=<integer or last>, --disable-plugin-autoload "

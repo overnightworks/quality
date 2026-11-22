@@ -36,6 +36,7 @@ from quality.run_script import (
     PIPES,
     SHELLS,
     LineReading,
+    Marker,
     ScriptLine,
     Segment,
     Tool,
@@ -243,48 +244,7 @@ WORKERS_FLAG = re.compile(r"(?:-n|--numprocesses)(?:=(.*))?|-n(.+)", re.DOTALL)
 WHOLE_NUMBER = re.compile(r"\d+", re.ASCII)
 PYTEST = Tool(commands=frozenset({"pytest", "py.test"}), module="pytest")
 AUTOMATIC_COUNTS = frozenset({"auto", "logical"})
-MARK_ABOVE = re.compile(r"[ \t]*(-[ \t]+)?#|.*\brun:[ \t]*[|>][-+\d]*[ \t]+#")  # a comment-only line, or a block scalar's `run: |` line
 Problem = tuple[FindingEvent, str]
-
-
-@dataclass(frozen=True)
-class Marker:
-    """The comment `# <rule>: <reason>` that clears a rule's findings: on a call's logical line or directly above its first line, and, where the rule allows it, in the column of a step's `-` directly above the step."""
-
-    pattern: re.Pattern[str]
-    above_step: bool
-
-    @classmethod
-    def of(cls, rule: Rule, above_step: bool) -> Marker:
-        return cls(re.compile(rf"#[ \t]*{re.escape(rule.value)}:[^\n]*?[^\W\d_]"), above_step)
-
-    def lines(self, file_lines: list[str]) -> frozenset[int]:
-        """The numbers of the file lines that carry the marker."""
-        return frozenset(number for number, line in enumerate(file_lines, 1) if self.pattern.search(line))
-
-    def clears(self, file_lines: list[str], marked: frozenset[int], first: int, last: int) -> bool:
-        """Whether a mark stands on a line of `first..last`, or directly above on a comment-only line or a block scalar's `run:` line; a mark trailing another command clears that command only."""
-        return any(number in marked for number in range(first, last + 1)) or (
-            first - 1 in marked and MARK_ABOVE.match(file_lines[first - 2]) is not None
-        )
-
-    def per_line_marks(self, file_lines: list[str], marked: frozenset[int], step: yaml.Node, run: yaml.Node) -> frozenset[int]:
-        """The marked lines the per-line form reads for the step's `run:`; where the rule has a step form, the line above a step whose `run:` stands on the step's own first line after its `-` (`- run: x`), and the line above a flow step, is read by the step form alone."""
-        number = step.start_mark.line
-        before_step = file_lines[number][: step.start_mark.column]
-        if self.above_step and run.start_mark.line == number and (step.flow_style or before_step.strip()):
-            return marked - {number}
-        return marked
-
-    def clears_step(self, file_lines: list[str], step: yaml.Node) -> bool:
-        """Whether the marker stands directly above the step's first line, its `#` in the column of the `-` on that line; a step whose `-` stands alone on its line has no such column."""
-        number = step.start_mark.line
-        before_step = file_lines[number][: step.start_mark.column]
-        if not self.above_step or number == 0 or before_step.strip() != "-":
-            return False
-        column = len(before_step) - len(before_step.lstrip())
-        above = file_lines[number - 1]
-        return not above[:column].strip() and self.pattern.match(above, column) is not None
 
 
 @dataclass(frozen=True)
@@ -308,7 +268,7 @@ def _pytest_problem(parts: Sequence[Segment], index: int) -> Problem | None:
 
 PYTEST_RULE = ScriptRule(
     Rule.PYTEST_WORKERS,
-    Marker.of(Rule.PYTEST_WORKERS, above_step=False),
+    Marker.of(Rule.PYTEST_WORKERS.value, above_step=False),
     LineReading(
         judge=_pytest_problem,
         starts_call=lambda command: pytest_arguments(command) is not None,
@@ -523,7 +483,7 @@ def _install_problem(parts: Sequence[Segment], index: int) -> Problem | None:
 
 INSTALL_RULE = ScriptRule(
     Rule.RUNTIME_INSTALL,
-    Marker.of(Rule.RUNTIME_INSTALL, above_step=True),
+    Marker.of(Rule.RUNTIME_INSTALL.value, above_step=True),
     LineReading(
         judge=_install_problem,
         starts_call=lambda command: _install_fact(command) is not None,

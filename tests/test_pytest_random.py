@@ -341,6 +341,16 @@ def test_a_marker_clears_an_env_value_on_its_line_or_directly_above(build_repo, 
     assert workflow_judged(build_repo, above) == [] == workflow_judged(build_repo, beside)
 
 
+@pytest.mark.parametrize("level", LEVELS)
+def test_a_marker_trailing_the_previous_env_value_does_not_clear_the_next(build_repo, level):
+    """RANDOM-8: a marker trailing another line's env value clears that line only."""
+    text, line = env_workflow(level, "PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+    lines = text.split("\n")
+    indent = lines[line - 1][: len(lines[line - 1]) - len(lines[line - 1].lstrip())]
+    marked = "\n".join([*lines[: line - 1], f"{indent}OTHER: x  {MARKER}", *lines[line - 1 :]])
+    assert shape(workflow_judged(build_repo, marked)) == expected(UNSHUFFLED, WORKFLOW, line + 1)
+
+
 def test_an_env_value_built_at_run_time_is_not_read(build_repo):
     """RANDOM-11: a `${{ }}` value is chosen at run time and judged clean."""
     text, _ = env_workflow("step", "PYTEST_ADDOPTS", "${{ matrix.opts }}")
