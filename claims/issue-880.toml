@@ -1,0 +1,7 @@
+claim_id = "36ca067b8e3a454bab14b810adec82b6"
+agent = "Claude 270388b5-f023-43f0-aeae-bfc00150dada"
+role = "builder"
+base = "1c9dfdca3a12c301b7376c40872bed7bf2b19d89"
+branch = "claude/issue-880-deterministic-interrupt-tests"
+scope = ["tests/support/door_process.py", "tests/test_cli_stream.py"]
+opened_commit = "795a07ee736bc4537e8c7ee01c7b467565db4d28"
