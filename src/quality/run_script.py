@@ -435,7 +435,13 @@ def _is_built_at_run_time(parts: Sequence[Segment], index: int, starts_call: Cal
     return bool(command) and (command[0] == "eval" or bool(DYNAMIC_COMMAND.match(command[0]))) and not starts_call(command)
 
 
-MARK_ABOVE = re.compile(r"[ \t]*(-[ \t]+)?#|.*\brun:[ \t]*[|>][-+\d]*[ \t]+#")  # a comment-only line, or a block scalar's `run: |` line
+COMMENT_ONLY_LINE = re.compile(r"[ \t]*(?:-[ \t]+)?#")
+BLOCK_SCALAR_RUN_LINE = re.compile(r".*\brun:[ \t]*[|>][-+\d]*[ \t]+#")
+
+
+def _is_mark_carrier(line: str) -> bool:
+    """Whether a line holds nothing but a comment, or is a block scalar's `run:` line with a comment."""
+    return COMMENT_ONLY_LINE.match(line) is not None or BLOCK_SCALAR_RUN_LINE.match(line) is not None
 
 
 @dataclass(frozen=True)
@@ -456,7 +462,7 @@ class Marker:
     def clears(self, file_lines: list[str], marked: frozenset[int], first: int, last: int) -> bool:
         """Whether a mark stands on a line of `first..last`, or directly above on a comment-only line or a block scalar's `run:` line; a mark trailing another command clears that command only."""
         return any(number in marked for number in range(first, last + 1)) or (
-            first - 1 in marked and MARK_ABOVE.match(file_lines[first - 2]) is not None
+            first - 1 in marked and _is_mark_carrier(file_lines[first - 2])
         )
 
     def per_line_marks(self, file_lines: list[str], marked: frozenset[int], step: yaml.Node, run: yaml.Node) -> frozenset[int]:
