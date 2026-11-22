@@ -536,12 +536,6 @@ def test_a_marker_trailing_the_previous_steps_line_clears_that_step_only(build_r
     assert shape(judged(build_repo, text)) == [(SERIAL, QUOTED_LINE + 1, WITHOUT_N)]
 
 
-def test_a_comment_only_marker_line_clears_the_call_below_and_a_trailing_marker_the_call_on_its_line(build_repo):
-    """PYTEST-7."""
-    text = head() + f"      {MARKER}\n      - run: pytest\n      - run: pytest {MARKER}\n"
-    assert judged(build_repo, text) == []
-
-
 @pytest.mark.parametrize("on_run_line", [True, False], ids=["after the value", "above the key"])
 def test_a_marker_clears_a_plain_scalar_call_beside_or_above_its_key(build_repo, on_run_line):
     """PYTEST-7."""

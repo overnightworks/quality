@@ -440,7 +440,7 @@ MARK_ABOVE = re.compile(r"[ \t]*(-[ \t]+)?#|.*\brun:[ \t]*[|>][-+\d]*[ \t]+#")  
 
 @dataclass(frozen=True)
 class Marker:
-    """The comment `# <rule>: <reason>` that clears a rule's findings: on a call's logical line or directly above its first line, and, where the rule allows it, in the column of a step's `-` directly above the step."""
+    """The comment `# <rule>: <reason>` that clears a rule's findings: on a call's logical line or on a comment-only line (or a block scalar's `run:` line) directly above it, and, where the rule allows it, in the column of a step's `-` directly above the step."""
 
     pattern: re.Pattern[str]
     above_step: bool
