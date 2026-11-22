@@ -495,7 +495,8 @@ def test_locator_text_on_main_reads_whether_the_clone_declares_catalogs(declares
 
 
 RULES_FIRST_RELEASED_IN_V0_21_OR_LATER = [
-    Rule.LOCATOR_TEXT.release, Rule.FLEET_SOURCE.release, Rule.NAMING.release, Rule.PR_WORKFLOWS.release
+    Rule.LOCATOR_TEXT.release, Rule.FLEET_SOURCE.release, Rule.NAMING.release, Rule.PR_WORKFLOWS.release,
+    Rule.PYTEST_RANDOM.release
 ]
 REPORT_ONLY_RULES_FIRST_RELEASED_IN_V0_23 = [Rule.TEST_TWIN.release, Rule.LOGGING.release]
 
