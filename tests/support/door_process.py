@@ -3,7 +3,7 @@
 a following `--block-ruff <fifo>` makes the ruff lookup write `ready` to the FIFO and block."""
 
 import sys
-import threading
+import time
 from functools import partial
 from pathlib import Path
 
@@ -22,10 +22,11 @@ def running_as(word: str) -> RunningQuality:
 
 
 def blocked_ruff(fifo: Path) -> str:
-    """Python loses a signal that arrives just before a wait blocks, so the wait is bounded and repeated."""
+    """Python loses a signal that arrives just before a wait blocks, so the wait is bounded and repeated; `time.sleep`
+    holds no lock, so a signal can land anywhere in it."""
     fifo.write_text("ready")
     while True:
-        threading.Event().wait(0.1)
+        time.sleep(0.1)
 
 
 def ports_and_words(words: list[str]) -> tuple[cli.DoorPorts, list[str]]:

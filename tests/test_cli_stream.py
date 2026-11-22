@@ -92,9 +92,10 @@ def test_a_refused_area_stands_before_the_next_scanner_and_the_pair_stays_on_std
 
 
 def interrupting_gitleaks(served_scanners: Path, name: str) -> None:
-    """A gitleaks that records its id, pushes a megabyte through the capture pipe, which is drained only inside
-    `communicate`, so the signal never meets the start of the process, then signals the door and waits."""
-    fake_scanner(served_scanners, scanners.GITLEAKS, f'echo $$ > "$SCANNER_PID"; head -c 1048576 /dev/zero; kill -{name} $PPID; exec sleep 60')
+    """A gitleaks that records its id, holds the write end of the FIFO `$HELD` where one is named and pushes a megabyte
+    through the capture pipe, drained only inside `communicate`, so the signal never meets the process start; then it
+    signals the door."""
+    fake_scanner(served_scanners, scanners.GITLEAKS, f'echo $$ > "$SCANNER_PID"; exec 9>"${{HELD:-/dev/null}}"; head -c 1048576 /dev/zero; kill -{name} $PPID; exec sleep 60')
 
 
 @pytest.mark.parametrize(
@@ -112,19 +113,24 @@ def test_an_interrupt_during_a_scan_leaves_the_rows_of_the_finished_areas_whole(
     complete = subprocess.run([*MODULE_DOOR, CHECK_WORD], cwd=repo, env=door_environment(), capture_output=True, text=True, timeout=60, check=False)
     pid_file, scratch_parent = tmp_path / "scanner.pid", tmp_path / "scratch"
     scratch_parent.mkdir()
+    os.mkfifo(tmp_path / "held")
+    held = os.open(tmp_path / "held", os.O_RDONLY | os.O_NONBLOCK)
     interrupting_gitleaks(served_scanners, signal.Signals(sent).name.removeprefix("SIG"))
     door = [*MODULE_DOOR, CHECK_WORD]
     command = ["sh", "-c", '"$@"; echo "exit $?" >&2', "sh", *door] if under_shell else door
     try:
-        done = subprocess.run(command, cwd=repo, env=door_environment(SCANNER_PID=str(pid_file), TMPDIR=str(scratch_parent)), capture_output=True, text=True, timeout=60, check=False)
+        done = subprocess.run(command, cwd=repo, env=door_environment(SCANNER_PID=str(pid_file), HELD=str(tmp_path / "held"), TMPDIR=str(scratch_parent)), capture_output=True, text=True, timeout=60, check=False)
         assert done.stdout == printed_before(complete.stdout, Area.SECRETS)
         if under_shell:
             assert done.stderr == f"exit {128 + signal.SIGINT}\n"
         else:
             assert (done.returncode, done.stderr) == (-signal.SIGINT if sent == signal.SIGINT else 128 + signal.SIGTERM, "")
         assert list(scratch_parent.iterdir()) == []
-        assert process_is_gone(int(pid_file.read_text()))
+        readable, _, _ = select.select([held], [], [], 60)
+        assert readable
+        assert os.read(held, 10) == b""
     finally:
+        os.close(held)
         kill_recorded(pid_file)
 
 
