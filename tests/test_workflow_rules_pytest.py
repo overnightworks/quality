@@ -530,17 +530,18 @@ def test_a_marker_with_a_reason_on_or_directly_above_a_line_clears_its_calls(bui
     assert judged(build_repo, block_run(*script)) == []
 
 
-def test_a_marker_trailing_the_previous_steps_line_clears_that_step_only(build_repo):
+@pytest.mark.parametrize(
+    ("step", "expected"),
+    [
+        (f"      - run: pytest {MARKER}\n", []),
+        (f"      {MARKER}\n      - run: pytest\n", []),
+        (f"      - run: pytest -n auto -m e2e {MARKER}\n      - run: pytest\n", [(SERIAL, QUOTED_LINE + 1, WITHOUT_N)]),
+    ],
+    ids=["after the value", "above the key", "trailing the previous step's line"],
+)
+def test_a_marker_clears_a_plain_scalar_call_only_beside_or_above_its_key(build_repo, step, expected):
     """PYTEST-7: a marker on another command's line does not clear the call on the next line."""
-    text = head() + f"      - run: pytest -n auto -m e2e {MARKER}\n      - run: pytest\n"
-    assert shape(judged(build_repo, text)) == [(SERIAL, QUOTED_LINE + 1, WITHOUT_N)]
-
-
-@pytest.mark.parametrize("on_run_line", [True, False], ids=["after the value", "above the key"])
-def test_a_marker_clears_a_plain_scalar_call_beside_or_above_its_key(build_repo, on_run_line):
-    """PYTEST-7."""
-    step = f"      - run: pytest {MARKER}\n" if on_run_line else f"      {MARKER}\n      - run: pytest\n"
-    assert judged(build_repo, head() + step) == []
+    assert shape(judged(build_repo, head() + step)) == expected
 
 
 @pytest.mark.parametrize(
