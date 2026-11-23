@@ -1,8 +1,0 @@
-claim_id = "6468102cbeb74322bcced93ab4bae526"
-agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
-role = "builder"
-base = "6661036e39066f4d5597c1492915b1ce46fbdaa4"
-branch = "claude/issue-989-busy-weeks-whole"
-scope = ["docs/commands.md", "src/quality/fleet_ci_time.py", "tests/test_fleet_ci_time.py", "tests/test_fleet_report.py"]
-opened_commit = "e12f2fbc829785dd97efcf6e3fe0fa033c0f85eb"
-whole_reason = "One read and its proof: the listing, the stop and the dedup change together with the fake that models GitHub's documented cap."
