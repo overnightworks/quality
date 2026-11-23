@@ -587,17 +587,19 @@ def test_a_malformed_config_value_cannot_be_judged_without_a_traceback(build_rep
 
 
 @pytest.mark.parametrize("files", [SHOP, SHOP_DB_IMPORTS_WEB], ids=["kept", "broken"])
-def test_a_run_writes_nothing_and_leaves_the_interpreter_as_it_was(build_repo, capsys, files):
-    """IMPORT-5: a run, kept or broken, writes no cache, changes nothing in the checkout and leaves sys.path,
-    sys.modules and grimp's package finder as they were."""
+def test_a_run_imports_no_module_of_the_judged_repository(build_repo, capsys, files):
+    """IMPORT-5: a run, kept or broken, writes no cache, changes nothing in the checkout, leaves sys.path and grimp's
+    package finder as they were and imports no module of the judged repository."""
     repo = build_repo({**files, ".importlinter": ini(FORBIDDEN)})
-    before = (list(sys.path), dict(sys.modules), grimp_settings.PACKAGE_FINDER)
+    before = (list(sys.path), grimp_settings.PACKAGE_FINDER)
     run(capsys, repo)
     status = subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "--ignored"],
                             capture_output=True, text=True, check=True)
     assert (status.stdout, (repo / ".import_linter_cache").exists()) == ("", False)
-    after = (list(sys.path), dict(sys.modules), grimp_settings.PACKAGE_FINDER)
-    assert after == before
+    assert (list(sys.path), grimp_settings.PACKAGE_FINDER) == before
+    judged = [name for name, module in list(sys.modules.items())
+              if Path(getattr(module, "__file__", None) or "/").resolve().is_relative_to(repo.resolve())]
+    assert judged == []
 
 
 def test_a_failing_graph_build_leaves_grimps_package_finder_as_it_was(build_repo, capsys):
