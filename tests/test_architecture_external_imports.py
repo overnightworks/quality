@@ -88,6 +88,16 @@ def test_a_submodule_line_no_import_matches_is_unused(tmp_path, core, unused):
     assert {finding.event for finding in findings} == {FindingEvent.UNUSED}
 
 
+def test_an_import_is_held_at_the_longest_named_submodule_it_lies_under(tmp_path):
+    """IMPORT-30: with a submodule named beside one below it, each import is held at the longest name, so both lines
+    are used."""
+    contract = {**CORE_KEEPS_TO_TWO_OF_AGENTS, "ignore_imports": [
+        "skat.table.** -> agents.calling", "skat.table.** -> agents.calling.deep",
+    ]}
+    core = "from agents.calling.deep import x\nfrom agents.calling.other import y\n"
+    assert judged_core(tmp_path, core, contract).findings == []
+
+
 def test_a_bare_package_line_beside_the_two_lines_is_unused_when_only_the_two_are_imported(tmp_path):
     """IMPORT-31: on a refined copy the bare line matches only imports held at the package itself."""
     contract = {**CORE_KEEPS_TO_TWO_OF_AGENTS, "ignore_imports": [*CALLING_AND_MEMBER, "skat.table.** -> agents"]}
