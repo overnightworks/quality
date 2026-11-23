@@ -140,6 +140,11 @@
         "verdicts": [],
         "risk": "normal"
       }
+    },
+    {
+      "run": "ef4cd8da3a2d48a8be0044ce299fd112-4",
+      "start_tip": "18d2584b6f0aa4cb7ad9c1a9081b29cd1f988d35",
+      "follows": true
     }
   ]
 }
