@@ -1,0 +1,8 @@
+claim_id = "74f8ede94e8247319287db7be7cebb7f"
+agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
+role = "builder"
+base = "d2b7099361d2524d0ceb1a4852f62c453dd340ff"
+branch = "claude/issue-1004-report-unit-integration-split"
+scope = ["docs/commands.md", "src/quality/fleet_suites.py", "src/quality/suites.py", "tests/test_fleet_report.py", "tests/test_fleet_suites.py", "tests/test_suites.py"]
+opened_commit = "c8e7c9af57c4dd58d418ae4f4a1a9f17185afaa6"
+whole_reason = "The layer enum, its reader, the report's header and the spec line that names the columns change together."
