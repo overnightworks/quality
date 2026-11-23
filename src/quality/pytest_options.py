@@ -2,8 +2,7 @@
 
 A short option letter that takes a value ends its cluster, and the rest of the word, else the next word, is its value; one
 leading `=` of a glued value is dropped. A long option is read by its full name only (`--opt=value` or `--opt value`),
-because pytest's parser refuses abbreviations. The letters that take a value and the spellings of the options the rules
-read are declared here, not read from pytest at run time: pytest and its plugins are the caller's, not quality's, and a
+X, not read from pytest at run time: pytest and its plugins are the caller's, not quality's, and a
 test holds the tables against the parsers installed with quality's own development dependencies. A `@file` argument and an
 option a repository's own plugin adds are not read."""
 
@@ -13,11 +12,20 @@ from dataclasses import dataclass
 from quality.run_script import Tool, tool_arguments
 
 PYTEST = Tool(commands=frozenset({"pytest", "py.test"}), module="pytest")
-VALUE_LETTERS = frozenset("porkmcWn")
-LONG_VALUE_OPTIONS = frozenset({"--numprocesses", "--verbosity", "--randomly-seed"})
 WORKERS_NAMES = frozenset({"-n", "--numprocesses"})
 LISTING_NAMES = frozenset({"--collect-only", "--collectonly", "--co"})
 PLUGIN_NAMES = frozenset({"-p"})
+VERBOSE_NAMES = frozenset({"-v", "--verbose"})
+QUIET_NAMES = frozenset({"-q", "--quiet"})
+VERBOSITY_NAMES = frozenset({"--verbosity"})
+HEADER_NAMES = frozenset({"--no-header"})
+SEED_NAMES = frozenset({"--randomly-seed"})
+REORDER_NAMES = frozenset({"--randomly-dont-reorganize"})
+AUTOLOAD_NAMES = frozenset({"--disable-plugin-autoload"})
+# The options of the tables above that take a value, and the value-taking letters no table names.
+_VALUE_NAMES = WORKERS_NAMES | PLUGIN_NAMES | VERBOSITY_NAMES | SEED_NAMES
+VALUE_LETTERS = frozenset("orkmcW") | {name[1] for name in _VALUE_NAMES if len(name) == 2}
+LONG_VALUE_OPTIONS = frozenset(name for name in _VALUE_NAMES if len(name) > 2)
 SEPARATOR = "--"
 
 

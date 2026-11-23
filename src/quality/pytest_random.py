@@ -14,7 +14,20 @@ from pathlib import Path
 from packaging.utils import canonicalize_name
 
 from quality import fleet_sources, repository
-from quality.pytest_options import PLUGIN_NAMES, Option, lists_only, options, pytest_arguments
+from quality.pytest_options import (
+    AUTOLOAD_NAMES,
+    HEADER_NAMES,
+    PLUGIN_NAMES,
+    QUIET_NAMES,
+    REORDER_NAMES,
+    SEED_NAMES,
+    VERBOSE_NAMES,
+    VERBOSITY_NAMES,
+    Option,
+    lists_only,
+    options,
+    pytest_arguments,
+)
 from quality.report import CannotJudge, Finding, FindingEvent, RuleResult
 from quality.rules import Rule
 from quality.run_script import Segment, command_start, command_words
@@ -45,13 +58,6 @@ WHOLE_NUMBER = re.compile(r"[+-]?\d+", re.ASCII)
 PLUGIN_OFF = "no:randomly"
 PLUGIN_LOADS = frozenset({"randomly", "pytest_randomly"})
 LAST_SEED = "last"
-VERBOSE_NAMES = frozenset({"-v", "--verbose"})
-QUIET_NAMES = frozenset({"-q", "--quiet"})
-VERBOSITY_NAMES = frozenset({"--verbosity"})
-HEADER_NAMES = frozenset({"--no-header"})
-SEED_NAMES = frozenset({"--randomly-seed"})
-REORDER_NAMES = frozenset({"--randomly-dont-reorganize"})
-AUTOLOAD_NAMES = frozenset({"--disable-plugin-autoload"})
 
 
 def check_pytest_random(root: Path, tracked: Sequence[str], pyprojects: Mapping[str, bytes]) -> RuleResult:
@@ -73,9 +79,8 @@ def _lock_findings(name: str, lock: dict) -> list[Finding]:
     return [Finding(Rule.PYTEST_RANDOM, name, None, fact, MISSING_FIX, event=FindingEvent.MISSING)]
 
 
-def flags_problem(arguments: Sequence[str], source: str) -> Problem | None:
+def flags_problem(called: Sequence[Option], source: str) -> Problem | None:
     """What the options switch off or hide: the no-shuffle problem first; `source` names where they stand."""
-    called = list(options(arguments))
     if _shuffle_is_off(called):
         return FindingEvent.UNSHUFFLED, SWITCHES_OFF_FACT.format(source)
     if _header_is_hidden(called):
@@ -118,7 +123,7 @@ def _addopts_findings(name: str, content: bytes) -> list[Finding]:
     table = next((table for path in TABLES if ADDOPTS_KEY in (table := _table(path, document))), None)
     if table is None:
         return []
-    problem = flags_problem(_addopts_words(name, table[ADDOPTS_KEY]), "addopts")
+    problem = flags_problem(list(options(_addopts_words(name, table[ADDOPTS_KEY]))), "addopts")
     if problem is None:
         return []
     event, fact = problem
@@ -168,7 +173,8 @@ def _call_findings(root: Path, tracked: Sequence[str]) -> list[Finding]:
 def _segment_problem(parts: Sequence[Segment], index: int) -> Problem | None:
     segment = parts[index]
     arguments = pytest_arguments(command_words(segment))
-    call = None if arguments is None or lists_only(list(options(arguments))) else flags_problem(arguments, "the call")
+    called = [] if arguments is None else list(options(arguments))
+    call = None if arguments is None or lists_only(called) else flags_problem(called, "the call")
     return next((problem for problem in (*_assignment_problems(segment.words), call) if problem is not None), None)
 
 
@@ -193,7 +199,7 @@ def _variable_problem(variable: str, value: str, words: Sequence[str]) -> Proble
     """What the variable's value does: `PYTEST_ADDOPTS` holds options, any value of `PYTEST_DISABLE_PLUGIN_AUTOLOAD` switches the autoload off."""
     if variable == AUTOLOAD_VARIABLE and value:
         return FindingEvent.UNSHUFFLED, SWITCHES_OFF_FACT.format(AUTOLOAD_VARIABLE)
-    return flags_problem(words, ADDOPTS_VARIABLE) if variable == ADDOPTS_VARIABLE else None
+    return flags_problem(list(options(words)), ADDOPTS_VARIABLE) if variable == ADDOPTS_VARIABLE else None
 
 
 CALL_RULE = ScriptRule(

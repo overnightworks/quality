@@ -3,19 +3,19 @@ import argparse
 import pytest
 from _pytest.config import _prepareconfig
 
-from quality import pytest_options, pytest_random
+from quality import pytest_options
 
 DECLARED_SPELLINGS = [
     pytest.param(pytest_options.WORKERS_NAMES, id="workers"),
     pytest.param(pytest_options.LISTING_NAMES, id="listing"),
     pytest.param(pytest_options.PLUGIN_NAMES, id="plugin"),
-    pytest.param(pytest_random.VERBOSE_NAMES, id="verbose"),
-    pytest.param(pytest_random.QUIET_NAMES, id="quiet"),
-    pytest.param(pytest_random.VERBOSITY_NAMES, id="verbosity"),
-    pytest.param(pytest_random.HEADER_NAMES, id="header"),
-    pytest.param(pytest_random.SEED_NAMES, id="seed"),
-    pytest.param(pytest_random.REORDER_NAMES, id="reorder"),
-    pytest.param(pytest_random.AUTOLOAD_NAMES, id="autoload"),
+    pytest.param(pytest_options.VERBOSE_NAMES, id="verbose"),
+    pytest.param(pytest_options.QUIET_NAMES, id="quiet"),
+    pytest.param(pytest_options.VERBOSITY_NAMES, id="verbosity"),
+    pytest.param(pytest_options.HEADER_NAMES, id="header"),
+    pytest.param(pytest_options.SEED_NAMES, id="seed"),
+    pytest.param(pytest_options.REORDER_NAMES, id="reorder"),
+    pytest.param(pytest_options.AUTOLOAD_NAMES, id="autoload"),
 ]
 
 
