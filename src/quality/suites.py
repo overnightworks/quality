@@ -1,6 +1,6 @@
 """A repository's tests: how many there are in each layer, how many carry a skip or a fixme mark, and the script test call
-that `spec-citation` reads. The layer comes from the path, the marks from the syntax; no repository code runs, so a
-mark that only a run applies is not seen."""
+that `spec-citation` reads. The layer comes from the path and the `integration` mark, the marks from the syntax; no
+repository code runs, so a mark that only a run applies is not seen."""
 
 import ast
 from collections.abc import Iterator
@@ -23,7 +23,8 @@ PYTEST_MARK_NAME = "pytestmark"
 
 
 class Layer(Enum):
-    UNIT_INTEGRATION = "Unit + integration"
+    UNIT = "Unit"
+    INTEGRATION = "Integration"
     FLOW = "Flow"
     LIVE = "Live"
 
@@ -31,9 +32,10 @@ class Layer(Enum):
 class Mark(Enum):
     SKIPPED = auto()
     FIXME = auto()
+    INTEGRATION = auto()
 
 
-PYTEST_MARKS = {"skip": Mark.SKIPPED, "skipif": Mark.SKIPPED, "xfail": Mark.FIXME}
+PYTEST_MARKS = {"skip": Mark.SKIPPED, "skipif": Mark.SKIPPED, "xfail": Mark.FIXME, "integration": Mark.INTEGRATION}
 SCRIPT_MARKS = {"skip": Mark.SKIPPED, "skipIf": Mark.SKIPPED, "fixme": Mark.FIXME}
 Marks = frozenset[Mark]
 NO_MARKS: Marks = frozenset()
@@ -235,11 +237,13 @@ def count_suites(tracked: list[str], sources: dict[str, bytes]) -> Suites:
     """The tests of the tracked files among `sources`; a file that cannot be read adds to `unread` and no test."""
     live, flow = _live_and_flow_folders(tracked)
 
-    def layer_of(path: str) -> Layer:
+    def layer_of(path: str, marks: Marks) -> Layer:
         parents = PurePosixPath(path).parents
         if any(folder in parents for folder in live):
             return Layer.LIVE
-        return Layer.FLOW if any(folder in parents for folder in flow) else Layer.UNIT_INTEGRATION
+        if any(folder in parents for folder in flow):
+            return Layer.FLOW
+        return Layer.INTEGRATION if Mark.INTEGRATION in marks else Layer.UNIT
 
     trees = dict(clones.python_test_trees(sources))
     scripts, unread_scripts = read_script_tests(tracked, sources)
@@ -249,7 +253,7 @@ def count_suites(tracked: list[str], sources: dict[str, bytes]) -> Suites:
     skipped = fixme = 0
     for path, tests in marked:
         for marks in tests:
-            layers[layer_of(path)] += 1
+            layers[layer_of(path, marks)] += 1
             skipped += Mark.SKIPPED in marks
             fixme += Mark.FIXME in marks
     return Suites(layers, skipped, fixme, len(unread))
