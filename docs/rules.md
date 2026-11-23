@@ -1796,6 +1796,35 @@ with the seed printed" (pytest-randomly). Three readers judge that one decision.
   only, a test environment installed from a requirements file instead of the lock, and an option or flag built with
   `${{ }}`.
 
+`vitest-random`, in the `dependencies` area beside `pytest-random`, holds the unit and component layers of a TypeScript
+project to the same R6. Vitest runs files and tests in a fixed order unless `test.sequence.shuffle` is set, and prints
+`Running tests with seed "N"` whenever it shuffles, so the config decides it for every run, CI, local and IDE.
+
+- **The project (VITEST-1).** The directory of each `package.json` that `frontend_projects` yields (none under a project's
+  `tests/`) and whose `dependencies` or `devDependencies` names `vitest`. Its config is the first tracked file among
+  `vitest.config.<ext>` and then `vite.config.<ext>` (`.ts`, `.mts`, `.cts`, `.js`, `.mjs`, `.cjs`), vitest's own order. The
+  row's extent is the projects read.
+- **No shuffle, `unshuffled` (VITEST-2, VITEST-3).** One finding per project, at the config or, with none tracked, at the
+  `package.json`, the fact `vitest runs its files and tests in a fixed order`. The config shuffles when the exported object
+  (the argument of `defineConfig(`, the arrow form `=> ({` included, else the `export default` object) has a direct `test`
+  key whose object has a direct `sequence` key whose object holds `shuffle: true` or `shuffle: { files: true, tests: true }`.
+  A `sequence` anywhere else counts for nothing, since vitest 4 ignores a project's own; `{ files: true }` or
+  `{ tests: true }` alone leaves the other order fixed, so it is no shuffle. Any `shuffle: false` elsewhere in the file is a
+  finding too, since a vitest 5 project can turn the root's shuffle off. A `seed:` with a number literal in that
+  `sequence` is `unshuffled` as well (a fixed seed, as RANDOM-5 treats one); a seed set from an expression is clean. The fix
+  is `set test.sequence.shuffle: true in <config>; vitest then prints Running tests with seed "N"`, and for a fixed seed
+  `draw test.sequence.seed at run time or drop it in <config>; vitest then prints Running tests with seed "N"`.
+- **Reading (VITEST-4).** The config is read as tokens (`typescript_tokens`), never run. A config with a string, template,
+  regex or block comment that does not close, or that is no UTF-8, and a package.json that is no UTF-8 JSON (`unparsable`, as
+  `naming` reports it, through the reader both share) are exit `2` naming the file. A key set in an imported module, a
+  spread or `mergeConfig` does not count, which is stricter than vitest.
+- **No release, no switch (VITEST-5).** No configuration switches the rule off, and no marker exists: vitest has no flow
+  layer, since the fleet's flow layer is Playwright. It first ships in the next release, so a gate pinned below it shows
+  `not in <tag>` in the fleet matrix's column (FLEET-18). Not covered, named: negatives in scripts and workflow calls
+  (`--sequence.shuffle=false`, `--sequence.seed=N`), `--config` pointing elsewhere, `extends: false`, a `reporters` list
+  without a reporter that prints the seed, 4.1.12's parent-directory config lookup (errs stricter). R6 under node's own test
+  runner is another rule's.
+
 The `logging` rule, in the `code` area, judges a repository against the machine rules of the fleet standard "Logging" with
 logline's own checker, `logline.check.check` of the logline release quality pins. quality holds no copy of the standard's
 values and runs no logging analysis of its own; a rule's wording and its gaps are logline's README's.
