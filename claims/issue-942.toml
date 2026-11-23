@@ -1,0 +1,8 @@
+claim_id = "056d720cfee64ea9890952a99e850505"
+agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
+role = "builder"
+base = "038941bfb6d9c7aa9e191635a8b4855afde7681b"
+branch = "claude/issue-942-shared-pytest-options-and-workflow-walk"
+scope = ["docs/rules.md", "pyproject.toml", "src/quality/catalog_rules.py", "src/quality/pytest_options.py", "src/quality/pytest_random.py", "src/quality/run_script.py", "src/quality/workflow_document.py", "src/quality/workflow_rules.py", "tests/test_catalog_rules.py", "tests/test_pytest_options.py", "tests/test_pytest_random.py", "tests/test_workflow_rules_install.py", "tests/test_workflow_rules_pytest.py"]
+opened_commit = "7ea1349069c80754e24e5d7509fededeeebf796b"
+whole_reason = "One owner for the pytest-options reading and one for the workflow walk: two new modules, their two rule callers, the layers row, the spec lines and the tests that pin the old readings."
