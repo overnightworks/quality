@@ -98,7 +98,8 @@ def test_the_fix_drops_a_held_id_that_is_cited_retired_or_undefined_and_never_ad
     assert (done[0], planned[0], written(repo)) == (1, 1, frozenset({"X-3"}))
     assert "ceiling lowered by 3 entries" in done[1]
     assert "3 ceiling entries would fall" in planned[1]
-    assert "uncited" in done[1] and "X-5" in done[1]
+    assert "uncited" in done[1]
+    assert "X-5" in done[1]
 
 
 def test_a_fix_with_the_table_and_nothing_to_drop_changes_nothing(build_repo, capsys):

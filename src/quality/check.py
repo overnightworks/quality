@@ -541,7 +541,9 @@ def _judge_debt(inputs: RunInputs) -> AreaVerdict:
         lambda: workflow_rules.check_job_timeouts(inputs.root, inputs.tracked, made.ceiling if fixed else judged_baseline(inputs.root))
     )
     twin = sources if isinstance(sources, CannotJudge) else twins.check_test_twins(sources)
-    held = made.ceiling if fixed else None if isinstance(baseline, CannotJudge) else baseline  # a baseline that cannot be read refuses size and clone, so the area is refused and this rule only reports
+    held = None if isinstance(baseline, CannotJudge) else baseline  # a baseline that cannot be read refuses size and clone, so the area is refused and this rule only reports
+    if fixed:
+        held = made.ceiling
     citations = sources if isinstance(sources, CannotJudge) else _attempt(lambda: spec_citations.check_spec_citations(inputs.root, inputs.tracked, sources, held))
     judged: dict[Rule, Judged] = {
         Rule.SIZE: size, Rule.CLONE: clone, Rule.JOB_TIMEOUT: timeouts, Rule.TEST_TWIN: twin, Rule.SPEC_CITATION: citations
