@@ -1,8 +1,0 @@
-claim_id = "3d94bfcadc62490299f77eee66118d0a"
-agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
-role = "builder"
-base = "b46480b3348773224f829baa7f0ca9c43db52ca9"
-branch = "claude/issue-719-cross-repo-clone-pairs"
-scope = ["docs/commands.md", "docs/output.md", "pyproject.toml", "src/quality/cli_help.py", "src/quality/clones.py", "src/quality/fleet.py", "src/quality/fleet_clones.py", "tests/test_cli_help.py", "tests/test_clones.py", "tests/test_fleet_report.py"]
-opened_commit = "f7f06592a2ca1ff45e4cf2c7378f7681ea921d83"
-whole_reason = "One new table in the weekly report: the shared detector made callable across repositories, the table module, its wiring and its spec lines."
