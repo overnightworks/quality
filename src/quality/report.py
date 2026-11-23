@@ -3,7 +3,8 @@ import unicodedata
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from quality.config import CONFIG_PATH, LAYOUT_ALLOWANCE_HEADING, Allowance, ConfigError
+from quality.config import LAYOUT_ALLOWANCE_HEADING, Allowance
+from quality.config_entries import CONFIG_PATH, ConfigError
 
 
 @dataclass(frozen=True)

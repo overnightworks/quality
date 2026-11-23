@@ -1,6 +1,6 @@
 import pytest
 
-from quality.config import ConfigError
+from quality.config_entries import ConfigError
 from quality.report import (
     CannotJudge,
     Choice,

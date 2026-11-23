@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from quality import DISTRIBUTION, installation, process
-from quality.config import CONFIG_PATH, SECRETS_ALLOW, Allowance, entry_name, secret_allowance_entry
+from quality.config import SECRETS_ALLOW, Allowance, secret_allowance_entry
+from quality.config_entries import CONFIG_PATH, entry_name
 from quality.deadline import RunDeadline
 from quality.output import SEPARATOR, counted
 from quality.report import (

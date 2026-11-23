@@ -3,7 +3,7 @@
 import pytest
 
 from quality import cli
-from quality.config import CONFIG_PATH
+from quality.config_entries import CONFIG_PATH
 from tests.support.verdict import CHECKS_GREEN, without_standing_rows
 
 READABLE = '[gate]\nmandatory_jobs = ["checks"]\n'

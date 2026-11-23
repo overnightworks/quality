@@ -6,7 +6,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from quality import output, sonar_properties
-from quality.config import CONFIG_PATH
+from quality.config_entries import CONFIG_PATH
 from quality.gh import GhFailed
 from quality.report import FindingEvent
 from quality.sonar import finding_from_issue

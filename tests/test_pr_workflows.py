@@ -4,7 +4,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from quality.config import CONFIG_PATH, WORKFLOW_ALLOWANCE_HEADING
+from quality.config import WORKFLOW_ALLOWANCE_HEADING
+from quality.config_entries import CONFIG_PATH
 from quality.report import Example, FindingEvent
 from quality.rules import Rule
 from tests.support.check import (

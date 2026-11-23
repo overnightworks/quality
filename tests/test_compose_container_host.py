@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from quality.config import COMPOSE_ALLOWANCE_EXAMPLE, CONFIG_PATH
+from quality.config import COMPOSE_ALLOWANCE_EXAMPLE
+from quality.config_entries import CONFIG_PATH
 from quality.report import Finding, FindingEvent
 from quality.rules import Rule
 from tests.support.check import check_output, copy_block, refused, rule_findings

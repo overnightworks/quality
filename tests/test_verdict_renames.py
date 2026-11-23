@@ -11,7 +11,7 @@ import pytest
 
 from quality import sides
 from quality.baseline_file import BASELINE_PATH, Key, Metric, render_baseline
-from quality.config import CONFIG_PATH
+from quality.config_entries import CONFIG_PATH
 from quality.ratchet import Renames, renames_of
 from quality.report import CannotJudge
 from tests.support.baselines import ceiling

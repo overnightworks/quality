@@ -115,6 +115,7 @@ layers = [
     "deadline | ci_time",
     "report",
     "config",
+    "config_entries",
     "repository",
     "process",
     "rules",

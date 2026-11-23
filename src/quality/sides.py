@@ -11,7 +11,8 @@ from types import MappingProxyType
 
 from quality import architecture, checkout, process, repository
 from quality.baseline_file import BASELINE_PATH, Baseline, SizeError, load_baseline, read_baseline
-from quality.config import CONFIG_PATH, ConfigError, GateSettings, LegacyMode, load_gate_settings, read_gate_settings
+from quality.config import GateSettings, LegacyMode, load_gate_settings, read_gate_settings
+from quality.config_entries import CONFIG_PATH, ConfigError
 from quality.ratchet import NO_RENAMES, Renames, head_step, renames_of
 from quality.report import CannotJudge, Step
 

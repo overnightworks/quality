@@ -8,7 +8,8 @@ import urllib.request
 import pytest
 
 from quality import advisories, deadline, process, scanners
-from quality.config import CONFIG_PATH, AdvisoryAllowance
+from quality.config import AdvisoryAllowance
+from quality.config_entries import CONFIG_PATH
 from quality.output import SEPARATOR
 from quality.report import FindingEvent, LockExtent, NoteEvent
 from quality.rules import Area

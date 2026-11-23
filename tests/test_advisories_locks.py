@@ -3,7 +3,7 @@ import datetime
 import pytest
 
 from quality import advisories, deadline
-from quality.config import CONFIG_PATH
+from quality.config_entries import CONFIG_PATH
 from quality.report import FindingEvent, NoteEvent
 from quality.rules import Area
 from quality.scanners import ScannerError

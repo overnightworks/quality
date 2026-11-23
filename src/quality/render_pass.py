@@ -6,7 +6,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 from quality import catalog_rules, workflow_rules
-from quality.config import CONFIG_PATH, Declarations, RenderPass
+from quality.config import Declarations, RenderPass
+from quality.config_entries import CONFIG_PATH
 from quality.report import Finding, FindingEvent, RuleResult
 from quality.rules import Rule
 

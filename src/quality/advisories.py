@@ -21,7 +21,8 @@ from datetime import date
 from pathlib import Path, PurePosixPath
 
 from quality import pip_requirements, process, repository, scanners
-from quality.config import ADVISORY_ALLOWANCE_HEADING, CONFIG_PATH, AdvisoryAllowance
+from quality.config import ADVISORY_ALLOWANCE_HEADING, AdvisoryAllowance
+from quality.config_entries import CONFIG_PATH
 from quality.deadline import RunDeadline, RunDeadlineSpent
 from quality.output import SEPARATOR
 from quality.pip_requirements import Requirement

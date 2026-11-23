@@ -8,7 +8,7 @@ import subprocess
 import pytest
 
 from quality import cli
-from quality.config import CONFIG_PATH
+from quality.config_entries import CONFIG_PATH
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, put
 from tests.support.verdict import CHECKS_GREEN, declaration, gate_config, jobs_page, without_standing_rows
 

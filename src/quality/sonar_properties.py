@@ -9,7 +9,8 @@ from pathlib import Path
 
 from quality import output, repository
 from quality.checkout import require_unchanged_tracked_files, tracked_files
-from quality.config import CONFIG_PATH, ConfigError, runs_sonar
+from quality.config import runs_sonar
+from quality.config_entries import CONFIG_PATH, ConfigError
 from quality.report import FIX_THEN_RERUN, PUSH_THE_FIX, CannotJudge, Instruction, Reason, config_refusal
 from quality.sonar import (
     EXIT_CLEAN,
