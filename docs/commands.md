@@ -196,7 +196,7 @@ percentile, the slowest first, or `none`; a repository whose jobs cannot be read
 runs without a page cap per repository, within its 600 calls; a repository the cap stops shows `partly read` and the pages
 read, or `cannot read CI time` where its runs cannot be read, in place of its numbers, and the table raises no finding and
 changes no exit (FLEET-105). One large repository can use up the cap and leave those read after it `partly read`, in the
-listing's order.
+listing's order. Private repositories are not read, and a commit whose runs begin before the window counts by its runs inside it.
 
 `Re-runs` and `Green on re-run` count runs, not commits, per repository over the same window and events, from the
 `run_attempt` and `conclusion` of each finished run's latest attempt: `Re-runs` the runs with a `run_attempt` above 1,
@@ -206,8 +206,7 @@ and no exit, and the JSON document (FLEET-106) does not carry them (FLEET-112). 
 first attempt counts as green on re-run; G2, no job names or failing steps are read; G3, a run created before the window
 but re-run inside it is not counted.
 
-Private
-repositories are not read, and a commit whose runs begin before the window counts by its runs inside it. With `GITHUB_STEP_SUMMARY` set, the
+With `GITHUB_STEP_SUMMARY` set, the
 tables are appended there (FLEET-43). Every cell puts a backslash before `` \ ` * _ ~ [ ] < > & | ``, so repository text
 opens no HTML comment, link or new cell (FLEET-44); a bare URL still renders as a link to its own address. The run ends
 on stderr with `✓ N of N repositories measured · <time>` (`repository` for one, exit `0`) (FLEET-45) or with `error: `
