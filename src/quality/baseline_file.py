@@ -1,5 +1,5 @@
 """The baseline file, `quality/baseline.toml`: the data model of what it holds (the size entries, the clone pairs, the
-job limits) and the text that renders and reads it. The `size` rule measures and compares, and owns what a value means; this
+job limits, the uncited spec IDs) and the text that renders and reads it. The `size` rule measures and compares, and owns what a value means; this
 module owns the key and the text.
 """
 
@@ -17,8 +17,11 @@ FIX_COMMAND = "quality check --fix"
 
 CLONES = "clones"
 JOB_MINUTES = "job_minutes"
+SPEC_CITATIONS = "spec_citations"
+UNCITED = "uncited"
 LITERAL_TEXT = "literal_text"
 JOB_LIMIT = "job limit"
+UNCITED_SPEC_ID = "uncited spec ID"
 BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 BASELINE_HEADER = f"# Measured by `{FIX_COMMAND}`. Entries only ever go down.\n"
 
@@ -86,12 +89,13 @@ class ClonePair:
 
 @dataclass(frozen=True)
 class Baseline:
-    """What `quality/baseline.toml` holds; `clones` and `job_minutes` are None when the file has no such table, so no pair
-    and no job limit is held. A `[literal_text]` table is read and ignored."""
+    """What `quality/baseline.toml` holds; `clones`, `job_minutes` and `spec_citations` are None when the file has no such
+    table, so no pair, no job limit and no uncited spec ID is held. A `[literal_text]` table is read and ignored."""
 
     size: SizeEntries
     clones: frozenset[ClonePair] | None
     job_minutes: JobMinutes | None = None
+    spec_citations: frozenset[str] | None = None
 
 
 class SizeError(Exception):
@@ -119,6 +123,8 @@ def render_baseline(baseline: Baseline) -> str:
         sections.update(_clone_sections(baseline.clones))
     if baseline.job_minutes is not None:
         sections.update(_job_sections(baseline.job_minutes))
+    if baseline.spec_citations is not None:
+        sections.update(_spec_sections(baseline.spec_citations))
     return BASELINE_HEADER + "".join(f"\n{header}\n" + "".join(f"{line}\n" for line in lines) for header, lines in sections.items())
 
 
@@ -146,6 +152,14 @@ def _job_sections(limits: JobMinutes) -> dict[str, list[str]]:
     return sections
 
 
+def _spec_sections(uncited: frozenset[str]) -> dict[str, list[str]]:
+    """The IDs sorted, one per line, in a key of the one table; an empty table stands as its header alone."""
+    if not uncited:
+        return {f"[{SPEC_CITATIONS}]": []}
+    listed = "".join(f"    {_toml_string(identifier)},\n" for identifier in sorted(uncited))
+    return {f"[{SPEC_CITATIONS}]": [f"{UNCITED} = [\n{listed}]"]}
+
+
 def _toml_key(name: str) -> str:
     """A key as TOML allows it bare, else quoted."""
     return name if BARE_KEY.fullmatch(name) else _toml_string(name)
@@ -166,17 +180,19 @@ def load_baseline(text: str) -> Baseline:
     except repository.TomlError as error:
         raise SizeError(f"{BASELINE_PATH} is not valid TOML ({error})") from error
     size: SizeEntries = {}
-    clones = job_minutes = None
+    clones = job_minutes = spec_citations = None
     for table_name, table in document.items():
         if table_name == CLONES:
             clones = _clone_pairs(table)
         elif table_name == JOB_MINUTES:
             job_minutes = _job_minutes(table)
+        elif table_name == SPEC_CITATIONS:
+            spec_citations = _uncited_ids(table)
         elif table_name == LITERAL_TEXT:
             continue  # read and ignored; `--fix` rewrites the file without it
         else:
             size.update(_size_entries(table_name, table))
-    return Baseline(size, clones, job_minutes)
+    return Baseline(size, clones, job_minutes, spec_citations)
 
 
 def _size_entries(table_name: str, table: object) -> SizeEntries:
@@ -229,11 +245,21 @@ def _job_minutes(table: object) -> JobMinutes:
     return limits
 
 
+def _uncited_ids(table: object) -> frozenset[str]:
+    entries = _table(SPEC_CITATIONS, table)
+    if entries.keys() - {UNCITED}:
+        raise SizeError(f"{BASELINE_PATH} needs {SPEC_CITATIONS} to hold only {UNCITED}")
+    listed = entries.get(UNCITED, [])
+    if not (isinstance(listed, list) and all(isinstance(identifier, str) for identifier in listed)):
+        raise SizeError(f"{BASELINE_PATH} needs {SPEC_CITATIONS}.{UNCITED} as a list of strings")
+    return frozenset(listed)
+
+
 def _metric_named(name: str) -> Metric:
     try:
         return Metric(name)
     except ValueError:
-        known = ", ".join([*(metric.value for metric in Metric), CLONES, JOB_MINUTES])
+        known = ", ".join([*(metric.value for metric in Metric), CLONES, JOB_MINUTES, SPEC_CITATIONS])
         raise UnknownTable(f"{BASELINE_PATH} has an unknown table [{name}]; quality {__version__} knows {known}") from None
 
 

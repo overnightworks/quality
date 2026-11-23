@@ -28,7 +28,7 @@ SPELLINGS = [
 ]
 
 
-@pytest.mark.parametrize("name", ["clones", "job_minutes"])
+@pytest.mark.parametrize("name", ["clones", "job_minutes", "spec_citations"])
 @pytest.mark.parametrize(("spelling", "held"), SPELLINGS)
 def test_a_version_holds_a_table_if_it_parses_so(name, spelling, held):
     """FIX-12, TIMEOUT-28: a version of the ceiling holds a table where it parses as one, in any spelling, and not
@@ -36,13 +36,15 @@ def test_a_version_holds_a_table_if_it_parses_so(name, spelling, held):
     assert holds_table(spelling.format(name=name).encode(), name) is held
 
 
-@pytest.mark.parametrize(("held", "asked"), [("clones", "job_minutes"), ("job_minutes", "clones")])
+@pytest.mark.parametrize(
+    ("held", "asked"), [("clones", "job_minutes"), ("job_minutes", "clones"), ("clones", "spec_citations"), ("spec_citations", "clones")]
+)
 def test_a_version_holding_one_table_does_not_hold_the_other(held, asked):
     """TIMEOUT-28: the table asked about is the only one that counts."""
     assert holds_table(f"[{held}]\n".encode(), asked) is False
 
 
-@pytest.mark.parametrize("name", ["clones", "job_minutes"])
+@pytest.mark.parametrize("name", ["clones", "job_minutes", "spec_citations"])
 @pytest.mark.parametrize("version", [b"[clones", b"\xff\xfe"], ids=["not TOML", "not UTF-8"])
 def test_a_version_no_parser_reads_shows_nothing(version, name):
     """FIX-13, TIMEOUT-28: a version of the ceiling in git that no parser reads raises the error that names it, instead
@@ -51,11 +53,11 @@ def test_a_version_no_parser_reads_shows_nothing(version, name):
         holds_table(version, name)
 
 
-def test_an_unknown_table_names_the_tool_version_and_every_known_table_with_clones_and_job_minutes():
-    """TIMEOUT-13, CEILING-3: an unknown table is named with the tool's version and every table it knows, `clones` and
-    `job_minutes` among them."""
+def test_an_unknown_table_names_the_tool_version_and_every_known_table_with_the_held_lists():
+    """TIMEOUT-13, CEILING-3, CITE-13: an unknown table is named with the tool's version and every table it knows,
+    `clones`, `job_minutes` and `spec_citations` among them."""
     with pytest.raises(
-        SizeError, match=rf"unknown table \[future\]; quality {re.escape(__version__)} knows ccn, .*, clones, job_minutes$"
+        SizeError, match=rf"unknown table \[future\]; quality {re.escape(__version__)} knows ccn, .*, clones, job_minutes, spec_citations$"
     ):
         load_baseline("[future]\n")
 
@@ -144,3 +146,53 @@ def test_a_job_name_that_is_not_valid_utf8_cannot_be_rendered():
     baseline = ceiling({}, None, {JobKey(CI, "\ud800"): 40})
     with pytest.raises(SizeError, match="is not valid UTF-8"):
         render_baseline(baseline)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        pytest.param("", None, id="no table"),
+        pytest.param("[spec_citations]\n", frozenset(), id="a held empty table"),
+        pytest.param("[spec_citations]\nuncited = []\n", frozenset(), id="an empty list"),
+        pytest.param('[spec_citations]\nuncited = ["ST-01", "ST-02"]\n', frozenset({"ST-01", "ST-02"}), id="two IDs"),
+        pytest.param('[spec_citations]\nuncited = ["ST-01", "ST-01"]\n', frozenset({"ST-01"}), id="a repeated ID"),
+    ],
+)
+def test_the_spec_citations_table_reads_to_the_set_of_held_ids(text, expected):
+    """CITE-7: the uncited IDs are the table's one key, a set."""
+    assert load_baseline(text).spec_citations == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "needs"),
+    [
+        pytest.param("spec_citations = 3\n", "spec_citations as a table", id="the table itself that is no table"),
+        pytest.param('[spec_citations]\nuncited = "ST-01"\n', "spec_citations.uncited as a list of strings", id="a string"),
+        pytest.param("[spec_citations]\nuncited = [1]\n", "spec_citations.uncited as a list of strings", id="a number in the list"),
+        pytest.param("[spec_citations]\nother = []\n", "spec_citations to hold only uncited", id="another key"),
+    ],
+)
+def test_a_spec_citations_table_that_is_not_a_list_of_ids_is_the_malformed_file_error(text, needs):
+    """CITE-7."""
+    with pytest.raises(SizeError, match=re.escape(f"needs {needs}")):
+        load_baseline(text)
+
+
+def test_the_spec_citations_table_renders_last_with_the_ids_sorted_one_per_line():
+    """CITE-7: the table follows the job tables, and its IDs stand sorted, one per line."""
+    text = '[spec_citations]\nuncited = ["ST-10", "AB-2", "ST-01"]\n\n[job_minutes."a.yml"]\nz = 16\n\n[file_lines]\n"src/a.py" = 820\n'
+    assert render_baseline(load_baseline(text)) == (
+        f'{BASELINE_HEADER}\n[file_lines]\n"src/a.py" = 820\n\n[job_minutes."a.yml"]\nz = 16\n\n'
+        '[spec_citations]\nuncited = [\n    "AB-2",\n    "ST-01",\n    "ST-10",\n]\n'
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "rendered_table"),
+    [("", ""), ("[spec_citations]\n", "[spec_citations]\n"), ('[spec_citations]\nuncited = ["X-1"]\n', '[spec_citations]\nuncited = [\n    "X-1",\n]\n')],
+    ids=["no table", "a held empty table", "one ID"],
+)
+def test_a_held_spec_table_renders_and_an_absent_one_does_not_and_the_rendering_reads_back_byte_for_byte(text, rendered_table):
+    """CITE-7: an empty held table renders as its header alone, and a file that renders reads back to the same text."""
+    rendered = render_baseline(load_baseline(text))
+    assert (rendered.removeprefix(BASELINE_HEADER).strip(), render_baseline(load_baseline(rendered))) == (rendered_table.strip(), rendered)
