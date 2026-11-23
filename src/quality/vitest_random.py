@@ -101,13 +101,19 @@ class _Config:
         return self._members(test.get("sequence"))
 
     def _exported_object(self) -> int | None:
-        """The index of the `{` of the exported config object, after `defineConfig(` or `export default`."""
+        """The index of the `{` of the exported config object: after `export default`, else after `defineConfig(`."""
         words = [token.value for token in self.tokens]
-        for anchor in (["defineConfig", "("], ["export", "default"]):
+        for anchor in (["export", "default"], ["defineConfig", "("]):
             start = next((index for index in range(len(words)) if words[index : index + 2] == anchor), None)
             if start is not None:
-                return self._body_from(start + 2)
+                return self._body_from(self._after_define_config(start + 2))
         return None
+
+    def _after_define_config(self, start: int) -> int:
+        """`start` moved past a `defineConfig(` that opens there."""
+        if self.tokens[start : start + 1] and self.tokens[start].value == "defineConfig" and self._is_mark(start + 1, "("):
+            return start + 2
+        return start
 
     def _body_from(self, start: int) -> int | None:
         """The `{` that starts at `start` or that the body of an arrow function starts with, `(` around it allowed."""

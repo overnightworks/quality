@@ -86,6 +86,10 @@ def test_a_number_seed_is_unshuffled_and_its_fix_draws_the_seed_at_run_time(buil
         pytest.param("export default { test: { include: [] } }\n", id="plain object"),
         pytest.param("export default defineConfig({})\n", id="no test"),
         pytest.param("export default shared\n", id="an imported config"),
+        pytest.param(
+            "const other = defineConfig({ test: { sequence: { shuffle: true } } })\nexport default defineConfig({ test: {} })\n",
+            id="a shuffling config that is not the exported one",
+        ),
     ],
 )
 def test_a_sequence_that_is_not_the_root_test_sequence_counts_for_nothing(build_repo, text):
