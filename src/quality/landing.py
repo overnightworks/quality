@@ -1,11 +1,11 @@
 """The line a merge commit ends with: the pull request body's one `Work-Item:` or `No-Item:` line, in the trunk's trailer form."""
 
 import re
-from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
 from quality.config import ITEM_REFERENCE
+from quality.markdown_fences import live_line_indexes
 from quality.report import CannotJudge
 
 NO_ITEM_KINDS = frozenset({"docs", "fix", "deps"})
@@ -19,8 +19,6 @@ class LandingKind(StrEnum):
 
 
 CLASSIFICATION_LINE = re.compile(rf"(?i)(?P<key>{LandingKind.WORK_ITEM}|{LandingKind.NO_ITEM}):(?P<value>[^\n]*)")
-FENCE_OPENING = re.compile(r" {0,3}(?P<run>`{3,}|~{3,})")
-FENCE_CLOSING = re.compile(r" {0,3}(?P<run>`{3,}|~{3,})[ \t]*")
 
 
 class LandingRefused(Exception):
@@ -35,22 +33,6 @@ class Landing:
     kind: LandingKind
     value: str
     message: str
-
-
-def live_line_indexes(lines: Sequence[str]) -> list[int]:
-    """The lines outside fenced code blocks: a fence closes on a run of its own character at least as long, nothing after it."""
-    live: list[int] = []
-    fence = ""
-    for index, line in enumerate(lines):
-        if not fence:
-            opening = FENCE_OPENING.match(line)
-            if opening:
-                fence = opening["run"]
-            else:
-                live.append(index)
-        elif (closing := FENCE_CLOSING.fullmatch(line)) and closing["run"][0] == fence[0] and len(closing["run"]) >= len(fence):
-            fence = ""
-    return live
 
 
 def classification(key: str, value: str, repository: str) -> tuple[LandingKind, str]:

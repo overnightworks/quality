@@ -7,6 +7,7 @@ from pathlib import Path, PurePosixPath
 
 from quality import checkout, repository
 from quality.config import LayoutAllowance, declared_paths
+from quality.markdown_fences import live_line_indexes
 from quality.report import CannotJudge, Finding, FindingEvent, Instruction, allowance_clause, stale_declaration
 from quality.rules import Rule
 
@@ -17,7 +18,6 @@ AGENTS_FILE = "AGENTS.md"
 AGENTS_SECTIONS = ("Commands", "Rules", "Owners", "Documents")
 AGENTS_MAX_LINES = 100
 AGENTS_MAX_BYTES = 4096
-FENCE_MARKERS = ("```", "~~~")
 FIRST_SPAN = re.compile(r"`([^`\n]+)`")
 type AgentsProblem = tuple[FindingEvent, int, str, str]
 NO_REMOTE_FACT = "no GitHub remote names this repository"
@@ -149,12 +149,10 @@ def _scan(body: list[str]) -> Iterator[tuple[int, str, str | None, bool]]:
 
     A line in a fence, its marker lines included, has no heading.
     """
-    fence = ""
-    for number, line in enumerate(body, start=2):
-        in_fence = bool(fence)
-        fence = _fence_after(fence, line)
-        fenced = in_fence or bool(fence)
-        yield number, line, None if fenced else _heading(line), fenced
+    live = set(live_line_indexes(body))
+    for index, line in enumerate(body):
+        fenced = index not in live
+        yield index + 2, line, None if fenced else _heading(line), fenced
 
 
 def _document_problems(body: list[str], tracked: list[str]) -> Iterator[AgentsProblem]:
@@ -203,16 +201,6 @@ def _heading(line: str) -> str | None:
     if line.startswith("## "):
         return line[3:]
     return "" if line.startswith("# ") else None
-
-
-def _fence_after(fence: str, line: str) -> str:
-    """The marker of the fence still open after `line`, "" for none; `fence` is the marker open before it."""
-    stripped = line.strip()
-    if fence:
-        return "" if stripped.startswith(fence) and not stripped.strip(fence[0]) else fence
-    if stripped.startswith(FENCE_MARKERS):
-        return stripped[: len(stripped) - len(stripped.lstrip(stripped[0]))]
-    return ""
 
 
 def _size_problems(line_count: int, byte_count: int) -> Iterator[AgentsProblem]:

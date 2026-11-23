@@ -128,9 +128,9 @@ def test_the_rule_stands_in_the_debt_area_after_the_job_timeouts_and_only_report
     """TWIN-4, TWIN-6: the rule's result holds no finding and is not measured only; its release switch is report-only."""
     result = check_result(build_repo({"tests/test_a.py": joined(twin_test("test_one"), twin_test("test_two"))}))
     debt = next(area for area in result.areas if area.area is Area.DEBT)
-    verdict = debt.verdicts[-1]
+    verdict = debt.verdicts[-2]
     assert (verdict.rule, verdict.findings, verdict.measured_only, verdict.extent) == (Rule.TEST_TWIN, (), False, 0)
-    assert [verdict.rule for verdict in debt.verdicts] == [Rule.SIZE, Rule.CLONE, Rule.JOB_TIMEOUT, Rule.TEST_TWIN]
+    assert [verdict.rule for verdict in debt.verdicts] == [Rule.SIZE, Rule.CLONE, Rule.JOB_TIMEOUT, Rule.TEST_TWIN, Rule.SPEC_CITATION]
 
 
 BASELINES = {

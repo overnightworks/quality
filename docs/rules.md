@@ -1175,7 +1175,7 @@ v0.17.0 on, and on main, the cell reads `enforced` where the clone declares the 
 The `literal-text` rule, in the `files` area, turns every literal text of a covered repository's pages into a finding: the
 texts a person reads that the markup holds itself instead of taking them from a catalog. A repository is covered as for
 `catalog-check` (the same read of the root `pyproject.toml`, CATALOG-1), so a repository that is not covered sees no row
-and no new verdict, and its `debt` area holds exactly the verdicts of `size`, `clone`, `job-timeout` and `test-twin`; the root
+and no new verdict, and its `debt` area holds exactly the verdicts of `size`, `clone`, `job-timeout`, `test-twin` and `spec-citation`; the root
 `pyproject.toml` is read once for the area, and one that cannot be read refuses the rule with the reason `python-floor` gives,
 `pyproject.toml is not UTF-8 TOML that Python reads (<error>)`, which `catalog-check` and `render-pass` give too (LITERAL-15).
 The rule reads every tracked `*.svelte` file the tree holds, with the standard library's `html.parser` and a fold of the
@@ -1455,6 +1455,32 @@ The `test-twin` rule, in the `debt` area, counts two kinds of copying in the tra
   note still stands. A file Python cannot parse is skipped without a refusal; `size` and `clone` refuse it.
 - **Report only (TWIN-6).** The rule is `report-only` in the fleet matrix and changes no verdict. It first ships in v0.23.0, so a gate
   pinned below that release shows `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `report-only` (FLEET-18).
+
+The `spec-citation` rule, in the `debt` area, reads the spec IDs of a repository's Markdown files and the IDs its tests cite,
+and reports three counts as one `open` [note](output.md#notes); it only reports and holds no list.
+
+- **Definitions (CITE-1).** Every tracked `.md` file the tree holds is read. A list item (`-`, `*`, `+`, `1.`, `1)`, at any
+  indent) that opens with `ID:` defines a live ID, and `ID (retired).` a retired one, which needs no test. A table row defines
+  its first cell when that cell is exactly an ID and the table follows a rule's list item with no heading or unindented prose
+  between them. A fenced code block, prose, `(ID)` and a list item without the colon define nothing. An ID is
+  `[A-Z][A-Z0-9]*(-[A-Z][A-Z0-9]*)*-[0-9]+`, and IDs compare as exact tokens: `CSRF-01` is not `CSRF-1`.
+- **Python citations (CITE-2).** The docstring of a function whose name starts with `test` in a Python test file (TWIN-1)
+  cites. Its head is the run of IDs at the docstring's start, after an optional `Spec:`, joined by `,`, `and` or `, and`, and every
+  ID-shaped token in the head counts, so a mistyped prefix is caught. A module or class docstring, a helper, a comment and a
+  later mention do not cite.
+- **TypeScript and JavaScript citations (CITE-3).** In a file `Language.is_test_file` accepts, a bare `it(` or `test(` whose
+  first token is a string, or a template without a hole, cites by its head as in CITE-2. `describe`, `.each`, `.skip` and other
+  modifiers are not read (a named gap).
+- **The note (CITE-4).** One `open` note under the `debt` area at the location `.` reads
+  `16 spec IDs uncited · 2 cited IDs undefined or retired · 1 spec ID defined twice`. The undefined count is distinct IDs, not
+  citations, and a cited retired ID counts with them. A count of zero leaves its part out, and with all three at zero no note
+  stands.
+- **What cannot be read (CITE-5).** Sources the `debt` area cannot read refuse the area as before, and no note stands. A
+  tracked `.md` file that cannot be read or is not UTF-8 and a TypeScript or JavaScript test file that is not UTF-8 or that the lexer refuses are left out and named in
+  the note's last part (`· 1 file not read: docs/x.md`), so the rule changes no exit code; with only such files the note is
+  that part alone. A Python test file that does not parse is skipped, since `size` and `clone` refuse it.
+- **Report only (CITE-6).** The rule changes no verdict and its extent is 0, never measured only. It names no first release
+  yet, so the fleet matrix's cell reads `not released` (FLEET-19).
 
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
