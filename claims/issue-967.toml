@@ -1,8 +1,0 @@
-claim_id = "c1da73ff5532452386edaaf4aa7b5b8f"
-agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
-role = "builder"
-base = "51c6ee642621af3cda867018f6b923f5609d005b"
-branch = "claude/issue-967-tests-per-layer-in-the-report"
-scope = ["docs/commands.md", "docs/output.md", "docs/proof.md", "pyproject.toml", "src/quality/cli_help.py", "src/quality/clones.py", "src/quality/fleet.py", "src/quality/fleet_suites.py", "src/quality/layout.py", "src/quality/live_layer.py", "src/quality/spec_citations.py", "src/quality/suites.py", "tests/test_cli_help.py", "tests/test_fleet_report.py", "tests/test_fleet_suites.py", "tests/test_suites.py"]
-opened_commit = "2e7d5039e5808af05b08c03a5bf8300166646100"
-whole_reason = "One table of the weekly report: one walker over a repository's test files that counts tests by layer and by skip and fixme mark, its table module, the shared script test call it takes from spec-citation, and the spec lines and pins that name it; it does not split, because the walker and its only reader land together."
