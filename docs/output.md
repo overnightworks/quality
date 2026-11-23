@@ -132,8 +132,12 @@ rows, by area:
   found in its file is `unused` ([rules](rules.md)). A `logging` finding is no finding row but an `open` note at the
   file and line, its fact the logline rule it breaks (LOGGING-3).
 - `debt`: the `test-twin` rule is no finding row but one `open` note at `.`, its fact the groups of test twins and of
-  copied test helpers it counts (TWIN-4); so is `spec-citation`, its fact the spec IDs no test cites, the cited IDs no spec
-  defines and the IDs defined twice (CITE-4).
+  copied test helpers it counts (TWIN-4); so is `spec-citation` without a `[spec_citations]` table, its fact the spec IDs no
+  test cites, the cited IDs no spec defines and the IDs defined twice (CITE-4). With the table its findings are `uncited` (at
+  the definition, `spec ID ST-02 is cited by no test`, fix `cite it at the head of a test`), `undefined` and `retired` (at the
+  citing test, `ST-03 is cited and defined nowhere`, `ST-03 is cited and retired`), `duplicate` (at the later definition,
+  `spec ID ST-01 is defined again, first at docs/spec.md:12`) and `can fall` (at `quality/baseline.toml`, `spec ID ST-01 is
+  cited`, fix `quality check --fix`) (CITE-8).
 
 The `env-file` fix's own wording stands in [rules](rules.md).
 
@@ -162,7 +166,8 @@ findings (ROW-10); the extent of a clean row is:
 
 - `files`: `N rules · M files`, M the distinct paths git tracks (O16).
 - `debt`: `ceiling held · N entries, M clone pairs`, what the ceiling file holds (ROW-18); a `[job_minutes]` table holding a job
-  adds `, K job limits` after the pairs (TIMEOUT-34).
+  adds `, K job limits` after the pairs (TIMEOUT-34), and a `[spec_citations]` table holding an ID adds `, K uncited spec IDs`
+  after them (CITE-8).
 - `imports`: `N contracts` (ROW-11).
 - `secrets`: `N commits` (O30), because gitleaks reads committed history only; `staged change · N files` for a staged
   run.
@@ -178,8 +183,8 @@ entries over the thresholds · measured only` (`M clone pairs · partly measured
 `[clones]` table, O21), with `fix: quality check --fix` under it. Under `quality check debt --fix` it is `✓
 debt  lowered  N entries · quality/baseline.toml` with a `✓` row per lowered or dropped entry, `✓ debt  moved  N entries
 · quality/baseline.toml` where it moves entries and lowers none, `✓ debt  recorded  N entries, M clone pairs ·
-quality/baseline.toml is new` (`, K job limits` after the pairs where it records the job table), `✓ debt  recorded  K job limits · quality/baseline.toml` with a `✓` row `recorded  K job limits` under
-it (it names the clone pairs recorded beside, and stands in place of the lowered or moved row where entries fall or move in
+quality/baseline.toml is new` (`, K job limits` after the pairs where it records the job table, `, K uncited spec IDs` after them where it records the spec table), `✓ debt  recorded  K job limits · quality/baseline.toml` with a `✓` row `recorded  K job limits` under
+it (`K uncited spec IDs` for the spec table, CITE-11) (it names the clone pairs recorded beside, and stands in place of the lowered or moved row where entries fall or move in
 the same fix), `✓ debt  rewritten  quality/baseline.toml` (entries equal, text not), `! debt  N findings
 nothing lowered` or `✗ debt  not fixed  <reason>`; under `--dry-run` it is `~ debt  N to lower` (`N to move`, `to
 record`, `to rewrite  text differs · quality/baseline.toml`; the first recording is `~ debt  to record  N entries, M clone pairs ·

@@ -48,7 +48,7 @@ flowchart TB
     verdict["verdict.py, sides.py: the pull request's verdict and the two sides it compares"]
     reports["sonar_properties.py, sonar.py, fleet.py: SonarCloud scan wiring and findings, fleet report"]
     check["check.py, staged.py: areas in order, the commit hook"]
-    fix["baseline_fix.py: the --fix recording of the size ceiling"]
+    fix["baseline_fix.py: the --fix recording of the baseline"]
     pin["pin.py: the release the gate pins"]
     rules["rule modules: one decision each"]
     shared["shared layers below the rules"]

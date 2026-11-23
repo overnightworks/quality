@@ -156,7 +156,7 @@ It applies these rules:
   (deleted but not staged, left out by a sparse checkout, or a dangling symlink) is skipped, and its entries stand,
   unjudged, while the index tracks it (CEILING-1). A `quality/baseline.toml` that is not UTF-8 is malformed like invalid
   TOML and says to restore it from git or repair it by hand (CEILING-2). A baseline with a table this quality does not
-  know (`has an unknown table [future]; quality <version> knows ccn, file_lines, function_lines, clones, job_minutes`) is not told
+  know (`has an unknown table [future]; quality <version> knows ccn, file_lines, function_lines, clones, job_minutes, spec_citations`) is not told
   that: a newer quality may have written it, so the head is told to run the quality release its gate pins (CEILING-3).
   With `quality/baseline.toml`, the tree on disk must hold the baseline: a new violation, an entry that grew and an
   entry above its measured value are findings, each a row under the [debt row](output.md#area-rows): `new debt`
@@ -676,6 +676,9 @@ It applies these rules:
     `job limit baseline adds .github/workflows/ci.yml e2e 40` (TIMEOUT-18);
   - the base's `[job_minutes]` table gone from a head that still has the file: `job limit baseline removed`
     (TIMEOUT-18);
+  - a held spec ID the base's `[spec_citations]` table lacks, when the base has the table, one line per ID in sorted
+    order: `spec citation baseline adds ST-02`; the base's table gone from a head that still has the file:
+    `spec citation baseline removed` (CITE-12);
   - the base's file deleted: `quality/baseline.toml removed` (BASELINE-6);
   - a `[[size.generated]]` declaration is judged as in [gate](gate.md), "Declared loosenings".
 
@@ -700,7 +703,8 @@ It applies these rules:
   neither side having one (BASELINE-8). A `[clones]` table the base lacks is an adoption too: its pairs are not
   compared (BASELINE-9), while the size entries are still held against the base's (BASELINE-10). A `[job_minutes]` table
   the base lacks is an adoption in the same way, whatever the base's `[clones]` table is, and the job lines stand after the
-  size and clone lines in the file's order (TIMEOUT-18).
+  size and clone lines in the file's order (TIMEOUT-18), and the spec citation lines stand last. A `[spec_citations]` table the base
+  lacks is an adoption in the same way (CITE-12).
   A malformed baseline on either side is exit `2`, naming the side (`quality/baseline.toml at the base commit <sha>:
   ...`, `quality/baseline.toml at the head: ...`) (BASELINE-20). So is a head baseline that links out of the repository
   (BASELINE-21), a base file that is not a regular file (`... : not a regular file`) (BASELINE-22), and a base that git
@@ -1494,14 +1498,16 @@ The `test-twin` rule, in the `debt` area, counts two kinds of copying in the tra
 - **Report only (TWIN-6).** The rule is `report-only` in the fleet matrix and changes no verdict. It first ships in v0.23.0, so a gate
   pinned below that release shows `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `report-only` (FLEET-18).
 
-The `spec-citation` rule, in the `debt` area, reads the spec IDs of a repository's Markdown files and the IDs its tests cite,
-and reports three counts as one `open` [note](output.md#notes); it only reports and holds no list.
+The `spec-citation` rule, in the `debt` area, reads the spec IDs of a repository's Markdown files and the IDs its tests cite.
+Without a `[spec_citations]` table in `quality/baseline.toml` it reports three counts as one `open` [note](output.md#notes)
+and holds no list; with the table it holds the repository's list so that it only falls: a new uncited ID, a citation of an ID
+no spec defines or one that is retired, and a duplicate definition are red, and the table holds the uncited IDs.
 
 - **Definitions (CITE-1).** Every tracked `.md` file the tree holds is read. A list item (`-`, `*`, `+`, `1.`, `1)`, at any
-  indent) that opens with `ID:` defines a live ID, and `ID (retired).` a retired one, which needs no test. A table row defines
-  its first cell when that cell is exactly an ID and the table follows a rule's list item with no heading or unindented prose
-  between them. A fenced code block, prose, `(ID)` and a list item without the colon define nothing. An ID is
-  `[A-Z][A-Z0-9]*(-[A-Z][A-Z0-9]*)*-[0-9]+`, and IDs compare as exact tokens: `CSRF-01` is not `CSRF-1`.
+  indent; a number is ASCII digits only) that opens with `ID:` defines a live ID, and `ID (retired).` a retired one, which needs
+  no test. A table row defines its first cell when that cell is exactly an ID and the table follows a rule's list item with no
+  heading or unindented prose between them. A fenced code block, prose, `(ID)` and a list item without the colon define nothing.
+  An ID is `[A-Z][A-Z0-9]*(-[A-Z][A-Z0-9]*)*-[0-9]+`, and IDs compare as exact tokens: `CSRF-01` is not `CSRF-1`.
 - **Python citations (CITE-2).** The docstring of a function whose name starts with `test` in a Python test file (TWIN-1)
   cites. Its head is the run of IDs at the docstring's start, after an optional `Spec:`, joined by `,`, `and` or `, and`, and every
   ID-shaped token in the head counts, so a mistyped prefix is caught. A module or class docstring, a helper, a comment and a
@@ -1509,16 +1515,60 @@ and reports three counts as one `open` [note](output.md#notes); it only reports 
 - **TypeScript and JavaScript citations (CITE-3).** In a file `Language.is_test_file` accepts, a bare `it(` or `test(` whose
   first token is a string, or a template without a hole, cites by its head as in CITE-2. `describe`, `.each`, `.skip` and other
   modifiers are not read (a named gap).
-- **The note (CITE-4).** One `open` note under the `debt` area at the location `.` reads
+- **The note (CITE-4).** Without the table one `open` note under the `debt` area at the location `.` reads
   `16 spec IDs uncited · 2 cited IDs undefined or retired · 1 spec ID defined twice`. The undefined count is distinct IDs, not
   citations, and a cited retired ID counts with them. A count of zero leaves its part out, and with all three at zero no note
   stands.
-- **What cannot be read (CITE-5).** Sources the `debt` area cannot read refuse the area as before, and no note stands. A
-  tracked `.md` file that cannot be read or is not UTF-8 and a TypeScript or JavaScript test file that is not UTF-8 or that the lexer refuses are left out and named in
-  the note's last part (`· 1 file not read: docs/x.md`), so the rule changes no exit code; with only such files the note is
-  that part alone. A Python test file that does not parse is skipped, since `size` and `clone` refuse it.
-- **Report only (CITE-6).** The rule changes no verdict and its extent is 0, never measured only. It first ships in v0.25.0, so a gate pinned below that release shows `not in <tag>` in
-  the fleet matrix's column (FLEET-18), and a dependent meets it at its bump to it.
+- **What cannot be read (CITE-5).** Sources the `debt` area cannot read refuse the area as before, and no note stands. Without
+  the table a tracked `.md` file that cannot be read or is not UTF-8 and a TypeScript or JavaScript test file that is not UTF-8
+  or that the lexer refuses are left out and named in the note's last part (`· 1 file not read: docs/x.md`), so the rule
+  changes no exit code; with only such files the note is that part alone. A Python test file that does not parse is skipped,
+  since `size` and `clone` refuse it.
+- **Report only (CITE-6).** The rule is report-only exactly where the baseline has no `[spec_citations]` table, a missing
+  baseline file and a baseline that cannot be read included (the latter refuses `size` and `clone`, CLONE-9, and the area). Then
+  it holds no finding, its extent is 0, it is never measured only, and it never decides whether the `debt` area is partly measured,
+  so a repository that has not adopted the table keeps its row. It first ships in v0.25.0, so a gate pinned below that release
+  shows `not in <tag>` in the fleet matrix's column (FLEET-18).
+- **The held list (CITE-7).** `[spec_citations] uncited` holds the live IDs no test cites, sorted, one per line. The ID alone
+  is the key, since IDs are unique in their repository, so a rule moving between files moves nothing; an ID is held wherever it
+  is defined. A table with no ID stands as `[spec_citations]` alone, and any other key is a malformed file.
+- **With the table (CITE-8).** A live ID no test cites and the table lacks is `uncited` at its definition's path and line
+  (`spec ID ST-02 is cited by no test`). A citation of an ID defined nowhere is `undefined`, of a retired ID `retired`, at the
+  citing test's path and line, one finding per citing test. Every definition after an ID's first is `duplicate` at its own path
+  and line, naming the first (`spec ID ST-01 is defined again, first at docs/spec.md:12`). None of these three is held: no entry of the
+  table silences them. A held ID that is cited, retired or no longer defined is
+  `can fall` at `quality/baseline.toml` (`spec ID ST-01 is cited`), fix `quality check --fix`. The debt row counts the held
+  IDs (`ceiling held · 0 entries, 0 clone pairs, 16 uncited spec IDs`, nothing for an empty table), the rule's extent is that
+  count, it is never measured only, and no note stands.
+- **What cannot be read with the table (CITE-9).** A tracked `.md` file or a TypeScript or JavaScript test file that cannot be
+  read can hide a definition or a citation, so with the table the rule is `cannot judge`, naming the files (`spec IDs cannot be
+  judged, 1 file not read: docs/x.md`), exit `2`, as for `clone` (CLONE-9). A Python test file that does not parse is skipped as
+  before.
+- **Dropping under `--fix` (CITE-10).** `quality check --fix` drops each held ID that is now cited, retired or undefined (a
+  `dropped` row, `spec ID ST-01 is cited`, counted among the entries that fell) and never adds one: a new uncited ID stays a
+  finding, and a raise is a hand edit with a declared loosening. While any `.md` or script test file is unread it neither drops nor
+  records: with the table the rule reads `cannot judge`, naming the unread files, exit `2`, writing nothing, in the dry run too;
+  without it nothing is recorded, the report-only note stays and the exit is unchanged. An ID defined in an unread file would
+  otherwise look undefined and be dropped, then return as a new uncited ID only the operator's door could merge. Named limit: a
+  tracked `.md` file that is not UTF-8 keeps its repository from recording until it is fixed.
+- **Recording under `--fix` (CITE-11).** `quality check --fix` records the table, the uncited IDs of the tree, only where the
+  baseline has none, git never held one, the tree defines a live ID, no citation is undefined or retired and no ID is defined
+  twice; the row reads `recorded  K uncited spec IDs · quality/baseline.toml` (`1 uncited spec ID`, a first recording
+  `N entries, M clone pairs, K uncited spec IDs · quality/baseline.toml is new`), and the dry run words it `to record`. Otherwise
+  nothing is recorded, not even an empty table, and the note stays, so a routine `--fix` in a repository that has not converted its
+  documents never turns it red. Where the fix would record and a version of the baseline in git held the table, it refuses
+  through the same question as `[job_minutes]` (TIMEOUT-28): `quality/baseline.toml lost its [spec_citations] table, which git
+  holds`, exit `2`, the restore step, nothing written; where it would not record, git is not asked.
+- **The loosenings (CITE-12).** On a pull request the verdict holds the head's table against the base's: each held ID the base's
+  table lacks is `spec citation baseline adds <ID>` (a set has no raise, so an add is the raise), and the base's table gone from
+  a head that still has the file is `spec citation baseline removed`; a base without the table is an adoption and green. Both
+  are declarable as in [gate](gate.md#declared-loosenings).
+- **The matrix cell (FLEET-118).** The cell reads `not in <tag>` below the first release, `report-only` without the table,
+  `enforced` with it from the release that holds the list (on main today; `SwitchChange` in `src/quality/rules.py` names the
+  release once it is tagged), and `cannot read quality/baseline.toml` for a baseline that cannot be read.
+- **The unknown-table message (CITE-13).** `quality/baseline.toml has an unknown table [future]; quality <version> knows ccn,
+  file_lines, function_lines, clones, job_minutes, spec_citations` (CEILING-3). A quality that predates the table meets it as an
+  unknown table and exits `2` (BASELINE-25), so a repository records the table only once its gate pins the release that holds it.
 
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
