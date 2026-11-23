@@ -8,10 +8,8 @@ import pytest
 
 from quality import cli, config
 from quality.config import (
-    CONFIG_PATH,
     AdvisoryAllowance,
     Allowance,
-    ConfigError,
     Declaration,
     GeneratedFile,
     LayoutAllowance,
@@ -22,6 +20,7 @@ from quality.config import (
     read_declarations,
     read_gate_settings,
 )
+from quality.config_entries import CONFIG_PATH, ConfigError
 from quality.report import printable
 from quality.rules import Rule
 from tests.support.advisories import allowance_config

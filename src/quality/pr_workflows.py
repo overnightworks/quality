@@ -4,7 +4,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from quality import checkout, workflow_rules
-from quality.config import CONFIG_PATH, WORKFLOW_ALLOWANCE_HEADING, WorkflowAllowance, workflow_allowance_entry
+from quality.config import WORKFLOW_ALLOWANCE_HEADING, WorkflowAllowance, workflow_allowance_entry
+from quality.config_entries import CONFIG_PATH
 from quality.report import Example, Finding, FindingEvent, RuleResult
 from quality.rules import Rule
 

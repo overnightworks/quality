@@ -41,12 +41,8 @@ from quality import (
     vitest_random,
     workflow_rules,
 )
-from quality.config import (
-    AllowLists,
-    ConfigError,
-    Declarations,
-    read_declarations,
-)
+from quality.config import AllowLists, Declarations, read_declarations
+from quality.config_entries import ConfigError
 from quality.deadline import RunDeadline
 from quality.report import (
     CannotJudge,

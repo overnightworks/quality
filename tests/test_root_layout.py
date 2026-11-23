@@ -5,7 +5,8 @@ import subprocess
 
 import pytest
 
-from quality.config import CONFIG_PATH, ROOT_ALLOWANCE_EXAMPLE
+from quality.config import ROOT_ALLOWANCE_EXAMPLE
+from quality.config_entries import CONFIG_PATH
 from quality.output import FIX_LABEL, Glyph
 from quality.report import FindingEvent
 from quality.root_layout import ROOT_BASE_DIRECTORIES, ROOT_BASE_ENTRIES, ROOT_BASE_FILES

@@ -6,7 +6,8 @@ import urllib.error
 import pytest
 
 from quality import architecture, cli, sides, verdict
-from quality.config import CONFIG_PATH, LegacyMode
+from quality.config import LegacyMode
+from quality.config_entries import CONFIG_PATH
 from quality.ratchet import NO_RENAMES
 from quality.report import CannotJudge, Instruction
 from quality.sides import Side

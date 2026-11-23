@@ -2,7 +2,8 @@
 
 from collections.abc import Sequence
 
-from quality.config import CONFIG_PATH, ROOT_ALLOWANCE_HEADING, RootAllowance
+from quality.config import ROOT_ALLOWANCE_HEADING, RootAllowance
+from quality.config_entries import CONFIG_PATH
 from quality.report import Finding, FindingEvent
 from quality.rules import Rule
 

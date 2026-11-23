@@ -11,7 +11,8 @@ import pytest
 
 from quality import __version__, cli, verdict
 from quality.baseline_file import BASELINE_PATH
-from quality.config import CONFIG_PATH, LOOSENED_EXAMPLE, LegacyMode
+from quality.config import LOOSENED_EXAMPLE, LegacyMode
+from quality.config_entries import CONFIG_PATH
 from quality.ratchet import NO_RENAMES
 from quality.report import CannotJudge, Instruction, printable
 from quality.sides import NO_BASE_SETTINGS, Side, read_base
