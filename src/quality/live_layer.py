@@ -26,7 +26,7 @@ UNREADABLE_EXPRESSION_FACT = "-m expression cannot be read"
 RUN_TIME_FACT = "command is built at run time, pytest -m cannot be read"
 FIX = f'add -m "not {LIVE_MARKER}", or "and not {LIVE_MARKER}" to its -m expression'
 # A pattern no comment matches: the rule has no marker.
-NO_MARKER = Marker(re.compile(r"(?!)"), above_step=False)
+NO_MARKER = Marker(re.compile(r"\b\B"), above_step=False)
 
 
 def has_live_layer(tracked: Sequence[str]) -> bool:

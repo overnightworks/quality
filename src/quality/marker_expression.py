@@ -67,18 +67,7 @@ class Or:
         return frozenset().union(*(operand.names() for operand in self.operands))
 
 
-@dataclass(frozen=True)
-class Nothing:
-    """The empty expression, which selects no test."""
-
-    def holds(self, marked: frozenset[str]) -> bool:
-        return False
-
-    def names(self) -> frozenset[str]:
-        return frozenset()
-
-
-type Node = Name | Not | And | Or | Nothing
+type Node = Name | Not | And | Or
 
 
 @dataclass(frozen=True)
@@ -107,6 +96,14 @@ def parse(text: str) -> Expression:
         raise MarkerExpressionError("nested too deeply") from error
 
 
+def _quoted(text: str, position: int) -> str:
+    end = text.find(text[position], position + 1)
+    word = text[position : end + 1] if end != -1 else ""
+    if not word or "\\" in word:
+        raise MarkerExpressionError(f"bad string at {position}")
+    return word
+
+
 def _tokens(text: str) -> list[str]:
     found = []
     position = 0
@@ -118,10 +115,7 @@ def _tokens(text: str) -> list[str]:
         if character in SYMBOLS:
             word = character
         elif character in QUOTES:
-            end = text.find(character, position + 1)
-            word = text[position : end + 1] if end != -1 else ""
-            if not word or "\\" in word:
-                raise MarkerExpressionError(f"bad string at {position}")
+            word = _quoted(text, position)
         else:
             matched = NAME.match(text, position)
             if matched is None:
@@ -141,7 +135,7 @@ class _Reader:
 
     def expression(self) -> Node:
         if not self.tokens:
-            return Nothing()
+            return Or(())
         node = self._disjunction()
         if self._peek() is not None:
             raise MarkerExpressionError(f"unexpected {self._peek()}")
