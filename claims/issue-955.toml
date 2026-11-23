@@ -1,0 +1,7 @@
+claim_id = "389d16e6f9ad4994bc0535989aa09c52"
+agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
+role = "builder"
+base = "5b588b75e88a0e2d24f453a47d5b374444125e2a"
+branch = "claude/issue-955-proof-standard-document"
+scope = ["AGENTS.md", "docs/VISION.md", "docs/proof.md"]
+opened_commit = "5abf2ab98c0148407afcba02d63e90886b7b19b6"
