@@ -9,6 +9,7 @@ from urllib.parse import unquote
 
 import pytest
 
+from quality.deadline import RunDeadline
 from quality.fleet_ci_time import (
     CALLS_PER_REPORT,
     FleetCiTime,
@@ -20,6 +21,7 @@ from quality.fleet_ci_time import (
     table_cells,
 )
 from quality.report import CannotJudge
+from tests.support.clock import Clock
 
 TODAY = date(2026, 11, 21)
 START = datetime(2026, 11, 20, 10, tzinfo=UTC)
@@ -48,9 +50,12 @@ class Runs:
     served: dict[str, list[dict] | Exception]
     jobs: dict[int, list[dict]] = field(default_factory=dict)
     urls: list[str] = field(default_factory=list)
+    clock: Clock = field(default_factory=Clock)
+    seconds_per_call: float = 0.0
 
     def __call__(self, url: str, headers: Mapping[str, str], unreadable: Callable[[Exception], CannotJudge]) -> tuple[bytes, Message]:
         self.urls.append(url)
+        self.clock.now += self.seconds_per_call
         name = url.split("/repos/")[1].split("/actions")[0]
         runs = self.served[name]
         if isinstance(runs, Exception):
@@ -63,9 +68,11 @@ class Runs:
         return json.dumps(body).encode(), Message()
 
 
-def read(served, *names, jobs=None):
-    fetch = Runs(served, jobs or {})
-    return read_fleet_ci_time(names or tuple(served), TODAY, "", fetch, DEFAULT_BRANCH), fetch
+def read(served, *names, jobs=None, seconds_per_call=0.0, seconds_left=1e9):
+    """The read under a deadline `seconds_left` after the start, every request costing `seconds_per_call` on the clock."""
+    clock = Clock()
+    fetch = Runs(served, jobs or {}, clock=clock, seconds_per_call=seconds_per_call)
+    return read_fleet_ci_time(names or tuple(served), TODAY, "", fetch, DEFAULT_BRANCH, RunDeadline(seconds_left, clock)), fetch
 
 
 def weekly(served, name="o/a"):
@@ -178,7 +185,7 @@ def test_an_answer_of_the_wrong_shape_is_partly_read_and_the_others_stay(body):
             return json.dumps(body).encode(), Message()
         return Runs(served)(url, headers, unreadable)
 
-    reading = read_fleet_ci_time(("o/a", "o/b"), TODAY, "", fetch, DEFAULT_BRANCH)
+    reading = read_fleet_ci_time(("o/a", "o/b"), TODAY, "", fetch, DEFAULT_BRANCH, RunDeadline(1e9, Clock()))
     assert (reading.rows["o/a"], reading.rows["o/b"].commits) == (PartlyRead("cannot read CI time"), 1)
 
 
@@ -234,11 +241,31 @@ def test_the_jobs_of_a_sample_of_runs_spread_over_the_window_give_the_queue_p90_
 
 
 def test_a_repository_without_runs_takes_no_share_of_the_calls_left_for_jobs():
-    names = [f"o/r{number}" for number in range(31)]
+    names = [f"o/r{number}" for number in range(61)]
     served = {"o/empty": [], **{name: [run(f"{name}-{number}", created=number, run_id=number) for number in range(30)] for name in names}}
     _, fetch = read(served)
     job_calls = [sum(f"/repos/{name}/" in url and "/jobs?" in url for url in fetch.urls) for name in names]
-    assert job_calls[:20] == [(CALLS_PER_REPORT - len(served)) // len(names)] * 20
+    assert job_calls[:10] == [(CALLS_PER_REPORT - len(served)) // len(names)] * 10
+
+
+def test_the_deadline_stops_a_runs_read_and_the_repository_is_partly_read_with_the_pages_it_read():
+    served = {"o/a": [run(f"c{number}", run_id=number) for number in range(5 * 100)], "o/b": [run("late")]}
+    reading, fetch = read(served, seconds_per_call=4, seconds_left=10)
+    assert reading.rows == {"o/a": PartlyRead("3 pages read"), "o/b": PartlyRead("0 pages read")}
+    assert (reading.calls, len(fetch.urls)) == (3, 3)
+    assert not json.loads(document(reading, START))["complete"]
+
+
+def test_a_jobs_sample_the_deadline_stops_before_its_first_call_is_not_sampled_for_the_time_limit():
+    reading, fetch = read({"o/a": [run("x", run_id=1)]}, seconds_per_call=5, seconds_left=5)
+    assert (table_cells("o/a", reading)[-3:], reading.calls, len(fetch.urls)) == (("not sampled · time limit",) * 3, 1, 1)
+
+
+def test_a_jobs_sample_the_deadline_stops_midway_shows_the_runs_it_read():
+    runs = [run(f"c{number}", created=number, run_id=number) for number in range(30)]
+    jobs = {number: [job("tests")] for number in range(30)}
+    reading, fetch = read({"o/a": runs}, jobs=jobs, seconds_per_call=3, seconds_left=8)
+    assert (reading.jobs["o/a"].runs, reading.calls, len(fetch.urls)) == (2, 3, 3)
 
 
 def counted_week(seconds: int, commits: int = 12) -> WeeklyCiTime:

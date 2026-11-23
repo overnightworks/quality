@@ -6,6 +6,7 @@ from email.message import Message
 
 import pytest
 
+from quality.deadline import RunDeadline
 from quality.fleet_job_time import (
     JOBS_PER_REPOSITORY,
     JobsUnread,
@@ -16,6 +17,7 @@ from quality.fleet_job_time import (
     sample_size,
     table_cells,
 )
+from tests.support.clock import Clock
 
 START = datetime(2026, 11, 20, 10, tzinfo=UTC)
 
@@ -35,7 +37,7 @@ def read(*pages):
         return (page if isinstance(page, bytes) else json.dumps({"jobs": page}).encode()), Message()
 
     runs = [RunToSample(number, START) for number, _ in enumerate(pages)]
-    return read_job_time("o/a", runs, {}, fetch)
+    return read_job_time("o/a", runs, {}, fetch, RunDeadline(1e9, Clock()))
 
 
 def test_the_sample_spreads_over_the_runs_by_their_creation():
@@ -45,7 +47,7 @@ def test_the_sample_spreads_over_the_runs_by_their_creation():
 
 @pytest.mark.parametrize(
     ("available", "budget", "repositories", "size"),
-    [(100, 600, 3, JOBS_PER_REPOSITORY), (4, 600, 3, 4), (100, 50, 5, 10), (100, 0, 2, 0), (100, 30, 0, JOBS_PER_REPOSITORY)],
+    [(100, 600, 3, JOBS_PER_REPOSITORY), (4, 600, 3, 4), (100, 40, 5, 8), (100, 0, 2, 0), (100, 30, 0, JOBS_PER_REPOSITORY)],
     ids=["capped", "fewer runs", "budget share", "no budget", "no repository"],
 )
 def test_a_repository_reads_the_fewest_of_its_runs_the_cap_and_its_share_of_the_budget(available, budget, repositories, size):

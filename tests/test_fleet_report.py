@@ -3,6 +3,7 @@ tables alone on stdout and in the step summary."""
 
 import json
 import subprocess
+import threading
 import urllib.error
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -28,8 +29,16 @@ class Printed:
 
 
 def ticks(*seconds: float) -> Callable[[], float]:
-    """A clock that reads each of `seconds` once; one read too many is a StopIteration."""
-    return iter(seconds).__next__
+    """A clock that reads each of `seconds` once on the test's thread, one read too many a StopIteration; the CI-time
+    worker's reads see the latest value and use none."""
+    readings, owner, latest = iter(seconds), threading.get_ident(), [0.0]
+
+    def read() -> float:
+        if threading.get_ident() == owner:
+            latest[0] = next(readings)
+        return latest[0]
+
+    return read
 
 
 def report_in(
@@ -705,3 +714,24 @@ def test_markdown_in_a_path_of_a_pair_stays_text(capsys, monkeypatch, tmp_path, 
     beta = public("beta", {"<!--x.py": function("copied", "value", "local")})
     printed = report_in(write_fleet(tmp_path / "fleet", [alpha, beta]), capsys, monkeypatch, ticks(*range(8)))
     assert clone_pair_table(printed)[4].startswith(f"| {alpha} | \\<!--x.py copied | {beta} |")
+
+
+def test_a_repository_reached_after_the_reports_deadline_is_not_measured_and_the_exit_is_2(capsys, monkeypatch, tmp_path, public):
+    """FLEET-126: a clone does not start once the 720 seconds are spent; the row says why and the exit is 2."""
+    alpha, beta = public("alpha", {"a.py": "a = 1\n"}), public("beta", {"b.py": "b = 1\n"})
+    printed = report_in(write_fleet(tmp_path / "fleet", [alpha, beta]), capsys, monkeypatch, ticks(0, 1, 2, 721, 722, 723))
+    assert printed.code == 2
+    beta_row = next(line for line in printed.err.splitlines() if beta in line)
+    assert "not measured" in beta_row
+    assert beta_row.endswith("the report's 720 seconds are spent")
+
+
+def test_an_exception_inside_the_ci_time_read_reaches_the_report(capsys, monkeypatch, tmp_path, public):
+    """FLEET-125: the worker thread's failure is the report's failure, not a silent missing table."""
+    alpha = public("alpha", {"a.py": "a = 1\n"})
+
+    def broken(url, headers, unreadable):
+        raise RuntimeError("the read broke")
+
+    with pytest.raises(RuntimeError, match="the read broke"):
+        report_in(write_fleet(tmp_path / "fleet", [alpha]), capsys, monkeypatch, ticks(*range(8)), fetch_listing=broken)

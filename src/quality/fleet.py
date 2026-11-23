@@ -15,6 +15,7 @@ import re
 import subprocess
 import urllib.error
 from collections.abc import Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum, StrEnum
@@ -39,6 +40,7 @@ from quality import (
     repository,
     web,
 )
+from quality.deadline import RunDeadline
 from quality.report import CannotJudge, Command, Example, Instruction, Step
 from quality.rules import Rule, RuleRelease, Switch, SwitchChange
 
@@ -71,6 +73,7 @@ NEXT_PAGE = re.compile(r'rel="next"')
 LISTING_CREDENTIAL_VARIABLE = "GITHUB_TOKEN"
 NOTHING_MEASURED = "nothing measured"
 CLONE_TIMEOUT_SECONDS = 300
+REPORT_DEADLINE_SECONDS = 720
 LS_REMOTE_TIMEOUT_SECONDS = 60
 SHORT_COMMIT = 7
 DASH = "—"
@@ -385,13 +388,16 @@ def read_release_tags() -> checkout.ReleaseTags:
     return tags
 
 
-def measure_repository(name: str) -> Row:
+def measure_repository(name: str, time_left: float) -> Row:
+    """The repository's row; its clone ends within `time_left` seconds, and none starts without any."""
+    if time_left <= 0:
+        return Unjudged(name, f"the report's {REPORT_DEADLINE_SECONDS} seconds are spent")
     with process.scratch_directory() as scratch:
         environment = anonymous_environment(scratch)
         clone = scratch / "clone"
         try:
             cloned = git(["clone", "--depth", "1", "--no-tags", "--quiet", "--", repository_url(name), str(clone)], scratch, environment,
-                         CLONE_TIMEOUT_SECONDS)
+                         min(CLONE_TIMEOUT_SECONDS, time_left))
             # git's own words name the local clone directory, so only its exit code is reported.
             if cloned.returncode != 0:
                 return Unjudged(name, f"cannot clone (git exited {cloned.returncode})")
@@ -465,7 +471,10 @@ def git(
     return process.run([*ANONYMOUS_GIT, *arguments], cwd=scratch, env=environment, timeout=timeout)
 
 
-def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTagsError, ci_time: fleet_ci_time.FleetCiTime) -> tuple[str, ...]:
+def render(
+    rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTagsError, ci_time: fleet_ci_time.FleetCiTime,
+    between: list[fleet_clones.RepositoryPair],
+) -> tuple[str, ...]:
     heading = f"**Fleet report, {today.isoformat()}, quality {__version__}**"
     table = [table_line(COLUMNS), "|---" * len(COLUMNS) + "|", *(table_line(cells(row)) for row in rows)]
     pins = release_tags_or_none(tags)
@@ -482,7 +491,6 @@ def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTag
         "|---" * len(fleet_ci_time.COLUMNS) + "|",
         *(table_line(fleet_ci_time.table_cells(name, ci_time)) for name in ci_time.rows),
     ]
-    between = fleet_clones.pairs_between([unit for row in rows if isinstance(row, Measured) for unit in row.units])
     between_table = [
         table_line(fleet_clones.COLUMNS),
         "|---" * len(fleet_clones.COLUMNS) + "|",
@@ -512,15 +520,18 @@ def run_report(
     show((output.Row(output.Glyph.NOTE, FLEET_SUBJECT, FleetEvent.FOUND, sources, count=len(names), counts_plural=False),))
     tags = _read_tags(release_tags, show)
     pins = release_tags_or_none(tags)
-    rows: list[Row] = []
-    for name in names:
-        began = clock()
-        measured = measure_repository(name)
-        show((report_row(measured, pins, clock() - began),))
-        rows.append(measured)
-    ci_time = fleet_ci_time.read_fleet_ci_time(names, today, environment.get(LISTING_CREDENTIAL_VARIABLE, ""), fetch_listing, checkout.DEFAULT_BRANCH)
+    run_deadline = RunDeadline(started + REPORT_DEADLINE_SECONDS, clock)
+    # One worker, so the requests stay serial; it reads beside the clones, which wait on git alone.
+    with ThreadPoolExecutor(max_workers=1) as worker:
+        reading = worker.submit(
+            fleet_ci_time.read_fleet_ci_time, names, today, environment.get(LISTING_CREDENTIAL_VARIABLE, ""), fetch_listing,
+            checkout.DEFAULT_BRANCH, run_deadline,
+        )
+        rows = _measure_rows(names, pins, show, clock, run_deadline)
+        between = fleet_clones.pairs_between([unit for row in rows if isinstance(row, Measured) for unit in row.units])
+        ci_time = reading.result()
     show(tuple(_unread_ci_time_row(name, reading) for name, reading in ci_time.rows.items() if reading == fleet_ci_time.PartlyRead(fleet_ci_time.UNREADABLE)))
-    tables = render(rows, today, tags, ci_time)
+    tables = render(rows, today, tags, ci_time, between)
     output.write_lines(tables, channels.out)
     try:
         output.append_step_summary(tables, environment)
@@ -540,6 +551,19 @@ def run_report(
     whole = f"{len(rows)} of {output.counted(len(rows), 'repository', 'repositories')} measured"
     output.write_closing_line(output.Glyph.CLEAN, (whole, output.format_duration(clock() - started)), channels.err)
     return EXIT_MEASURED
+
+
+def _measure_rows(
+    names: tuple[str, ...], pins: checkout.ReleaseTags | None, show: Callable[[tuple[output.Row, ...]], None],
+    clock: Callable[[], float], run_deadline: RunDeadline,
+) -> list[Row]:
+    rows: list[Row] = []
+    for name in names:
+        began = clock()
+        measured = measure_repository(name, run_deadline.ends_at - began)
+        show((report_row(measured, pins, clock() - began),))
+        rows.append(measured)
+    return rows
 
 
 def _unread_ci_time_row(name: str, reading: fleet_ci_time.PartlyRead) -> output.Row:

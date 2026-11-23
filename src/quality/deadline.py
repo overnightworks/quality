@@ -24,7 +24,7 @@ class RunDeadlineSpent(CannotJudge):
 
 @dataclass(frozen=True)
 class RunDeadline:
-    """The one time budget of a `check` run, counted on the clock the door injected."""
+    """The one time budget of a `check` run or of a fleet report, counted on the clock the door injected."""
 
     ends_at: float
     monotonic: Callable[[], float]

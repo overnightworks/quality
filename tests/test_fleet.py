@@ -17,8 +17,8 @@ from typing import ClassVar
 import pytest
 import yaml
 
-from quality import __version__, cli, fleet_ci_time
-from quality.fleet import anonymous_environment, parse_fleet, read_fleet
+from quality import __version__, cli, fleet_ci_time, web
+from quality.fleet import REPORT_DEADLINE_SECONDS, anonymous_environment, parse_fleet, read_fleet
 from quality.output import SEPARATOR
 from quality.report import CannotJudge
 from tests.support.clones import function as clone_function
@@ -594,6 +594,14 @@ def test_the_workflow_measures_read_only_and_only_the_publish_job_writes_pages()
     assert re.search(r"quality report --ci-time-json$", measuring["run"].strip())
     assert f"hashFiles('{fleet_ci_time.DOCUMENT_PATH}')" in upload["if"]
     assert fleet_ci_time.DOCUMENT_PATH.parent == Path(upload["with"]["path"])
+
+
+def test_the_report_job_outlasts_its_setup_deadline_one_request_and_tail():
+    """FLEET-127: the job's limit covers its setup, the report's deadline, one request in flight and the tail."""
+    setup_allowance, tail_allowance = 60, 90
+    job = workflow("report.yml")["jobs"]["report"]
+    parts = setup_allowance + REPORT_DEADLINE_SECONDS + web.REQUEST_TIMEOUT_SECONDS + tail_allowance
+    assert job["timeout-minutes"] * 60 >= parts
 
 
 @pytest.mark.parametrize(
