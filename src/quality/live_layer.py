@@ -4,7 +4,6 @@ A repository whose tests hold a `tests/e2e/live/` folder checks its deployed app
 CI. The rule reads every pytest call in a `run:` of every tracked workflow, whatever triggers it, with the reader of
 `pytest-workers`, and faults a call whose last `-m` expression can select a test marked `live`. No marker clears it."""
 
-import re
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path, PurePosixPath
@@ -15,7 +14,7 @@ from quality.pytest_options import running_options
 from quality.report import FindingEvent, RuleResult
 from quality.rules import Rule
 from quality.run_script import Segment
-from quality.workflow_document import Marker
+from quality.workflow_document import NO_MARKER
 from quality.workflow_rules import PYTEST_RULE, Problem, ScriptRule, judge_scripts
 
 LIVE_MARKER = "live"
@@ -25,8 +24,6 @@ CAN_SELECT_FACT = f"pytest can select tests marked {LIVE_MARKER}"
 UNREADABLE_EXPRESSION_FACT = "-m expression cannot be read"
 RUN_TIME_FACT = "command is built at run time, pytest -m cannot be read"
 FIX = f'add -m "not {LIVE_MARKER}", or "and not {LIVE_MARKER}" to its -m expression'
-# A pattern no comment matches: the rule has no marker.
-NO_MARKER = Marker(re.compile(r"\b\B"), above_step=False)
 
 
 def has_live_layer(tracked: Sequence[str]) -> bool:

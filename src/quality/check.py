@@ -25,6 +25,7 @@ from quality import (
     locator_text,
     logging_rule,
     naming,
+    node_test_random,
     pr_workflows,
     process,
     pytest_random,
@@ -594,9 +595,10 @@ def _judge_dependencies(inputs: RunInputs) -> AreaVerdict:
     vitest_random_result = _attempt(
         lambda: vitest_random.check_vitest_random(inputs.root, inputs.tracked, _package_json_contents(inputs.root, _required(inputs.modes)))
     )
+    node_test_random_result = _attempt(lambda: node_test_random.check_node_test_random(inputs.root, inputs.tracked))
     rules = {
         Rule.ADVISORY: advisory, Rule.FLEET_SOURCE: fleet_source, Rule.PYTEST_RANDOM: pytest_random_result,
-        Rule.VITEST_RANDOM: vitest_random_result,
+        Rule.VITEST_RANDOM: vitest_random_result, Rule.NODE_TEST_RANDOM: node_test_random_result,
     }
     return _area_verdict(Area.DEPENDENCIES, rules, runs)
 

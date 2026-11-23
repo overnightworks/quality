@@ -29,7 +29,7 @@ Each is checked by quality's gate, either as a rule on the repository's files or
 | R3 | every workflow a pull request triggers groups its pull-request runs by number and cancels only those; every other run gets a group of its own, so a run on main always finishes | `pr-concurrency` (CONCURRENCY-1 and on) |
 | R4 | every workflow a pull request triggers is the gate's caller, CodeQL's, or declared with its reason | `pr-workflows` (PRWORKFLOW-1 and on) |
 | R5 | a sharded mandatory job keeps its name as an aggregator job that needs every shard | the verdict: a name the run holds only as shard legs is `missing  not in the run` (VERDICT-7), and dropping the name from the config is a loosening (VERDICT-13), both in `docs/gate.md`; whether the aggregator fails on a failed or skipped shard is not machine-read |
-| R6 | the unit and integration layers run in random order with the seed printed | `pytest-random` (RANDOM-1 and on), `vitest-random` (VITEST-1 and on) |
+| R6 | the unit and integration layers run in random order with the seed printed | `pytest-random` (RANDOM-1 and on), `vitest-random` (VITEST-1 and on), `node-test-random` (NODETEST-1 and on) |
 | R7 | no workflow runs the live layer | `live-layer` (LIVE-1 and on): a pytest call that can select a test marked `live` is a finding. No coverage check stands beside it, since coverage is measured only inside CI runs and no workflow runs the live layer; a call behind a script is left to the live layer's own boundary (LIVE-8) |
 
 ## The rules only judgement sees
