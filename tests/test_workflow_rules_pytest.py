@@ -533,6 +533,10 @@ def test_a_run_time_command_before_a_pytest_call_is_invalid_and_the_call_is_judg
         (MARKER, "pytest -q \\", "  tests"),
         ("pytest -q \\", "  tests " + MARKER),
         ("echo start", MARKER, "pytest"),
+        (MARKER, "# a plain comment", "pytest -n 0"),
+        (MARKER, "# a plain comment", "# another", "pytest -n 0"),
+        (MARKER, "# pytest-random: x", "pytest -n 0"),
+        ("# pytest-random: x", MARKER, "pytest -n 0"),
         (MARKER, 'echo "unbalanced pytest'),
         ("pytest # pytest-workers:reason", ),
         ("#pytest-workers:   reason", "pytest"),
@@ -540,7 +544,8 @@ def test_a_run_time_command_before_a_pytest_call_is_invalid_and_the_call_is_judg
     ],
     ids=[
         "on its line", "above", "above an invalid count", "above two calls", "above a continued command",
-        "on the last line of a continued command", "above a later line", "above an unreadable line", "no space",
+        "on the last line of a continued command", "above a later line", "above a plain comment", "above two plain comments", "above another rule's marker",
+        "below another rule's marker", "above an unreadable line", "no space",
         "wide spaces", "a letter of any script",
     ],
 )
@@ -555,8 +560,9 @@ def test_a_marker_with_a_reason_on_or_directly_above_a_line_clears_its_calls(bui
         (f"      - run: pytest {MARKER}\n", []),
         (f"      {MARKER}\n      - run: pytest\n", []),
         (f"      - run: pytest -n auto -m e2e {MARKER}\n      - run: pytest\n", [(SERIAL, QUOTED_LINE + 1, WITHOUT_N)]),
+        (f"      {MARKER}\n      # a plain comment\n      - run: pytest\n      - run: pytest\n", [(SERIAL, QUOTED_LINE + 3, WITHOUT_N)]),
     ],
-    ids=["after the value", "above the key", "trailing the previous step's line"],
+    ids=["after the value", "above the key", "trailing the previous step's line", "above a plain comment, not the next step"],
 )
 def test_a_marker_clears_a_plain_scalar_call_only_beside_or_above_its_key(build_repo, step, expected):
     """PYTEST-7: a marker on another command's line does not clear the call on the next line."""
@@ -580,10 +586,19 @@ def test_a_comment_that_is_no_marker_clears_nothing(build_repo, comment):
     assert shape(judged(build_repo, block_run(comment, "pytest"))) == [(SERIAL, BLOCK_LINE + 1, WITHOUT_N)]
 
 
-def test_a_marker_two_lines_above_clears_nothing(build_repo):
+@pytest.mark.parametrize(
+    ("script", "line"),
+    [
+        ((MARKER, "echo a", "pytest"), BLOCK_LINE + 2),
+        ((MARKER, "echo a", "# a plain comment", "pytest"), BLOCK_LINE + 3),
+        (("echo a " + MARKER, "# a plain comment", "pytest"), BLOCK_LINE + 2),
+        ((MARKER, "# pytest-random: x", "pytest -n 0", "pytest"), BLOCK_LINE + 3),
+    ],
+    ids=["a command between marker and call", "a command between marker and comment", "a marker trailing a command", "a run of markers clears the call below it only"],
+)
+def test_a_marker_outside_the_unbroken_comment_run_above_a_call_clears_nothing(build_repo, script, line):
     """PYTEST-7."""
-    findings = judged(build_repo, block_run(MARKER, "echo a", "pytest"))
-    assert shape(findings) == [(SERIAL, BLOCK_LINE + 2, WITHOUT_N)]
+    assert [finding.line for finding in judged(build_repo, block_run(*script))] == [line]
 
 
 def test_a_marker_does_not_clear_the_call_of_the_logical_line_below_its_own(build_repo):
@@ -600,11 +615,15 @@ def test_a_marker_does_not_clear_the_call_of_the_logical_line_below_its_own(buil
             [(SERIAL, BLOCK_LINE + 1, WITHOUT_N)],
         ),
         (
+            head() + f"      - name: t\n        {MARKER}\n        run: | # other\n          pytest -q\n",
+            [(SERIAL, BLOCK_LINE + 1, WITHOUT_N)],
+        ),
+        (
             head() + f"      - name: t\n        run: | {MARKER}\n          pytest -q\n          pytest -n 0\n",
             [(SERIAL, BLOCK_LINE + 1, WITH_ZERO)],
         ),
     ],
-    ids=["comment above the key clears nothing", "marker on the run line covers the first line only"],
+    ids=["comment above the key clears nothing", "comment above a run line with a comment clears nothing", "marker on the run line covers the first line only"],
 )
 def test_a_marker_for_a_block_scalar_covers_its_run_line_and_the_block_only(build_repo, text, expected):
     """PYTEST-7."""

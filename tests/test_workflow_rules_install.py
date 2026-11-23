@@ -267,6 +267,8 @@ def test_two_installs_are_two_findings_and_one_call_is_one(build_repo):
         ((MARKER, "apt-get install \\", "  -y x"), []),
         (("apt-get install \\", f"  -y x {MARKER}"), []),
         ((MARKER, "echo a", "apt-get install -y x"), [(BLOCK_LINE + 2, INSTALLS)]),
+        ((MARKER, "# a plain comment", "apt-get install -y x"), []),
+        ((MARKER, "echo a", "# a plain comment", "apt-get install -y x"), [(BLOCK_LINE + 3, INSTALLS)]),
         ((f"apt-get install -y x {MARKER}", "echo a", "apt-get install -y y"), [(BLOCK_LINE + 2, INSTALLS)]),
         ((f"apt-get install -y x {MARKER}", "apt-get install -y y"), [(BLOCK_LINE + 1, INSTALLS)]),
         (("# runtime-install: x", "apt-get install -y x"), []),
@@ -281,7 +283,7 @@ def test_two_installs_are_two_findings_and_one_call_is_one(build_repo):
     ],
     ids=[
         "above", "on its line", "above two calls", "above a continued command", "on the last line of a continued command",
-        "above a later line", "on the first call's line only", "on the line above a second call", "short reason",
+        "above a later line", "above a plain comment", "above a later line and a comment", "on the first call's line only", "on the line above a second call", "short reason",
         "wide spaces", "a letter of any script", "no colon", "no reason", "no letter", "dash only", "another id",
         "the other rule's id",
     ],
@@ -289,6 +291,12 @@ def test_two_installs_are_two_findings_and_one_call_is_one(build_repo):
 def test_a_marker_on_a_calls_line_or_directly_above_clears_that_call(build_repo, script, expected):
     """RUNTIME-7."""
     assert [(f.line, f.event) for f in judged(build_repo, block_script(*script))] == expected
+
+
+def test_a_marker_and_a_comment_above_a_one_line_step_belong_to_the_step_form_alone(build_repo):
+    """RUNTIME-7: the step form wants the marker directly above the `-`, so a comment between them leaves the call reported."""
+    text = steps_of() + f"      {MARKER}\n      # a plain comment\n      - run: apt-get install -y x\n"
+    assert shape(judged(build_repo, text)) == [(INSTALLS, QUOTED_LINE + 2, "apt-get install")]
 
 
 def test_a_marker_on_the_run_line_of_a_block_covers_its_first_line_only(build_repo):

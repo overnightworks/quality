@@ -981,14 +981,16 @@ call, judged once (PYTEST-6). A second substitution on a command line (`cp $(a) 
 is no command word; the same `$(…)` after the `)` of a `case` pattern is read the same way, a named gap.
 
 A comment `# pytest-workers: <reason>`, with a reason that holds a letter, clears every call of the logical line it
-stands on, or that directly follows a line holding only the comment; a marker that trails another command's line
-clears that command only, so the unmarked call of the next line is reported. The marker stands, for a plain or quoted
-value, as a YAML comment above `run:` or after its value; for a block
-scalar (`|`, `>`), a YAML comment above the `run:` key clears nothing, so the marker goes on the `run: |` line (it
-covers the script's first line) or on a block line directly above the line it clears; for a command joined by
-backslashes, above its first line or on any of its lines. Without the id, without a reason, with a reason of no letter,
-or two lines above, it clears nothing; a marker that clears no call is not reported (PYTEST-7). A pytest line in a
-heredoc body is read as a shell line, since the reader does not parse heredocs: without a readable flag it is `serial`,
+stands on, or that stands on any line of the unbroken run of comment-only lines directly above the call's first line (a
+plain comment inside the run does not break it, so two markers stand on two lines); the first line that is not
+comment-only ends the run, and so does a block scalar's `run:` line that carries a comment; a marker that trails another
+command's line is not in the run and clears that command only, so the unmarked call of the next line is reported. The
+marker stands, for a plain or quoted value, as a YAML comment above `run:` or after its value; for a block scalar (`|`,
+`>`), a YAML comment above the `run:` key clears nothing, so the marker goes on the `run: |` line (it covers the
+script's first line) or on a block line directly above the line it clears; for a command joined by backslashes, above
+its first line or on any of its lines. Without the id, without a reason, with a reason of no letter, or separated from
+the call by a line that is not comment-only, it clears nothing; a marker that clears no call is not reported (PYTEST-7).
+A pytest line in a heredoc body is read as a shell line, since the reader does not parse heredocs: without a readable flag it is `serial`,
 and a marker above it clears it (PYTEST-13). A finding is at the call's first line, `serial` with the fact `pytest runs
 without -n` or `pytest runs with -n 0`, or `invalid` with the fact `-n count is not a number above zero or auto`,
 `command cannot be read to its end` or `command is built at run time, pytest -n cannot be read`, its fix `pass -n auto,
@@ -1043,9 +1045,10 @@ form: the marker stands on the line directly above a step's first line, the line
 column of that `-`, and clears every finding of the step's `run:`; a `#` in another column clears nothing, a comment
 in the `-` column that follows the previous step and stands directly above the next step clears the next step, and a
 step whose `-` stands alone on its line or that stands in a flow sequence (`steps: [{run: x}]`) has no step form. The
-per-line form is that of `pytest-workers`: the marker on a call's logical line, or alone on the line directly above its first
-line, clears that call (a marker trailing another command's line clears that command only), for a block scalar on the `run: |` line (it covers the first line) or on a block line directly above the
-call; the line above a step whose `run:` stands on the step's own first line (`- run: x`, a flow step) belongs
+per-line form is that of `pytest-workers`: the marker on a call's logical line, or on a line of the unbroken run of
+comment-only lines directly above its first line, clears that call (a marker trailing another command's line clears that
+command only), for a block scalar on the `run: |` line (it covers the first line) or on a block line directly above the
+call; the whole comment run above a step whose `run:` stands on the step's own first line (`- run: x`, a flow step) belongs
 to the step form alone, so that step takes a marker on its own line only, while a marker on the `-` line of a step
 whose `run:` stands on the next line (`- # runtime-install: reason`) clears that call; a marker between a step's
 `name:` and its `run: |` clears nothing. A marker that clears nothing is not reported (RUNTIME-7). A
@@ -1771,8 +1774,9 @@ with the seed printed" (pytest-randomly). Three readers judge that one decision.
   reads it (PYTEST-5: `--collect-only`, `--collectonly` or `--co` before the first `--`), runs none and is not judged
   (`pytest --collect-only -q` is clean, `pytest -q -- --collect-only` is `unseeded`).
 - **The marker (RANDOM-8).** A comment `# pytest-random: <reason>`, with a reason that holds a letter, on the line of a
-  workflow call, assignment or `env:` value, or alone on the line directly above it, clears the finding (the form of
-  `# pytest-workers:`, PYTEST-7); a marker that trails another command's line clears that command only. It is the way out of a flow layer (end-to-end, browser, image); it clears nothing in `addopts`, and it has
+  workflow call, assignment or `env:` value, or on a line of the unbroken run of comment-only lines directly above it,
+  clears the finding (the form of `# pytest-workers:`, PYTEST-7), so `# pytest-workers:` and `# pytest-random:` stand on
+  two lines above one call; a marker that trails another command's line clears that command only. It is the way out of a flow layer (end-to-end, browser, image); it clears nothing in `addopts`, and it has
   no other form.
 - **Facts and fixes (RANDOM-10).** `unshuffled`: `pytest-randomly is switched off or its order fixed by <source>`, its
   fix naming what to drop (`-p no:randomly`, `--randomly-dont-reorganize`, `--randomly-seed=<integer or last>`,
