@@ -11,7 +11,9 @@ from quality.config import (
     AdvisoryAllowance,
     Allowance,
     Declaration,
+    ForeignPrefix,
     GeneratedFile,
+    ImplementedDocument,
     LayoutAllowance,
     LegacyMode,
     load_declarations,
@@ -39,6 +41,7 @@ from tests.support.config_refusals import (
 )
 from tests.support.door import CHECK_WORD, STAGED_WORDS, check_door, door_in
 from tests.support.generated_files import TYPES_FILE, generated_config
+from tests.support.specs import declaring, foreign_entry, implemented_entry
 
 
 def test_reads_the_mandatory_job_names():
@@ -384,7 +387,7 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
     capsys.readouterr()
     assert {rule for rule, reason in refusals(repo).items() if named in reason} == {
         Rule.COMPOSE_PORT, Rule.SIZE, Rule.ROOT_LAYOUT, Rule.AGENTS_MD, Rule.FILE_SUFFIX, Rule.SCRIPT_NAME,
-        Rule.SCRIPT_HEADER, Rule.TEST_LAYOUT, Rule.TEST_IMPORT,
+        Rule.SCRIPT_HEADER, Rule.TEST_LAYOUT, Rule.TEST_IMPORT, Rule.SPEC_CITATION,
         Rule.PYTHON_FLOOR, Rule.LEAK, Rule.ADVISORY, Rule.PR_WORKFLOWS,
     }
 
@@ -562,6 +565,31 @@ def test_the_verdict_refuses_a_malformed_generated_file_naming_the_side(capsys, 
     assert "[[size.generated]]" in err
 
 
+def test_spec_citation_declarations_are_read_as_written_by_every_loader_that_reads_the_whole_config(tmp_path):
+    """CITE-14, CITE-15: a foreign prefix with its owner and an implemented document with its item, date and reason are
+    read back, in file order, by the check, and the implemented documents by the gate."""
+    text = GATE_WITH_CHECKS + declaring(foreign_entry("LANG"), foreign_entry("REQ-AUTH"), implemented_entry("docs/calling.md"))[CONFIG_PATH]
+    (tmp_path / "quality").mkdir()
+    (tmp_path / CONFIG_PATH).write_text(text)
+    documents = (ImplementedDocument("docs/calling.md", "#974", datetime.date(2026, 11, 23), "its implementers' tests cite its rules"),)
+    prefixes = (ForeignPrefix("LANG", "overnightworks/design"), ForeignPrefix("REQ-AUTH", "overnightworks/design"))
+    allow_lists = read_declarations(tmp_path).allow_lists
+    assert (allow_lists.foreign_prefixes, allow_lists.implemented_documents) == (prefixes, documents)
+    assert load_gate_settings(text).implemented_documents == documents
+
+
+@pytest.mark.parametrize("text", [None, GATE_WITH_CHECKS], ids=["no config", "no declaration"])
+def test_a_config_without_spec_citation_declarations_declares_none(text):
+    """CITE-14, CITE-15."""
+    allow_lists = load_declarations(text).allow_lists
+    assert (allow_lists.foreign_prefixes, allow_lists.implemented_documents) == ((), ())
+
+
+def test_the_commit_hook_ignores_a_malformed_spec_citation_table():
+    """CITE-16, VERDICT-58: `check secrets --staged` reads only [secrets]."""
+    assert load_staged_secret_allowances(implemented_entry("docs/") + "[spec_citations]\nextra = 1\n") == {}
+
+
 def test_the_commit_hook_ignores_a_malformed_size_table():
     """VERDICT-58: the commit hook ignores a malformed [size] table."""
     assert load_staged_secret_allowances(generated_config(job="other") + "[size]\nextra = 1\n") == {}
@@ -603,7 +631,7 @@ def test_the_refusals_use_every_example_and_every_refusal_without_one():
         config.LOOSENED_EXAMPLE,
         config.ADVISORY_ALLOWANCE_EXAMPLE, config.ROOT_ALLOWANCE_EXAMPLE, config.LAYOUT_ALLOWANCE_EXAMPLE,
         config.PYTHON_ALLOWANCE_EXAMPLE, config.COMPOSE_ALLOWANCE_EXAMPLE, config.WORKFLOW_ALLOWANCE_EXAMPLE,
-        config.GENERATED_FILE_EXAMPLE,
+        config.GENERATED_FILE_EXAMPLE, config.FOREIGN_PREFIX_EXAMPLE, config.IMPLEMENTED_DOCUMENT_EXAMPLE,
     }
 
 

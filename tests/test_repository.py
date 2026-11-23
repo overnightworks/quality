@@ -82,6 +82,9 @@ def parent_is_a_file(repo: Path, elsewhere: Path) -> None:
 
 OUTSIDE = f"{NAME} resolves outside the repository"
 DENIED = f"cannot read {NAME}: [Errno 13] Permission denied"
+DEBT_REFUSED_FOR_BASELINE_AND_CONFIG = (
+    f"{refusal_row('debt')}2 reasons\n    ✗ cannot read quality/baseline.toml: [Errno 13] Permission denied\n    ✗ {DENIED}"
+)
 LOOP = f"cannot read {NAME}: [Errno 40] Too many levels of symbolic links"
 DANGLING = f"cannot read {NAME}: it leads to nothing"
 NOT_A_FILE = f"{NAME} is not a file"
@@ -453,8 +456,8 @@ def test_an_unusable_config_is_exit_2_with_one_reason_in_every_command(
 @pytest.mark.parametrize(
     ("command", "refusal"),
     [
-        (CHECK_WORD, f"{refusal_row('debt')}cannot read quality/baseline.toml: [Errno 13] Permission denied"),
-        ("check debt --fix", f"{refusal_row('debt')}cannot read quality/baseline.toml: [Errno 13] Permission denied"),
+        (CHECK_WORD, DEBT_REFUSED_FOR_BASELINE_AND_CONFIG),
+        ("check debt --fix", DEBT_REFUSED_FOR_BASELINE_AND_CONFIG),
         ("verdict", f"error: {DENIED}"),
         ("sonar findings", f"error: {DENIED}"),
     ],

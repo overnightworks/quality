@@ -3,7 +3,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from quality import baseline_file, checkout, clones, process, ratchet, repository, spec_citations, workflow_rules
-from quality.config import GeneratedFile
+from quality.config import AllowLists
 from quality.output import SEPARATOR, counted
 from quality.report import CannotJudge, Instruction, Note, NoteEvent
 
@@ -107,11 +107,13 @@ def _with_recorded_jobs(root: Path, tracked: list[str], made: ratchet.CeilingFix
     return _recording(root, tracked, made, baseline_file.JOB_MINUTES, counted(len(limits), baseline_file.JOB_LIMIT), replace(made.ceiling, job_minutes=limits))
 
 
-def _with_spec_citations(root: Path, tracked: list[str], sources: dict[str, bytes], made: ratchet.CeilingFix) -> ratchet.CeilingFix:
+def _with_spec_citations(
+    root: Path, tracked: list[str], sources: dict[str, bytes], allow_lists: AllowLists, made: ratchet.CeilingFix
+) -> ratchet.CeilingFix:
     """The fix with the spec table made: a held table keeps only the IDs that are still defined and uncited, and never
     gains one; a ceiling without it records the table where the tree is clean and git never held one, which a first
     recording carries in the ceiling alone, as its row counts."""
-    tree = spec_citations.read_tree(root, tracked, sources)
+    tree = spec_citations.read_tree(root, tracked, sources, allow_lists)
     held = made.ceiling.spec_citations
     if held is not None:
         spec_citations.require_read(tree)
@@ -131,20 +133,21 @@ def fix_ceiling(
     tracked: list[str],
     sources: dict[str, bytes],
     held: baseline_file.Baseline | None,
-    generated_files: Callable[[], tuple[GeneratedFile, ...]],
+    allow_lists: Callable[[], AllowLists],
     dry_run: bool,
     rerun_command: str,
 ) -> ratchet.CeilingFix:
     """The ceiling lowered, or recorded where git never held one; the caller writes it."""
     tree = ratchet.measure(sources)
     ratchet.complete(tree)
-    generated = generated_files()  # read after the tree is judged complete, so that refusal comes first
+    declared = allow_lists()  # read after the tree is judged complete, so that refusal comes first
+    generated = declared.generated
     measurements = ratchet.without_generated(tree, generated).measurements
     pairs = clones.find_pairs(sources).pairs
     if held is None:
         _require_no_ceiling_in_git(root, tracked)
         first = ratchet.CeilingFix(baseline_file.Baseline(ratchet.debt(measurements), pairs), (), first=True)
-        return _with_spec_citations(root, tracked, sources, _with_recorded_jobs(root, tracked, first))
+        return _with_spec_citations(root, tracked, sources, declared, _with_recorded_jobs(root, tracked, first))
     if held.clones is None:
         _require_no_table_in_git(root, tracked, baseline_file.CLONES)
     followed = _followed(root, tracked, rerun_command, held)  # renames first, so a renamed file's entries move instead of falling as gone
@@ -155,7 +158,7 @@ def fix_ceiling(
     jobs = workflow_rules.lower_job_entries(root, tracked, lowered.ceiling)
     changes = (*followed.changes, *lowered.changes, *jobs.changes)
     recorded_jobs = _with_recorded_jobs(root, tracked, replace(jobs, changes=changes))
-    return _with_spec_citations(root, tracked, sources, recorded_jobs)
+    return _with_spec_citations(root, tracked, sources, declared, recorded_jobs)
 
 
 def reported(fix: ratchet.CeilingFix, planned: bool) -> ratchet.CeilingFix:

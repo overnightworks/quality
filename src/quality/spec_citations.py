@@ -5,6 +5,9 @@ it was recorded.
 
 A Markdown list item that opens with `ID:` defines a live ID and `ID (retired).` a retired one; the first cell of a table row
 under such an item defines one too. A test cites the IDs at the head of its Python docstring or of its `it(` and `test(` title.
+
+Two declarations of `quality/config.toml` leave IDs to another repository's judgement: a foreign prefix exempts the citations of
+IDs the tree defines nowhere, and an implemented document exempts its own IDs from needing a citation here.
 """
 
 import ast
@@ -15,6 +18,14 @@ from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
 from quality import baseline_file, clones, repository
+from quality.config import (
+    FOREIGN_PREFIX_HEADING,
+    ID_PREFIX,
+    IMPLEMENTED_DOCUMENT_HEADING,
+    MARKDOWN_SUFFIX,
+    AllowLists,
+)
+from quality.config_entries import CONFIG_PATH
 from quality.markdown_fences import live_line_indexes
 from quality.output import SEPARATOR, counted
 from quality.ratchet import Language, language_of
@@ -23,9 +34,8 @@ from quality.rules import Rule
 from quality.typescript_tokens import Kind, ScriptSyntaxError, Token, tokenize
 
 NOTE_PATH = "."
-MARKDOWN_SUFFIX = ".md"
 BYTE_ORDER_MARK = "\ufeff"
-ID = r"[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-(?a:\d+)"
+ID = rf"{ID_PREFIX}-(?a:\d+)"
 ID_PATTERN = re.compile(ID)
 DEFINING_ITEM = re.compile(rf"\s*(?:[-*+]|(?a:\d+)[.)])\s+(?P<id>{ID})(?::|(?P<retired> \(retired\)\.))")
 HEAD = re.compile(rf"\s*(?:Spec:\s*)?{ID}(?:\s*(?:,(?:\s*and\b)?|\band\b)\s*{ID})*")
@@ -48,28 +58,74 @@ class Definition(NamedTuple):
     live: bool
 
 
+def prefix_of(identifier: str) -> str:
+    """An ID's part before its last number."""
+    return identifier.rsplit("-", 1)[0]
+
+
 @dataclass(frozen=True)
 class Tree:
     """What a repository's Markdown files define and its tests cite, in file and line order, and the files that could not
-    be read; a retired ID is defined too."""
+    be read; a retired ID is defined too. `foreign` holds the prefixes and `implemented` the document paths the config
+    declares."""
 
     definitions: dict[str, list[Definition]]
     citations: dict[str, list[Site]]
     unread: list[str]
+    foreign: frozenset[str] = frozenset()
+    implemented: frozenset[str] = frozenset()
 
     @property
     def live(self) -> frozenset[str]:
         return frozenset(identifier for identifier, defined in self.definitions.items() if any(each.live for each in defined))
 
     @property
+    def prefix_sites(self) -> dict[str, Site]:
+        """Each prefix the tree defines, live or retired, with its earliest definition."""
+        sites: dict[str, Site] = {}
+        for identifier, defined in self.definitions.items():
+            earliest = min(each.site for each in defined)
+            sites[prefix_of(identifier)] = min(earliest, sites.get(prefix_of(identifier), earliest))
+        return sites
+
+    @property
+    def foreign_citations(self) -> frozenset[str]:
+        """The cited IDs of a declared prefix the tree defines nowhere; their owner judges them, so a declaration the tree
+        itself contradicts exempts nothing."""
+        exempt = self.foreign - self.prefix_sites.keys()
+        return frozenset(identifier for identifier in self.citations if prefix_of(identifier) in exempt)
+
+    @property
+    def left_to_implementers(self) -> frozenset[str]:
+        """The live IDs whose first definition stands in a declared document."""
+        return frozenset(identifier for identifier in self.live if self.definitions[identifier][0].site.path in self.implemented)
+
+    @property
     def uncited(self) -> frozenset[str]:
-        """The live IDs no test cites."""
-        return self.live - self.citations.keys()
+        """The live IDs no test cites and no declared document leaves to its implementers."""
+        return self.live - self.citations.keys() - self.left_to_implementers
 
     @property
     def undefined_or_retired(self) -> frozenset[str]:
-        """The cited IDs that are not live."""
-        return self.citations.keys() - self.live
+        """The cited IDs that are not live and no owner judges."""
+        return self.citations.keys() - self.live - self.foreign_citations
+
+    @property
+    def conflicting_prefixes(self) -> dict[str, Site]:
+        """The declared prefixes the tree defines, each with its earliest definition."""
+        return {prefix: site for prefix, site in sorted(self.prefix_sites.items()) if prefix in self.foreign}
+
+    @property
+    def unused_prefixes(self) -> list[str]:
+        """The declared prefixes the tree does not define that no citation carries."""
+        cited = {prefix_of(identifier) for identifier in self.citations}
+        return sorted(self.foreign - self.prefix_sites.keys() - cited)
+
+    @property
+    def unused_documents(self) -> list[str]:
+        """The declared documents that hold no live ID's first definition."""
+        holding = {self.definitions[identifier][0].site.path for identifier in self.live}
+        return sorted(self.implemented - holding)
 
     @property
     def repeated(self) -> list[str]:
@@ -90,6 +146,8 @@ class Tree:
             return f"spec ID {identifier} is cited"
         if identifier in self.definitions and identifier not in self.live:
             return f"spec ID {identifier} is retired"
+        if identifier in self.left_to_implementers:
+            return f"spec ID {identifier} is left to its implementers"
         return f"spec ID {identifier} is no longer defined"
 
 
@@ -184,14 +242,19 @@ def _read_markdown(root: Path, tracked: list[str]) -> tuple[dict[str, str], list
     return texts, unread
 
 
-def read_tree(root: Path, tracked: list[str], sources: dict[str, bytes]) -> Tree:
-    """The definitions and citations of the tree; a file that cannot be read is named, never guessed."""
+def read_tree(root: Path, tracked: list[str], sources: dict[str, bytes], declared: AllowLists) -> Tree:
+    """The definitions and citations of the tree under the config's declarations; a file that cannot be read is named,
+    never guessed."""
     texts, unread = _read_markdown(root, tracked)
     script_cited, unread_scripts = _script_citations(tracked, sources)
     citations: dict[str, list[Site]] = {}
     for identifier, site in sorted({*_python_citations(sources), *script_cited}, key=lambda each: (each[1], each[0])):
         citations.setdefault(identifier, []).append(site)
-    return Tree(_define(texts), citations, [*unread, *unread_scripts])
+    return Tree(
+        _define(texts), citations, [*unread, *unread_scripts],
+        frozenset(foreign.prefix for foreign in declared.foreign_prefixes),
+        frozenset(document.path for document in declared.implemented_documents),
+    )
 
 
 def _unread_fact(unread: list[str]) -> str:
@@ -214,8 +277,8 @@ def _note(tree: Tree) -> tuple[Note, ...]:
     return (Note(NOTE_PATH, NoteEvent.OPEN, SEPARATOR.join(fact for fact in facts if fact)),) if any(facts) else ()
 
 
-def _finding(site: Site | None, event: FindingEvent, fact: str, fix: str) -> Finding:
-    path, line = (baseline_file.BASELINE_PATH, None) if site is None else site
+def _finding(site: tuple[str, int | None], event: FindingEvent, fact: str, fix: str) -> Finding:
+    path, line = site
     return Finding(Rule.SPEC_CITATION, path, line, fact, fix, event=event)
 
 
@@ -225,8 +288,36 @@ def _citation_finding(identifier: str, site: Site, defined: Collection[str]) -> 
     return _finding(site, FindingEvent.UNDEFINED, f"{identifier} is cited and defined nowhere", "define it in a spec, or cite another ID")
 
 
+def _delete_entry(heading: str) -> str:
+    return f"delete its {heading} entry from {CONFIG_PATH}"
+
+
+def _declaration_findings(tree: Tree) -> list[Finding]:
+    """The declared prefixes the tree defines itself or no citation carries, and the declared documents that define no live ID."""
+    conflicts = [
+        _finding(
+            (CONFIG_PATH, None), FindingEvent.CONFLICT, f"{FOREIGN_PREFIX_HEADING} prefix {prefix} is defined here, first at {site}",
+            f"{_delete_entry(FOREIGN_PREFIX_HEADING)}, or give the local IDs a prefix of their own",
+        )
+        for prefix, site in tree.conflicting_prefixes.items()
+    ]
+    unused_prefixes = [
+        _finding((CONFIG_PATH, None), FindingEvent.UNUSED, f"{FOREIGN_PREFIX_HEADING} prefix {prefix} matches no citation", _delete_entry(FOREIGN_PREFIX_HEADING))
+        for prefix in tree.unused_prefixes
+    ]
+    unused_documents = [
+        _finding(
+            (path, None), FindingEvent.UNUSED, f"{IMPLEMENTED_DOCUMENT_HEADING} matches no tracked file that defines a live spec ID",
+            _delete_entry(IMPLEMENTED_DOCUMENT_HEADING),
+        )
+        for path in tree.unused_documents
+    ]
+    return [*conflicts, *unused_prefixes, *unused_documents]
+
+
 def _findings(tree: Tree, held: frozenset[str]) -> list[Finding]:
-    """The new uncited IDs, the undefined and retired citations, the later definitions of an ID and the held IDs that can fall."""
+    """The new uncited IDs, the undefined and retired citations, the later definitions of an ID, the held IDs that can fall
+    and the declarations that conflict or match nothing."""
     uncited = [
         _finding(tree.definitions[identifier][0].site, FindingEvent.UNCITED, f"spec ID {identifier} is cited by no test", "cite it at the head of a test")
         for identifier in sorted(tree.uncited - held, key=lambda each: tree.definitions[each][0].site)
@@ -245,21 +336,23 @@ def _findings(tree: Tree, held: frozenset[str]) -> list[Finding]:
         for later in tree.definitions[identifier][1:]
     ]
     can_fall = [
-        _finding(None, FindingEvent.CAN_FALL, reason, baseline_file.FIX_COMMAND)
+        _finding((baseline_file.BASELINE_PATH, None), FindingEvent.CAN_FALL, reason, baseline_file.FIX_COMMAND)
         for identifier in sorted(held)
         if (reason := tree.fall_reason(identifier))
     ]
-    return [*uncited, *sorted(cited, key=lambda each: (each.path, each.line)), *twice, *can_fall]
+    return [*uncited, *sorted(cited, key=lambda each: (each.path, each.line)), *twice, *can_fall, *_declaration_findings(tree)]
 
 
-def check_spec_citations(root: Path, tracked: list[str], sources: dict[str, bytes], baseline: baseline_file.Baseline | None) -> RuleResult:
+def check_spec_citations(
+    root: Path, tracked: list[str], sources: dict[str, bytes], baseline: baseline_file.Baseline | None, declared: AllowLists
+) -> RuleResult:
     """Without a `[spec_citations]` table the note with the counts, a count of zero left out and no note when all are zero;
     no finding, no extent. With it the findings, an extent of the held IDs and no note.
 
     A tracked Markdown file that cannot be read or is not UTF-8 and a script test file the lexer refuses are named in the note,
     so the report-only rule never changes an exit code; with the table they make the rule cannot judge. `sources` that cannot
     be read refuse the area before this rule runs."""
-    tree = read_tree(root, tracked, sources)
+    tree = read_tree(root, tracked, sources, declared)
     held = None if baseline is None else baseline.spec_citations
     if held is None:
         return RuleResult([], 0, False, _note(tree))

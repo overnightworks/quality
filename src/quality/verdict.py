@@ -17,6 +17,8 @@ from quality.config import (
     REPOSITORY_NAME,
     Declaration,
     GateSettings,
+    GeneratedFile,
+    ImplementedDocument,
     LegacyMode,
 )
 from quality.output import SEPARATOR, Glyph, Row, SubLine, counted, format_duration
@@ -271,7 +273,7 @@ def _loosenings(
     head: Side, base: Side, renames: Renames, pull_tree: PullTree | None
 ) -> tuple[tuple[Loosening, ...], tuple[Declaration, ...]]:
     """Each loosening, bound to the head's new declaration of it; a declaration the base holds already binds nothing.
-    An advisory allowance and a generated file declare their own loosening, so no [[gate.loosened]] entry binds one; a
+    An advisory allowance, a generated file and an implemented document declare their own loosening, so no [[gate.loosened]] entry binds one; a
     secret allowance, which carries no item or date, is declared by a [[gate.loosened]] entry like a removed job."""
     whats = [_removal(name) for name in base.settings.mandatory_jobs if name not in head.settings.mandatory_jobs]
     if base.settings.legacy is LegacyMode.FAIL and head.settings.legacy is not LegacyMode.FAIL:
@@ -289,7 +291,7 @@ def _loosenings(
     loosened = set(whats)
     stale = tuple(declaration for what, declaration in new.items() if what not in loosened)
     own = (Loosening(what, new.get(what)) for what in whats)
-    return (*own, *_allowance_loosenings(base.settings, head.settings), *_generated_loosenings(base.settings, head.settings)), stale
+    return (*own, *_allowance_loosenings(base.settings, head.settings), *_self_declared_loosenings(base.settings, head.settings)), stale
 
 
 def _secret_allowance_loosenings(base: GateSettings, head: GateSettings) -> list[str]:
@@ -318,14 +320,22 @@ def _allowance_loosenings(base: GateSettings, head: GateSettings) -> list[Loosen
     return loosenings
 
 
-def _generated_loosenings(base: GateSettings, head: GateSettings) -> list[Loosening]:
-    """Each head path the base does not declare generated, declared by its own item and date."""
-    inherited = {file.path for file in base.generated_files}
+# Each kind of declaration that declares its own loosening: the line the verdict prints for a path and where the settings hold them.
+_SELF_DECLARING: tuple[tuple[str, Callable[[GateSettings], Iterable[GeneratedFile | ImplementedDocument]]], ...] = (
+    ("size leaves out generated file {path}", lambda settings: settings.generated_files),
+    ("spec citation leaves {path} to its implementers", lambda settings: settings.implemented_documents),
+)
+
+
+def _self_declared_loosenings(base: GateSettings, head: GateSettings) -> list[Loosening]:
+    """Each head path the base does not declare, of each self-declaring kind, declared by its own item and date."""
     loosenings = []
-    for file in head.generated_files:
-        if file.path not in inherited:
-            what = f"size leaves out generated file {file.path}"
-            loosenings.append(Loosening(what, Declaration(what, file.item, file.date, file.reason)))
+    for line, declared in _SELF_DECLARING:
+        inherited = {each.path for each in declared(base)}
+        for each in declared(head):
+            if each.path not in inherited:
+                what = line.format(path=each.path)
+                loosenings.append(Loosening(what, Declaration(what, each.item, each.date, each.reason)))
     return loosenings
 
 

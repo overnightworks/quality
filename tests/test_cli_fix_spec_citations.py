@@ -10,7 +10,7 @@ from tests.support.baselines import holding_spec_ids, rendered
 from tests.support.door import DRY_RUN_WORDS, FIX_WORDS, digest, fixed, restore_step, tree_of
 from tests.support.git_repositories import git, put
 from tests.support.source_code import long_function
-from tests.support.specs import SPEC, spec_with
+from tests.support.specs import SPEC, declaring, foreign_entry, implemented_entry, spec_with
 
 TEST_FILE = "tests/test_a.py"
 HELD = "[file_lines]\n\n[clones]\n"
@@ -42,6 +42,14 @@ RECORDINGS = {
     "some uncited": (spec_with("- X-1: a.", "- X-2: b.", "- X-3: c."), citing("X-1"), {"X-2", "X-3"}),
     "all cited": (spec_with("- X-1: a."), citing("X-1"), set()),
     "a retired ID beside a live one": (spec_with("- X-1: a.", "- X-2 (retired)."), {}, {"X-1"}),
+    "a citation of a declared foreign prefix": (
+        spec_with("- X-1: a."), {**citing("X-1", "LANG-7"), **declaring(foreign_entry("LANG"))}, set()
+    ),
+    "an uncited ID of a declared document": (
+        {SPEC: "- X-1: a.\n", "docs/calling.md": "- CALLING-1: a.\n"},
+        declaring(implemented_entry("docs/calling.md")),
+        {"X-1"},
+    ),
 }
 
 
@@ -100,6 +108,17 @@ def test_the_fix_drops_a_held_id_that_is_cited_retired_or_undefined_and_never_ad
     assert "3 ceiling entries would fall" in planned[1]
     assert "uncited" in done[1]
     assert "X-5" in done[1]
+
+
+def test_the_fix_drops_a_held_id_once_its_document_is_declared_and_never_adds_one(build_repo, capsys):
+    """CITE-15, CITE-10: a held ID of a declared document falls as left to its implementers, the other held ID stays,
+    and an uncited ID of the document is no entry."""
+    files = {SPEC: "- X-1: a.\n", "docs/calling.md": "- CALLING-1: a.\n- CALLING-2: b.\n"}
+    repo = build_repo({**files, **declaring(implemented_entry("docs/calling.md")), BASELINE_PATH: holding_spec_ids("X-1", "CALLING-1")})
+    planned, done = both(capsys, repo)
+    assert (done[0], planned[0], written(repo)) == (0, 1, frozenset({"X-1"}))
+    assert "spec ID CALLING-1 is left to its implementers" in done[1]
+    assert "1 ceiling entry would fall" in planned[1]
 
 
 def test_a_fix_with_the_table_and_nothing_to_drop_changes_nothing(build_repo, capsys):
