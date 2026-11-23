@@ -59,6 +59,7 @@ jobs:
           fi
       # the caller's own proof that the source carries "$VERSION"
       # a build that makes release files uploads them with actions/upload-artifact
+      # a build that also publishes a page uploads it with actions/upload-pages-artifact
 
   tag:
     needs: [gate, build]
@@ -70,6 +71,22 @@ jobs:
       commit: ${{ needs.gate.outputs.commit }}
       artifact: <the build's artifact name, or omit for a release without files>
       notes: <optional Markdown that opens the release notes>
+
+  # optional: a release that publishes a static page
+  publish:
+    needs: [gate, build, tag]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pages: write # deploys the Pages artifact
+      id-token: write # proves to Pages that this run made the artifact
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@<commit sha> # v<tag>
 ```
 
 Each line has a reason:
@@ -83,8 +100,16 @@ Each line has a reason:
   the checkout's head is `needs.gate.outputs.commit`, the commit the gate judged (RELEASE-7). The gate refuses unless main's head is
   still that commit, so the two are equal; a `ref:` naming the output raises CodeQL's
   `actions/cache-poisoning/poisonable-step` alert at the checkout, so no caller writes one.
-- `needs: [gate, build]` makes the tag wait for both (RELEASE-8); `contents: write` is granted to the tag job only, so no other job
-  can write (RELEASE-9), and nothing dispatches the tag job apart from the release run (RELEASE-10).
+- `needs: [gate, build]` makes the tag wait for both (RELEASE-8); `contents: write` is granted to the tag job only, and no job
+  of the release path holds a write grant apart from the tag job, the optional publish job and an app's image jobs
+  (RELEASE-9). Nothing dispatches the tag job apart from the release run (RELEASE-10).
+- The optional `publish` job deploys a page and holds nothing else: `needs: [gate, build, tag]` makes it run after the tag
+  (RELEASE-22); it holds only `pages: write` and `id-token: write`, in the `github-pages` environment (RELEASE-23); it has no
+  checkout and no secret and runs only `actions/deploy-pages`, pinned by commit with its tag in a comment, so it runs no
+  caller code (RELEASE-24). It deploys the artifact the build uploaded with `actions/upload-pages-artifact`, which lies
+  outside the release files (TAG-4 never sees it), so a broken page generator stops the release before the tag. A failed
+  publish leaves the release standing and is re-run with "re-run failed jobs" (RELEASE-25). The precedent for the permission
+  pair is quality's `report.yml` publish job.
 - `commit` is the gate's output, the commit it judged (GATE-2).
 - `artifact` names an artifact of the same run (TAG-3). Its regular top-level files, dotfiles included, are the release's files and
   nothing else is uploaded (TAG-4); a file name carries no `#`, which gh reads as the start of an asset label. A build that makes
@@ -225,7 +250,7 @@ These refusals stop the attempt before publishing; none creates or changes a tag
 | `Refused: the tag v<version> exists at <sha>, not at the gated commit <sha>.` (TAG-13) | Choose the next version; a tag is never moved. |
 
 Re-run the failed jobs after a failed publish: the tag job runs whole again, keeps the tag at the commit and completes the
-release (TAG-14). "Re-run all jobs" runs the gate again, which refuses the existing tag. A tag left without a release by a defective
+release (TAG-14); after a failed `publish` job it runs that job alone. "Re-run all jobs" runs the gate again, which refuses the existing tag. A tag left without a release by a defective
 publish step is completed by hand with `gh release create v<version> <files> --verify-tag`.
 
 ## Concurrency
