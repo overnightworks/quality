@@ -189,6 +189,7 @@ cannot judge.
   organization holds.
 - Selecting the fleet by a custom property or topic: `quality_gate` means the ruleset applies and the emergency door switches it off, and a
   topic is one more hand step per repository. Reopens when the report should measure exactly the gated repositories.
+- Parallel REST requests in the fleet report: GitHub counts response time against 90 seconds of CPU time per 60 seconds and recommends serial requests, so a pool gains at most 1.5×. Reopens when the read needs more than the deadline holds at serial speed.
 - A check that exits 2 with the `uvx --from git+…` command for the pinned release instead of fetching it. Reopens when the operator rules it.
 
 ## 8. Risks and Technical Debt

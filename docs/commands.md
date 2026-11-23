@@ -191,11 +191,11 @@ are over every counted commit, median and p90 nearest-rank over the walls. `Red`
 with a `pull_request` run that have one concluded `failure` or `timed_out`, `Red on main` the same over the commits with a
 `push` run on the default branch; each cell reads `N % (K of M)` over its own population, a push run on another branch, or on none (a null `head_branch`), is in
 neither, and a commit red only through a verdict of declared loosenings counts as red. After every repository's runs are
-read, the jobs listing reads a sample of its runs spread evenly over the window (at most 20, an even share of the calls the
-report's cap of 600 leaves): `Jobs sampled` is the sample's size, `Queue p90` the nearest-rank 90th percentile of the time
+read, the jobs listing reads a sample of its runs spread evenly over the window (at most 10, an even share of the calls the
+report's cap of 600 leaves, and only while the report's deadline allows (FLEET-126)): `Jobs sampled` is the sample's size, `Queue p90` the nearest-rank 90th percentile of the time
 the sampled jobs waited between creation and start (a skipped or cancelled job is left out), counted apart from their
 running time, and `Over 12 min` each job name with at least 5 samples whose running time is above 12 minutes at its 90th
-percentile, the slowest first, or `none`; a repository whose jobs cannot be read shows `cannot read jobs`, and one whose runs were read but whose jobs the cap left no call for shows `not sampled · call cap` in all three cells. The report reads
+percentile, the slowest first, or `none`; a repository whose jobs cannot be read shows `cannot read jobs`, one whose runs were read but whose jobs the cap left no call for shows `not sampled · call cap` in all three cells, and one whose jobs the deadline stopped before the first call shows `not sampled · time limit`. The report reads
 runs without a page cap per repository, within its 600 calls; a repository the cap stops shows `partly read` and the pages
 read, or `cannot read CI time` where its runs cannot be read, in place of its numbers, and the table raises no finding and
 changes no exit (FLEET-105). One large repository can use up the cap and leave those read after it `partly read`, in the
@@ -208,6 +208,18 @@ listing's order. Private repositories are not read, and a commit whose runs begi
 and no exit, and the JSON document (FLEET-106) does not carry them (FLEET-112). Named gaps: G1, a run re-run after a green
 first attempt counts as green on re-run; G2, no job names or failing steps are read; G3, a run created before the window
 but re-run inside it is not counted.
+
+The CI-time read starts before the first clone and runs beside the clones, the size measurement and the pairs between
+repositories, one request at a time; its rows print after the last repository's row, and the tables and the document are
+those a read after the clones gives (FLEET-125). The report has one deadline of 720 seconds from its start: no request
+and no clone starts after it, and a clone in flight ends at it. A repository whose runs it stops is `partly read · N pages
+read` and makes `complete` false; one whose jobs it stops before the first call shows `not sampled · time limit` in its
+three cells, and one it stops mid-sample shows the sample it read; one whose clone it does not start is `not measured ·
+the report's 720 seconds are spent` (exit `2`, FLEET-46). Like the call cap, it falls on the repositories read last, in
+the listing's order (FLEET-126). The `fleet report` job's limit covers its setup, the deadline, one request in flight
+and the tail (tables, summary, document, upload): 60 + 720 + 30 + 90 = 900 seconds (FLEET-127). Named gaps: the pairs
+between repositories are not bounded (24 s at 18 repositories, inside the tail); a size measurement in flight finishes
+after the deadline; a cut is not spread evenly.
 
 With `GITHUB_STEP_SUMMARY` set, the
 tables are appended there (FLEET-43). Every cell puts a backslash before `` \ ` * _ ~ [ ] < > & | ``, so repository text

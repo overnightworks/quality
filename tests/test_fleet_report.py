@@ -3,6 +3,7 @@ tables alone on stdout and in the step summary."""
 
 import json
 import subprocess
+import threading
 import urllib.error
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -12,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import __version__, cli, fleet_ci_time, web
+from quality import __version__, cli, fleet, fleet_ci_time, web
 from quality.fleet import ListingFetch, ReleaseTagsError, TagReader
 from quality.report import CannotJudge
 from tests.support.clones import function
@@ -28,8 +29,16 @@ class Printed:
 
 
 def ticks(*seconds: float) -> Callable[[], float]:
-    """A clock that reads each of `seconds` once; one read too many is a StopIteration."""
-    return iter(seconds).__next__
+    """A clock that reads each of `seconds` once on the test's thread, one read too many a StopIteration; the CI-time
+    worker's reads see the latest value and use none."""
+    readings, owner, latest = iter(seconds), threading.get_ident(), [0.0]
+
+    def read() -> float:
+        if threading.get_ident() == owner:
+            latest[0] = next(readings)
+        return latest[0]
+
+    return read
 
 
 def report_in(
@@ -735,3 +744,43 @@ def test_markdown_in_a_path_of_a_pair_stays_text(capsys, monkeypatch, tmp_path, 
     beta = public("beta", {"<!--x.py": function("copied", "value", "local")})
     printed = report_in(write_fleet(tmp_path / "fleet", [alpha, beta]), capsys, monkeypatch, ticks(*range(8)))
     assert clone_pair_table(printed)[4].startswith(f"| {alpha} | \\<!--x.py copied | {beta} |")
+
+
+@pytest.mark.parametrize(
+    ("beta_reached_at", "clone_bounds", "exit_code", "not_measured"),
+    [(721, [300], 2, True), (720, [300], 2, True), (719, [300, 1], 0, False)],
+    ids=["overdrawn", "none left", "one second left"],
+)
+def test_a_clone_starts_only_within_the_reports_deadline_and_ends_at_it(
+    capsys, monkeypatch, tmp_path, public, beta_reached_at, clone_bounds, exit_code, not_measured
+):
+    """FLEET-126: no clone starts once the 720 seconds are spent, the row says why and the exit is 2; a clone in
+    flight is bound by the seconds left when it is smaller than the clone's own bound."""
+    alpha, beta = public("alpha", {"a.py": "a = 1\n"}), public("beta", {"b.py": "b = 1\n"})
+    bounds, clone = [], fleet.git
+
+    def recording(arguments, scratch, environment, timeout):
+        bounds.append(timeout)
+        return clone(arguments, scratch, environment, fleet.CLONE_TIMEOUT_SECONDS)
+
+    monkeypatch.setattr(fleet, "git", recording)
+    ticks_read = ticks(0, 1, 2, beta_reached_at, beta_reached_at + 1, beta_reached_at + 2)
+    printed = report_in(write_fleet(tmp_path / "fleet", [alpha, beta]), capsys, monkeypatch, ticks_read)
+    assert bounds == clone_bounds
+    beta_row = next(line for line in printed.err.splitlines() if beta in line)
+    assert printed.code == exit_code
+    assert ("not measured" in beta_row) == not_measured
+    assert beta_row.endswith("the report's 720 seconds are spent") == not_measured
+
+
+def test_an_exception_inside_the_ci_time_read_reaches_the_report(capsys, monkeypatch, tmp_path, public):
+    """FLEET-125: the worker thread's failure is the report's failure, not a silent missing table."""
+    alpha = public("alpha", {"a.py": "a = 1\n"})
+
+    def broken(url, headers, unreadable):
+        raise RuntimeError("the read broke")
+
+    fleet_file, ticks_read = write_fleet(tmp_path / "fleet", [alpha]), ticks(*range(8))
+
+    with pytest.raises(RuntimeError, match="the read broke"):
+        report_in(fleet_file, capsys, monkeypatch, ticks_read, fetch_listing=broken)

@@ -9,9 +9,10 @@ from datetime import datetime, timedelta
 from email.message import Message
 
 from quality import ci_time, output
+from quality.deadline import RunDeadline
 from quality.report import CannotJudge
 
-JOBS_PER_REPOSITORY = 20
+JOBS_PER_REPOSITORY = 10
 JOBS_URL = "https://api.github.com/repos/{name}/actions/runs/{run_id}/jobs?filter=latest&per_page=100"
 JOB_LIMIT = timedelta(minutes=12)
 NOT_RAN = frozenset({"skipped", "cancelled"})
@@ -19,6 +20,7 @@ FEWEST_SAMPLES_PER_JOB = 5
 QUEUE, JOB = 90, 90
 UNREADABLE = "cannot read jobs"
 CUT_BY_CAP = "not sampled · call cap"
+CUT_BY_TIME = "not sampled · time limit"
 DASH = "—"
 
 JobsFetch = Callable[[str, Mapping[str, str], Callable[[Exception], CannotJudge]], tuple[bytes, Message]]
@@ -51,7 +53,9 @@ class JobsUnread:
 
 @dataclass(frozen=True)
 class JobsCut:
-    """A repository with runs whose jobs the report's call cap kept from a sample."""
+    """A repository with runs whose jobs the report's call cap or deadline kept from a sample."""
+
+    reason: str
 
 
 def sample_size(runs_available: int, budget: int, repositories: int) -> int:
@@ -65,13 +69,18 @@ def evenly(runs: Sequence[RunToSample], size: int) -> list[RunToSample]:
     return [ordered[(2 * position + 1) * len(ordered) // (2 * size)] for position in range(size)]
 
 
-def read_job_time(name: str, runs: Sequence[RunToSample], headers: Mapping[str, str], fetch: JobsFetch) -> tuple[JobTime | JobsUnread, int]:
-    """The sample's job numbers and the calls it made; a failed read is JobsUnread."""
+def read_job_time(
+    name: str, runs: Sequence[RunToSample], headers: Mapping[str, str], fetch: JobsFetch, deadline: RunDeadline
+) -> tuple[JobTime | JobsUnread | JobsCut, int]:
+    """The sample's job numbers over the runs read before the deadline and the calls it made; a failed read is
+    JobsUnread, and a deadline spent before the first call is JobsCut."""
     queues: list[timedelta] = []
     durations: dict[str, list[timedelta]] = defaultdict(list)
     calls = 0
     try:
         for run in runs:
+            if deadline.left() <= 0:
+                break
             calls += 1
             body, _ = fetch(JOBS_URL.format(name=name, run_id=run.run_id), headers, _unreadable)
             for job_name, queued, ran in _timed_jobs(body):
@@ -79,14 +88,16 @@ def read_job_time(name: str, runs: Sequence[RunToSample], headers: Mapping[str, 
                 durations[job_name].append(ran)
     except CannotJudge:
         return JobsUnread(UNREADABLE), calls
-    return JobTime(len(runs), ci_time.nearest_rank(queues, QUEUE) if queues else None, _over_limit(durations)), calls
+    if not calls:
+        return JobsCut(CUT_BY_TIME), calls
+    return JobTime(calls, ci_time.nearest_rank(queues, QUEUE) if queues else None, _over_limit(durations)), calls
 
 
 def table_cells(reading: JobTime | JobsUnread | JobsCut | None) -> tuple[str, str, str]:
     """The sample size, the queue p90 and the jobs above the limit under their columns; a repository without runs
-    shows dashes and one the call cap left unsampled says so."""
+    shows dashes and one the call cap or the deadline left unsampled says so."""
     if isinstance(reading, JobsCut):
-        return (CUT_BY_CAP, CUT_BY_CAP, CUT_BY_CAP)
+        return (reading.reason,) * 3
     if isinstance(reading, JobsUnread):
         return (reading.reason, DASH, DASH)
     if reading is None or reading.queue_p90 is None:
