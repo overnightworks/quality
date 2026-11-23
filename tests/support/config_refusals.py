@@ -249,7 +249,7 @@ def _unknown_key_refusals() -> list[Refusal]:
     for table, example in (("root", config.ROOT_ALLOWANCE_EXAMPLE), ("layout", config.LAYOUT_ALLOWANCE_EXAMPLE),
                            ("python", config.PYTHON_ALLOWANCE_EXAMPLE), ("compose", config.COMPOSE_ALLOWANCE_EXAMPLE),
                            ("workflow", config.WORKFLOW_ALLOWANCE_EXAMPLE), ("size", config.GENERATED_FILE_EXAMPLE),
-                       ("spec_citations", config.FOREIGN_PREFIX_EXAMPLE)):
+                           ("spec_citations", config.FOREIGN_PREFIX_EXAMPLE)):
         refusals.append(Refusal(f"{table} unknown key", f"[{table}]\nignore = []\n", f"{where} ignore - {KNOWN_KEYS}", example))
     return refusals
 
