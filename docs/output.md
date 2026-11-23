@@ -127,7 +127,7 @@ rows, by area:
   `# pytest-random: <reason>` marker ([rules](rules.md)). A pytest line `pytest-workers` reports as `invalid` carries no
   `pytest-random` row, so it is red once. A `vitest-random` finding is `unshuffled` at the config of a vitest project that does
   not shuffle both orders under its root `test.sequence` or fixes its seed, and at its `package.json` where it has no config; its fix
-  names the key to set ([rules](rules.md)).
+  names the key to set ([rules](rules.md)). A `node-test-random` finding is `unshuffled` (`node --test runs its files and tests in a fixed order`) or `unseeded` (`no reporter of the call prints the seed to the log`) at the call's first line, or `invalid` (`command cannot be read to its end`, `command is built at run time, node --test cannot be read`); its fix names the flag or the reporter and no marker ([rules](rules.md)).
 - `code`: a security finding is `insecure`, a `print` or `pprint` is a `print call`, and an owner that names no code
   found in its file is `unused` ([rules](rules.md)). A `logging` finding is no finding row but an `open` note at the
   file and line, its fact the logline rule it breaks (LOGGING-3).

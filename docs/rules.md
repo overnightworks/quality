@@ -1829,7 +1829,41 @@ project to the same R6. Vitest runs files and tests in a fixed order unless `tes
   `not in <tag>` in the fleet matrix's column (FLEET-18). Not covered, named: negatives in scripts and workflow calls
   (`--sequence.shuffle=false`, `--sequence.seed=N`), `--config` pointing elsewhere, `extends: false`, a `reporters` list
   without a reporter that prints the seed, 4.1.12's parent-directory config lookup (errs stricter). R6 under node's own test
-  runner is another rule's.
+  runner is `node-test-random`'s.
+
+`node-test-random`, in the `dependencies` area beside `vitest-random`, holds a `node --test` call of a workflow to the same
+R6. Node's runner runs its files and tests in a fixed order unless `--test-randomize` or a `--test-random-seed` says
+otherwise (node 24.16 or newer; an older node refuses the flag), and prints `Randomized test order seed: N` through its
+spec, tap and junit reporters.
+
+- **The call (NODETEST-1).** A command in a `run:` script of a tracked workflow, read by the reader of `pytest-workers`
+  (PYTEST-2, PYTEST-3: wrappers, assignments, a shell's `-c` string, and the runners `npx`, `npm exec`, `pnpm exec` and
+  `yarn`), whose command word is `node` and whose words before the first `--` hold `--test`. The row's extent is the
+  workflows read; a repository without such a call is clean.
+- **No shuffle, `unshuffled` (NODETEST-2).** One finding at the call's first line, the fact `node --test runs its files and
+  tests in a fixed order`. Among the words before the first `--`, a call shuffles when the last of `--test-randomize` and
+  `--no-test-randomize` is `--test-randomize` (`--test-randomize=<anything>` counts as set, as node reads it), or when a
+  `--test-random-seed` stands; a seed whose value (`=n` or the next word) is a whole number fixes the order and is
+  `unshuffled` as well (as RANDOM-5 treats one), while a seed built at run time (`${{ }}`, `$VAR`, `$(...)`) is clean. The fix
+  is `pass --test-randomize before the test files and drop --no-test-randomize and a fixed --test-random-seed (node 24.16 or
+  newer); node then prints "Randomized test order seed: N"`.
+- **No seed in the log, `unseeded` (NODETEST-3).** A call that shuffles and has `--test-reporter` words, none of them a
+  `spec`, `tap` or `junit` reporter whose destination is `stdout` or `stderr`: the n-th `--test-reporter-destination` goes
+  with the n-th `--test-reporter`, and a reporter without one writes to stdout. `dot`, `lcov` and a reporter named by
+  module path or package do not count; a call without `--test-reporter` is clean. The fact is `no reporter of the call prints
+  the seed to the log`, the fix `add --test-reporter=spec --test-reporter-destination=stdout so the log prints "Randomized
+  test order seed: N"`. A call that does not shuffle has the first finding only, so each call has at most one.
+- **Reading (NODETEST-4).** The words are read, never run. A line the reader cannot finish that holds the words `node` and
+  `--test` is `invalid` (`command cannot be read to its end`), and so is a command built at run time in a script holding
+  them (`command is built at run time, node --test cannot be read`). A workflow that cannot be read is exit `2` naming the
+  file, as PYTEST-9 says.
+- **No release, no switch (NODETEST-5).** No configuration switches the rule off, and no marker exists, as for VITEST-5. It
+  first ships in the next release, so a gate pinned below it shows `not in <tag>` in the fleet matrix's column (FLEET-18).
+  Not covered, named: a call behind a package.json script (`npm test`, `pnpm test`, `node --run`), `make` or a mise task,
+  `run()` from `node:test` inside a script, `NODE_OPTIONS` (a randomizing value there leaves the finding, a fixing one goes
+  unseen), a config file passed with `--config-file`, an option written after the first test file (it reads as set), and
+  subtests awaited one by one, which keep their order as node documents. A custom reporter counts as printing no seed,
+  which is stricter.
 
 The `logging` rule, in the `code` area, judges a repository against the machine rules of the fleet standard "Logging" with
 logline's own checker, `logline.check.check` of the logline release quality pins. quality holds no copy of the standard's
