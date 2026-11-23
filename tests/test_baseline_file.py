@@ -44,13 +44,32 @@ def test_a_version_holding_one_table_does_not_hold_the_other(held, asked):
     assert holds_table(f"[{held}]\n".encode(), asked) is False
 
 
+UNREAD_NAMING = [
+    pytest.param("[{name}", id="not TOML"),
+    pytest.param("[{name}]\n[file_lines\n", id="a header and a broken line"),
+    pytest.param("\xff[{name}]", id="not UTF-8"),
+]
+UNREAD_NOT_NAMING = [
+    pytest.param(b"[file_lines]\n<<<<<<< ours\n\"a.py\" = 900\n=======\n\"a.py\" = 800\n>>>>>>> theirs\n", id="conflict markers"),
+    pytest.param(b"\xff\xfe", id="not UTF-8"),
+]
+
+
 @pytest.mark.parametrize("name", ["clones", "job_minutes", "spec_citations"])
-@pytest.mark.parametrize("version", [b"[clones", b"\xff\xfe"], ids=["not TOML", "not UTF-8"])
-def test_a_version_no_parser_reads_shows_nothing(version, name):
-    """FIX-13, TIMEOUT-28: a version of the ceiling in git that no parser reads raises the error that names it, instead
-    of reading as a table held or absent, for either table."""
-    with pytest.raises(SizeError, match="a version of quality/baseline.toml in git cannot be read"):
+@pytest.mark.parametrize("text", UNREAD_NAMING)
+def test_a_version_no_parser_reads_that_names_the_table_raises(text, name):
+    """FIX-13, TIMEOUT-28: a version of the ceiling in git that no parser reads and whose bytes name the table raises the
+    error that names the table, instead of reading as held or absent."""
+    version = text.format(name=name).encode("latin-1")
+    with pytest.raises(SizeError, match=f"a version of quality/baseline.toml in git cannot be read and names {name}"):
         holds_table(version, name)
+
+
+@pytest.mark.parametrize("name", ["clones", "job_minutes", "spec_citations"])
+@pytest.mark.parametrize("version", UNREAD_NOT_NAMING)
+def test_a_version_no_parser_reads_that_never_names_the_table_holds_nothing(version, name):
+    """FIX-46: a version no TOML parser reads whose bytes never name the table does not hold it."""
+    assert holds_table(version, name) is False
 
 
 def test_an_unknown_table_names_the_tool_version_and_every_known_table_with_the_held_lists():
