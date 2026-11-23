@@ -11,6 +11,7 @@ class Switch(Enum):
     IMPORT_LINTER_CONFIG = "an import-linter config"
     CLONE_TABLE = "a clone table"
     LITERAL_TABLE = "a literal text table"
+    SPEC_TABLE = "a spec citation table"
     JUDGED_PROJECT = "a judged project"
     REPORT_ONLY = "report only"
     CATALOG_DECLARATION = "a catalogs declaration"
@@ -83,7 +84,7 @@ class Rule(StrEnum):
     CLONE = "clone", Area.DEBT, "v0.4.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE)
     JOB_TIMEOUT = "job-timeout", Area.DEBT, RELEASE_0_12, Switch.ALWAYS
     TEST_TWIN = "test-twin", Area.DEBT, RELEASE_0_23, Switch.REPORT_ONLY
-    SPEC_CITATION = "spec-citation", Area.DEBT, RELEASE_0_25, Switch.REPORT_ONLY
+    SPEC_CITATION = "spec-citation", Area.DEBT, RELEASE_0_25, Switch.REPORT_ONLY, SwitchChange(None, Switch.SPEC_TABLE)
     IMPORT_CONTRACT = "import-contract", Area.IMPORTS, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
     CLAUDE_MD = "claude-md", Area.FILES, RELEASE_0_3, Switch.ALWAYS
     AGENTS_MD = "agents-md", Area.FILES, RELEASE_0_11, Switch.ALWAYS
