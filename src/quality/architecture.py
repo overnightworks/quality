@@ -23,6 +23,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
+from functools import partial
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 
@@ -43,7 +44,8 @@ from importlinter.domain.contract import Contract, ContractCheck, InvalidContrac
 from importlinter.domain.helpers import MissingImport
 from importlinter.domain.imports import ImportExpression, ModuleExpression
 
-from quality import ratchet
+from quality import external_imports, python_imports, ratchet
+from quality import repository as checkout_files
 from quality.report import Finding, FindingEvent, Note, NoteEvent, RuleResult
 from quality.rules import Rule
 
@@ -157,7 +159,8 @@ def check_contracts(root: Path, tracked: Sequence[str], configs: Mapping[str, st
         roots = {package: _source_root(tracked, package) for package in config.options.session_options["root_packages"]}
         with _library_warnings(repository) as graph_warnings:
             graph = _build_graph(repository, roots, config.options)
-    results = [_check(contract, graph, config.name, repository) for contract in contracts]
+    statements_of = partial(_statements_of, root, frozenset(tracked), roots)
+    results = [_check(contract, graph, config.name, repository, partial(_refined, roots, statements_of)) for contract in contracts]
     grimp_notes = tuple(Note(config.name, NoteEvent.WARNING, message.removeprefix(GRIMP_WARNING_PREFIX)) for message in graph_warnings)
     return RuleResult([finding for result in results for finding in result.findings], len(contracts), False,
                       (*grimp_notes, *(note for result in results for note in result.notes)))
@@ -673,11 +676,42 @@ def _library_warnings(repository: str) -> Iterator[list[str]]:
         logger.propagate = propagates
 
 
-def _check(contract: Contract, graph: grimp.ImportGraph, config_name: str, repository: str) -> RuleResult:
+def _refined(roots: Mapping[str, str], statements_of: Callable[[str], list[python_imports.Statement]],
+             contract: Contract, graph: grimp.ImportGraph) -> None:
+    """The contract's own copy keeps the submodules of an external package that its
+    `ignore_imports` name, read from the tracked statements of the modules importing it."""
+    if not isinstance(contract, ForbiddenContract):
+        return
+    for package, names in external_imports.named_submodules(contract.ignore_imports or (), roots).items():
+        if not contract.as_packages:
+            raise ContractError(f"contract {contract.name} ignores imports of {package} submodules and sets as_packages = false;"
+                                " an import of a submodule that no line covers cannot be judged")
+        if package in graph.modules:
+            importers = sorted(graph.find_modules_that_directly_import(package))
+            external_imports.refine(graph, package, names, {importer: statements_of(importer) for importer in importers})
+
+
+def _statements_of(root: Path, tracked: frozenset[str], roots: Mapping[str, str], module: str) -> list[python_imports.Statement]:
+    """The import statements of the tracked file of a module of a root package."""
+    place = _module_place(roots[module.partition(".")[0]], module)
+    path = next((path for path in (f"{place}.py", f"{place}/{PACKAGE_INIT}") if path in tracked), None)
+    content = None if path is None else checkout_files.read_bytes(root, path)
+    if path is None or content is None:
+        raise ContractError(f"module {module} cannot be examined: the checkout holds no tracked file for it")
+    try:
+        return python_imports.import_statements(path, content)
+    except ratchet.PARSE_ERRORS as error:
+        raise UnparsableModule(_cut(f"{path} is not valid Python ({error})")) from error
+
+
+def _check(contract: Contract, graph: grimp.ImportGraph, config_name: str, repository: str,
+           refine: Callable[[Contract, grimp.ImportGraph], None]) -> RuleResult:
     """Checks one contract on its own copy of the graph, as import-linter does."""
     with _judging(f"contract {contract.name} in {config_name}", repository):
+        own_graph = copy.deepcopy(graph)
+        refine(contract, own_graph)
         try:
-            check = contract.check(copy.deepcopy(graph), verbose=False)
+            check = contract.check(own_graph, verbose=False)
         except MissingImport as stale:
             return RuleResult([
                 Finding(Rule.IMPORT_CONTRACT, config_name, None, _ignore_fact(contract.name, line, _ignored_expression(line)), STALE_IGNORE_FIX, event=FindingEvent.UNUSED)

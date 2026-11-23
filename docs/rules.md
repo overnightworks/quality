@@ -278,6 +278,19 @@ It applies these rules:
   row `✗ not checked` with the reason (exit `2`) (IMPORT-24); a warning grimp gives while building the graph is a
   [note row](output.md#notes) `· <config>  warning  <grimp's message>`, before the contracts' notes (IMPORT-25). No
   message names an absolute local path (IMPORT-26).
+  A `forbidden` contract whose own `ignore_imports` name a plain dotted submodule of an external package (one that is
+  no root package), such as `skat.table.** -> agents.calling`, is checked on its own copy of the graph in which that
+  package keeps the submodules the contract names; every other contract keeps grimp's squashed package, and a wildcard
+  such as `-> agents.*` names no submodule (IMPORT-29). Stock import-linter reports such a line as unmatched, so an app
+  that uses it drops its own `lint-imports` run. Every import statement at a line grimp reports for an import of that
+  package is read from the importer's tracked file, an import inside a function included and one under `TYPE_CHECKING`
+  left out as grimp leaves it out: `import a.b` names `a.b`, `from M import x` names `M.x`, `from M import *` names
+  `M`, and each name is held at the longest prefix the contract names, otherwise at the package, so
+  `from agents import calling` is `agents.calling`, `from agents.calling.sub import x` is `agents.calling`, and
+  `from agents import Standing`, `from agents.turn import T` and `import agents` are `agents` (IMPORT-30). On that
+  copy an `ignore_imports` line naming the bare package matches only imports held at the package itself, and a line no
+  import matches follows IMPORT-6 (IMPORT-31). A refining contract with `as_packages = false`, and a module grimp read
+  that Python cannot parse or git does not track, cannot be judged (exit `2`) (IMPORT-32).
   On a pull request `quality verdict` and the door also hold the head's import contracts against the base's (see
   "The import contracts only tighten" below).
 - `claude-md`: a tracked `CLAUDE.md`, in any case (`claude.md` is named as it is) (CLAUDE-1), holds exactly `@AGENTS.md`
