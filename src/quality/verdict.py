@@ -349,31 +349,45 @@ def _baseline_loosenings(base: Baseline | None, head: Baseline | None, renames: 
         return [f"{BASELINE_PATH} removed"]
     base = carried_base(base, renames, named_paths(head))
     lines = [f"size baseline {entry.describe()}" for entry in raised_entries(base.size, head.size)]
-    return [*lines, *_clone_loosenings(base, head), *_job_loosenings(base, head), *_citation_loosenings(base, head)]
+    return [*lines, *(line for held in _HELD_TABLES for line in held(base, head))]
 
 
-def _clone_loosenings(base: Baseline, head: Baseline) -> list[str]:
-    if base.clones is None:
+def _table_loosenings[Table](
+    noun: str,
+    table: Callable[[Baseline], Table | None],
+    loosened: Callable[[Table, Table], list[str]],
+    base: Baseline,
+    head: Baseline,
+) -> list[str]:
+    """One held table: nothing where the base has none, the removal where the head drops it, else what the head loosens."""
+    base_table, head_table = table(base), table(head)
+    if base_table is None:
         return []
-    if head.clones is None:
-        return ["clone baseline removed"]
-    return [f"clone baseline adds {pair.label}" for pair in added_pairs(base.clones, head.clones)]
+    if head_table is None:
+        return [f"{noun} removed"]
+    return [f"{noun} {change}" for change in loosened(base_table, head_table)]
 
 
-def _job_loosenings(base: Baseline, head: Baseline) -> list[str]:
-    if base.job_minutes is None:
-        return []
-    if head.job_minutes is None:
-        return ["job limit baseline removed"]
-    return [f"job limit baseline {entry.describe()}" for entry in raised_job_limits(base.job_minutes, head.job_minutes)]
-
-
-def _citation_loosenings(base: Baseline, head: Baseline) -> list[str]:
-    if base.spec_citations is None:
-        return []
-    if head.spec_citations is None:
-        return ["spec citation baseline removed"]
-    return [f"spec citation baseline adds {identifier}" for identifier in sorted(head.spec_citations - base.spec_citations)]
+_HELD_TABLES: tuple[Callable[[Baseline, Baseline], list[str]], ...] = (
+    partial(
+        _table_loosenings,
+        "clone baseline",
+        lambda baseline: baseline.clones,
+        lambda base, head: [f"adds {pair.label}" for pair in added_pairs(base, head)],
+    ),
+    partial(
+        _table_loosenings,
+        "job limit baseline",
+        lambda baseline: baseline.job_minutes,
+        lambda base, head: [entry.describe() for entry in raised_job_limits(base, head)],
+    ),
+    partial(
+        _table_loosenings,
+        "spec citation baseline",
+        lambda baseline: baseline.spec_citations,
+        lambda base, head: [f"adds {identifier}" for identifier in sorted(head - base)],
+    ),
+)
 
 
 def _judge_job(name: str, jobs: list[Job], current_attempt: int) -> tuple[JobOutcome, Unsettled | None]:
