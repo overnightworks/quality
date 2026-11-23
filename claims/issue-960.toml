@@ -1,8 +1,0 @@
-claim_id = "57c8334c776c4037b81aa4fc6ab3e081"
-agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
-role = "builder"
-base = "325e8dd30c03d25b5d47c81277e860c13ea847ab"
-branch = "claude/issue-960-marker-run-above-a-call"
-scope = ["docs/rules.md", "src/quality/workflow_document.py", "tests/test_pytest_random.py", "tests/test_workflow_rules_install.py", "tests/test_workflow_rules_pytest.py"]
-opened_commit = "161efbb8869610c0b26a6f0136ff548da8a00e00"
-whole_reason = "One reading of the comment run above a call, shared by the three marker rules, with their spec sentences and the tests of each rule."
