@@ -3,7 +3,7 @@
 `pr-concurrency`: a workflow a pull request triggers sets a top-level `concurrency` that groups a pull-request run by its
 number and cancels only pull-request runs; no expression is read.
 
-`pytest-workers`: every pytest call in a `run:` script passes `-n` with more than zero workers or carries a
+`pytest-workers`: every pytest call that runs tests in a `run:` script passes `-n` with more than zero workers or carries a
 `# pytest-workers: <reason>` marker; the script is read as POSIX shell words, never run.
 
 `runtime-install`: no `run:` script installs through an operating-system package manager or pipes a download into a
