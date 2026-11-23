@@ -43,7 +43,7 @@ def check_node_test_random(root: Path, tracked: Sequence[str]) -> RuleResult:
     """Every `node --test` call in a `run:` of a tracked workflow, judged; the extent is how many workflows were read."""
     judged = judge_scripts(NODE_RULE, root, list(tracked))
     findings = [replace(finding, fix=SEED_FIX) if finding.event is FindingEvent.UNSEEDED else finding for finding in judged.findings]
-    return replace(judged, findings=findings)
+    return RuleResult(findings, judged.extent, judged.measured_only, judged.notes)
 
 
 def _holds_node_test(text: str) -> bool:
