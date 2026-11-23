@@ -31,12 +31,14 @@ from quality import (
     config,
     fleet_ci_time,
     fleet_clones,
+    fleet_suites,
     layout,
     output,
     process,
     ratchet,
     report,
     repository,
+    suites,
     web,
 )
 from quality.report import CannotJudge, Command, Example, Instruction, Step
@@ -203,6 +205,7 @@ class Measured:
     unparsable: dict[ratchet.FunctionSource, int]
     pairs: dict[ratchet.Area, int]
     units: list[clones.Unit]
+    suites: suites.Suites
     workflows: checkout.Workflows
     declared: Declared
 
@@ -414,9 +417,10 @@ def measure_repository(name: str) -> Row:
     tree = ratchet.measure(sources)
     units = clones.units_of(sources, name)
     pairs = clones.summarise_pairs(clones.file_pairs(units).pairs)
+    counted = suites.count_suites(tracked, sources)
     commit = head[:SHORT_COMMIT]
     languages, areas = ratchet.language_lines(tree), ratchet.summarise(tree)
-    return Measured(name, commit, languages, areas, {source: tree.unparsable_count(source) for source in ratchet.FunctionSource}, pairs, units, workflows, declared)
+    return Measured(name, commit, languages, areas, {source: tree.unparsable_count(source) for source in ratchet.FunctionSource}, pairs, units, counted, workflows, declared)
 
 
 def read_declared(clone: Path, tracked: list[str]) -> Declared:
@@ -488,7 +492,15 @@ def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTag
         "|---" * len(fleet_clones.COLUMNS) + "|",
         *(table_line(pair.cells) for pair in between),
     ]
-    return (heading, "", *table, "", matrix_heading, "", every_release, "", *matrix, "", ci_heading, "", *ci_table, "", fleet_clones.heading(between), "", *between_table)
+    suites_table = [
+        table_line(fleet_suites.COLUMNS),
+        "|---" * len(fleet_suites.COLUMNS) + "|",
+        *(table_line(suites_cells(row)) for row in rows),
+    ]
+    return (
+        heading, "", *table, "", matrix_heading, "", every_release, "", *matrix, "", ci_heading, "", *ci_table, "",
+        fleet_clones.heading(between), "", *between_table, "", fleet_suites.HEADING, "", *suites_table,
+    )
 
 
 def run_report(
@@ -734,6 +746,12 @@ def cells(row: Row) -> tuple[str, ...]:
     if isinstance(row, Measured):
         return measured_cells(row)
     return (row.name, DASH, status_label(row), *("",) * (len(COLUMNS) - 3))
+
+
+def suites_cells(row: Row) -> tuple[str, ...]:
+    if isinstance(row, Measured):
+        return fleet_suites.cells(row.name, row.suites)
+    return fleet_suites.unjudged_cells(row.name, status_label(row))
 
 
 def status_label(row: Unjudged) -> str:

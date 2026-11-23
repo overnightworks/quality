@@ -89,7 +89,7 @@ usage: quality report [--ci-time-json] [-v]
 
 Measure every fleet repository {fleet.FLEET_PATH} selects: size, debt, the gate
 release it pins, the CI time of the last {fleet_ci_time.WINDOW_DAYS} days. A row per repository goes to
-stderr, the four markdown tables to stdout and to the step summary.
+stderr, the five markdown tables to stdout and to the step summary.
 
 Options:
   --ci-time-json  also write the weekly CI time to {fleet_ci_time.DOCUMENT_PATH}
