@@ -5,7 +5,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta, timezone
 from email.message import Message
-from itertools import count
+from zlib import crc32
 
 import pytest
 
@@ -30,13 +30,12 @@ WINDOW_START = datetime(2026, 11, 14, tzinfo=UTC)
 WINDOW_START_SECONDS = int((WINDOW_START - START).total_seconds())
 SEARCH_RESULT_LIMIT = 1000
 PAGE_SIZE = 100
-fresh_ids = count(1_000_000)
 
 
 def run(sha, created=0, updated=60, event="pull_request", status="completed", conclusion="success", branch="feature", run_id=None, attempt=1):
-    """A workflow run of `sha` on `branch` whose moments are seconds after START; without a `run_id` it gets its own."""
+    """A workflow run of `sha` on `branch` whose moments are seconds after START; without a `run_id` it gets one derived from its other fields."""
     return {
-        "id": next(fresh_ids) if run_id is None else run_id,
+        "id": crc32(repr((sha, created, updated, event, status, conclusion, branch, attempt)).encode()) if run_id is None else run_id,
         "head_branch": branch,
         "head_sha": sha,
         "event": event,
