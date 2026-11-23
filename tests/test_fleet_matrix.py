@@ -496,7 +496,8 @@ def test_locator_text_on_main_reads_whether_the_clone_declares_catalogs(declares
 
 RULES_FIRST_RELEASED_IN_V0_21_OR_LATER = [
     Rule.LOCATOR_TEXT.release, Rule.FLEET_SOURCE.release, Rule.NAMING.release, Rule.PR_WORKFLOWS.release,
-    Rule.PYTEST_RANDOM.release, Rule.LIVE_LAYER.release, Rule.VITEST_RANDOM.release
+    Rule.PYTEST_RANDOM.release, Rule.LIVE_LAYER.release, Rule.VITEST_RANDOM.release,
+    Rule.NODE_TEST_RANDOM.release
 ]
 REPORT_ONLY_RULES_FIRST_RELEASED_IN_V0_23_OR_LATER = [Rule.TEST_TWIN.release, Rule.LOGGING.release, Rule.SPEC_CITATION.release]
 
@@ -578,6 +579,16 @@ def test_a_pinned_gate_reads_the_spec_table_from_the_release_that_names_it(pin, 
     rule = RuleRelease("future", "v0.1.0", Switch.REPORT_ONLY, (SwitchChange("v0.5.0", Switch.SPEC_TABLE),))
     release = gate_release((gate_call("e" * 40),), False, {**FIRST_RELEASES, pin: "e" * 40})
     assert rule_cell(rule, release, declared(has_spec_table=has_spec_table)) == words
+
+
+@pytest.mark.parametrize(
+    ("has_spec_table", "words"), [(True, "enforced"), (False, "report-only")], ids=["a table", "no table"]
+)
+def test_spec_citation_under_the_release_of_its_switch_reads_whether_the_clone_holds_the_table(has_spec_table, words):
+    """FLEET-118: a gate pinned at the release that switches the rule reads the table."""
+    pin = "d" * 40
+    release = gate_release((gate_call(pin),), False, {**FIRST_RELEASES, SPEC_CITATION.switched[0].release: pin})
+    assert rule_cell(SPEC_CITATION, release, declared(has_spec_table=has_spec_table)) == words
 
 
 @pytest.mark.parametrize(
