@@ -83,8 +83,9 @@ def test_a_call_that_shuffles_with_its_seed_printed_is_clean(build_repo, call):
 @pytest.mark.parametrize("call", UNSHUFFLED_CALLS)
 def test_a_call_that_does_not_shuffle_is_unshuffled_at_its_first_line(build_repo, call):
     """NODETEST-2: the finding is at the call's line with the fact and the fix the rule words."""
-    (finding,) = judged(build_repo, call)
-    assert (finding.event, finding.path, finding.line, finding.fact, finding.fix) == (UNSHUFFLED, WORKFLOW, SCRIPT_LINE, FIXED_ORDER, SHUFFLE_FIX)
+    findings = judged(build_repo, call)
+    assert [(finding.event, finding.path, finding.line) for finding in findings] == [(UNSHUFFLED, WORKFLOW, SCRIPT_LINE)]
+    assert (findings[0].fact, findings[0].fix) == (FIXED_ORDER, SHUFFLE_FIX)
 
 
 def test_a_folded_scalar_call_is_unshuffled_at_its_first_content_line(build_repo):
