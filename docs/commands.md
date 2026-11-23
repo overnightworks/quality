@@ -313,11 +313,11 @@ repository a token can list is dropped without a trace (FLEET-72).
   and changes no exit (FLEET-117). Named limit: the detector reads Python, not workflow files, so the copied jobs of
   `ci.yml` are outside it; the CI standard's shared building blocks own them.
 - Under `Tests per layer`, last, stands one row per repository: `Repo`, `Unit`, `Integration`, `Flow`, `Live`,
-  `Skipped`, `Fixme` and `Note`, numbers with thousands separators as the size table. It is counted in the clone the size table
-  measures, with no further GitHub call or clone, runs no repository code, raises no finding, changes no exit and is
-  not in `site/fleet-ci-time.json` (FLEET-119). A Python test is a function named `test*` in a Python test file, a
-  parametrized one once; a script test is a call of `it` or `test` in a TypeScript or JavaScript test file, bare or
-  with a modifier (`skip`, `skipIf(…)`, `runIf(…)`, `only`, `fixme`, `concurrent`, `each(…)`), whose first argument is
+  `Skipped`, `Fixme` and `Note`, numbers with thousands separators as the size table. It is counted in the clone the
+  size table measures, with no further GitHub call or clone, runs no repository code, raises no finding, changes no
+  exit and is not in `site/fleet-ci-time.json` (FLEET-119). A Python test is a function named `test*` in a Python
+  test file, a parametrized one once; a script test is a call of `it` or `test` in a TypeScript or JavaScript test
+  file, bare or with a modifier (`skip`, `skipIf(…)`, `runIf(…)`, `only`, `fixme`, `concurrent`, `each(…)`), whose first argument is
   a string or a template; `test.step(`, `test.describe(`, `test.use(`, hooks, a member `x.test(` and a runtime
   `test.skip(<condition>, …)` are no test (FLEET-120). The layer comes from the path first: `Live` is a test under
   `tests/e2e/live/` of the root or of a judged project, or under a frontend project's `e2e/live/`; `Flow` is one under

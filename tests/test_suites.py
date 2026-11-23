@@ -42,7 +42,7 @@ def script_counts(source: str) -> tuple[int, int, int]:
     ],
 )
 def test_a_test_is_counted_in_the_layer_its_path_names(path, manifest, source, layer):
-    """FLEET-121: the layer comes from the path alone."""
+    """FLEET-121: the path names Live and Flow before any mark is read."""
     found = counted({path: source, **({manifest: ""} if manifest else {})})
     assert {each: found.layers[each] for each in Layer} == {each: int(each is layer) for each in Layer}
 
@@ -165,7 +165,7 @@ def test_a_python_test_is_integration_when_an_integration_mark_reaches_it_and_th
 
 def test_a_script_test_outside_the_flow_folder_is_a_unit_test():
     """FLEET-121: a script test has no integration mark."""
-    found = counted({"web/a.test.ts": "test.integration('a', () => {});\ntest('b', () => {});", "web/package.json": ""})
+    found = counted({"web/a.test.ts": "describe('integration', () => {});\ntest('integration', () => {});", "web/package.json": ""})
     assert (found.layers[UNIT], found.layers[INTEGRATION]) == (1, 0)
 
 
