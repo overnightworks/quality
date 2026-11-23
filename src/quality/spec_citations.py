@@ -231,10 +231,12 @@ def _findings(tree: Tree, held: frozenset[str]) -> list[Finding]:
         for site in tree.citations[identifier]
     ]
     twice = [
-        _finding(later.site, FindingEvent.DUPLICATE, f"spec ID {identifier} is defined again, first at {first.site}", "define each spec ID once")
+        _finding(
+            later.site, FindingEvent.DUPLICATE,
+            f"spec ID {identifier} is defined again, first at {tree.definitions[identifier][0].site}", "define each spec ID once",
+        )
         for identifier in tree.repeated
-        for first, *later_ones in [tree.definitions[identifier]]
-        for later in later_ones
+        for later in tree.definitions[identifier][1:]
     ]
     can_fall = [
         _finding(None, FindingEvent.CAN_FALL, reason, baseline_file.FIX_COMMAND)
