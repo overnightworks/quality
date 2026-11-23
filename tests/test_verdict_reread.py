@@ -12,7 +12,7 @@ from quality.ratchet import NO_RENAMES
 from quality.report import CannotJudge, Instruction
 from quality.sides import Side
 from quality.verdict import GateSettings, judge
-from tests.support.architecture import FORBIDDEN, contracts_ini, contracts_toml, ini_section
+from tests.support.architecture import FORBIDDEN, adapter_contract, contracts_ini, contracts_toml, ini_section
 from tests.support.git_repositories import put
 from tests.support.sonar import reply
 from tests.support.verdict import (
@@ -650,15 +650,18 @@ def test_a_change_that_only_forbids_more_is_no_loosening_and_every_other_change_
     [
         ({".importlinter": DUPLICATE_A},
          "head", 'import contract "a" is declared twice in .importlinter'),
+        ({"pyproject.toml": contracts_toml({"a": adapter_contract(), "b": adapter_contract()})},
+         "head", "pyproject.toml holds 2 contracts carrying the id core-imports-no-adapter; keep one"),
         ({".importlinter": contracts_ini({"a": FORBIDDEN}), "setup.cfg": contracts_ini({"a": FORBIDDEN})},
          "head", ".importlinter and setup.cfg each hold an import-linter config; keep one"),
         ({".importlinter": DUPLICATE_A},
          "base", 'import contract "a" is declared twice in .importlinter'),
     ],
-    ids=["a duplicate name at the head", "two configs at the head", "a duplicate name at the base"],
+    ids=["a duplicate name at the head", "two carriers of the adapter id at the head", "two configs at the head",
+         "a duplicate name at the base"],
 )
 def test_import_contracts_that_cannot_be_told_apart_cannot_be_judged_naming_the_side(judged_contracts, files, side, message):
-    """LOOSE-16, LOOSE-17: an ambiguous side is cannot judge, and the line names the head or the base commit."""
+    """LOOSE-16, LOOSE-17, LOOSE-36: an ambiguous side is cannot judge, and the line names the head or the base commit."""
     code, lines = judged_contracts(files if side == "base" else {}, files if side == "head" else {})
     assert code == 2
     place = "the head" if side == "head" else "the base commit [0-9a-f]{40}"

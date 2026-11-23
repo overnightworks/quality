@@ -317,12 +317,11 @@ It applies these rules:
   Every `import` and `from ... import` statement of a core test is read, inside a function or under `if TYPE_CHECKING:`
   too, and so are those of every `support/` module it imports, followed through further support modules and each read
   once (ADAPTERIMPORT-9). A `from M import a` judges `M` and `M.a` (ADAPTERIMPORT-10). An imported name is red when it is
-  a forbidden module or lies inside one (by prefix with `as_packages`, else exactly) (ADAPTERIMPORT-11). A name that is
+  a forbidden module or lies inside one (ADAPTERIMPORT-11). A name that is
   an ancestor of a forbidden module (`shop` above `shop.adapters`) counts only as a namespace: its own `__init__` is not
   judged, only `M.a` (ADAPTERIMPORT-12). Any other name the import graph holds is red when it reaches a forbidden module
-  (ADAPTERIMPORT-13). Reach is computed once per run as the union of grimp's `find_downstream_modules(m)` over the
-  forbidden modules `m` the graph holds, with `as_package` the contract's `as_packages`, as import-linter's own forbidden
-  contract filters them; a forbidden module nothing imports is not in the graph and reaches nothing (ADAPTERIMPORT-14).
+  (ADAPTERIMPORT-13). Reach is computed once per run as the union of grimp's `find_downstream_modules(m, as_package=True)`
+  over the forbidden modules `m` the graph holds, as import-linter's own forbidden contract filters them; a forbidden module nothing imports is not in the graph and reaches nothing (ADAPTERIMPORT-14).
   A name neither forbidden nor in the graph is clean (ADAPTERIMPORT-15).
 
   One finding per statement, at the core test's `path:line`, is an `adapter import` row whose fact names each imported

@@ -472,7 +472,7 @@ def find_import_config(clone: Path, tracked: list[str]) -> tuple[bool, bool]:
     """Whether the clone holds an import-linter config, and in it a contract that carries the adapter id."""
     texts = {name: repository.read_text(clone, name) for name in tracked if name in architecture.CONFIG_FILES}
     config = architecture.find_config({name: text for name, text in texts.items() if text is not None})
-    return config is not None, config is not None and any(map(architecture.carries_adapter_id, config.options.contracts_options))
+    return config is not None, config is not None and architecture.adapter_carrier_index(config) is not None
 
 
 def git(
@@ -709,17 +709,17 @@ def switch_words(switch: Switch, declared: Declared) -> Cell:
         if catalog_rules.PYPROJECT in declared.unreadable:
             return CannotRead((catalog_rules.PYPROJECT,))
         return ENFORCED if declared.declares_catalogs else NO_CATALOGS_DECLARATION
-    file, present = {
-        Switch.SIZE_BASELINE: (baseline_file.BASELINE_PATH, declared.has_baseline),
-        Switch.CLONE_TABLE: (baseline_file.BASELINE_PATH, declared.has_clone_table),
-        Switch.LITERAL_TABLE: (baseline_file.BASELINE_PATH, declared.has_literal_table),
-        Switch.SPEC_TABLE: (baseline_file.BASELINE_PATH, declared.has_spec_table),
-        Switch.IMPORT_LINTER_CONFIG: (IMPORT_LINTER_CONFIG, declared.has_import_config),
-        Switch.ADAPTER_CONTRACT: (IMPORT_LINTER_CONFIG, declared.has_adapter_contract),
+    file, present, absent = {
+        Switch.SIZE_BASELINE: (baseline_file.BASELINE_PATH, declared.has_baseline, REPORT_ONLY),
+        Switch.CLONE_TABLE: (baseline_file.BASELINE_PATH, declared.has_clone_table, REPORT_ONLY),
+        Switch.LITERAL_TABLE: (baseline_file.BASELINE_PATH, declared.has_literal_table, REPORT_ONLY),
+        Switch.SPEC_TABLE: (baseline_file.BASELINE_PATH, declared.has_spec_table, REPORT_ONLY),
+        Switch.IMPORT_LINTER_CONFIG: (IMPORT_LINTER_CONFIG, declared.has_import_config, REPORT_ONLY),
+        Switch.ADAPTER_CONTRACT: (IMPORT_LINTER_CONFIG, declared.has_adapter_contract, NO_ADAPTER_CONTRACT),
     }[switch]
     if file in declared.unreadable:
         return CannotRead((file,))
-    return ENFORCED if present else NO_ADAPTER_CONTRACT if switch is Switch.ADAPTER_CONTRACT else REPORT_ONLY
+    return ENFORCED if present else absent
 
 
 def pin_cell(calls: tuple[checkout.Call, ...], absent: str, is_gate_repository: bool, tags: checkout.ReleaseTags | None) -> str:

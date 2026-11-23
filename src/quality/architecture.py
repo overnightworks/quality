@@ -179,15 +179,15 @@ def check_contracts(read: ContractsRead) -> RuleResult:
                       (*read.warnings, *(note for result in results for note in result.notes)))
 
 
-def carries_adapter_id(options: Mapping[str, object]) -> bool:
-    """Whether a contract's raw options (a TOML key, or an INI section suffix) make it the adapter contract."""
-    return options.get("id") == ADAPTER_CONTRACT_ID and options.get("type") == ForbiddenContract.type_name
-
-
-def one_adapter_carrier[T](config_name: str, carriers: Sequence[T]) -> T | None:
-    """The one contract that carries the adapter id, None without one; two leave it open which one is the split."""
+def adapter_carrier_index(config: Config) -> int | None:
+    """The position among the config's contracts of the one that carries the adapter id (a forbidden contract with the
+    id), None without one; two leave it open which one is the split."""
+    carriers = [
+        index for index, options in enumerate(config.options.contracts_options)
+        if options.get("id") == ADAPTER_CONTRACT_ID and options.get("type") == ForbiddenContract.type_name
+    ]
     if len(carriers) > 1:
-        raise ContractError(f"{config_name} holds {len(carriers)} contracts carrying the id {ADAPTER_CONTRACT_ID}; keep one")
+        raise ContractError(f"{config.name} holds {len(carriers)} contracts carrying the id {ADAPTER_CONTRACT_ID}; keep one")
     return carriers[0] if carriers else None
 
 
@@ -219,15 +219,15 @@ def contracts_of(configs: Mapping[str, str]) -> SideContracts:
     if config is None:
         return SideContracts()
     contracts: dict[str, ContractFields] = {}
-    carriers: list[str] = []
     with _judging(f"the config {config.name}", ""):
         for index, options in enumerate(config.options.contracts_options, 1):
             contract = _contract(config, index, options)
             if contract.name in contracts:
                 raise ContractError(f'import contract "{contract.name}" is declared twice in {config.name}')
             contracts[contract.name] = _fields_of(contract, options["type"])
-            carriers += [contract.name] * carries_adapter_id(options)
-        return SideContracts(config.name, _session_of(config.options), contracts, one_adapter_carrier(config.name, carriers))
+        carrier = adapter_carrier_index(config)
+        adapter = None if carrier is None else config.options.contracts_options[carrier]["name"]
+        return SideContracts(config.name, _session_of(config.options), contracts, adapter)
 
 
 def contract_loosenings(base: SideContracts, head: SideContracts, tree: PullTree | None = None) -> list[str]:

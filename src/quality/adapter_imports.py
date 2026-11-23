@@ -26,23 +26,27 @@ class Split:
     adapters: tuple[str, ...]
     as_packages: bool
 
-    def inside(self, name: str, modules: Iterable[str]) -> str | None:
-        """The module `name` is, or lies inside when the contract treats its modules as packages."""
-        return next((module for module in modules if name == module or (self.as_packages and name.startswith(f"{module}."))), None)
+    def adapter_of(self, name: str) -> str | None:
+        """The adapter `name` is or lies inside."""
+        return next((adapter for adapter in self.adapters if name == adapter or name.startswith(f"{adapter}.")), None)
+
+    def in_core(self, subject: str) -> bool:
+        """Whether `subject` is a source module, or lies inside one when the contract treats its modules as packages."""
+        return any(subject == module or (self.as_packages and subject.startswith(f"{module}.")) for module in self.core)
 
     def is_core_test(self, subject: str | None) -> bool:
         """A test with no subject is a core test, so no declaration becomes a path allowlist."""
-        return subject is None or (self.inside(subject, self.adapters) is None and self.inside(subject, self.core) is not None)
+        return subject is None or (self.adapter_of(subject) is None and self.in_core(subject))
 
 
 def split_of(read: architecture.ContractsRead | None) -> Split | None:
     """The split the config declares, None without a config or without a contract that carries the id."""
     if read is None:
         return None
-    contracts = zip(read.contracts, read.config.options.contracts_options, strict=True)
-    contract = architecture.one_adapter_carrier(read.config.name, [contract for contract, options in contracts if architecture.carries_adapter_id(options)])
-    if contract is None:
+    carrier = architecture.adapter_carrier_index(read.config)
+    if carrier is None:
         return None
+    contract = read.contracts[carrier]
     lists = (contract.source_modules, contract.forbidden_modules)
     if any(expression.has_wildcard_expression() for expressions in lists for expression in expressions):
         raise architecture.ContractError(
@@ -72,7 +76,7 @@ def _reach(split: Split, graph: grimp.ImportGraph) -> dict[str, str]:
     reach: dict[str, str] = {}
     for adapter in split.adapters:
         if adapter in graph.modules:
-            for module in graph.find_downstream_modules(adapter, as_package=split.as_packages):
+            for module in graph.find_downstream_modules(adapter, as_package=True):
                 reach.setdefault(module, adapter)
     return reach
 
@@ -83,13 +87,20 @@ class _Judgement:
     reach: Mapping[str, str]
 
     def red(self, name: str, through: str | None) -> _Red | None:
-        adapter = self.split.inside(name, self.split.adapters)
+        adapter = self.split.adapter_of(name)
         if adapter is not None:
             return _Red(name, adapter, True, through)
         if any(module.startswith(f"{name}.") for module in self.split.adapters):
             return None  # an ancestor of an adapter is a namespace, and its own __init__ is not judged
         reached = self.reach.get(name)
         return None if reached is None else _Red(name, reached, False, through)
+
+    def reds(self, statement: layout.ModuleImport, imports_of: Callable[[str], list[layout.ModuleImport]]) -> set[_Red]:
+        """What a statement imports that is red, and what the support modules it imports do."""
+        reds = {red for name in statement.names if (red := self.red(name, None))}
+        for module in _support_modules(statement.modules, imports_of):
+            reds |= {red for inner in imports_of(module) for name in inner.names if (red := self.red(name, module))}
+        return reds
 
 
 def check_adapter_imports(
@@ -111,9 +122,7 @@ def check_adapter_imports(
     findings = []
     for path in sorted(path for path, subject in subjects.items() if split.is_core_test(subject) and path in contents):
         for statement in imports_of(path):
-            reds = {red for name in statement.names if (red := judgement.red(name, None))}
-            for module in _support_modules(statement.modules, imports_of):
-                reds |= {red for inner in imports_of(module) for name in inner.names if (red := judgement.red(name, module))}
+            reds = judgement.reds(statement, imports_of)
             if reds:
                 words = ", ".join(red.words() for red in sorted(reds, key=lambda red: (red.name, red.through or "")))
                 findings.append(Finding(Rule.ADAPTER_IMPORT, path, statement.line, f"imports {words}", FIX, event=FindingEvent.ADAPTER_IMPORT))

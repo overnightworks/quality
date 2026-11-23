@@ -115,14 +115,15 @@ def test_a_forbidden_external_package_is_an_adapter_by_its_name_and_by_what_reac
     ("contract", "content", "expected"),
     [
         pytest.param(adapter_contract(as_packages=True), ADAPTER_IMPORT, [f"{CORE_TEST}:1"], id="inside a forbidden package"),
-        pytest.param(adapter_contract(source=("shop.core.config",), as_packages=False), ADAPTER_IMPORT, [], id="inside it, not as packages"),
+        pytest.param(adapter_contract(source=("shop.core.config",), as_packages=False), ADAPTER_IMPORT, FOUND, id="inside it, not as packages"),
         pytest.param(adapter_contract(source=("shop.core.config",), as_packages=False), "import shop.adapters\n", [f"{CORE_TEST}:1"], id="the module itself, not as packages"),
-        pytest.param(adapter_contract(source=("shop.core.config",), as_packages=False), "import shop.main\n", [], id="a module reaching a submodule, not as packages"),
+        pytest.param(adapter_contract(source=("shop.core.config",), as_packages=False), "import shop.main\n", FOUND, id="a module reaching a submodule, not as packages"),
         pytest.param(adapter_contract(as_packages=False), ADAPTER_IMPORT, [], id="a subject below an exact source module"),
     ],
 )
-def test_as_packages_decides_what_lies_inside_a_module_the_contract_names(red, contract, content, expected):
-    """ADAPTERIMPORT-5, ADAPTERIMPORT-11, ADAPTERIMPORT-13: a module lies inside another by prefix only with `as_packages`."""
+def test_as_packages_decides_only_what_lies_inside_the_core(red, contract, content, expected):
+    """ADAPTERIMPORT-5, ADAPTERIMPORT-11, ADAPTERIMPORT-14: only the core is matched by prefix with `as_packages`; an adapter
+    is a module and every module inside it, and its importers are found as a package."""
     assert red({CORE_TEST: content}, contract) == expected
 
 
@@ -148,6 +149,12 @@ def test_as_packages_decides_what_lies_inside_a_module_the_contract_names(red, c
 def test_a_test_is_judged_when_its_subject_lies_in_the_core_outside_every_adapter(red, contract, path, expected):
     """ADAPTERIMPORT-4 to ADAPTERIMPORT-8: the module a test is named after decides whether it is a core test, by names alone."""
     assert red({path: ADAPTER_IMPORT}, contract) == ([f"{path}:1"] if expected else [])
+
+
+def test_a_test_named_after_its_package_is_that_packages_even_beside_a_module_of_the_same_name(red):
+    """ADAPTERIMPORT-4, ADAPTERIMPORT-5: `shop` the package, not `shop.shop` the module, is the subject of `test_shop.py`."""
+    contract = adapter_contract(source=("shop",), forbidden=("shop.adapters", "shop.shop"))
+    assert red({"tests/test_shop.py": ADAPTER_IMPORT}, contract, extra={"src/shop/shop.py": ""}) == ["tests/test_shop.py:1"]
 
 
 def test_a_test_a_layout_declaration_exempts_has_no_subject_and_is_judged(red):
@@ -177,6 +184,8 @@ SUPPORT = "tests/support/stores.py"
                      [f"{CORE_TEST}:1"], id="two hops"),
         pytest.param({SUPPORT: "import tests.support.other\n", "tests/support/other.py": "import tests.support.stores\n" + ADAPTER_IMPORT},
                      "from tests.support import stores\n", [f"{CORE_TEST}:1"], id="a cycle of support modules"),
+        pytest.param({"tests/support/__init__.py": ADAPTER_IMPORT}, "import tests.support\n", [f"{CORE_TEST}:1"], id="a package initializer"),
+        pytest.param({"tests/support/__init__.py": ADAPTER_IMPORT}, "from .. import support\n", [f"{CORE_TEST}:1"], id="a package initializer, relative"),
         pytest.param({SUPPORT: "import shop.core.config\n"}, "from tests.support import stores\n", [], id="a clean support module"),
         pytest.param({SUPPORT: "", "tests/support/unused.py": ADAPTER_IMPORT}, "from tests.support import stores\n", [], id="a support module no core test imports"),
     ],
@@ -237,6 +246,7 @@ def test_two_contracts_carrying_the_id_cannot_be_judged(build_repo):
     [
         pytest.param(CORE_TEST, "def broken(:\n", id="a core test"),
         pytest.param("tests/support/stores.py", "def broken(:\n", id="a support module a core test imports"),
+        pytest.param("tests/support/__init__.py", "def broken(:\n", id="a support package initializer"),
     ],
 )
 def test_a_module_that_does_not_parse_makes_the_imports_row_not_checked(build_repo, capsys, path, content):

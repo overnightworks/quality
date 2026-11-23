@@ -20,7 +20,7 @@ from quality.fleet import (
     rule_cell,
 )
 from quality.rules import Rule, RuleRelease, Switch, SwitchChange
-from tests.support.architecture import FORBIDDEN, adapter_contract, toml
+from tests.support.architecture import FORBIDDEN, adapter_contract, contracts_toml, toml
 from tests.support.baselines import ceiling
 from tests.support.fleet import NEWEST, OLDER, RELEASES, row
 from tests.support.git_repositories import GIT_IDENTITY, head_commit
@@ -674,8 +674,9 @@ def test_the_import_contract_cell_follows_the_import_linter_config(fleet_report,
         ({"pyproject.toml": toml(FORBIDDEN)}, 0, "no adapter contract"),
         ({}, 0, "no adapter contract"),
         (TWO_IMPORT_CONFIGS, 2, "cannot read import-linter config"),
+        ({"pyproject.toml": contracts_toml({"a": adapter_contract(), "b": adapter_contract()})}, 2, "cannot read import-linter config"),
     ],
-    ids=["the contract with the id", "a contract without it", "no config", "two configs"],
+    ids=["the contract with the id", "a contract without it", "no config", "two configs", "two contracts with the id"],
 )
 def test_the_adapter_import_cell_follows_the_contract_the_config_holds(fleet_report, gate_clone, files, code, cell_words):
     """FLEET-13, ADAPTERIMPORT-21: on main the cell reads enforced when the config holds the contract with the id."""
