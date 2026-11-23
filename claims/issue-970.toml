@@ -1,8 +1,0 @@
-claim_id = "0f4b0e97b2b144119a5e0e5c9fe473c7"
-agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
-role = "builder"
-base = "55dedae863e826009a87ad9fe90ca1fc84e6d3c0"
-branch = "claude/issue-970-node-test-random"
-scope = ["docs/output.md", "docs/proof.md", "docs/rules.md", "pyproject.toml", "src/quality/check.py", "src/quality/live_layer.py", "src/quality/node_test_random.py", "src/quality/rules.py", "src/quality/run_script.py", "src/quality/workflow_document.py", "tests/test_cli_help.py", "tests/test_fleet_matrix.py", "tests/test_node_test_random.py"]
-opened_commit = "35f0da00b9ee49c221a00aa84b34079f399a78ed"
-whole_reason = "One new R6 rule for node's runner: its module, the never-matching marker's move to its owner, the Tool type, the wiring, its spec lines and the tests that pin rule lists."
