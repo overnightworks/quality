@@ -3,6 +3,6 @@ agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
 role = "builder"
 base = "d93d57086cd5755015af5cbc58eaac2b86603028"
 branch = "claude/issue-957-spec-citation-report-only"
-scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/check.py", "src/quality/clones.py", "src/quality/rules.py", "src/quality/spec_citations.py", "src/quality/twins.py", "tests/test_cli_help.py", "tests/test_fleet_matrix.py", "tests/test_literal_text_rule.py", "tests/test_spec_citations.py", "tests/test_twins.py"]
+scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/agent_guidance.py", "src/quality/check.py", "src/quality/clones.py", "src/quality/landing.py", "src/quality/markdown_fences.py", "src/quality/rules.py", "src/quality/spec_citations.py", "src/quality/twins.py", "tests/test_cli_help.py", "tests/test_fleet_matrix.py", "tests/test_literal_text_rule.py", "tests/test_spec_citations.py", "tests/test_twins.py"]
 opened_commit = "7ce9fd4258bd9fa0448a13de061747232b683f32"
 whole_reason = "One report-only rule: its new module, the reader it shares with test-twin, its wiring, its spec section and the tests that list every debt rule."
