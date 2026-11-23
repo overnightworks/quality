@@ -3,6 +3,6 @@ agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
 role = "builder"
 base = "47a9eb105c47624c1f0482e2d32451dc5f3567c6"
 branch = "claude/issue-968-vitest-random"
-scope = ["docs/output.md", "docs/proof.md", "docs/rules.md", "pyproject.toml", "src/quality/check.py", "src/quality/naming.py", "src/quality/rules.py", "src/quality/typescript_tokens.py", "src/quality/vitest_random.py", "tests/test_check.py", "tests/test_cli_help.py", "tests/test_fleet_matrix.py", "tests/test_naming.py", "tests/test_vitest_random.py"]
+scope = ["docs/output.md", "docs/proof.md", "docs/rules.md", "pyproject.toml", "src/quality/check.py", "src/quality/layout.py", "src/quality/naming.py", "src/quality/rules.py", "src/quality/typescript_tokens.py", "src/quality/vitest_random.py", "tests/test_check.py", "tests/test_cli_help.py", "tests/test_fleet_matrix.py", "tests/test_naming.py", "tests/test_vitest_random.py"]
 opened_commit = "e72c0d5e7d48c5838259a6a53ced20fd76de49f7"
 whole_reason = "One new rule with the shared package.json reader it needs, its wiring, the R6 row and the tests that pin rule lists."
