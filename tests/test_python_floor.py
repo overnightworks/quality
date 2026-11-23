@@ -5,7 +5,8 @@ import pytest
 
 from quality import cli, python_floor
 from quality import output as output_module
-from quality.config import CONFIG_PATH, PYTHON_ALLOWANCE_EXAMPLE, PYTHON_ALLOWANCE_HEADING
+from quality.config import PYTHON_ALLOWANCE_EXAMPLE, PYTHON_ALLOWANCE_HEADING
+from quality.config_entries import CONFIG_PATH
 from quality.output import SEPARATOR, Glyph
 from quality.report import FindingEvent, NoteEvent, printable
 from quality.rules import Area, Rule

@@ -1,16 +1,14 @@
 import datetime
 import re
-import unicodedata
-from collections.abc import Callable, Hashable, Iterator, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
-from quality import repository
+from quality import config_entries, repository
 from quality.rules import Rule
 
-CONFIG_PATH = "quality/config.toml"
 SECRETS_KEYS = {"allow"}
 SECRETS_ALLOW = "[secrets] allow"
 ALLOW_ONLY = {"allow"}
@@ -31,8 +29,6 @@ SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 REPOSITORY_NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 ITEM_REFERENCE = re.compile(rf"(?:{REPOSITORY_NAME.pattern})?#[1-9][0-9]*")
 ONE_LINE_REASON = "a non-empty one-line reason"
-BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
-type ExampleLines = tuple[str, *tuple[str, ...]]
 GATE_HEADING = "[gate]"
 LOOSENED_HEADING = "[[gate.loosened]]"
 SECRETS_ALLOWANCE_HEADING = "[[secrets.allow]]"
@@ -44,26 +40,26 @@ COMPOSE_ALLOWANCE_HEADING = "[[compose.allow]]"
 WORKFLOW_ALLOWANCE_HEADING = "[[workflow.allow]]"
 GENERATED_FILE_HEADING = "[[size.generated]]"
 LANGUAGES_HEADING = "[languages]"
-EXAMPLE: ExampleLines = (GATE_HEADING, 'mandatory_jobs = ["checks"]')
-LEGACY_EXAMPLE: ExampleLines = (GATE_HEADING, 'legacy = "fail"')
-LANGUAGES_EXAMPLE: ExampleLines = (LANGUAGES_HEADING, 'render_pass = "render"')
-SONAR_EXAMPLE: ExampleLines = (GATE_HEADING, "sonar = false")
-SONAR_OFF_EXAMPLE: ExampleLines = (GATE_HEADING, 'legacy = "report"', "sonar = false")
-ALLOWANCE_EXAMPLE: ExampleLines = (
+EXAMPLE: config_entries.ExampleLines = (GATE_HEADING, 'mandatory_jobs = ["checks"]')
+LEGACY_EXAMPLE: config_entries.ExampleLines = (GATE_HEADING, 'legacy = "fail"')
+LANGUAGES_EXAMPLE: config_entries.ExampleLines = (LANGUAGES_HEADING, 'render_pass = "render"')
+SONAR_EXAMPLE: config_entries.ExampleLines = (GATE_HEADING, "sonar = false")
+SONAR_OFF_EXAMPLE: config_entries.ExampleLines = (GATE_HEADING, 'legacy = "report"', "sonar = false")
+ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
     SECRETS_ALLOWANCE_HEADING,
     'rule = "aws-access-token"',
     'file = "tests/fixture.py"',
     'secret_sha256 = "<64 lowercase hex>"',
     'reason = "fixture value, not a key"',
 )
-LOOSENED_EXAMPLE: ExampleLines = (
+LOOSENED_EXAMPLE: config_entries.ExampleLines = (
     LOOSENED_HEADING,
     "what = 'mandatory job \"Acceptance evidence (integration)\" removed'",
     'item = "overnightworks/songmaker#1345"',
     "date = 2026-10-20",
     'reason = "the operator ruled the requirement shelf machinery out"',
 )
-ADVISORY_ALLOWANCE_EXAMPLE: ExampleLines = (
+ADVISORY_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
     ADVISORY_ALLOWANCE_HEADING,
     'id = "GHSA-462x-pgg6-55fp"',
     'lock = "speech/providers/qwen/uv.lock"',
@@ -72,34 +68,34 @@ ADVISORY_ALLOWANCE_EXAMPLE: ExampleLines = (
     'item = "overnightworks/agent-presentator#371"',
     'reason = "gradio caps pillow<13; no image input"',
 )
-ROOT_ALLOWANCE_EXAMPLE: ExampleLines = (
+ROOT_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
     ROOT_ALLOWANCE_HEADING,
     'entry = "frontend/"',
     'reason = "the web client, built apart from the Python package"',
 )
-LAYOUT_ALLOWANCE_EXAMPLE: ExampleLines = (
+LAYOUT_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
     LAYOUT_ALLOWANCE_HEADING,
     'path = "deploy/EDGE_SHA"',
     'rule = "file-suffix"',
     'reason = "the deploy script reads it by this name"',
 )
-PYTHON_ALLOWANCE_EXAMPLE: ExampleLines = (
+PYTHON_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
     PYTHON_ALLOWANCE_HEADING,
     'path = "speech/providers/qwen/pyproject.toml"',
     'reason = "qwen-tts has no cp314 wheel"',
 )
-COMPOSE_ALLOWANCE_EXAMPLE: ExampleLines = (
+COMPOSE_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
     COMPOSE_ALLOWANCE_HEADING,
     'file = "compose.yaml"',
     'service = "traefik"',
     'reason = "it terminates TLS on the host\'s own interfaces"',
 )
-WORKFLOW_ALLOWANCE_EXAMPLE: ExampleLines = (
+WORKFLOW_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
     WORKFLOW_ALLOWANCE_HEADING,
     'file = ".github/workflows/preview.yml"',
     'reason = "it deploys the pull request preview and no check belongs to it"',
 )
-GENERATED_FILE_EXAMPLE: ExampleLines = (
+GENERATED_FILE_EXAMPLE: config_entries.ExampleLines = (
     GENERATED_FILE_HEADING,
     'path = "frontend/src/lib/api/types.ts"',
     'job = "Backend (Python 3.14)"',
@@ -108,7 +104,7 @@ GENERATED_FILE_EXAMPLE: ExampleLines = (
     'reason = "written by scripts/generate_types.py, proven by its --check"',
 )
 # Each table but [secrets] (which its own reader checks): its keys and the example of a refusal in it.
-TABLE_SHAPES: dict[str, tuple[set[str], ExampleLines]] = {
+TABLE_SHAPES: dict[str, tuple[set[str], config_entries.ExampleLines]] = {
     "gate": ({"mandatory_jobs", "legacy", "sonar", "loosened"}, EXAMPLE),
     "advisories": (ALLOW_ONLY, ADVISORY_ALLOWANCE_EXAMPLE),
     "root": (ALLOW_ONLY, ROOT_ALLOWANCE_EXAMPLE),
@@ -248,20 +244,6 @@ class Allowance(NamedTuple):
     secret_sha256: str
 
 
-class ConfigError(Exception):
-    """The quality config cannot be read: `fact` says why, `example` (TOML lines to copy) how to write it, where there is one.
-
-    `str` is the one-line form for the doors that print a single line; the structured fields are the contract."""
-
-    def __init__(self, fact: str, example: ExampleLines | None = None) -> None:
-        super().__init__(fact)
-        self.fact = fact
-        self.example = example
-
-    def __str__(self) -> str:
-        return self.fact if self.example is None else f"{self.fact}, like:\n" + "\n".join(self.example)
-
-
 @dataclass(frozen=True)
 class AllowLists:
     """What the repository allows or declares, one list per table; the default allows nothing, as a missing config does."""
@@ -303,102 +285,25 @@ class _Document:
     render_pass: RenderPass
 
 
-def secret_allowance_entry(allowance: Allowance) -> ExampleLines:
+def secret_allowance_entry(allowance: Allowance) -> config_entries.ExampleLines:
     """The entry that allows `allowance`, as the block the reader takes; the reason is the person's to write."""
     return (
         SECRETS_ALLOWANCE_HEADING,
-        f"rule = {_toml_string(allowance.rule)}",
-        f"file = {_toml_string(allowance.file)}",
+        f"rule = {config_entries.toml_string(allowance.rule)}",
+        f"file = {config_entries.toml_string(allowance.file)}",
         f'secret_sha256 = "{allowance.secret_sha256}"',
     )
 
 
-def workflow_allowance_entry(file: str) -> ExampleLines:
+def workflow_allowance_entry(file: str) -> config_entries.ExampleLines:
     """The entry that declares the workflow `file`, as the block the reader takes; the reason is the person's to write."""
-    return (WORKFLOW_ALLOWANCE_HEADING, f"file = {_toml_string(file)}")
-
-
-def _toml_string(value: str) -> str:
-    """`value` as a TOML basic string: `\\` and `"` escaped, every control character (category Cc) as `\\uNNNN`, every
-    other character as itself, so what a person copies reads back as `value`; `report.printable` escapes the rest
-    when the line is printed."""
-    return f'"{"".join(_escaped_in_string(character) for character in value)}"'
-
-
-def _escaped_in_string(character: str) -> str:
-    if character in '\\"':
-        return f"\\{character}"
-    return f"\\u{ord(character):04x}" if unicodedata.category(character) == "Cc" else character
-
-
-def _key_name(key: str) -> str:
-    """A key as TOML writes it: bare when it can be, else a basic string."""
-    return key if BARE_KEY.fullmatch(key) else _toml_string(key)
-
-
-def _unknown_keys(unknown: set[str]) -> str:
-    return f"unknown {'key' if len(unknown) == 1 else 'keys'} {', '.join(_key_name(key) for key in sorted(unknown))}"
-
-
-def _parse(text: str, example: ExampleLines) -> dict:
-    try:
-        return repository.parse_toml(text)
-    except repository.TomlError as error:
-        raise ConfigError(f"{CONFIG_PATH} is not valid TOML ({error})", example) from error
-
-
-def _table(document: dict, name: str, example: ExampleLines) -> dict:
-    table = document.get(name, {})
-    if not isinstance(table, dict):
-        raise ConfigError(f"{CONFIG_PATH} has [{name}] as a value, not a table", example)
-    return table
-
-
-def _entries(table: dict, key: str, heading: str, example: ExampleLines, shape: str = "an array of tables") -> Iterator[tuple[int, object]]:
-    """The entries of a list in `table` with their 1-based positions, counted once for every reader."""
-    entries = table.get(key, [])
-    if not isinstance(entries, list):
-        raise ConfigError(f"{CONFIG_PATH} needs {heading} as {shape}", example)
-    return enumerate(entries, start=1)
-
-
-def _unique_entries[Entry](
-    table: dict,
-    key: str,
-    heading: str,
-    example: ExampleLines,
-    read: Callable[[object, int], Entry],
-    identity: Callable[[Entry], Hashable],
-    repeated: Callable[[Entry], str],
-    example_on_repeat: bool = True,
-) -> tuple[Entry, ...]:
-    """The entries of a list in `table`, each read by `read`; an entry whose `identity` came before is refused as
-    `{CONFIG_PATH} {heading} {repeated(entry)}`."""
-    entries: dict[Hashable, Entry] = {}
-    for position, raw in _entries(table, key, heading, example):
-        entry = read(raw, position)
-        if identity(entry) in entries:
-            raise ConfigError(f"{CONFIG_PATH} {heading} {repeated(entry)}", example if example_on_repeat else None)
-        entries[identity(entry)] = entry
-    return tuple(entries.values())
-
-
-def entry_name(heading: str, position: int) -> str:
-    """How a message names one entry of a list: its heading and 1-based position."""
-    return f"{heading} entry {position}"
-
-
-def _entry_refusal(heading: str, position: int, example: ExampleLines) -> Callable[[str], ConfigError]:
-    def refuse(need: str) -> ConfigError:
-        return ConfigError(f"{CONFIG_PATH} {entry_name(heading, position)} needs {need}", example)
-
-    return refuse
+    return (WORKFLOW_ALLOWANCE_HEADING, f"file = {config_entries.toml_string(file)}")
 
 
 def _refuse_unknown_secrets_keys(secrets: dict) -> None:
     unknown = set(secrets) - SECRETS_KEYS
     if unknown:
-        raise ConfigError(f"{CONFIG_PATH} has {_unknown_keys(unknown)} in [secrets] - only allow exists")
+        raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} has {config_entries.unknown_keys(unknown)} in [secrets] - only allow exists")
 
 
 def _refuse_unknown_keys(document: dict, tables: dict[str, dict]) -> None:
@@ -410,8 +315,8 @@ def _refuse_unknown_keys(document: dict, tables: dict[str, dict]) -> None:
         if extra and name not in UNKNOWN_KEY_WITHOUT_EXAMPLE:
             example = table_example
     if unknown:
-        raise ConfigError(
-            f"{CONFIG_PATH} has {_unknown_keys(unknown)} - only [gate] mandatory_jobs, [gate] legacy, [gate] sonar, "
+        raise config_entries.ConfigError(
+            f"{config_entries.CONFIG_PATH} has {config_entries.unknown_keys(unknown)} - only [gate] mandatory_jobs, [gate] legacy, [gate] sonar, "
             "[[gate.loosened]], [secrets] allow, [[advisories.allow]], [[root.allow]], [[layout.allow]], "
             "[[python.allow]], [[compose.allow]], [[workflow.allow]], [[size.generated]] and [languages] render_pass exist",
             example,
@@ -420,15 +325,15 @@ def _refuse_unknown_keys(document: dict, tables: dict[str, dict]) -> None:
 
 def _validated_document(text: str) -> _Document:
     """The one validation of the whole config: one parse, one unknown-key check, and every entry of every table."""
-    document = _parse(text, EXAMPLE)
-    tables = {name: _table(document, name, example) for name, (_, example) in TABLE_SHAPES.items()}
+    document = config_entries.parse(text, EXAMPLE)
+    tables = {name: config_entries.table_named(document, name, example) for name, (_, example) in TABLE_SHAPES.items()}
     _refuse_unknown_keys(document, tables)
     gate = tables["gate"]
     return _Document(
         gate,
         _declarations(gate),
         AllowLists(
-            _parse_allowances(_table(document, "secrets", ALLOWANCE_EXAMPLE)),
+            _parse_allowances(config_entries.table_named(document, "secrets", ALLOWANCE_EXAMPLE)),
             _advisory_allowances(tables["advisories"]),
             _root_allowances(tables["root"]),
             _layout_allowances(tables["layout"]),
@@ -445,7 +350,7 @@ def _render_pass_job(languages: dict) -> str | None:
     """The job named by `[languages] render_pass`, None when the key is absent."""
     job = languages.get("render_pass")
     if job is not None and not (isinstance(job, str) and job.strip()):
-        raise ConfigError(f"{CONFIG_PATH} needs [languages] render_pass as the non-empty name of a job", LANGUAGES_EXAMPLE)
+        raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} needs [languages] render_pass as the non-empty name of a job", LANGUAGES_EXAMPLE)
     return job
 
 
@@ -460,7 +365,7 @@ def _job_names(gate: dict) -> tuple[str, ...]:
 def _mandatory_jobs(gate: dict) -> tuple[str, ...]:
     names = _job_names(gate)
     if not names:
-        raise ConfigError(f"{CONFIG_PATH} needs [gate] mandatory_jobs as a non-empty list of job names", EXAMPLE)
+        raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} needs [gate] mandatory_jobs as a non-empty list of job names", EXAMPLE)
     return names
 
 
@@ -471,31 +376,18 @@ def _legacy_mode(gate: dict) -> LegacyMode:
         return LegacyMode(value)
     except ValueError:
         modes = " or ".join(f'"{mode.value}"' for mode in LegacyMode)
-        raise ConfigError(f"{CONFIG_PATH} [gate] legacy must be {modes}", LEGACY_EXAMPLE) from None
-
-
-def _spans_lines(reason: str) -> bool:
-    return "\n" in reason or "\r" in reason
-
-
-def _is_one_line_text(value: object) -> bool:
-    return isinstance(value, str) and bool(value.strip()) and not _spans_lines(value)
-
-
-def _is_date_without_time(value: object) -> bool:
-    """A TOML date: tomllib reads a date with a time as a datetime, which is a date too."""
-    return isinstance(value, datetime.date) and not isinstance(value, datetime.datetime)
+        raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} [gate] legacy must be {modes}", LEGACY_EXAMPLE) from None
 
 
 def _declarations(gate: dict) -> tuple[Declaration, ...]:
-    return _unique_entries(
+    return config_entries.unique_entries(
         gate, "loosened", LOOSENED_HEADING, LOOSENED_EXAMPLE, _read_declaration, lambda declaration: declaration.what,
-        lambda declaration: f"declares what = {_toml_string(declaration.what)} twice; one entry per loosening",
+        lambda declaration: f"declares what = {config_entries.toml_string(declaration.what)} twice; one entry per loosening",
     )
 
 
 def _read_declaration(entry: object, position: int) -> Declaration:
-    refuse = _entry_refusal(LOOSENED_HEADING, position, LOOSENED_EXAMPLE)
+    refuse = config_entries.entry_refusal(LOOSENED_HEADING, position, LOOSENED_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != DECLARATION_KEYS:
         raise refuse("exactly a what, an item, a date and a reason")
     what, item, date, reason = (entry[key] for key in ("what", "item", "date", "reason"))
@@ -503,44 +395,44 @@ def _read_declaration(entry: object, position: int) -> Declaration:
         raise refuse("a non-empty what")
     if not (isinstance(item, str) and ITEM_REFERENCE.fullmatch(item)):
         raise refuse(ITEM_REFERENCE_EXPECTED)
-    if not _is_date_without_time(date):
+    if not config_entries.is_date_without_time(date):
         raise refuse("date as a TOML date without a time")
-    if not _is_one_line_text(reason):
+    if not config_entries.is_one_line_text(reason):
         raise refuse(ONE_LINE_REASON)
     return Declaration(what, item, date, reason)
 
 
 def _advisory_allowances(advisories: dict) -> tuple[AdvisoryAllowance, ...]:
-    return _unique_entries(
+    return config_entries.unique_entries(
         advisories, "allow", ADVISORY_ALLOWANCE_HEADING, ADVISORY_ALLOWANCE_EXAMPLE, _read_advisory_allowance,
         lambda allowance: allowance.key,
-        lambda allowance: f"allows id = {_toml_string(allowance.id)} in lock = {_toml_string(allowance.lock)} twice; "
+        lambda allowance: f"allows id = {config_entries.toml_string(allowance.id)} in lock = {config_entries.toml_string(allowance.lock)} twice; "
         "one entry per advisory and lock file",
         example_on_repeat=False,
     )
 
 
 def _read_advisory_allowance(entry: object, position: int) -> AdvisoryAllowance:
-    refuse = _entry_refusal(ADVISORY_ALLOWANCE_HEADING, position, ADVISORY_ALLOWANCE_EXAMPLE)
+    refuse = config_entries.entry_refusal(ADVISORY_ALLOWANCE_HEADING, position, ADVISORY_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != ADVISORY_ALLOWANCE_KEYS:
         raise refuse("exactly an id, a lock, an until, a date, an item and a reason")
     identifier, lock, until, date, item, reason = (
         entry[key] for key in ("id", "lock", "until", "date", "item", "reason")
     )
-    if not all(_is_one_line_text(value) for value in (identifier, lock, reason)):
+    if not all(config_entries.is_one_line_text(value) for value in (identifier, lock, reason)):
         raise refuse("a non-empty one-line id, lock and reason")
     if not (isinstance(item, str) and ITEM_REFERENCE.fullmatch(item)):
         raise refuse(ITEM_REFERENCE_EXPECTED)
-    if not (_is_date_without_time(until) and _is_date_without_time(date)):
+    if not (config_entries.is_date_without_time(until) and config_entries.is_date_without_time(date)):
         raise refuse("until and date as TOML dates without a time")
     return AdvisoryAllowance(identifier, lock, until, date, item, reason)
 
 
 def _root_allowances(root: dict) -> tuple[RootAllowance, ...]:
-    return _unique_entries(
+    return config_entries.unique_entries(
         root, "allow", ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE, _read_root_allowance,
         lambda allowance: allowance.entry,
-        lambda allowance: f"declares entry = {_toml_string(allowance.entry)} twice; one entry per root entry",
+        lambda allowance: f"declares entry = {config_entries.toml_string(allowance.entry)} twice; one entry per root entry",
     )
 
 
@@ -553,42 +445,42 @@ def _is_root_entry(entry: object) -> bool:
 
 
 def _read_root_allowance(entry: object, position: int) -> RootAllowance:
-    refuse = _entry_refusal(ROOT_ALLOWANCE_HEADING, position, ROOT_ALLOWANCE_EXAMPLE)
+    refuse = config_entries.entry_refusal(ROOT_ALLOWANCE_HEADING, position, ROOT_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != ROOT_ALLOWANCE_KEYS:
         raise refuse("exactly an entry and a reason")
     name, reason = entry["entry"], entry["reason"]
     if not _is_root_entry(name):
         raise refuse("entry as one name directly in the root, a directory with a trailing /, not a path")
-    if not _is_one_line_text(reason):
+    if not config_entries.is_one_line_text(reason):
         raise refuse(ONE_LINE_REASON)
     return RootAllowance(name, reason)
 
 
 def _layout_allowances(layout: dict) -> tuple[LayoutAllowance, ...]:
-    return _unique_entries(
+    return config_entries.unique_entries(
         layout, "allow", LAYOUT_ALLOWANCE_HEADING, LAYOUT_ALLOWANCE_EXAMPLE, _read_layout_allowance,
         lambda allowance: (allowance.rule, allowance.path),
-        lambda allowance: f"declares path = {_toml_string(allowance.path)} for rule = "
-        f"{_toml_string(allowance.rule.value)} twice; one declaration per rule and path",
+        lambda allowance: f"declares path = {config_entries.toml_string(allowance.path)} for rule = "
+        f"{config_entries.toml_string(allowance.rule.value)} twice; one declaration per rule and path",
     )
 
 
 def _python_allowances(python: dict) -> tuple[PythonAllowance, ...]:
-    return _unique_entries(
+    return config_entries.unique_entries(
         python, "allow", PYTHON_ALLOWANCE_HEADING, PYTHON_ALLOWANCE_EXAMPLE, _read_python_allowance,
         lambda allowance: allowance.path,
-        lambda allowance: f"declares path = {_toml_string(allowance.path)} twice; one entry per path",
+        lambda allowance: f"declares path = {config_entries.toml_string(allowance.path)} twice; one entry per path",
     )
 
 
 def _read_python_allowance(entry: object, position: int) -> PythonAllowance:
-    refuse = _entry_refusal(PYTHON_ALLOWANCE_HEADING, position, PYTHON_ALLOWANCE_EXAMPLE)
+    refuse = config_entries.entry_refusal(PYTHON_ALLOWANCE_HEADING, position, PYTHON_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != PYTHON_ALLOWANCE_KEYS:
         raise refuse("exactly a path and a reason")
     path, reason = entry["path"], entry["reason"]
     if not _is_exact_file_path(path) or PurePosixPath(path).name != "pyproject.toml":
         raise refuse("path as the exact tracked path of one pyproject.toml, no folder, pattern or ..")
-    if not _is_one_line_text(reason):
+    if not config_entries.is_one_line_text(reason):
         raise refuse(ONE_LINE_REASON)
     return PythonAllowance(path, reason)
 
@@ -604,7 +496,7 @@ def _is_exact_file_path(path: object) -> bool:
 
 
 def _read_layout_allowance(entry: object, position: int) -> LayoutAllowance:
-    refuse = _entry_refusal(LAYOUT_ALLOWANCE_HEADING, position, LAYOUT_ALLOWANCE_EXAMPLE)
+    refuse = config_entries.entry_refusal(LAYOUT_ALLOWANCE_HEADING, position, LAYOUT_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != LAYOUT_ALLOWANCE_KEYS:
         raise refuse("exactly a path, a rule and a reason")
     path, rule, reason = entry["path"], entry["rule"], entry["reason"]
@@ -612,65 +504,65 @@ def _read_layout_allowance(entry: object, position: int) -> LayoutAllowance:
         raise refuse("path as the exact tracked path of one file: no folder, pattern, .. or absolute path")
     if rule not in LAYOUT_RULES:
         raise refuse(f"rule as one of {', '.join(sorted(str(known) for known in LAYOUT_RULES))}")
-    if not _is_one_line_text(reason):
+    if not config_entries.is_one_line_text(reason):
         raise refuse(ONE_LINE_REASON)
     return LayoutAllowance(path, Rule(rule), reason)
 
 
 def _compose_allowances(compose: dict) -> tuple[ComposeAllowance, ...]:
-    return _unique_entries(
+    return config_entries.unique_entries(
         compose, "allow", COMPOSE_ALLOWANCE_HEADING, COMPOSE_ALLOWANCE_EXAMPLE, _read_compose_allowance,
         lambda allowance: (allowance.file, allowance.service),
-        lambda allowance: f"declares service = {_toml_string(allowance.service)} of file = "
-        f"{_toml_string(allowance.file)} twice; one declaration per file and service",
+        lambda allowance: f"declares service = {config_entries.toml_string(allowance.service)} of file = "
+        f"{config_entries.toml_string(allowance.file)} twice; one declaration per file and service",
     )
 
 
 def _read_compose_allowance(entry: object, position: int) -> ComposeAllowance:
-    refuse = _entry_refusal(COMPOSE_ALLOWANCE_HEADING, position, COMPOSE_ALLOWANCE_EXAMPLE)
+    refuse = config_entries.entry_refusal(COMPOSE_ALLOWANCE_HEADING, position, COMPOSE_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != COMPOSE_ALLOWANCE_KEYS:
         raise refuse("exactly a file, a service and a reason")
     file, service, reason = entry["file"], entry["service"], entry["reason"]
     if not _is_exact_file_path(file):
         raise refuse("file as the exact tracked path of one compose file: no folder, pattern, .. or absolute path")
-    if not _is_one_line_text(service):
+    if not config_entries.is_one_line_text(service):
         raise refuse("service as the one-line name of a service in that file")
-    if not _is_one_line_text(reason):
+    if not config_entries.is_one_line_text(reason):
         raise refuse(ONE_LINE_REASON)
     return ComposeAllowance(file, service, reason)
 
 
 def _workflow_allowances(workflow: dict) -> tuple[WorkflowAllowance, ...]:
-    return _unique_entries(
+    return config_entries.unique_entries(
         workflow, "allow", WORKFLOW_ALLOWANCE_HEADING, WORKFLOW_ALLOWANCE_EXAMPLE, _read_workflow_allowance,
         lambda allowance: allowance.file,
-        lambda allowance: f"declares file = {_toml_string(allowance.file)} twice; one entry per workflow",
+        lambda allowance: f"declares file = {config_entries.toml_string(allowance.file)} twice; one entry per workflow",
     )
 
 
 def _read_workflow_allowance(entry: object, position: int) -> WorkflowAllowance:
-    refuse = _entry_refusal(WORKFLOW_ALLOWANCE_HEADING, position, WORKFLOW_ALLOWANCE_EXAMPLE)
+    refuse = config_entries.entry_refusal(WORKFLOW_ALLOWANCE_HEADING, position, WORKFLOW_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != WORKFLOW_ALLOWANCE_KEYS:
         raise refuse("exactly a file and a reason")
     file, reason = entry["file"], entry["reason"]
     if not _is_exact_file_path(file):
         raise refuse("file as the exact tracked path of one workflow: no folder, pattern, .. or absolute path")
-    if not _is_one_line_text(reason):
+    if not config_entries.is_one_line_text(reason):
         raise refuse(ONE_LINE_REASON)
     return WorkflowAllowance(file, reason)
 
 
 def _generated_files(size: dict, gate: dict) -> tuple[GeneratedFile, ...]:
     jobs = _job_names(gate)
-    return _unique_entries(
+    return config_entries.unique_entries(
         size, "generated", GENERATED_FILE_HEADING, GENERATED_FILE_EXAMPLE,
         lambda entry, position: _read_generated_file(entry, position, jobs), lambda generated: generated.path,
-        lambda generated: f"declares path = {_toml_string(generated.path)} twice; one entry per file",
+        lambda generated: f"declares path = {config_entries.toml_string(generated.path)} twice; one entry per file",
     )
 
 
 def _read_generated_file(entry: object, position: int, mandatory_jobs: tuple[str, ...]) -> GeneratedFile:
-    refuse = _entry_refusal(GENERATED_FILE_HEADING, position, GENERATED_FILE_EXAMPLE)
+    refuse = config_entries.entry_refusal(GENERATED_FILE_HEADING, position, GENERATED_FILE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != GENERATED_FILE_KEYS:
         raise refuse("exactly a path, a job, an item, a date and a reason")
     path, job, item, date, reason = (entry[key] for key in ("path", "job", "item", "date", "reason"))
@@ -680,9 +572,9 @@ def _read_generated_file(entry: object, position: int, mandatory_jobs: tuple[str
         raise refuse("job as one of [gate] mandatory_jobs, the job whose generator check proves the file")
     if not (isinstance(item, str) and ITEM_REFERENCE.fullmatch(item)):
         raise refuse(ITEM_REFERENCE_EXPECTED)
-    if not _is_date_without_time(date):
+    if not config_entries.is_date_without_time(date):
         raise refuse("date as a TOML date without a time")
-    if not _is_one_line_text(reason):
+    if not config_entries.is_one_line_text(reason):
         raise refuse(ONE_LINE_REASON)
     return GeneratedFile(path, job, item, date, reason)
 
@@ -691,10 +583,10 @@ def _sonar(gate: dict, legacy: LegacyMode) -> bool:
     """A missing `sonar` key scans; legacy findings judged by SonarCloud need it on."""
     value = gate.get("sonar", True)
     if not isinstance(value, bool):
-        raise ConfigError(f"{CONFIG_PATH} [gate] sonar must be true or false", SONAR_EXAMPLE)
+        raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} [gate] sonar must be true or false", SONAR_EXAMPLE)
     if not value and legacy is LegacyMode.FAIL:
-        raise ConfigError(
-            f'{CONFIG_PATH} [gate] legacy = "fail" judges SonarCloud findings, which [gate] sonar = false turns off',
+        raise config_entries.ConfigError(
+            f'{config_entries.CONFIG_PATH} [gate] legacy = "fail" judges SonarCloud findings, which [gate] sonar = false turns off',
             SONAR_OFF_EXAMPLE,
         )
     return value
@@ -703,7 +595,7 @@ def _sonar(gate: dict, legacy: LegacyMode) -> bool:
 def load_gate_settings(text: str | None) -> GateSettings:
     """mandatory_jobs is judged before legacy, so a config wrong in both is refused for mandatory_jobs."""
     if text is None:
-        raise ConfigError(f"{CONFIG_PATH} is missing", EXAMPLE)
+        raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} is missing", EXAMPLE)
     document = _validated_document(text)
     jobs = _mandatory_jobs(document.gate)
     legacy = _legacy_mode(document.gate)
@@ -717,9 +609,9 @@ def load_gate_settings(text: str | None) -> GateSettings:
 def _read_config_text(repo: Path) -> str | None:
     """The repository's own config text, None when it has none; the one reader of quality/config.toml on disk."""
     try:
-        return repository.read_text(repo, CONFIG_PATH)
+        return repository.read_text(repo, config_entries.CONFIG_PATH)
     except repository.RepositoryFileError as error:
-        raise ConfigError(str(error)) from error
+        raise config_entries.ConfigError(str(error)) from error
 
 
 def read_gate_settings(repo: Path) -> GateSettings:
@@ -756,25 +648,25 @@ def load_staged_secret_allowances(text: str | None) -> dict[Allowance, str]:
     """
     if text is None:
         return {}
-    return _parse_allowances(_table(_parse(text, ALLOWANCE_EXAMPLE), "secrets", ALLOWANCE_EXAMPLE))
+    return _parse_allowances(config_entries.table_named(config_entries.parse(text, ALLOWANCE_EXAMPLE), "secrets", ALLOWANCE_EXAMPLE))
 
 
 def _parse_allowances(secrets: dict) -> dict[Allowance, str]:
     _refuse_unknown_secrets_keys(secrets)
     allowances: dict[Allowance, str] = {}
-    for position, entry in _entries(secrets, "allow", "[secrets] allow", ALLOWANCE_EXAMPLE, "a list"):
+    for position, entry in config_entries.numbered_entries(secrets, "allow", "[secrets] allow", ALLOWANCE_EXAMPLE, "a list"):
         allowance, reason = _read_allowance(entry, position)
         if allowance in allowances:
-            raise ConfigError(
-                f"{CONFIG_PATH} [secrets] allow lists rule = {_toml_string(allowance.rule)} in file = "
-                f"{_toml_string(allowance.file)} twice for one value"
+            raise config_entries.ConfigError(
+                f"{config_entries.CONFIG_PATH} [secrets] allow lists rule = {config_entries.toml_string(allowance.rule)} in file = "
+                f"{config_entries.toml_string(allowance.file)} twice for one value"
             )
         allowances[allowance] = reason
     return allowances
 
 
 def _read_allowance(entry: object, position: int) -> tuple[Allowance, str]:
-    refuse = _entry_refusal(SECRETS_ALLOW, position, ALLOWANCE_EXAMPLE)
+    refuse = config_entries.entry_refusal(SECRETS_ALLOW, position, ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != ALLOWANCE_KEYS:
         raise refuse("exactly a rule, a file, a secret_sha256 and a reason (the old fingerprint form is gone)")
     rule, file, secret_sha256, reason = (entry[key] for key in ("rule", "file", "secret_sha256", "reason"))
@@ -782,6 +674,6 @@ def _read_allowance(entry: object, position: int) -> tuple[Allowance, str]:
         raise refuse("a non-empty rule, file and reason")
     if not (isinstance(secret_sha256, str) and SHA256_HEX.fullmatch(secret_sha256)):
         raise refuse("secret_sha256 as 64 lowercase hex digits")
-    if _spans_lines(reason):
-        raise ConfigError(f"{CONFIG_PATH} {entry_name(SECRETS_ALLOW, position)} needs a one-line reason")
+    if config_entries.spans_lines(reason):
+        raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} {config_entries.entry_name(SECRETS_ALLOW, position)} needs a one-line reason")
     return Allowance(rule, file, secret_sha256), reason

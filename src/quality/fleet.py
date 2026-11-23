@@ -29,6 +29,7 @@ from quality import (
     checkout,
     clones,
     config,
+    config_entries,
     fleet_ci_time,
     fleet_clones,
     fleet_suites,
@@ -428,9 +429,9 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
     unreadable: set[str] = set()
     settings, has_baseline, has_clone_table, has_literal_table, has_spec_table, has_import_config = None, False, False, False, False, False
     try:
-        settings = config.read_gate_settings(clone) if config.CONFIG_PATH in tracked else None
-    except config.ConfigError:
-        unreadable.add(config.CONFIG_PATH)
+        settings = config.read_gate_settings(clone) if config_entries.CONFIG_PATH in tracked else None
+    except config_entries.ConfigError:
+        unreadable.add(config_entries.CONFIG_PATH)
     try:
         baseline = baseline_file.read_baseline(clone)
         has_baseline = baseline is not None
@@ -629,8 +630,8 @@ def matrix_cells(row: Row, tags: checkout.ReleaseTags | None) -> tuple[Cell, ...
 def settings_cells(declared: Declared, release: Gate | str) -> tuple[Cell, Cell]:
     if release is Gate.NONE:
         return (DASH, DASH)
-    if config.CONFIG_PATH in declared.unreadable:
-        return (CannotRead((config.CONFIG_PATH,)),) * 2
+    if config_entries.CONFIG_PATH in declared.unreadable:
+        return (CannotRead((config_entries.CONFIG_PATH,)),) * 2
     if declared.settings is None:
         return (NO_CONFIG, NO_CONFIG)
     return (str(len(declared.settings.mandatory_jobs)), declared.settings.legacy.value)

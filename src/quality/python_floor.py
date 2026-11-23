@@ -8,7 +8,8 @@ from packaging.specifiers import Specifier, SpecifierSet
 from packaging.version import Version
 
 from quality import repository
-from quality.config import CONFIG_PATH, PYTHON_ALLOWANCE_HEADING, PythonAllowance
+from quality.config import PYTHON_ALLOWANCE_HEADING, PythonAllowance
+from quality.config_entries import CONFIG_PATH
 from quality.report import Finding, FindingEvent, Note, NoteEvent, Unparsable
 from quality.rules import Rule
 

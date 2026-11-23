@@ -12,7 +12,8 @@ from enum import StrEnum
 from pathlib import Path
 
 from quality import output
-from quality.config import ConfigError, LegacyMode, read_gate_settings
+from quality.config import LegacyMode, read_gate_settings
+from quality.config_entries import ConfigError
 from quality.report import (
     FIX_THEN_RERUN,
     PUSH_THE_FIX,

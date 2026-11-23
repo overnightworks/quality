@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 
 from quality.baseline_file import BASELINE_PATH, Key, Metric, load_baseline
-from quality.config import CONFIG_PATH, GeneratedFile
+from quality.config import GeneratedFile
+from quality.config_entries import CONFIG_PATH
 from quality.ratchet import Measured, gone_entries
 from tests.support.baselines import rendered
 from tests.support.door import CHECK_WORD, FIX_WORDS, digest, fixed

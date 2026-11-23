@@ -4,7 +4,7 @@ import tomllib
 from dataclasses import dataclass
 from typing import Literal
 
-from quality import config
+from quality import config, config_entries
 
 CONFIG = "quality/config.toml"
 GATE = '[gate]\nmandatory_jobs = ["checks"]\n'
@@ -33,7 +33,7 @@ class Refusal:
     id: str
     text: str | None
     fact: str
-    example: config.ExampleLines | None
+    example: config_entries.ExampleLines | None
     loaders: tuple[Loader, ...] = WHOLE
     directory: bool = False
 
@@ -59,7 +59,7 @@ class ArrayTable:
     """An array of tables the config holds: its valid entry, the ways an entry fails and how a duplicate reads."""
 
     name: str
-    example: config.ExampleLines
+    example: config_entries.ExampleLines
     defaults: dict[str, object]
     keys_need: str
     needs: tuple[tuple[dict[str, object], str], ...]

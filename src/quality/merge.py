@@ -11,7 +11,8 @@ from functools import partial
 from quality import architecture, checkout
 from quality.base_branch import MergeMethod, choose_merge_method, compare_with_tip
 from quality.baseline_file import BASELINE_PATH
-from quality.config import CONFIG_PATH, Declaration, GateSettings, LegacyMode
+from quality.config import Declaration, GateSettings, LegacyMode
+from quality.config_entries import CONFIG_PATH
 from quality.gh import GhFailed, GhRunner, file_at, workflow_texts_at
 from quality.landing import Landing, LandingKind, LandingRefused, landing_of
 from quality.output import (

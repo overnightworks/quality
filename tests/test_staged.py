@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import check, config, deadline, scanners, staged
+from quality import check, config_entries, deadline, scanners, staged
 from quality.report import FindingEvent, NoteEvent
 from quality.rules import Area
 from tests.support.check import (
@@ -338,7 +338,7 @@ def test_the_printed_entry_with_a_reason_allows_the_staged_key_with_head_unchang
     first = capsys.readouterr()
     (finding,) = staged.scan_change(repo, run_deadline()).findings
     entry = [line.copy for line in area_block(first.out, Area.SECRETS) if isinstance(line, CopyLine)]
-    stage(repo, {config.CONFIG_PATH: '[gate]\nmandatory_jobs = ["checks"]\n' + "\n".join(entry) + '\nreason = "scenario reason"\n'})
+    stage(repo, {config_entries.CONFIG_PATH: '[gate]\nmandatory_jobs = ["checks"]\n' + "\n".join(entry) + '\nreason = "scenario reason"\n'})
     assert staged_door(repo) == 0
     second = capsys.readouterr()
     result = staged.scan_change(repo, run_deadline())
@@ -374,7 +374,7 @@ def test_a_commit_that_touches_no_allowed_line_prints_no_unused_row(build_repo, 
     """STAGED-10: a commit that touches no allowed line prints no unused row, and the entry stays used by the
     history."""
     entry = ("aws-access-token", "docs/key.txt", FAKE_KEY, "a test key")
-    repo = build_repo({"docs/key.txt": KEY_LINE, config.CONFIG_PATH: allow_config(entry)})
+    repo = build_repo({"docs/key.txt": KEY_LINE, config_entries.CONFIG_PATH: allow_config(entry)})
     stage(repo, {"docs/key.txt": "removed\n"} if change == "the allowed line removed" else {"docs/other.md": "text\n"})
     assert staged_door(repo) == 0
     staged_out = capsys.readouterr().out

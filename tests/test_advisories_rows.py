@@ -8,7 +8,8 @@ from pathlib import Path, PurePosixPath
 import pytest
 
 from quality import advisories, check, cli, scanners
-from quality.config import ADVISORY_ALLOWANCE_HEADING, CONFIG_PATH
+from quality.config import ADVISORY_ALLOWANCE_HEADING
+from quality.config_entries import CONFIG_PATH
 from quality.output import SEPARATOR, Glyph
 from quality.report import FindingEvent, NoteEvent, printable, shell_word
 from quality.rules import Area, Rule
