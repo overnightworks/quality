@@ -161,6 +161,7 @@ class FindingEvent(StrEnum):
     NO_HEADER = "no header"
     STRAY = "stray"
     TEST_IMPORT = "test import"
+    ADAPTER_IMPORT = "adapter import"
     LITERAL_TEXT = "literal text"
     CATALOG_TEXT = "catalog text"
     BELOW_FLOOR = "below floor"

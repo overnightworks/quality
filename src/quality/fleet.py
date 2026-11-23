@@ -102,6 +102,7 @@ ENFORCED = "enforced"
 REPORT_ONLY = "report-only"
 NO_CONFIG = "no config"
 NO_JUDGED_PROJECT = "no judged project"
+NO_ADAPTER_CONTRACT = "no adapter contract"
 NO_CATALOGS_DECLARATION = "no catalogs declaration"
 RELEASE_UNKNOWN = "release unknown"
 NOT_RELEASED = "not released"
@@ -165,7 +166,7 @@ class ReleaseTagsError(Exception):
 @dataclass(frozen=True)
 class Declared:
     """What a clone's own files switch on: the gate settings, a size baseline, a clone table, a literal-text table, a spec
-    citation table, an import-linter config, a project whose tests the layout rules judge, a catalogs declaration, and the files among them
+    citation table, an import-linter config and in it the adapter contract, a project whose tests the layout rules judge, a catalogs declaration, and the files among them
     that could not be read."""
 
     settings: config.GateSettings | None
@@ -174,6 +175,7 @@ class Declared:
     has_literal_table: bool
     has_spec_table: bool
     has_import_config: bool
+    has_adapter_contract: bool
     has_judged_project: bool
     declares_catalogs: bool
     unreadable: frozenset[str]
@@ -433,7 +435,8 @@ def measure_repository(name: str, time_left: float) -> Row:
 def read_declared(clone: Path, tracked: list[str]) -> Declared:
     """The clone's gate settings, size baseline, clone table, literal-text table, spec citation table and import-linter config; a file that cannot be read is named."""
     unreadable: set[str] = set()
-    settings, has_baseline, has_clone_table, has_literal_table, has_spec_table, has_import_config = None, False, False, False, False, False
+    settings, has_baseline, has_clone_table, has_literal_table, has_spec_table = None, False, False, False, False
+    has_import_config = has_adapter_contract = False
     try:
         settings = config.read_gate_settings(clone) if config_entries.CONFIG_PATH in tracked else None
     except config_entries.ConfigError:
@@ -448,7 +451,7 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
     except (report.CannotJudge, baseline_file.SizeError):
         unreadable.add(baseline_file.BASELINE_PATH)
     try:
-        has_import_config = find_import_config(clone, tracked)
+        has_import_config, has_adapter_contract = find_import_config(clone, tracked)
     except (repository.RepositoryFileError, architecture.ContractError):
         unreadable.add(IMPORT_LINTER_CONFIG)
     try:
@@ -460,14 +463,16 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
         layout.frontend_projects(tracked)
     )
     return Declared(
-        settings, has_baseline, has_clone_table, has_literal_table, has_spec_table, has_import_config, has_judged_project,
-        declares_catalogs, frozenset(unreadable),
+        settings, has_baseline, has_clone_table, has_literal_table, has_spec_table, has_import_config, has_adapter_contract,
+        has_judged_project, declares_catalogs, frozenset(unreadable),
     )
 
 
-def find_import_config(clone: Path, tracked: list[str]) -> bool:
+def find_import_config(clone: Path, tracked: list[str]) -> tuple[bool, bool]:
+    """Whether the clone holds an import-linter config, and in it a contract that carries the adapter id."""
     texts = {name: repository.read_text(clone, name) for name in tracked if name in architecture.CONFIG_FILES}
-    return architecture.find_config({name: text for name, text in texts.items() if text is not None}) is not None
+    config = architecture.find_config({name: text for name, text in texts.items() if text is not None})
+    return config is not None, config is not None and architecture.adapter_carrier_index(config) is not None
 
 
 def git(
@@ -704,16 +709,17 @@ def switch_words(switch: Switch, declared: Declared) -> Cell:
         if catalog_rules.PYPROJECT in declared.unreadable:
             return CannotRead((catalog_rules.PYPROJECT,))
         return ENFORCED if declared.declares_catalogs else NO_CATALOGS_DECLARATION
-    file, present = {
-        Switch.SIZE_BASELINE: (baseline_file.BASELINE_PATH, declared.has_baseline),
-        Switch.CLONE_TABLE: (baseline_file.BASELINE_PATH, declared.has_clone_table),
-        Switch.LITERAL_TABLE: (baseline_file.BASELINE_PATH, declared.has_literal_table),
-        Switch.SPEC_TABLE: (baseline_file.BASELINE_PATH, declared.has_spec_table),
-        Switch.IMPORT_LINTER_CONFIG: (IMPORT_LINTER_CONFIG, declared.has_import_config),
+    file, present, absent = {
+        Switch.SIZE_BASELINE: (baseline_file.BASELINE_PATH, declared.has_baseline, REPORT_ONLY),
+        Switch.CLONE_TABLE: (baseline_file.BASELINE_PATH, declared.has_clone_table, REPORT_ONLY),
+        Switch.LITERAL_TABLE: (baseline_file.BASELINE_PATH, declared.has_literal_table, REPORT_ONLY),
+        Switch.SPEC_TABLE: (baseline_file.BASELINE_PATH, declared.has_spec_table, REPORT_ONLY),
+        Switch.IMPORT_LINTER_CONFIG: (IMPORT_LINTER_CONFIG, declared.has_import_config, REPORT_ONLY),
+        Switch.ADAPTER_CONTRACT: (IMPORT_LINTER_CONFIG, declared.has_adapter_contract, NO_ADAPTER_CONTRACT),
     }[switch]
     if file in declared.unreadable:
         return CannotRead((file,))
-    return ENFORCED if present else REPORT_ONLY
+    return ENFORCED if present else absent
 
 
 def pin_cell(calls: tuple[checkout.Call, ...], absent: str, is_gate_repository: bool, tags: checkout.ReleaseTags | None) -> str:

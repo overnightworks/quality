@@ -295,6 +295,50 @@ It applies these rules:
   that Python cannot parse or git does not track, cannot be judged (exit `2`) (IMPORT-32).
   On a pull request `quality verdict` and the door also hold the head's import contracts against the base's (see
   "The import contracts only tighten" below).
+- `adapter-import`: a core unit test imports no adapter. It judges a repository whose import-linter config (IMPORT-2)
+  holds a `forbidden` contract with the `id` `core-imports-no-adapter`, read from the raw contract options (a TOML key,
+  or an INI section suffix) (ADAPTERIMPORT-1): the contract's `source_modules` are the core and its `forbidden_modules`
+  the adapters, external packages allowed. Without such a contract it judges nothing, and a repository without a config
+  stays as IMPORT-27 says (ADAPTERIMPORT-2). Two contracts carrying the id, or a wildcard in its `source_modules` or
+  `forbidden_modules`, cannot be judged (exit `2`) (ADAPTERIMPORT-3).
+
+  Ruled by the operator: the contract's `source_modules` decide what is core, so a core-subject test that imports an
+  adapter is red also when it is marked integration (#898, line 1, A).
+
+  A test module is a tracked `test_*.py` under a project's `tests/` as `test-layout` finds projects; its subject is the
+  module or package its longest matching key names (LAYOUT-24), and a test named after its package's own name
+  (LAYOUT-23) has that package as its subject (ADAPTERIMPORT-4). It is a core test when its subject lies inside
+  `source_modules` (by prefix with `as_packages`, the default, else exactly) (ADAPTERIMPORT-5). A test with no subject,
+  because a `[[layout.allow]]` entry exempts it from `test-layout` or its project is not judged, is a core test too, so
+  no declaration becomes a path allowlist (ADAPTERIMPORT-6). A subject equal to or inside a forbidden module, or any
+  other subject outside `source_modules`, makes no core test (ADAPTERIMPORT-7); these are name checks and no graph is
+  asked. Modules under `tests/scripts/`, `tests/workflows/` and `tests/e2e/`, and every `conftest.py`, are not judged
+  (ADAPTERIMPORT-8).
+
+  Every `import` and `from ... import` statement of a core test is read, inside a function or under `if TYPE_CHECKING:`
+  too, and so are those of every `support/` module it imports, followed through further support modules and each read
+  once (ADAPTERIMPORT-9). A `from M import a` judges `M` and `M.a` (ADAPTERIMPORT-10). An imported name is red when it is
+  a forbidden module or lies inside one (ADAPTERIMPORT-11). A name that is
+  an ancestor of a forbidden module (`shop` above `shop.adapters`) counts only as a namespace: its own `__init__` is not
+  judged, only `M.a` (ADAPTERIMPORT-12). Any other name the import graph holds is red when it reaches a forbidden module
+  (ADAPTERIMPORT-13). Reach is computed once per run as the union of grimp's `find_downstream_modules(m, as_package=True)`
+  over the forbidden modules `m` the graph holds, as import-linter's own forbidden contract filters them; a forbidden module nothing imports is not in the graph and reaches nothing (ADAPTERIMPORT-14).
+  A name neither forbidden nor in the graph is clean (ADAPTERIMPORT-15).
+
+  One finding per statement, at the core test's `path:line`, is an `adapter import` row whose fact names each imported
+  name with the forbidden module it is or reaches, and the support module that carried it (ADAPTERIMPORT-16), its fix to
+  name the test after an adapter or composition module or to import no adapter; all findings print sorted by path and line
+  (ADAPTERIMPORT-17). A test or support module that does not parse makes the `imports` row `✗ not checked` with the
+  reason (exit `2`) (ADAPTERIMPORT-18). A `[[layout.allow]]` entry naming the rule is refused like any rule outside the
+  layout rules (ADAPTERIMPORT-19). The imports area reads the config and builds the graph once per run; `import-contract`
+  and `adapter-import` judge that one read. A read that cannot judge refuses both, a rule's own refusal only that rule,
+  and grimp's warnings print once, as `import-contract`'s note rows (IMPORT-25) (ADAPTERIMPORT-20). The
+  [fleet matrix](commands.md#quality-report) cell reads `enforced` when the repository's config holds the contract with
+  the id, `no adapter contract` otherwise (ADAPTERIMPORT-21). Named gaps, waiting for usage evidence: fixtures a
+  `conftest.py` injects, string imports (`importlib.import_module`, `pytest.importorskip`), the `__init__` of an ancestor
+  of a forbidden module, the `ignore_imports` of the contract (the raw graph is asked), `allow_indirect_imports = true`
+  (a core module that reaches an adapter is in the reach set, so its own test is red for importing its subject), and a
+  test-side fake, which is caught only through a forbidden module it imports.
 - `claude-md`: a tracked `CLAUDE.md`, in any case (`claude.md` is named as it is) (CLAUDE-1), holds exactly `@AGENTS.md`
   with or without a final line feed (CLAUDE-2), so Claude, Codex and Grok read the same guidance, and the repository
   tracks an `AGENTS.md` beside it (CLAUDE-3). No `CLAUDE.md` is clean, with or without an `AGENTS.md` (CLAUDE-4). A
@@ -738,7 +782,12 @@ It applies these rules:
     reads `changes type` (LOOSE-11); a module dropped from a list reads as that list's field, unless the head no longer
     has it and git does not read it as renamed, or git reads it as renamed to a module the same list names (below));
   - `root_packages` (as a set of names), `include_external_packages` or `exclude_type_checking_imports` changed:
-    `import-linter changes root_packages` (LOOSE-12).
+    `import-linter changes root_packages` (LOOSE-12);
+  - the contract that carries the id `core-imports-no-adapter` (`adapter-import`'s contract) stays at
+    the head under the same name without the id: `import contract id core-imports-no-adapter removed`, or
+    `import contract id core-imports-no-adapter moves "a" -> "b"` when contract `b` carries it at the head (LOOSE-36).
+    A carrier that is gone at the head, renamed (LOOSE-5) or removed, gives LOOSE-7's line only, and a removed config
+    LOOSE-8's. Two contracts carrying the id on a side are exit `2` like LOOSE-16.
 
   Ruled by the operator:
 

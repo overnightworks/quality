@@ -6,13 +6,21 @@ import datetime
 import pytest
 
 from quality import output, verdict
+from quality.architecture import ADAPTER_CONTRACT_ID
 from quality.baseline_file import BASELINE_PATH
 from quality.ratchet import NO_RENAMES
 from quality.report import CannotJudge
 from quality.sides import side_of
 from quality.verdict import judge
 from tests.support.advisories import allowance_config
-from tests.support.architecture import FORBIDDEN, contracts_ini
+from tests.support.architecture import (
+    FORBIDDEN,
+    adapter_contract,
+    adapter_split,
+    contracts_ini,
+    contracts_toml,
+    loosened,
+)
 from tests.support.baselines import spec_table
 from tests.support.generated_files import generated_config
 from tests.support.verdict import declaration, gate_config, job
@@ -129,6 +137,10 @@ UNDECLARED_KINDS = [
     kind(CHECKS, CHECKS, imports=(GUARDED, contracts_ini({"guarded": {**FORBIDDEN, "allow_indirect_imports": True}})),
          id="a contract option changed"),
     kind(CHECKS, CHECKS + secret_blocks(secret_allowance()), id="a secret allowance added"),
+    kind(CHECKS, CHECKS, imports=(contracts_ini({"guarded": adapter_contract()}), contracts_ini({"guarded": adapter_split()})),
+         id="the adapter id removed"),
+    kind(CHECKS, CHECKS, imports=(contracts_ini({"guarded": adapter_contract(), "other": adapter_split()}),
+                                  contracts_ini({"guarded": adapter_split(), "other": adapter_contract()})), id="the adapter id moved"),
 ]
 SELF_DECLARED_KINDS = [
     kind(CHECKS, CHECKS + allowance_config(), id="an advisory allowance added"),
@@ -160,6 +172,8 @@ PRINTED = {
     "a contract's type changed": ['    ! import contract "guarded" changes type'],
     "an ignore added": ['    ! import contract "guarded" ignores shop.db -> shop.web'],
     "a contract option changed": ['    ! import contract "guarded" changes allow_indirect_imports'],
+    "the adapter id removed": [f"    ! import contract id {ADAPTER_CONTRACT_ID} removed"],
+    "the adapter id moved": [f'    ! import contract id {ADAPTER_CONTRACT_ID} moves "guarded" -> "other"'],
     "a secret allowance added": [f"    ! secret allowance adds api-key in src/app.py{output.SEPARATOR}sha256 aaaaaaaaaaaa"],
     "an advisory allowance added": [f"    ! advisory allowance adds {QWEN} until 2027-01-31 · {PRESENTATOR}", GRADIO],
     "an advisory allowance extended": [f"    ! advisory allowance extends {QWEN} to 2027-07-31 · {PRESENTATOR}", GRADIO],
@@ -379,3 +393,33 @@ def test_a_declaration_with_the_secret_allowance_text_declares_it_and_stays_red_
     assert ([(each.what, each.declaration is not None) for each in result.loosenings], result.stale, result.green) == (
         [(text, True)], (), False,
     )
+
+
+ID_LINE = f"import contract id {ADAPTER_CONTRACT_ID} "
+CARRYING = {"a": adapter_contract(), "b": adapter_split()}
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "expected"),
+    [
+        (CARRYING, CARRYING, []),
+        ({"a": adapter_split(), "b": adapter_split()}, CARRYING, []),
+        (CARRYING, {"b": adapter_contract(), "c": adapter_split()}, ['import contract "a" removed']),
+        (CARRYING, {"b": adapter_split()}, ['import contract "a" removed']),
+        (CARRYING, {"a": {**adapter_contract(), "id": "another"}, "b": adapter_split()}, [ID_LINE + "removed"]),
+        (CARRYING, {"a": {"type": "layers", "layers": ["shop.web", "shop.db"]}, "b": adapter_split()},
+         ['import contract "a" changes type', ID_LINE + "removed"]),
+    ],
+    ids=["the id kept", "the id adopted", "the carrier renamed", "the carrier removed", "the id changed",
+         "the carrier made another type"],
+)
+def test_a_carrier_that_loses_the_adapter_id_or_is_gone_gives_the_lines_of_its_own_case(base, head, expected):
+    """LOOSE-36, LOOSE-5, LOOSE-7: a carrier that stays without the id is its own line, a gone carrier is LOOSE-7's line only."""
+    assert loosened({"pyproject.toml": contracts_toml(base)}, {"pyproject.toml": contracts_toml(head)}) == expected
+
+
+def test_a_removed_config_is_the_only_line_whatever_the_adapter_id_was():
+    """LOOSE-36, LOOSE-8."""
+    assert loosened({"pyproject.toml": contracts_toml(CARRYING)}, {"pyproject.toml": "[project]\nname = 'x'\n"}) == [
+        "import-linter config in pyproject.toml removed"
+    ]

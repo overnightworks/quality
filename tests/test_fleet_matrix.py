@@ -20,7 +20,7 @@ from quality.fleet import (
     rule_cell,
 )
 from quality.rules import Rule, RuleRelease, Switch, SwitchChange
-from tests.support.architecture import FORBIDDEN, toml
+from tests.support.architecture import FORBIDDEN, adapter_contract, contracts_toml, toml
 from tests.support.baselines import ceiling
 from tests.support.fleet import NEWEST, OLDER, RELEASES, row
 from tests.support.git_repositories import GIT_IDENTITY, head_commit
@@ -260,7 +260,7 @@ CLONE_RELEASES = {**FIRST_RELEASES, "v0.4.0": CLONE_RELEASE, "v0.5.0": CLONE_TAB
 
 def declared(**fields) -> Declared:
     """A clone that declares nothing, with the given fields set."""
-    return Declared(**{"settings": None, "has_baseline": False, "has_clone_table": False, "has_literal_table": False, "has_spec_table": False, "has_import_config": False, "has_judged_project": False,
+    return Declared(**{"settings": None, "has_baseline": False, "has_clone_table": False, "has_literal_table": False, "has_spec_table": False, "has_import_config": False, "has_adapter_contract": False, "has_judged_project": False,
                        "declares_catalogs": False, "unreadable": frozenset(), **fields})
 
 
@@ -683,6 +683,30 @@ def test_the_import_contract_cell_follows_the_import_linter_config(fleet_report,
     assert cell(output, "o/layered", "import-contract") == cell_words
 
 
+@pytest.mark.parametrize(
+    ("files", "code", "cell_words"),
+    [
+        ({"pyproject.toml": toml(adapter_contract())}, 0, "enforced"),
+        ({"pyproject.toml": toml(FORBIDDEN)}, 0, "no adapter contract"),
+        ({}, 0, "no adapter contract"),
+        (TWO_IMPORT_CONFIGS, 2, "cannot read import-linter config"),
+        ({"pyproject.toml": contracts_toml({"a": adapter_contract(), "b": adapter_contract()})}, 2, "cannot read import-linter config"),
+    ],
+    ids=["the contract with the id", "a contract without it", "no config", "two configs", "two contracts with the id"],
+)
+def test_the_adapter_import_cell_follows_the_contract_the_config_holds(fleet_report, gate_clone, files, code, cell_words):
+    """FLEET-13, ADAPTERIMPORT-21: on main the cell reads enforced when the config holds the contract with the id."""
+    result, output = fleet_report(gate_clone({**caller("./.github/workflows/gate.yml"), **files}), tags=first_releases())
+    assert result == code, output
+    assert cell(output, GATE_REPOSITORY, "adapter-import") == cell_words
+
+
+def test_the_adapter_import_cell_says_not_released_under_a_tag(fleet_report, public):
+    """FLEET-19, ADAPTERIMPORT-21: only main has the rule."""
+    _, output = fleet_report(public("tagged", pinned_gate(NEWEST)), tags=first_releases())
+    assert cell(output, "o/tagged", "adapter-import") == "not released"
+
+
 def test_without_a_gate_every_cell_that_needs_one_is_a_dash_and_an_unreadable_workflow_makes_each_unreadable(
     fleet_report, public
 ):
@@ -749,7 +773,7 @@ def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces
     _, output = fleet_report(public("any", {}), tags=first_releases())
     assert "Every gate release enforces env-file, compose-port, secret, workflow-lint and workflow-security." in output
     assert MATRIX_COLUMNS[5:] == (
-        "size", "clone", "job-timeout", "test-twin", "spec-citation", "import-contract", "claude-md", "agents-md", "root-layout", "file-suffix",
+        "size", "clone", "job-timeout", "test-twin", "spec-citation", "import-contract", "adapter-import", "claude-md", "agents-md", "root-layout", "file-suffix",
         "script-name", "script-header", "test-layout", "test-import", "literal-text", "locator-text", "python-floor",
         "naming", "python-security", "python-print", "logging", "pr-concurrency", "pr-workflows", "pytest-workers", "runtime-install", "live-layer", "catalog-check", "render-pass", "advisory", "fleet-source", "pytest-random", "vitest-random", "node-test-random",
     )

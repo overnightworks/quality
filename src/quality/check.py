@@ -1,6 +1,6 @@
 import time
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum, auto
@@ -8,6 +8,7 @@ from functools import cached_property, partial
 from pathlib import Path, PurePosixPath
 
 from quality import (
+    adapter_imports,
     advisories,
     agent_guidance,
     architecture,
@@ -117,18 +118,43 @@ def judged_baseline(root: Path) -> baseline_file.Baseline | None:
         raise CannotJudge(str(error), (ratchet.head_step(error),)) from error
 
 
-def check_import_contract(root: Path, tracked: list[str]) -> RuleResult:
-    """Measured only without an import-linter config at the top; with one, its contracts must be kept.
-
-    A config counts when its name exists, so a tracked one deleted from the tree is none and a link to nowhere cannot be read.
-    """
-    configs = checkout.read_existing(repository.read_text, root, [name for name in tracked if name in architecture.CONFIG_FILES])
+@contextmanager
+def _refusing_contract_errors() -> Iterator[None]:
+    """What the imports area reads and judges raises its refusals as import-linter and grimp name them."""
     try:
-        return architecture.check_contracts(root, tracked, configs)
+        yield
     except architecture.UnparsableModule as error:
         raise Unparsable(str(error)) from error
     except architecture.ContractError as error:
         raise CannotJudge(str(error)) from error
+
+
+def read_import_contracts(root: Path, tracked: list[str]) -> architecture.ContractsRead | None:
+    """The import-linter contracts and the one import graph of the repository, None without a config at the top.
+
+    A config counts when its name exists, so a tracked one deleted from the tree is none and a link to nowhere cannot be read.
+    """
+    configs = checkout.read_existing(repository.read_text, root, [name for name in tracked if name in architecture.CONFIG_FILES])
+    with _refusing_contract_errors():
+        return architecture.read_contracts(root, tracked, configs)
+
+
+def check_import_contract(read: architecture.ContractsRead | None) -> RuleResult:
+    """Measured only without an import-linter config at the top; with one, its contracts must be kept."""
+    if read is None:
+        return RuleResult([], 0, True)
+    with _refusing_contract_errors():
+        return architecture.check_contracts(read)
+
+
+def check_adapter_imports(inputs: RunInputs, read: architecture.ContractsRead | None) -> Judged:
+    """Judges nothing without the contract that carries the adapter id, and then reads no file; measured only without a config."""
+    with _refusing_contract_errors():
+        split = adapter_imports.split_of(read)
+    if read is None or split is None:
+        return RuleResult([], 0, read is None)
+    check = partial(adapter_imports.check_adapter_imports, split, read.graph)
+    return _content_findings(inputs.root, inputs.modes, inputs.allow_lists, layout.test_import_candidates, check)
 
 
 def lint_python(
@@ -142,6 +168,11 @@ def lint_python(
         raise Unparsable(str(error)) from error
     except python_lint.LintError as error:
         raise CannotJudge(str(error)) from error
+
+
+def _judge_read[T](read: T | CannotJudge, judge: Callable[[T], Judged]) -> Judged:
+    """One rule's verdict on a read shared by the rules of an area; a read that cannot judge refuses every rule, a judge's own refusal only its rule."""
+    return read if isinstance(read, CannotJudge) else _attempt(lambda: judge(read))
 
 
 def _judge_lint(lint: python_lint.Lint | CannotJudge, judge: Callable[[python_lint.Lint], RuleResult]) -> RuleResult | CannotJudge:
@@ -398,16 +429,16 @@ def _judge_baseline_rules(
     return size, _attempt(lambda: clones.check_clones(tree, sources, baseline))
 
 
-def _content_findings(
+def _content_findings[T: list[Finding] | RuleResult](
     root: Path,
     modes: dict[str, str] | CannotJudge,
     allow_lists: AllowLists | CannotJudge,
     candidates: Callable[[dict[str, str]], list[str]],
-    check: Callable[..., list[Finding]],
-) -> list[Finding] | CannotJudge:
-    """The findings of a rule over the index modes and the contents of the files `candidates` names."""
+    check: Callable[..., T],
+) -> T | CannotJudge:
+    """The verdict of a rule over the index modes and the contents of the files `candidates` names."""
 
-    def judge() -> list[Finding]:
+    def judge() -> T:
         indexed = _required(modes)
         contents = checkout.read_existing(repository.read_bytes, root, checkout.on_disk(root, candidates(indexed)))
         try:
@@ -444,6 +475,11 @@ class RunInputs:
     @cached_property
     def modes(self) -> dict[str, str] | CannotJudge:
         return _attempt(lambda: checkout.index_modes(self.root))
+
+    @cached_property
+    def import_contracts(self) -> architecture.ContractsRead | None | CannotJudge:
+        """The import contracts and the one import graph that both rules of the imports area judge."""
+        return _attempt(lambda: read_import_contracts(self.root, self.tracked))
 
     @cached_property
     def logline_declared(self) -> bool | CannotJudge:
@@ -550,7 +586,9 @@ def _judge_debt(inputs: RunInputs) -> AreaVerdict:
 
 
 def _judge_imports(inputs: RunInputs) -> AreaVerdict:
-    return _area_verdict(Area.IMPORTS, {Rule.IMPORT_CONTRACT: _attempt(lambda: check_import_contract(inputs.root, inputs.tracked))})
+    read = inputs.import_contracts
+    judged = {Rule.IMPORT_CONTRACT: _judge_read(read, check_import_contract), Rule.ADAPTER_IMPORT: _judge_read(read, partial(check_adapter_imports, inputs))}
+    return _area_verdict(Area.IMPORTS, judged)
 
 
 def _judge_secrets(inputs: RunInputs) -> AreaVerdict:
