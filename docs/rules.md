@@ -1079,8 +1079,7 @@ run time (`${{ }}`, `$VAR`, `$(...)`) or not readable in pytest's grammar is `in
 be read`; an unreadable shell line is `invalid` as `pytest-workers` reports it, and a command built at run time in a run
 holding the word `pytest` is `invalid` with the fact `command is built at run time, pytest -m cannot be read` (LIVE-5). A
 workflow that cannot be read is exit `2` as for `pytest-workers` (LIVE-6). No marker comment, configuration or declaration
-switches the rule off; only the operator rules a deviation ([proof](proof.md)). It first ships in the release after
-v0.24.0, so a gate pinned below it shows `not in <tag>` in the fleet matrix's column (LIVE-7, FLEET-18). Named gaps: a call
+switches the rule off; only the operator rules a deviation ([proof](proof.md)). It first ships in v0.25.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column (LIVE-7, FLEET-18). Named gaps: a call
 behind a repository script, `make`, nox, tox or a mise task is not seen, since the live layer's own boundary covers it (a
 journey without platform's storage-state file fails loud, and CI never has that file); `-k`, `--deselect` and `--ignore`
 are not read as an exclusion, so a call that relies on them alone is `runs live`; a Playwright live layer under
@@ -1518,8 +1517,8 @@ and reports three counts as one `open` [note](output.md#notes); it only reports 
   tracked `.md` file that cannot be read or is not UTF-8 and a TypeScript or JavaScript test file that is not UTF-8 or that the lexer refuses are left out and named in
   the note's last part (`· 1 file not read: docs/x.md`), so the rule changes no exit code; with only such files the note is
   that part alone. A Python test file that does not parse is skipped, since `size` and `clone` refuse it.
-- **Report only (CITE-6).** The rule changes no verdict and its extent is 0, never measured only. It names no first release
-  yet, so the fleet matrix's cell reads `not released` (FLEET-19).
+- **Report only (CITE-6).** The rule changes no verdict and its extent is 0, never measured only. It first ships in v0.25.0, so a gate pinned below that release shows `not in <tag>` in
+  the fleet matrix's column (FLEET-18), and a dependent meets it at its bump to it.
 
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
@@ -1825,7 +1824,7 @@ project to the same R6. Vitest runs files and tests in a fixed order unless `tes
   `naming` reports it, through the reader both share) are exit `2` naming the file. A key set in an imported module, a
   spread or `mergeConfig` does not count, which is stricter than vitest.
 - **No release, no switch (VITEST-5).** No configuration switches the rule off, and no marker exists: vitest has no flow
-  layer, since the fleet's flow layer is Playwright. It first ships in the next release, so a gate pinned below it shows
+  layer, since the fleet's flow layer is Playwright. It first ships in v0.25.0, so a gate pinned below that release shows
   `not in <tag>` in the fleet matrix's column (FLEET-18). Not covered, named: negatives in scripts and workflow calls
   (`--sequence.shuffle=false`, `--sequence.seed=N`), `--config` pointing elsewhere, `extends: false`, a `reporters` list
   without a reporter that prints the seed, 4.1.12's parent-directory config lookup (errs stricter). R6 under node's own test
