@@ -387,7 +387,7 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
     capsys.readouterr()
     assert {rule for rule, reason in refusals(repo).items() if named in reason} == {
         Rule.COMPOSE_PORT, Rule.SIZE, Rule.ROOT_LAYOUT, Rule.AGENTS_MD, Rule.FILE_SUFFIX, Rule.SCRIPT_NAME,
-        Rule.SCRIPT_HEADER, Rule.TEST_LAYOUT, Rule.TEST_IMPORT,
+        Rule.SCRIPT_HEADER, Rule.TEST_LAYOUT, Rule.TEST_IMPORT, Rule.SPEC_CITATION,
         Rule.PYTHON_FLOOR, Rule.LEAK, Rule.ADVISORY, Rule.PR_WORKFLOWS,
     }
 
