@@ -198,7 +198,7 @@ running time, and `Over 12 min` each job name with at least 5 samples whose runn
 percentile, the slowest first, or `none`; a repository whose jobs cannot be read shows `cannot read jobs`, one whose runs were read but whose jobs the cap left no call for shows `not sampled · call cap` in all three cells, and one whose jobs the deadline stopped before the first call shows `not sampled · time limit`. The report reads
 runs without a page cap per repository, within its 600 calls; a repository the cap stops shows `partly read` and the pages
 read, or `cannot read CI time` where its runs cannot be read, in place of its numbers, and the table raises no finding and
-changes no exit (FLEET-105). One large repository can use up the cap and leave those read after it `partly read`, in the
+changes no exit (FLEET-105, FLEET-130). One large repository can use up the cap and leave those read after it `partly read`, in the
 listing's order. Private repositories are not read, and a commit whose runs begin before the window counts by its runs inside it.
 
 `Re-runs` and `Green on re-run` count runs, not commits, per repository over the same window and events, from the
@@ -221,6 +221,15 @@ and the tail (tables, summary, document, upload): 60 + 720 + 30 + 90 = 900 secon
 between repositories are not bounded (24 s at 18 repositories, inside the tail); a size measurement in flight finishes
 after the deadline; a cut is not spread evenly.
 
+The runs are read from the repository's runs listing without a date filter, newest first, 100 to a page, because a
+filtered listing returns at most 1,000 runs; the read stops after the first page whose oldest run, of any event, was
+created before the window, or at the listing's end, and a run created before the window is not counted, so a window of
+more than 1,000 runs is counted whole (FLEET-128). A run listed on two pages, because runs created during the read shift
+the pages, counts once by its id, as its later sighting shows it (FLEET-129). A listing that ends before the run total it
+reports is `partly read · N pages read` and makes `complete` false (FLEET-130). Named gaps: a run deleted during the read
+can let one run slip past a page boundary unread; the stop assumes the listing's id order agrees with `created_at` at the
+window's edge.
+
 With `GITHUB_STEP_SUMMARY` set, the
 tables are appended there (FLEET-43). Every cell puts a backslash before `` \ ` * _ ~ [ ] < > & | ``, so repository text
 opens no HTML comment, link or new cell (FLEET-44); a bare URL still renders as a link to its own address. The run ends
@@ -239,7 +248,7 @@ sent to `api.github.com` only, never to git); a local run lists anonymously (FLE
 and prints nothing of its own; without the switch no file is written. The switch takes no path, so no caller chooses
 where the file lands. The top level holds, in this
 order, `schema` (`1`; a change of any key goes through it), `generated_at` and `window_start` and `window_end` (RFC 3339 UTC
-instants: `window_start` is midnight UTC seven days before the report's day, the bound of the runs query, and `window_end`
+instants: `window_start` is midnight UTC seven days before the report's day, the bound of the runs read, and `window_end`
 equals `generated_at`), `limit_seconds` (`600`, the one limit the CI-time module owns), `complete` and `repositories`, a flat
 array with one row per repository of the report's selection in the table's order, each with `name`, `median_seconds`,
 `commits_sampled`, `measured` and `breach`: only the name, whole numbers and booleans, no commit author and no reason

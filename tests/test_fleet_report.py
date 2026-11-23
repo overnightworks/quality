@@ -568,7 +568,6 @@ def test_the_weekly_ci_time_is_a_third_table_and_leaves_the_exit_as_it_is(capsys
         "| o/beta | 0 | — | — | — | — | — | — | — | — | — |",
     ]
     assert "| o/alpha | 2 | 1m00s |" in summary.read_text()
-    assert "created=%3E%3D2026-10-30" in listing.runs_requests[0][0]
 
 
 def test_re_runs_and_those_green_on_re_run_print_in_the_ci_time_table_and_leave_the_exit_as_it_is(capsys, monkeypatch, tmp_path, public):
