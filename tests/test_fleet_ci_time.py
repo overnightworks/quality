@@ -26,7 +26,7 @@ START = datetime(2026, 11, 20, 10, tzinfo=UTC)
 DEFAULT_BRANCH = "trunk"
 
 
-def run(sha, created=0, updated=60, event="pull_request", status="completed", conclusion="success", branch="feature", run_id=1):
+def run(sha, created=0, updated=60, event="pull_request", status="completed", conclusion="success", branch="feature", run_id=1, attempt=1):
     """A workflow run of `sha` on `branch` whose moments are seconds after START."""
     return {
         "id": run_id,
@@ -35,6 +35,7 @@ def run(sha, created=0, updated=60, event="pull_request", status="completed", co
         "event": event,
         "status": status,
         "conclusion": conclusion,
+        "run_attempt": attempt,
         "created_at": (START + timedelta(seconds=created)).isoformat(),
         "updated_at": (START + timedelta(seconds=updated)).isoformat(),
     }
@@ -74,7 +75,7 @@ def weekly(served, name="o/a"):
 
 def test_the_runs_of_a_commit_count_from_the_earliest_creation_to_the_latest_update():
     counted = weekly({"o/a": [run("x", created=0, updated=100), run("x", created=30, updated=500, event="push")]})
-    assert counted == WeeklyCiTime(commits=1, median=timedelta(seconds=500), p90=timedelta(seconds=500), red=RedShare(0, 1), red_on_main=RedShare(0, 0))
+    assert counted == WeeklyCiTime(commits=1, median=timedelta(seconds=500), p90=timedelta(seconds=500), red=RedShare(0, 1), red_on_main=RedShare(0, 0), reruns=0, green_on_rerun=0)
 
 
 def test_median_and_p90_are_the_nearest_rank_over_the_commit_walls():
@@ -107,8 +108,28 @@ def test_a_commit_with_a_failed_or_timed_out_run_is_red_and_a_skipped_one_is_not
     assert (counted.commits, counted.red) == (3, RedShare(1, 3))
 
 
+@pytest.mark.parametrize(
+    ("runs", "reruns", "green"),
+    [
+        pytest.param([run("x")], 0, 0, id="a first attempt is no re-run"),
+        pytest.param([run("x", attempt=2, conclusion="success")], 1, 1, id="a re-run that ends green"),
+        pytest.param([run("x", attempt=3, conclusion="failure")], 1, 0, id="a re-run that ends red"),
+        pytest.param([run("x", attempt=2, status="in_progress", conclusion=None)], 0, 0, id="a re-run still in progress is not counted"),
+        pytest.param([run("x", attempt=2, event="schedule")], 0, 0, id="an event no commit counts is not counted"),
+    ],
+)
+def test_re_runs_and_those_green_on_the_latest_attempt_count_over_the_finished_runs(runs, reruns, green):
+    counted = weekly({"o/a": runs})
+    assert (counted.reruns, counted.green_on_rerun) == (reruns, green)
+
+
+@pytest.mark.parametrize("attempt", ["2", None, True, 1.5])
+def test_a_run_attempt_that_is_not_an_integer_cannot_be_read(attempt):
+    assert weekly({"o/a": [run("x", attempt=attempt)]}) == PartlyRead("cannot read CI time")
+
+
 def test_a_repository_without_counted_commits_reads_zero_commits():
-    assert weekly({"o/a": []}) == WeeklyCiTime(commits=0, median=None, p90=None, red=RedShare(0, 0), red_on_main=RedShare(0, 0))
+    assert weekly({"o/a": []}) == WeeklyCiTime(commits=0, median=None, p90=None, red=RedShare(0, 0), red_on_main=RedShare(0, 0), reruns=0, green_on_rerun=0)
 
 
 def test_a_repository_with_many_pages_is_read_whole_within_the_call_cap():
@@ -222,11 +243,11 @@ def test_a_repository_without_runs_takes_no_share_of_the_calls_left_for_jobs():
 
 def counted_week(seconds: int, commits: int = 12) -> WeeklyCiTime:
     wall = timedelta(seconds=seconds)
-    return WeeklyCiTime(commits, wall, wall, RedShare(0, 0), RedShare(0, 0))
+    return WeeklyCiTime(commits, wall, wall, RedShare(0, 0), RedShare(0, 0), 0, 0)
 
 
 def quiet_week() -> WeeklyCiTime:
-    return WeeklyCiTime(0, None, None, RedShare(0, 0), RedShare(0, 0))
+    return WeeklyCiTime(0, None, None, RedShare(0, 0), RedShare(0, 0), 0, 0)
 
 
 def written_text(rows: dict[str, WeeklyCiTime | PartlyRead]) -> str:

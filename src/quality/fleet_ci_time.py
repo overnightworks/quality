@@ -20,10 +20,10 @@ RUNS_URL = "https://api.github.com/repos/{name}/actions/runs?created={created}&p
 PULL_REQUEST, PUSH = "pull_request", "push"
 COUNTED_EVENTS = frozenset({PULL_REQUEST, PUSH})
 RED_CONCLUSIONS = frozenset({"failure", "timed_out"})
-CANCELLED = "cancelled"
+CANCELLED, SUCCESS = "cancelled", "success"
 UNREADABLE = "cannot read CI time"
 MEDIAN, P90 = 50, 90
-COLUMNS = ("Repo", "Commits", "Median", "p90", "Red", "Red on main", "Jobs sampled", "Queue p90", "Over 12 min")
+COLUMNS = ("Repo", "Commits", "Median", "p90", "Red", "Red on main", "Re-runs", "Green on re-run", "Jobs sampled", "Queue p90", "Over 12 min")
 PARTLY_READ = "partly read"
 DASH = "—"
 LIMIT = timedelta(minutes=10)
@@ -47,13 +47,16 @@ class RedShare:
 @dataclass(frozen=True)
 class WeeklyCiTime:
     """What a repository's counted commits come to; the walls are None when no commit was counted. `red` is over the
-    commits with a pull_request run, `red_on_main` over those with a push run on the default branch."""
+    commits with a pull_request run, `red_on_main` over those with a push run on the default branch. `reruns` counts the
+    finished runs whose `run_attempt` is above 1, `green_on_rerun` those among them whose latest attempt succeeded."""
 
     commits: int
     median: timedelta | None
     p90: timedelta | None
     red: RedShare
     red_on_main: RedShare
+    reruns: int
+    green_on_rerun: int
 
 
 @dataclass(frozen=True)
@@ -83,6 +86,7 @@ class _Run:
     updated: datetime
     finished: bool
     conclusion: str | None
+    attempt: int
 
 
 def api_headers(token: str) -> dict[str, str]:
@@ -122,7 +126,7 @@ def table_cells(name: str, fleet: FleetCiTime) -> tuple[str, ...]:
         return (name, f"{PARTLY_READ}{output.SEPARATOR}{reading.reason}", *[DASH] * (len(COLUMNS) - 2))
     if reading.median is None or reading.p90 is None:
         return (name, "0", *[DASH] * (len(COLUMNS) - 2))
-    walls = (str(reading.commits), _duration(reading.median), _duration(reading.p90), reading.red.cell(), reading.red_on_main.cell())
+    walls = (str(reading.commits), _duration(reading.median), _duration(reading.p90), reading.red.cell(), reading.red_on_main.cell(), str(reading.reruns), str(reading.green_on_rerun))
     return (name, *walls, *fleet_job_time.table_cells(fleet.jobs.get(name)))
 
 
@@ -207,10 +211,11 @@ def _run(entry: Mapping[str, object]) -> _Run | None:
         return None
     created, updated = ci_time.parsed_moment(entry["created_at"]), ci_time.parsed_moment(entry["updated_at"])
     run_id, sha, branch = entry["id"], entry["head_sha"], entry["head_branch"] or ""
-    if created is None or updated is None or type(run_id) is not int or not isinstance(sha, str) or not isinstance(branch, str):
+    attempt = entry["run_attempt"]
+    if created is None or updated is None or type(run_id) is not int or type(attempt) is not int or not isinstance(sha, str) or not isinstance(branch, str):
         raise _unreadable(ValueError(entry))
     conclusion = entry["conclusion"]
-    return _Run(run_id, sha, entry["event"], branch, created, updated, entry["status"] == ci_time.COMPLETED, conclusion if isinstance(conclusion, str) else None)
+    return _Run(run_id, sha, entry["event"], branch, created, updated, entry["status"] == ci_time.COMPLETED, conclusion if isinstance(conclusion, str) else None, attempt)
 
 
 def _weekly(runs: list[_Run], default_branch: str) -> WeeklyCiTime:
@@ -218,13 +223,15 @@ def _weekly(runs: list[_Run], default_branch: str) -> WeeklyCiTime:
     for run in runs:
         by_commit[run.sha].append(run)
     counted = [commit for commit in by_commit.values() if all(run.finished for run in commit) and any(run.conclusion != CANCELLED for run in commit)]
+    reruns = [run for run in runs if run.finished and run.attempt > 1]
+    green_on_rerun = sum(run.conclusion == SUCCESS for run in reruns)
     none = RedShare(0, 0)
     if not counted:
-        return WeeklyCiTime(0, None, None, none, none)
+        return WeeklyCiTime(0, None, None, none, none, len(reruns), green_on_rerun)
     walls = [max(run.updated for run in commit) - min(run.created for run in commit) for commit in counted]
     red = _red_share(counted, lambda run: run.event == PULL_REQUEST)
     red_on_main = _red_share(counted, lambda run: run.event == PUSH and run.branch == default_branch)
-    return WeeklyCiTime(len(counted), ci_time.nearest_rank(walls, MEDIAN), ci_time.nearest_rank(walls, P90), red, red_on_main)
+    return WeeklyCiTime(len(counted), ci_time.nearest_rank(walls, MEDIAN), ci_time.nearest_rank(walls, P90), red, red_on_main, len(reruns), green_on_rerun)
 
 
 def _red_share(commits: list[list[_Run]], in_population: Callable[[_Run], bool]) -> RedShare:
