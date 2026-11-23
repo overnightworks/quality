@@ -176,9 +176,19 @@ def _is_mark_carrier(line: str) -> bool:
     return COMMENT_ONLY_LINE.match(line) is not None or BLOCK_SCALAR_RUN_LINE.match(line) is not None
 
 
+def _mark_carrier_run(file_lines: list[str], first: int) -> range:
+    """The numbers of the unbroken run of mark carriers directly above the line `first`; a block scalar's `run:` line with a comment is its top."""
+    top = first
+    while top > 1 and _is_mark_carrier(file_lines[top - 2]):
+        top -= 1
+        if BLOCK_SCALAR_RUN_LINE.match(file_lines[top - 1]):
+            break
+    return range(top, first)
+
+
 @dataclass(frozen=True)
 class Marker:
-    """The comment `# <rule>: <reason>` that clears a rule's findings: on a call's logical line or on a comment-only line (or a block scalar's `run:` line) directly above it, and, where the rule allows it, in the column of a step's `-` directly above the step."""
+    """The comment `# <rule>: <reason>` that clears a rule's findings: on a call's logical line or in the unbroken run of comment-only lines (the run ends at a block scalar's `run:` line that carries a comment) directly above it, and, where the rule allows it, in the column of a step's `-` directly above the step."""
 
     pattern: re.Pattern[str]
     above_step: bool
@@ -192,17 +202,17 @@ class Marker:
         return frozenset(number for number, line in enumerate(file_lines, 1) if self.pattern.search(line))
 
     def clears(self, file_lines: list[str], marked: frozenset[int], first: int, last: int) -> bool:
-        """Whether a mark stands on a line of `first..last`, or directly above on a comment-only line or a block scalar's `run:` line; a mark trailing another command clears that command only."""
-        return any(number in marked for number in range(first, last + 1)) or (
-            first - 1 in marked and _is_mark_carrier(file_lines[first - 2])
+        """Whether a mark stands on a line of `first..last`, or in the run of comment lines directly above; a mark trailing another command clears that command only."""
+        return any(number in marked for number in range(first, last + 1)) or any(
+            number in marked for number in _mark_carrier_run(file_lines, first)
         )
 
     def per_line_marks(self, file_lines: list[str], marked: frozenset[int], step: yaml.Node, run: yaml.Node) -> frozenset[int]:
-        """The marked lines the per-line form reads for the step's `run:`; where the rule has a step form, the line above a step whose `run:` stands on the step's own first line after its `-` (`- run: x`), and the line above a flow step, is read by the step form alone."""
+        """The marked lines the per-line form reads for the step's `run:`; where the rule has a step form, the comment run above a step whose `run:` stands on the step's own first line after its `-` (`- run: x`), and above a flow step, is read by the step form alone."""
         number = step.start_mark.line
         before_step = file_lines[number][: step.start_mark.column]
         if self.above_step and run.start_mark.line == number and (step.flow_style or before_step.strip()):
-            return marked - {number}
+            return marked - set(_mark_carrier_run(file_lines, number + 1)) - {number}
         return marked
 
     def clears_step(self, file_lines: list[str], step: yaml.Node) -> bool:
