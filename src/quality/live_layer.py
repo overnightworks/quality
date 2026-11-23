@@ -11,10 +11,10 @@ from pathlib import Path, PurePosixPath
 
 from quality import layout
 from quality.marker_expression import MarkerExpressionError, parse
-from quality.pytest_options import lists_only, options, pytest_arguments
+from quality.pytest_options import running_options
 from quality.report import FindingEvent, RuleResult
 from quality.rules import Rule
-from quality.run_script import Segment, command_words
+from quality.run_script import Segment
 from quality.workflow_document import Marker
 from quality.workflow_rules import PYTEST_RULE, Problem, ScriptRule, judge_scripts
 
@@ -42,9 +42,8 @@ def check_live_layer(root: Path, tracked: list[str]) -> RuleResult:
 
 
 def _call_problem(parts: Sequence[Segment], index: int) -> Problem | None:
-    arguments = pytest_arguments(command_words(parts[index]))
-    called = None if arguments is None else list(options(arguments))
-    if called is None or lists_only(called):
+    called = running_options(parts[index])
+    if called is None:
         return None
     expressions = [option.value for option in called if option.name == MARK_OPTION]
     # pytest applies no expression when the last -m is empty, so every test is selected.

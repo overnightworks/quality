@@ -24,13 +24,12 @@ from quality.pytest_options import (
     VERBOSE_NAMES,
     VERBOSITY_NAMES,
     Option,
-    lists_only,
     options,
-    pytest_arguments,
+    running_options,
 )
 from quality.report import CannotJudge, Finding, FindingEvent, RuleResult
 from quality.rules import Rule
-from quality.run_script import Segment, command_start, command_words
+from quality.run_script import Segment, command_start
 from quality.workflow_document import Marker, composed, environment_values, readable_workflows, unreadable
 from quality.workflow_rules import PYTEST_RULE, Problem, ScriptRule, judge_scripts
 
@@ -172,9 +171,8 @@ def _call_findings(root: Path, tracked: Sequence[str]) -> list[Finding]:
 
 def _segment_problem(parts: Sequence[Segment], index: int) -> Problem | None:
     segment = parts[index]
-    arguments = pytest_arguments(command_words(segment))
-    called = [] if arguments is None else list(options(arguments))
-    call = None if arguments is None or lists_only(called) else flags_problem(called, "the call")
+    called = running_options(segment)
+    call = None if called is None else flags_problem(called, "the call")
     return next((problem for problem in (*_assignment_problems(segment.words), call) if problem is not None), None)
 
 

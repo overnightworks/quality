@@ -1046,6 +1046,7 @@ runtime-install: <reason>` (RUNTIME-8). A workflow whose YAML or file cannot be 
 `run:` are exit `2` naming the file; a step with no `run:` is skipped and a tracked name gone from the tree is skipped (RUNTIME-9). The clean row of
 `workflows` keeps its words, the rule's extent is the count of workflows it read (RUNTIME-10). No configuration
 switches the rule off. It first ships in v0.12.0, so a dependent meets it at its first bump to that release.
+quality's own checkout needs no workflow edit.
 
 The `live-layer` rule keeps the live layer out of CI. A repository that tracks a path under a `tests/e2e/live/` folder, at
 its root or in a judged project's `tests/`, has a live layer; without one the rule is clean with extent `0` and reads no
@@ -1069,7 +1070,6 @@ journey without platform's storage-state file fails loud, and CI never has that 
 are not read as an exclusion, so a call that relies on them alone is `runs live`; a Playwright live layer under
 `frontend/e2e/live` is not read (LIVE-8). The marker grammar is read by `marker_expression`, since pytest is no runtime
 dependency of quality; a test holds it against pytest's own parser.
-quality's own checkout needs no workflow edit.
 
 Named gaps, each reading as no call: `sudo` flags that combine and take a value (`sudo -nu ci apt-get install`) and a
 nested `env -S`; a download and its run in two steps (`curl -o f url && sh f`); `eval "$(curl url)"` and `source
