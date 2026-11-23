@@ -14,7 +14,7 @@ import json
 import re
 import subprocess
 import urllib.error
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -491,21 +491,9 @@ def render(
         *(table_line(matrix_cells(row, pins)) for row in rows),
     ]
     ci_heading = f"**CI time, last {fleet_ci_time.WINDOW_DAYS} days{output.SEPARATOR}{output.counted(ci_time.calls, 'API call')}**"
-    ci_table = [
-        table_line(fleet_ci_time.COLUMNS),
-        "|---" * len(fleet_ci_time.COLUMNS) + "|",
-        *(table_line(fleet_ci_time.table_cells(name, ci_time)) for name in ci_time.rows),
-    ]
-    between_table = [
-        table_line(fleet_clones.COLUMNS),
-        "|---" * len(fleet_clones.COLUMNS) + "|",
-        *(table_line(pair.cells) for pair in between),
-    ]
-    suites_table = [
-        table_line(fleet_suites.COLUMNS),
-        "|---" * len(fleet_suites.COLUMNS) + "|",
-        *(table_line(suites_cells(row)) for row in rows),
-    ]
+    ci_table = table_lines(fleet_ci_time.COLUMNS, (fleet_ci_time.table_cells(name, ci_time) for name in ci_time.rows))
+    between_table = table_lines(fleet_clones.COLUMNS, (pair.cells for pair in between))
+    suites_table = table_lines(fleet_suites.COLUMNS, (suites_cells(row) for row in rows))
     return (
         heading, "", *table, "", matrix_heading, "", every_release, "", *matrix, "", ci_heading, "", *ci_table, "",
         fleet_clones.heading(between), "", *between_table, "", fleet_suites.HEADING, "", *suites_table,
@@ -755,6 +743,10 @@ def pin_words(ref: str, tags: checkout.ReleaseTags | None) -> str:
 def released_tag(commit: str, tags: checkout.ReleaseTags) -> str | None:
     """The newest release tag that points at the commit."""
     return max((tag for tag, tagged in tags.items() if tagged == commit), key=checkout.release_order, default=None)
+
+
+def table_lines(columns: tuple[str, ...], rows: Iterable[tuple[Cell, ...]]) -> list[str]:
+    return [table_line(columns), "|---" * len(columns) + "|", *map(table_line, rows)]
 
 
 def table_line(values: tuple[Cell, ...]) -> str:
