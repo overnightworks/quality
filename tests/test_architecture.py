@@ -596,7 +596,8 @@ def test_a_run_imports_no_module_of_the_judged_repository(build_repo, capsys, fi
     status = subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "--ignored"],
                             capture_output=True, text=True, check=True)
     assert (status.stdout, (repo / ".import_linter_cache").exists()) == ("", False)
-    assert (list(sys.path), grimp_settings.PACKAGE_FINDER) == before
+    after = (list(sys.path), grimp_settings.PACKAGE_FINDER)
+    assert after == before
     judged = [name for name, module in list(sys.modules.items())
               if Path(getattr(module, "__file__", None) or "/").resolve().is_relative_to(repo.resolve())]
     assert judged == []
