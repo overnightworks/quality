@@ -32,5 +32,6 @@
 - `docs/codeql.md`: read when you change `codeql.yml` or its caller contract.
 - `docs/release.md`: read when you change a release workflow, the image build or how quality releases itself.
 - `docs/naming.md`: read when you name a package or rename a repository, or change a Sonar key.
+- `docs/proof.md`: read when you add tests or a CI job, or change a proof or CI-time rule or number.
 - `docs/sonar.md`: read when you change `sonar findings`, coverage on new code or the Sonar gate.
 - `docs/runbooks/`: read when the operator's door is the question, a pull request red that no change can turn green; the files are named by their task.
