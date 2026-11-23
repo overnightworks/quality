@@ -12,8 +12,8 @@ dependencies = [
     "lizard>=1.24.1,<1.26",
     # design v0.36.0: the full commit of its release tag, because quality is installed without a lock
     "overnightworks-design[po] @ git+https://github.com/overnightworks/design@e1b4a448a9e4d86539f4f2ef05f5267a4b52fe36",
-    # logline v1.6.0: the full commit of its release tag, because quality is installed without a lock
-    "overnightworks-logline @ git+https://github.com/overnightworks/logline@91662227fbb219d2a249615aea1a4cd0bcb0317e",
+    # logline v1.9.0: the full commit of its release tag, because quality is installed without a lock
+    "overnightworks-logline @ git+https://github.com/overnightworks/logline@cca495315f8fb25dae85851592a2c42376052c58",
     "packaging>=24",
     "ruff==0.17.5",
     "zizmor==1.32.0",
