@@ -1,8 +1,0 @@
-claim_id = "0dc5bf3e9c9d40d9855301de99811363"
-agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
-role = "builder"
-base = "4dc8ea20d64f2fee7eeb3d826a5c96aa5c17ef5a"
-branch = "claude/issue-953-ci-time-reruns"
-scope = ["docs/commands.md", "src/quality/fleet_ci_time.py", "tests/test_fleet_ci_time.py", "tests/test_fleet_report.py"]
-opened_commit = "dad1b64d0f0dd7694d3f845a862c9bc45266d6a5"
-whole_reason = "One owner's read gains one field and two counts: its module, its spec lines and the two test modules that pin its table."
