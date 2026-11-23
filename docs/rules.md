@@ -1568,11 +1568,11 @@ no spec defines or one that is retired, and a duplicate definition are red, and 
   a head that still has the file is `spec citation baseline removed`; a base without the table is an adoption and green. Both
   are declarable as in [gate](gate.md#declared-loosenings).
 - **The matrix cell (FLEET-118).** The cell reads `not in <tag>` below the first release, `report-only` without the table,
-  `enforced` with it from the release that holds the list (on main today; `SwitchChange` in `src/quality/rules.py` names the
-  release once it is tagged), and `cannot read quality/baseline.toml` for a baseline that cannot be read.
+  `enforced` with it from v0.26.0, the release that holds the list (`SwitchChange` in `src/quality/rules.py` names it), and
+  `cannot read quality/baseline.toml` for a baseline that cannot be read.
 - **The unknown-table message (CITE-13).** `quality/baseline.toml has an unknown table [future]; quality <version> knows ccn,
   file_lines, function_lines, clones, job_minutes, spec_citations` (CEILING-3). A quality that predates the table meets it as an
-  unknown table and exits `2` (BASELINE-25), so a repository records the table only once its gate pins the release that holds it.
+  unknown table and exits `2` (BASELINE-25), so a repository records the table only once its gate pins v0.26.0, the release that holds it.
 
 - **Foreign prefixes (CITE-14).** An implementer declares each prefix whose IDs its tests cite, one entry per prefix, in
   `quality/config.toml`; `owner` is the repository that defines them:
@@ -1609,8 +1609,8 @@ no spec defines or one that is retired, and a duplicate definition are red, and 
   malformed `item` or `date`, a `reason` that is not one line, or two entries for one path. Either key as anything but an array
   of tables is refused too. It shows in `check` and `check --fix` as the `debt` row `✗ not checked`, and in the verdict and the
   door naming the side, as GENERATED-6 to GENERATED-8; `check secrets --staged` reads only `[secrets]`. A quality older than
-  this release refuses `[spec_citations]` in `quality/config.toml` as an unknown key (the baseline's table of that name is
-  CITE-13's), so a repository declares only once its gate pins the release that holds the list.
+  v0.26.0 refuses `[spec_citations]` in `quality/config.toml` as an unknown key (the baseline's table of that name is
+  CITE-13's), so a repository declares only once its gate pins v0.26.0, the release that holds the list.
 - **Unused declarations (CITE-17).** With the baseline table, a foreign prefix that matches no citation of an ID the tree
   defines nowhere is `unused` at `quality/config.toml` (`[[spec_citations.foreign]] prefix LANG matches no citation`), and an
   implemented path that is not tracked or holds no live ID's first definition is `unused` at that path
@@ -1965,7 +1965,7 @@ spec, tap and junit reporters.
   them (`command is built at run time, node --test cannot be read`). A workflow that cannot be read is exit `2` naming the
   file, as PYTEST-9 says.
 - **No release, no switch (NODETEST-5).** No configuration switches the rule off, and no marker exists, as for VITEST-5. It
-  first ships in the next release, so a gate pinned below it shows `not in <tag>` in the fleet matrix's column (FLEET-18).
+  first ships in v0.26.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column (FLEET-18).
   Not covered, named: a call behind a package.json script (`npm test`, `pnpm test`, `node --run`), `make` or a mise task,
   `run()` from `node:test` inside a script, `NODE_OPTIONS` (a randomizing value there leaves the finding, a fixing one goes
   unseen), a config file passed with `--config-file`, an option written after the first test file (it reads as set), and
