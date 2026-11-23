@@ -264,11 +264,15 @@ def _metric_named(name: str) -> Metric:
 
 
 def holds_table(version: bytes, name: str) -> bool:
-    """Whether a version has a top-level key `name`; text no parser reads proves nothing."""
+    """Whether a version has a top-level key `name`. A version no parser reads may hold it where its bytes name it, and
+    then it raises; where they never name it, it holds nothing."""
     try:
         return name in repository.parse_toml(version.decode("utf-8"))
     except (UnicodeDecodeError, repository.TomlError) as error:
-        raise SizeError(f"a version of {BASELINE_PATH} in git cannot be read") from error
+        # A version a parser read is judged by it; one it cannot read still blocks a recording where it could have held the table.
+        if name.encode() in version:
+            raise SizeError(f"a version of {BASELINE_PATH} in git cannot be read and names {name}") from error
+        return False
 
 
 def _table(where: str, value: object) -> dict:

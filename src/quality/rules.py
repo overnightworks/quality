@@ -50,6 +50,7 @@ RELEASE_0_21 = "v0.21.0"
 RELEASE_0_23 = "v0.23.0"
 RELEASE_0_24 = "v0.24.0"
 RELEASE_0_25 = "v0.25.0"
+RELEASE_0_26 = "v0.26.0"
 
 
 class Area(StrEnum):
@@ -85,7 +86,7 @@ class Rule(StrEnum):
     CLONE = "clone", Area.DEBT, "v0.4.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE)
     JOB_TIMEOUT = "job-timeout", Area.DEBT, RELEASE_0_12, Switch.ALWAYS
     TEST_TWIN = "test-twin", Area.DEBT, RELEASE_0_23, Switch.REPORT_ONLY
-    SPEC_CITATION = "spec-citation", Area.DEBT, RELEASE_0_25, Switch.REPORT_ONLY, SwitchChange(None, Switch.SPEC_TABLE)
+    SPEC_CITATION = "spec-citation", Area.DEBT, RELEASE_0_25, Switch.REPORT_ONLY, SwitchChange(RELEASE_0_26, Switch.SPEC_TABLE)
     IMPORT_CONTRACT = "import-contract", Area.IMPORTS, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
     ADAPTER_IMPORT = "adapter-import", Area.IMPORTS, None, Switch.ADAPTER_CONTRACT
     CLAUDE_MD = "claude-md", Area.FILES, RELEASE_0_3, Switch.ALWAYS
@@ -122,7 +123,7 @@ class Rule(StrEnum):
     FLEET_SOURCE = "fleet-source", Area.DEPENDENCIES, RELEASE_0_21, Switch.ALWAYS
     PYTEST_RANDOM = "pytest-random", Area.DEPENDENCIES, RELEASE_0_24, Switch.ALWAYS
     VITEST_RANDOM = "vitest-random", Area.DEPENDENCIES, RELEASE_0_25, Switch.ALWAYS
-    NODE_TEST_RANDOM = "node-test-random", Area.DEPENDENCIES, None, Switch.ALWAYS
+    NODE_TEST_RANDOM = "node-test-random", Area.DEPENDENCIES, RELEASE_0_26, Switch.ALWAYS
 
     def __new__(
         cls, rule_id: str, area: Area, first_release: str | None, switch: Switch, *switched: SwitchChange
