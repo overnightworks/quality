@@ -242,8 +242,8 @@ po = [
 
 [[package]]
 name = "overnightworks-logline"
-version = "1.9.0"
-source = { git = "https://github.com/overnightworks/logline?rev=cca495315f8fb25dae85851592a2c42376052c58#cca495315f8fb25dae85851592a2c42376052c58" }
+version = "1.10.0"
+source = { git = "https://github.com/overnightworks/logline?rev=c8eeea08873719d9521553a95fb2d5b9fcbe11a5#c8eeea08873719d9521553a95fb2d5b9fcbe11a5" }
 dependencies = [
     { name = "opentelemetry-api" },
     { name = "structlog" },
@@ -278,7 +278,7 @@ requires-dist = [
     { name = "import-linter", specifier = "==2.16" },
     { name = "lizard", specifier = "==1.26.1" },
     { name = "overnightworks-design", extras = ["po"], git = "https://github.com/overnightworks/design?rev=e1b4a448a9e4d86539f4f2ef05f5267a4b52fe36" },
-    { name = "overnightworks-logline", git = "https://github.com/overnightworks/logline?rev=cca495315f8fb25dae85851592a2c42376052c58" },
+    { name = "overnightworks-logline", git = "https://github.com/overnightworks/logline?rev=c8eeea08873719d9521553a95fb2d5b9fcbe11a5" },
     { name = "packaging", specifier = ">=24" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "ruff", specifier = "==0.17.5" },
