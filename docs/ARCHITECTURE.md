@@ -64,7 +64,7 @@ flowchart TB
 ```
 
 Rules return findings and never print; `output.py` owns every printed line. `checkout.py` and `repository.py` are the
-only readers of the checked-out files (`architecture.py` opens the sources itself, for grimp), `web.py` the only HTTP transport that sends a credential, and `gh.py` runs every `gh` command the door sends.
+only readers of the checked-out files (`architecture.py` opens the sources itself, for grimp), `web.py` the only HTTP transport that sends a credential, and `gh.py` runs every `gh` command the door sends. `python_imports.py` is the one reader of a module's import statements: from them `external_imports.py` keeps the submodules of an external package that a forbidden contract names (`agents.calling`), which grimp would squash, so nothing of the package is read or installed.
 
 ## 3. Runtime View
 
