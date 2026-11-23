@@ -11,10 +11,11 @@ import math
 from collections import Counter, defaultdict
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 
 from quality import baseline_file, ratchet
 from quality.baseline_file import ClonePair, Place
-from quality.ratchet import Area
+from quality.ratchet import Area, Language, language_of
 from quality.report import Finding, FindingEvent, RuleResult
 from quality.rules import Rule
 
@@ -24,6 +25,7 @@ SIMILARITY_THRESHOLD = 0.9
 IDENTIFIER_PLACEHOLDER = "ID"
 KEYWORD_SPREAD_PLACEHOLDER = "**"
 FUNCTION_NODES = ast.FunctionDef | ast.AsyncFunctionDef
+TEST_NAME_PREFIX = "test"
 WRITTEN_NAME_FIELD = {ast.Name: "id", ast.Attribute: "attr", ast.arg: "arg", ast.keyword: "arg"}
 
 
@@ -116,6 +118,14 @@ def parsed(path: str, source: bytes) -> ast.Module | None:
         return ast.parse(ratchet.python_text(source), filename=path)
     except ratchet.PARSE_ERRORS:
         return None
+
+
+def python_test_trees(sources: dict[str, bytes]) -> Iterator[tuple[str, ast.Module]]:
+    """The parsed Python test files among `sources`; a file Python cannot parse is left out."""
+    for path, source in sources.items():
+        is_python_test = language_of(path) is Language.PYTHON and Language.PYTHON.is_test_file(PurePosixPath(path))
+        if is_python_test and (tree := parsed(path, source)) is not None:
+            yield path, tree
 
 
 def _units(sources: dict[str, bytes]) -> list[Unit]:

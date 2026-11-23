@@ -9,19 +9,15 @@ names and literals kept, from 8 tokens, are a group. A case table stands in a de
 
 import ast
 from collections import defaultdict
-from collections.abc import Iterator
 from dataclasses import dataclass
-from pathlib import PurePosixPath
 
 from quality import clones
 from quality.output import counted
-from quality.ratchet import Language, language_of
 from quality.report import Note, NoteEvent, RuleResult
 
 MIN_TEST_TOKENS = 12
 MIN_HELPER_TOKENS = 8
 NOTE_PATH = "."
-TEST_NAME_PREFIX = "test"
 
 
 @dataclass(frozen=True)
@@ -32,21 +28,13 @@ class TwinCounts:
     helpers: int
 
 
-def _python_test_trees(sources: dict[str, bytes]) -> Iterator[tuple[str, ast.AST]]:
-    """The parsed Python test files among `sources`; a file Python cannot parse is left out."""
-    for path, source in sources.items():
-        is_python_test = language_of(path) is Language.PYTHON and Language.PYTHON.is_test_file(PurePosixPath(path))
-        if is_python_test and (tree := clones.parsed(path, source)) is not None:
-            yield path, tree
-
-
 def count_twins(sources: dict[str, bytes]) -> TwinCounts:
     """The two counts over the Python test files among `sources`; a file Python cannot parse has none."""
     test_streams: defaultdict[tuple[str, tuple[str, ...]], int] = defaultdict(int)
     helper_files: defaultdict[tuple[str, ...], set[str]] = defaultdict(set)
-    for path, tree in _python_test_trees(sources):
+    for path, tree in clones.python_test_trees(sources):
         for function in (node for node in ast.walk(tree) if isinstance(node, clones.FUNCTION_NODES)):
-            if function.name.startswith(TEST_NAME_PREFIX):
+            if function.name.startswith(clones.TEST_NAME_PREFIX):
                 if len(stream := clones.tokens(function, names_kept=True, literals_kept=False)) >= MIN_TEST_TOKENS:
                     test_streams[path, tuple(stream)] += 1
             elif len(stream := clones.tokens(function, names_kept=True, literals_kept=True)) >= MIN_HELPER_TOKENS:
