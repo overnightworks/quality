@@ -125,7 +125,9 @@ rows, by area:
   `PYTEST_ADDOPTS` or `PYTEST_DISABLE_PLUGIN_AUTOLOAD` value that switches the plugin off or fixes its order, and `unseeded`
   where the same places hide its seed header; its fix names what to drop, and a workflow finding the
   `# pytest-random: <reason>` marker ([rules](rules.md)). A pytest line `pytest-workers` reports as `invalid` carries no
-  `pytest-random` row, so it is red once.
+  `pytest-random` row, so it is red once. A `vitest-random` finding is `unshuffled` at the config of a vitest project that does
+  not shuffle both orders under its root `test.sequence` or fixes its seed, and at its `package.json` where it has no config; its fix
+  names the key to set ([rules](rules.md)).
 - `code`: a security finding is `insecure`, a `print` or `pprint` is a `print call`, and an owner that names no code
   found in its file is `unused` ([rules](rules.md)). A `logging` finding is no finding row but an `open` note at the
   file and line, its fact the logline rule it breaks (LOGGING-3).
