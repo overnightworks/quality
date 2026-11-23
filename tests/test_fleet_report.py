@@ -750,5 +750,7 @@ def test_an_exception_inside_the_ci_time_read_reaches_the_report(capsys, monkeyp
     def broken(url, headers, unreadable):
         raise RuntimeError("the read broke")
 
+    fleet_file, ticks_read = write_fleet(tmp_path / "fleet", [alpha]), ticks(*range(8))
+
     with pytest.raises(RuntimeError, match="the read broke"):
-        report_in(write_fleet(tmp_path / "fleet", [alpha]), capsys, monkeypatch, ticks(*range(8)), fetch_listing=broken)
+        report_in(fleet_file, capsys, monkeypatch, ticks_read, fetch_listing=broken)
