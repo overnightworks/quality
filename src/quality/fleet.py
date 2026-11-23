@@ -528,10 +528,10 @@ def run_report(
             fleet_ci_time.read_fleet_ci_time, names, today, environment.get(LISTING_CREDENTIAL_VARIABLE, ""), fetch_listing,
             checkout.DEFAULT_BRANCH, run_deadline,
         )
-        rows = _measure_rows(names, pins, show, clock, run_deadline)
+        rows = _measure_rows(names, pins, show, run_deadline)
         between = fleet_clones.pairs_between([unit for row in rows if isinstance(row, Measured) for unit in row.units])
         ci_time = reading.result()
-    show(tuple(_unread_ci_time_row(name, reading) for name, reading in ci_time.rows.items() if reading == fleet_ci_time.PartlyRead(fleet_ci_time.UNREADABLE)))
+    show(tuple(_unread_ci_time_row(name, row) for name, row in ci_time.rows.items() if row == fleet_ci_time.PartlyRead(fleet_ci_time.UNREADABLE)))
     tables = render(rows, today, tags, ci_time, between)
     output.write_lines(tables, channels.out)
     try:
@@ -556,13 +556,13 @@ def run_report(
 
 def _measure_rows(
     names: tuple[str, ...], pins: checkout.ReleaseTags | None, show: Callable[[tuple[output.Row, ...]], None],
-    clock: Callable[[], float], run_deadline: RunDeadline,
+    run_deadline: RunDeadline,
 ) -> list[Row]:
     rows: list[Row] = []
     for name in names:
-        began = clock()
-        measured = measure_repository(name, run_deadline.ends_at - began)
-        show((report_row(measured, pins, clock() - began),))
+        time_left = run_deadline.left()
+        measured = measure_repository(name, time_left)
+        show((report_row(measured, pins, time_left - run_deadline.left()),))
         rows.append(measured)
     return rows
 

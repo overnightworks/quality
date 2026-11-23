@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import __version__, cli, fleet_ci_time, web
+from quality import __version__, cli, fleet, fleet_ci_time, web
 from quality.fleet import ListingFetch, ReleaseTagsError, TagReader
 from quality.report import CannotJudge
 from tests.support.clones import function
@@ -716,14 +716,32 @@ def test_markdown_in_a_path_of_a_pair_stays_text(capsys, monkeypatch, tmp_path, 
     assert clone_pair_table(printed)[4].startswith(f"| {alpha} | \\<!--x.py copied | {beta} |")
 
 
-def test_a_repository_reached_after_the_reports_deadline_is_not_measured_and_the_exit_is_2(capsys, monkeypatch, tmp_path, public):
-    """FLEET-126: a clone does not start once the 720 seconds are spent; the row says why and the exit is 2."""
+@pytest.mark.parametrize(
+    ("beta_reached_at", "clone_bounds"), [(721, [300]), (720, [300]), (719, [300, 1])], ids=["overdrawn", "none left", "one second left"]
+)
+def test_a_clone_starts_only_within_the_reports_deadline_and_ends_at_it(
+    capsys, monkeypatch, tmp_path, public, beta_reached_at, clone_bounds
+):
+    """FLEET-126: no clone starts once the 720 seconds are spent, the row says why and the exit is 2; a clone in
+    flight is bound by the seconds left when it is smaller than the clone's own bound."""
     alpha, beta = public("alpha", {"a.py": "a = 1\n"}), public("beta", {"b.py": "b = 1\n"})
-    printed = report_in(write_fleet(tmp_path / "fleet", [alpha, beta]), capsys, monkeypatch, ticks(0, 1, 2, 721, 722, 723))
-    assert printed.code == 2
+    bounds, clone = [], fleet.git
+
+    def recording(arguments, scratch, environment, timeout):
+        bounds.append(timeout)
+        return clone(arguments, scratch, environment, timeout)
+
+    monkeypatch.setattr(fleet, "git", recording)
+    ticks_read = ticks(0, 1, 2, beta_reached_at, beta_reached_at + 1, beta_reached_at + 2)
+    printed = report_in(write_fleet(tmp_path / "fleet", [alpha, beta]), capsys, monkeypatch, ticks_read)
+    assert bounds == clone_bounds
     beta_row = next(line for line in printed.err.splitlines() if beta in line)
-    assert "not measured" in beta_row
-    assert beta_row.endswith("the report's 720 seconds are spent")
+    if len(clone_bounds) == 1:
+        assert printed.code == 2
+        assert "not measured" in beta_row
+        assert beta_row.endswith("the report's 720 seconds are spent")
+    else:
+        assert (printed.code, "measured" in beta_row) == (0, True)
 
 
 def test_an_exception_inside_the_ci_time_read_reaches_the_report(capsys, monkeypatch, tmp_path, public):
