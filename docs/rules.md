@@ -1810,7 +1810,9 @@ project to the same R6. Vitest runs files and tests in a fixed order unless `tes
   row's extent is the projects read.
 - **No shuffle, `unshuffled` (VITEST-2, VITEST-3).** One finding per project, at the config or, with none tracked, at the
   `package.json`, the fact `vitest runs its files and tests in a fixed order`. The config shuffles when the exported object
-  (the argument of `defineConfig(`, the arrow form `=> ({` included, else the `export default` object) has a direct `test`
+  (the object after `export default`, the argument of `defineConfig(` and the arrow form `=> ({` included; only a file
+  without `export default` falls back to its first `defineConfig(` argument; an `export default` that names no object,
+  as in `export default c`, reads none and is `unshuffled`) has a direct `test`
   key whose object has a direct `sequence` key whose object holds `shuffle: true` or `shuffle: { files: true, tests: true }`.
   A `sequence` anywhere else counts for nothing, since vitest 4 ignores a project's own; `{ files: true }` or
   `{ tests: true }` alone leaves the other order fixed, so it is no shuffle. Any `shuffle: false` elsewhere in the file is a
