@@ -9,11 +9,10 @@ from enum import Enum, auto
 from pathlib import PurePosixPath
 
 from quality import clones, layout
-from quality.ratchet import Language, language_of
+from quality.ratchet import language_of
 from quality.typescript_tokens import Kind, ScriptSyntaxError, Token, tokenize
 
 SCRIPT_TEST_CALLS = frozenset({"it", "test"})
-SCRIPT_LANGUAGES = frozenset({Language.TYPESCRIPT, Language.JAVASCRIPT})
 SCRIPT_TEST = "test"
 SCRIPT_GROUP = "describe"
 SCRIPT_MODIFIERS = frozenset({"skip", "skipIf", "runIf", "only", "fixme", "concurrent", "each"})
@@ -61,7 +60,7 @@ def script_titles(tokens: list[Token]) -> Iterator[Token]:
 
 def is_script_test(path: str) -> bool:
     language = language_of(path)
-    return language in SCRIPT_LANGUAGES and language.is_test_file(PurePosixPath(path))
+    return language in layout.SCRIPT_LANGUAGES and language.is_test_file(PurePosixPath(path))
 
 
 def read_script_tests(tracked: list[str], sources: dict[str, bytes]) -> tuple[dict[str, list[Token]], list[str]]:
@@ -88,9 +87,18 @@ def _python_marks(node: ast.expr, aliases: dict[str, Marks]) -> Marks:
         return _python_marks(node.func, aliases)
     if isinstance(node, ast.Name):
         return aliases.get(node.id, NO_MARKS)
-    written = ast.unparse(node)
+    written = _dotted_name(node)
     mark = PYTEST_MARKS.get(written.removeprefix(PYTEST_MARK_PREFIX)) if written.startswith(PYTEST_MARK_PREFIX) else None
     return frozenset({mark}) if mark else NO_MARKS
+
+
+def _dotted_name(node: ast.expr) -> str:
+    """`a.b.c` for a chain of attributes on a name, else an empty string; walks the chain, so its depth costs no recursion."""
+    names: list[str] = []
+    while isinstance(node, ast.Attribute):
+        names.append(node.attr)
+        node = node.value
+    return ".".join([node.id, *reversed(names)]) if isinstance(node, ast.Name) else ""
 
 
 def _bound_marks(body: list[ast.stmt], aliases: dict[str, Marks]) -> Iterator[tuple[str, Marks]]:
@@ -104,7 +112,9 @@ def _python_test_marks(tree: ast.Module) -> Iterator[Marks]:
     aliases = {name: marks for name, marks in _bound_marks(tree.body, {}) if marks and name != PYTEST_MARK_NAME}
     scope = NO_MARKS.union(*(marks for name, marks in _bound_marks(tree.body, aliases) if name == PYTEST_MARK_NAME))
 
-    def visit(node: ast.AST, inherited: Marks) -> Iterator[Marks]:
+    pending: list[tuple[ast.AST, Marks]] = [(tree, scope)]
+    while pending:
+        node, inherited = pending.pop()
         for child in ast.iter_child_nodes(node):
             marks = inherited
             if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
@@ -113,9 +123,7 @@ def _python_test_marks(tree: ast.Module) -> Iterator[Marks]:
                 marks = marks.union(*(each for name, each in _bound_marks(child.body, aliases) if name == PYTEST_MARK_NAME))
             if clones.is_test_function(child):
                 yield marks
-            yield from visit(child, marks)
-
-    return visit(tree, scope)
+            pending.append((child, marks))
 
 
 @dataclass(frozen=True)
@@ -140,7 +148,7 @@ def _paired_parentheses(tokens: list[Token]) -> dict[int, int]:
 
 
 def _value_at(tokens: list[Token], index: int) -> str:
-    return tokens[index].value if index < len(tokens) else ""
+    return tokens[index].value if 0 <= index < len(tokens) else ""
 
 
 def _chain(tokens: list[Token], start: int, paired: dict[int, int]) -> tuple[list[str], int] | None:

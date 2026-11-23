@@ -142,3 +142,22 @@ def test_a_file_that_cannot_be_read_is_counted_apart_and_the_others_still_count(
         "web/open.test.ts": "/* never closed",
     })
     assert (found.layers[UNIT], found.unread) == (2, 3)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param("@a" + ".b" * 400 + "\ndef test_a(): ...\n", id="a-deep-dotted-decorator"),
+        pytest.param("x = a" + ".b" * 600 + "\ndef test_a(): ...\n", id="a-deep-dotted-expression"),
+    ],
+)
+def test_a_deeply_nested_python_file_still_counts_its_tests(source):
+    """FLEET-124: a file the reader cannot walk deeply never aborts the report; the others still count."""
+    found = counted({"tests/test_deep.py": source, "tests/test_good.py": PYTHON_TEST})
+    assert found.layers[UNIT] + found.unread >= 1
+    assert found.layers[UNIT] >= 1
+
+
+def test_a_script_whose_last_token_is_a_dot_still_counts_its_first_call():
+    """FLEET-124: the first token has no token before it, so a trailing dot is no member access."""
+    assert script_counts("test('a', f); x.")[0] == 1
