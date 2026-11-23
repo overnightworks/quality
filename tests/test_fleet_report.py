@@ -67,10 +67,10 @@ JOB = {"name": "tests", "conclusion": "success", "created_at": "2026-11-05T10:00
 NO_RUNS = b'{"total_count": 0, "workflow_runs": []}'
 
 
-def runs_of(*runs: tuple[str, str, str, str]) -> Answer:
-    """GitHub's answer for the runs listing; each run is `(head_sha, created_at, updated_at, conclusion)` of a pull request."""
+def runs_of(*runs: tuple[str, str, str, str], attempt: int = 1) -> Answer:
+    """GitHub's answer for the runs listing; each run is `(head_sha, created_at, updated_at, conclusion)` of a pull request at `run_attempt`."""
     entries = [
-        {"id": number, "head_branch": "feature", "head_sha": sha, "event": "pull_request", "status": "completed", "conclusion": conclusion, "created_at": created, "updated_at": updated}
+        {"id": number, "head_branch": "feature", "head_sha": sha, "event": "pull_request", "status": "completed", "conclusion": conclusion, "run_attempt": attempt, "created_at": created, "updated_at": updated}
         for number, (sha, created, updated, conclusion) in enumerate(runs, 1)
     ]
     return Answer(json.dumps({"total_count": len(entries), "workflow_runs": entries}).encode())
@@ -522,13 +522,22 @@ def test_the_weekly_ci_time_is_a_third_table_and_leaves_the_exit_as_it_is(capsys
     third = printed.out.split("**CI time, last 7 days")[1].splitlines()
     assert third[0] == " · 4 API calls**"
     assert third[2:] == [
-        "| Repo | Commits | Median | p90 | Red | Red on main | Jobs sampled | Queue p90 | Over 12 min |",
-        "|---|---|---|---|---|---|---|---|---|",
-        "| o/alpha | 2 | 1m00s | 3m00s | 50 % (1 of 2) | — | 2 | 7s | none |",
-        "| o/beta | 0 | — | — | — | — | — | — | — |",
+        "| Repo | Commits | Median | p90 | Red | Red on main | Re-runs | Green on re-run | Jobs sampled | Queue p90 | Over 12 min |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "| o/alpha | 2 | 1m00s | 3m00s | 50 % (1 of 2) | — | 0 | 0 | 2 | 7s | none |",
+        "| o/beta | 0 | — | — | — | — | — | — | — | — | — |",
     ]
     assert "| o/alpha | 2 | 1m00s |" in summary.read_text()
     assert "created=%3E%3D2026-10-30" in listing.runs_requests[0][0]
+
+
+def test_re_runs_and_those_green_on_re_run_print_in_the_ci_time_table_and_leave_the_exit_as_it_is(capsys, monkeypatch, tmp_path, public):
+    """FLEET-112: a run re-run to a green latest attempt counts in both cells, and no finding or exit follows."""
+    public("alpha", {"a.py": "a = 1\n"})
+    listing = Listing({"o": listed(("o/alpha",))}, runs={"o/alpha": runs_of(("x", "2026-11-05T10:00:00Z", "2026-11-05T10:01:00Z", "success"), attempt=2)})
+    printed = report_in(write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(*range(8)), fetch_listing=listing)
+    assert printed.code == 0, printed.err
+    assert "| o/alpha | 1 | 1m00s | 1m00s | 0 % (0 of 1) | — | 1 | 1 | 1 | 7s | none |" in printed.out
 
 
 def test_a_repository_whose_runs_cannot_be_read_is_a_partly_read_row_and_the_exit_stays(capsys, monkeypatch, tmp_path, public):
@@ -545,8 +554,8 @@ def test_a_repository_whose_runs_cannot_be_read_is_a_partly_read_row_and_the_exi
     assert "  ✗ o/alpha  " in printed.err
     assert "partly read    cannot read CI time" in printed.err
     assert printed.err.splitlines()[-1].startswith("✓ 2 of 2 repositories measured")
-    assert "| o/alpha | partly read · cannot read CI time | — | — | — | — | — | — | — |" in printed.out
-    assert "| o/beta | 1 | 30s | 30s | 0 % (0 of 1) | — | 1 | 7s | none |" in printed.out
+    assert "| o/alpha | partly read · cannot read CI time | — | — | — | — | — | — | — | — | — |" in printed.out
+    assert "| o/beta | 1 | 30s | 30s | 0 % (0 of 1) | — | 0 | 0 | 1 | 7s | none |" in printed.out
 
 
 def slow_week() -> Answer:
