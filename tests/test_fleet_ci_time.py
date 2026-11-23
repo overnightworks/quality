@@ -72,9 +72,13 @@ class Runs:
             return json.dumps({"total_count": len(entries), "jobs": entries}).encode(), Message()
         page = int(url.split("&page=")[1])
         newest_first = sorted(runs, key=lambda entry: (entry["created_at"], entry["id"]), reverse=True)
-        if "created=" in url:
-            newest_first = newest_first[:SEARCH_RESULT_LIMIT]
-        body = {"total_count": len(newest_first), "workflow_runs": newest_first[(page - 1) * PAGE_SIZE : page * PAGE_SIZE]}
+        first = (page - 1) * PAGE_SIZE
+        last = page * PAGE_SIZE
+        if "created=" in url and first >= SEARCH_RESULT_LIMIT:
+            body = {"total_count": 0, "workflow_runs": []}
+        else:
+            reachable = newest_first[:SEARCH_RESULT_LIMIT] if "created=" in url else newest_first
+            body = {"total_count": len(newest_first), "workflow_runs": reachable[first:last]}
         return json.dumps(body).encode(), Message()
 
 
@@ -222,16 +226,20 @@ def test_a_window_of_more_than_a_thousand_runs_is_counted_whole():
 
 def test_a_run_that_a_new_run_pushes_onto_the_next_page_counts_once():
     """FLEET-129: a run listed on two pages counts once."""
-    served = {"o/a": [run(f"c{number}", created=-number - 1) for number in range(150)]}
+    shifted = run("c99", created=-100, run_id=1, attempt=2)
+    served = {"o/a": [run(f"c{number}", created=-number - 1) for number in range(99)] + [shifted] + [run(f"c{number}", created=-number - 1) for number in range(100, 150)]}
     listing = Runs(served)
 
     def fetch(url, headers, unreadable):
         answer = listing(url, headers, unreadable)
-        served["o/a"].append(run("newest", created=1000))
+        if "&page=1" in url:
+            served["o/a"].append(run("newest", created=1000))
+            served["o/a"][served["o/a"].index(shifted)] = run("c99", created=-100, run_id=1, attempt=2, conclusion="failure")
         return answer
 
     reading = read_fleet_ci_time(("o/a",), TODAY, "", fetch, DEFAULT_BRANCH, RunDeadline(1e9, Clock()))
-    assert reading.rows["o/a"].commits == 150
+    counted = reading.rows["o/a"]
+    assert (counted.commits, counted.reruns, counted.green_on_rerun, counted.red) == (150, 1, 0, RedShare(1, 150))
 
 
 def test_the_read_stops_at_the_first_page_whose_oldest_run_predates_the_window():
