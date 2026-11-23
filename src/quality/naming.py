@@ -2,7 +2,6 @@
 `pyproject.toml`, the `name` of each `package.json`, the repository's own name) against the stem its remote `origin`
 names, and the deviations the operator ruled."""
 
-import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -146,11 +145,8 @@ def _table(parent: Mapping[str, object], *keys: str) -> Mapping[str, object]:
 
 
 def _npm_claims(path: str, content: bytes) -> list[_Claim]:
-    try:
-        document = json.loads(content.decode("utf-8-sig"))
-    except (ValueError, RecursionError) as error:
-        raise Unparsable(f"{path} is not UTF-8 JSON that Python reads") from error
-    if not isinstance(document, dict) or "name" not in document:
+    document = layout.package_document(path, content)
+    if "name" not in document:
         return []
     named = document["name"]
     if not isinstance(named, str):

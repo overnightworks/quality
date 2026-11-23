@@ -1,3 +1,4 @@
+import json
 import re
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -6,7 +7,7 @@ from pathlib import PurePosixPath
 
 from quality import checkout, python_imports, ratchet
 from quality.config import LayoutAllowance, declared_paths
-from quality.report import Finding, FindingEvent, allowance_clause, stale_declaration
+from quality.report import Finding, FindingEvent, Unparsable, allowance_clause, stale_declaration
 from quality.rules import Rule
 
 EXECUTABLE_MODE = "100755"
@@ -195,6 +196,15 @@ def frontend_projects(paths: Iterable[str]) -> list[str]:
     """The directory of each tracked `package.json` that lies in no project's `tests/`, of either kind. The file's
     content is never read. Sorted."""
     return [str(directory) for directory in _project_directories([PurePosixPath(path) for path in paths], PACKAGE_FILE)]
+
+
+def package_document(path: str, content: bytes) -> dict:
+    """The JSON object a `package.json` holds, empty where it holds another value; a file that is no UTF-8 JSON is `Unparsable`."""
+    try:
+        document = json.loads(content.decode("utf-8-sig"))
+    except (ValueError, RecursionError) as error:
+        raise Unparsable(f"{path} is not UTF-8 JSON that Python reads") from error
+    return document if isinstance(document, dict) else {}
 
 
 def _project_directories(tracked: Sequence[PurePosixPath], manifest: str) -> list[PurePosixPath]:
