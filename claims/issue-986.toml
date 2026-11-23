@@ -1,8 +1,0 @@
-claim_id = "76f5408c1cc44e4b9be3ce254a6f8ae4"
-agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
-role = "builder"
-base = "51c6ee642621af3cda867018f6b923f5609d005b"
-branch = "claude/issue-986-config-entries-move"
-scope = ["pyproject.toml", "src/quality", "tests"]
-opened_commit = "d04be41ce718e76c2fa90b4ab8979b419484b57f"
-whole_reason = "One module move: the entry reading leaves config.py and every importer of its names follows, because a half-done move leaves two import paths for one name."
