@@ -11,7 +11,7 @@ from typing import NamedTuple
 
 import pytest
 
-from quality import advisories, check, cli, config, deadline, env_file, installation, report, scanners
+from quality import advisories, check, cli, config, config_entries, deadline, env_file, installation, report, scanners
 from quality.compose import is_compose_file
 from quality.report import CannotJudge, Command, Example, Finding, FindingEvent, Reason, Unparsable, printable
 from quality.rules import Area, Rule
@@ -441,7 +441,7 @@ def test_every_rule_a_malformed_config_refuses_carries_its_fact_and_its_example_
     Example step; the refusals of one run are all the same reason."""
     repo = build_repo({"quality/config.toml": GATE + generated_config(job="other")})
     reasons = {verdict.refusal.reason for area in check_result(repo, installed_ruff, never_located).areas for verdict in area.verdicts if verdict.refusal}
-    fact = f"{config.CONFIG_PATH} [[size.generated]] entry 1 needs job as one of [gate] mandatory_jobs, the job whose generator check proves the file"
+    fact = f"{config_entries.CONFIG_PATH} [[size.generated]] entry 1 needs job as one of [gate] mandatory_jobs, the job whose generator check proves the file"
     assert reasons == {Reason(fact, (Example(report.CONFIG_EXAMPLE_LABEL, config.GENERATED_FILE_EXAMPLE),))}
 
 
@@ -449,7 +449,7 @@ def test_a_config_refusal_without_an_example_carries_no_step(build_repo):
     """REFUSAL-19: an error without an example becomes a refusal without a step."""
     repo = build_repo({"quality/config.toml": "[secrets]\nignore = []\n"})
     reasons = {verdict.refusal.reason for area in check_result(repo, installed_ruff, never_located).areas for verdict in area.verdicts if verdict.refusal}
-    assert reasons == {Reason(f"{config.CONFIG_PATH} has unknown key ignore in [secrets] - only allow exists")}
+    assert reasons == {Reason(f"{config_entries.CONFIG_PATH} has unknown key ignore in [secrets] - only allow exists")}
 
 
 CONFIG_AREAS = ("files", "debt", "secrets", "dependencies")

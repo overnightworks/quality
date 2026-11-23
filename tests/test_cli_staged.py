@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import config, pin, scanners
+from quality import config_entries, pin, scanners
 from quality.report import printable
 from quality.rules import Area
 from tests.support.check import refusal_row, scanner_rows
@@ -80,7 +80,7 @@ def test_a_staged_run_counts_what_the_next_commit_changes(build_repo, tmp_path, 
 
 def test_a_staged_run_prints_no_unused_row(build_repo, capsys):
     """STAGED-10: a staged run prints no unused row for an entry that matches nothing."""
-    repo = build_repo({config.CONFIG_PATH: allow_config(("aws-access-token", "docs/gone.txt", FAKE_KEY, "a stale entry"))})
+    repo = build_repo({config_entries.CONFIG_PATH: allow_config(("aws-access-token", "docs/gone.txt", FAKE_KEY, "a stale entry"))})
     stage(repo, {"docs/b.md": "b\n"})
     assert fixed(capsys, repo, *STAGED_WORDS)[:2] == (0, clean_row("1 file"))
 
@@ -96,9 +96,9 @@ def merge_conflict(repo: Path) -> None:
 
 
 def stage_a_config_link(repo: Path) -> None:
-    (repo / config.CONFIG_PATH).parent.mkdir()
-    (repo / config.CONFIG_PATH).symlink_to("elsewhere.toml")
-    git(repo, "add", config.CONFIG_PATH)
+    (repo / config_entries.CONFIG_PATH).parent.mkdir()
+    (repo / config_entries.CONFIG_PATH).symlink_to("elsewhere.toml")
+    git(repo, "add", config_entries.CONFIG_PATH)
 
 
 @pytest.mark.parametrize(
@@ -158,10 +158,10 @@ def test_a_staged_config_refusal_keeps_its_fact_and_its_example_apart(build_repo
 def test_a_staged_config_is_read_from_the_tree_the_commit_records(build_repo, capsys):
     """STAGED-7: the config a staged run reads is the staged one, so an edit that is not staged changes nothing."""
     repo = build_repo({"README.md": "x\n"})
-    stage(repo, {config.CONFIG_PATH: "[secrets]\nallow = [{ rule = \"r\" }]\n"})
-    (repo / config.CONFIG_PATH).write_text(allow_config())
+    stage(repo, {config_entries.CONFIG_PATH: "[secrets]\nallow = [{ rule = \"r\" }]\n"})
+    (repo / config_entries.CONFIG_PATH).write_text(allow_config())
     assert staged_door(repo) == 2
-    git(repo, "add", config.CONFIG_PATH)
+    git(repo, "add", config_entries.CONFIG_PATH)
     capsys.readouterr()
     assert staged_door(repo) == 0
 

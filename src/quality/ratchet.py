@@ -35,7 +35,8 @@ from quality.baseline_file import (
     UnknownTable,
     key_order,
 )
-from quality.config import CONFIG_PATH, GENERATED_FILE_HEADING, GeneratedFile
+from quality.config import GENERATED_FILE_HEADING, GeneratedFile
+from quality.config_entries import CONFIG_PATH
 from quality.output import SEPARATOR, counted
 from quality.report import CannotJudge, Finding, FindingEvent, Instruction, Note, NoteEvent, RuleResult, Unparsable
 from quality.rules import Rule

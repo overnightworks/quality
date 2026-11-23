@@ -5,7 +5,7 @@ from urllib.parse import unquote
 
 from quality import checkout, cli, pin
 from quality.baseline_file import BASELINE_PATH
-from quality.config import CONFIG_PATH
+from quality.config_entries import CONFIG_PATH
 from quality.gh import GhFailed
 from quality.installation import VcsOrigin
 from quality.pin import RunningQuality

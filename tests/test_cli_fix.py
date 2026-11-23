@@ -7,7 +7,7 @@ import pytest
 
 from quality import report
 from quality.baseline_file import BASELINE_PATH, Key, Metric, load_baseline
-from quality.config import CONFIG_PATH
+from quality.config_entries import CONFIG_PATH
 from tests.support.architecture import FORBIDDEN, SHOP, contracts_ini
 from tests.support.baselines import rendered
 from tests.support.check import copy_block, refusal_row

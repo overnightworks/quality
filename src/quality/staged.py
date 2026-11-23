@@ -2,7 +2,8 @@ import os
 from pathlib import Path
 
 from quality import process, scanners
-from quality.config import CONFIG_PATH, Allowance, ConfigError, load_staged_secret_allowances
+from quality.config import Allowance, load_staged_secret_allowances
+from quality.config_entries import CONFIG_PATH, ConfigError
 from quality.deadline import RunDeadline
 from quality.report import Instruction, RuleResult, StagedExtent, config_refusal
 

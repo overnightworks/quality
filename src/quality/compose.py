@@ -8,7 +8,8 @@ from pathlib import Path, PurePosixPath
 import yaml
 
 from quality import checkout, repository
-from quality.config import CONFIG_PATH, ComposeAllowance
+from quality.config import ComposeAllowance
+from quality.config_entries import CONFIG_PATH
 from quality.report import CannotJudge, Finding, FindingEvent
 from quality.rules import Rule
 

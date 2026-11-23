@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import config, deadline, scanners
+from quality import config_entries, deadline, scanners
 from quality.report import Example, FindingEvent, NoteEvent, printable
 from quality.rules import Area, Rule
 from tests.support.check import (
@@ -219,7 +219,7 @@ def test_a_key_on_an_allowance_line_of_the_config_stays_red(build_repo, installe
     line = f'# {FAKE_KEY} secret_sha256 = "{sha256_of(FAKE_KEY)}"\n'
     repo = build_repo({"quality/config.toml": allow_config() + line})
     assert scan(repo) == 1
-    assert [finding.path for finding in rule_findings(repo, Rule.LEAK)] == [config.CONFIG_PATH]
+    assert [finding.path for finding in rule_findings(repo, Rule.LEAK)] == [config_entries.CONFIG_PATH]
     assert FAKE_KEY not in heard(capsys)
 
 
@@ -313,7 +313,7 @@ def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_rep
     notes = rule_notes(repo, Rule.LEAK)
     block = area_block(printed, Area.SECRETS)
     (note,) = notes
-    assert (code, note.event, note.path) == (0, NoteEvent.UNUSED, config.CONFIG_PATH)
+    assert (code, note.event, note.path) == (0, NoteEvent.UNUSED, config_entries.CONFIG_PATH)
     assert ("aws-access-token" in note.fact, STALE_FILE in note.fact) == (True, True)
     assert_block_prints(block, [], notes)
     assert FAKE_KEY not in streams.out + streams.err
@@ -325,12 +325,12 @@ def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_rep
 def test_the_printed_entry_with_a_reason_allows_exactly_that_finding(build_repo, installed_scanners, capsys, name):
     """O31: the lines under `fix:`, with a reason added and committed, turn the finding into one allowed
     row."""
-    repo = build_repo({name: f"aws_access_key_id = {FAKE_KEY}\n", config.CONFIG_PATH: GATE_ONLY})
+    repo = build_repo({name: f"aws_access_key_id = {FAKE_KEY}\n", config_entries.CONFIG_PATH: GATE_ONLY})
     assert scan(repo) == 1
     first = capsys.readouterr()
     (finding,) = rule_findings(repo, Rule.LEAK)
     entry = [line.copy for line in area_block(first.out, "secrets") if isinstance(line, CopyLine)]
-    with (repo / config.CONFIG_PATH).open("a", encoding="utf-8") as allowing:
+    with (repo / config_entries.CONFIG_PATH).open("a", encoding="utf-8") as allowing:
         allowing.write("\n".join(entry) + '\nreason = "scenario reason"\n')
     commit(repo, "allow what the door printed")
     assert scan(repo) == 0
@@ -366,7 +366,7 @@ def test_nothing_about_secrets_prints_before_the_area_rows(build_repo, installed
     entries = (("aws-access-token", "config.txt", FAKE_KEY, "test key"), ("aws-access-token", "nothere.txt", FAKE_KEY, "stale entry"))
     repo = build_repo({
         "config.txt": f"aws_access_key_id = {FAKE_KEY}\n", "other.txt": f"aws_access_key_id = {OTHER_KEY}\n",
-        config.CONFIG_PATH: allow_config(*entries),
+        config_entries.CONFIG_PATH: allow_config(*entries),
     })
     assert scan(repo) == 1
     streams = capsys.readouterr()
