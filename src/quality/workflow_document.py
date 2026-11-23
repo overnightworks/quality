@@ -224,3 +224,7 @@ class Marker:
         column = len(before_step) - len(before_step.lstrip())
         above = file_lines[number - 1]
         return not above[:column].strip() and self.pattern.match(above, column) is not None
+
+
+# A pattern no comment matches: a rule with no marker.
+NO_MARKER = Marker(re.compile(r"\b\B"), above_step=False)
