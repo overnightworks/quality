@@ -12,8 +12,9 @@ once, however they are named; with none it judges all seven (CHECK-3). An area n
 row (CHECK-6); the verdict counts only the named areas (`✓ clean · 1 area`) (CHECK-7) and the exit is the worst of
 theirs (CHECK-8), so a named run says nothing of the rest. The gate runs all seven ([gate](gate.md#gateyml)).
 
-Three statements hold for each of five declaration tables of `quality/config.toml` and the rule that reads it:
-`[[compose.allow]]`, `[[root.allow]]`, `[[layout.allow]]`, `[[python.allow]]` and `[[workflow.allow]]`. A malformed
+Three statements hold for each of six declaration tables of `quality/config.toml` and the rule that reads it:
+`[[compose.allow]]`, `[[root.allow]]`, `[[layout.allow]]`, `[[python.allow]]`, `[[workflow.allow]]` and
+`[[spec_citations.foreign]]`. A malformed
 table other than the rule's own is forwarded with its validation error; the values of `[gate]` stay the verdict's to
 judge. A declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry. A config reader older
 than the rule refuses its table as an unknown key.
@@ -680,7 +681,7 @@ It applies these rules:
     order: `spec citation baseline adds ST-02`; the base's table gone from a head that still has the file:
     `spec citation baseline removed` (CITE-12);
   - the base's file deleted: `quality/baseline.toml removed` (BASELINE-6);
-  - a `[[size.generated]]` declaration is judged as in [gate](gate.md), "Declared loosenings".
+  - a `[[size.generated]]` or `[[spec_citations.implemented]]` declaration is judged as in [gate](gate.md), "Declared loosenings".
 
   Ruled by the operator: a file git recognises as renamed (BASELINE-11), a directory move included, is no loosening when
   its numbers do not rise (BASELINE-12).
@@ -1553,7 +1554,8 @@ no spec defines or one that is retired, and a duplicate definition are red, and 
   otherwise look undefined and be dropped, then return as a new uncited ID only the operator's door could merge. Named limit: a
   tracked `.md` file that is not UTF-8 keeps its repository from recording until it is fixed.
 - **Recording under `--fix` (CITE-11).** `quality check --fix` records the table, the uncited IDs of the tree, only where the
-  baseline has none, git never held one, the tree defines a live ID, no citation is undefined or retired and no ID is defined
+  baseline has none, git never held one, the tree defines a live ID, no citation is undefined or retired (a declared foreign
+  citation is not undefined, CITE-14; an implemented document's IDs are not recorded, CITE-15) and no ID is defined
   twice; the row reads `recorded  K uncited spec IDs · quality/baseline.toml` (`1 uncited spec ID`, a first recording
   `N entries, M clone pairs, K uncited spec IDs · quality/baseline.toml is new`), and the dry run words it `to record`. Otherwise
   nothing is recorded, not even an empty table, and the note stays, so a routine `--fix` in a repository that has not converted its
@@ -1570,6 +1572,60 @@ no spec defines or one that is retired, and a duplicate definition are red, and 
 - **The unknown-table message (CITE-13).** `quality/baseline.toml has an unknown table [future]; quality <version> knows ccn,
   file_lines, function_lines, clones, job_minutes, spec_citations` (CEILING-3). A quality that predates the table meets it as an
   unknown table and exits `2` (BASELINE-25), so a repository records the table only once its gate pins the release that holds it.
+
+- **Foreign prefixes (CITE-14).** An implementer declares each prefix whose IDs its tests cite, one entry per prefix, in
+  `quality/config.toml`; `owner` is the repository that defines them:
+
+  ```toml
+  [[spec_citations.foreign]]
+  prefix = "LANG"
+  owner = "overnightworks/design"
+  ```
+
+  A prefix is an ID's part before its last `-<number>`, compared exactly (`REQ` does not cover `REQ-AUTH-3`). A citation of an ID
+  the tree defines nowhere whose prefix is declared is not judged: no `undefined` finding, not in the note (CITE-4), and it does
+  not keep `--fix` from recording (CITE-11). Where the tree defines the prefix, live or retired, the declaration exempts
+  nothing and every ID of it is judged as any other (CITE-19). The declaration is no loosening. A foreign citation is not
+  resolved against its owner, so a mistyped foreign ID or a typo onto a declared prefix is not caught; CITE-2's caught typo
+  holds for undeclared prefixes only.
+- **Implemented documents (CITE-15).** An owner declares its document, a tracked `.md` file, in `quality/config.toml`:
+
+  ```toml
+  [[spec_citations.implemented]]
+  path = "docs/calling.md"
+  item = "overnightworks/agents#312"
+  date = 2026-11-23
+  reason = "the implementers cite its rules, so no test of this repository does"
+  ```
+
+  A live ID whose first definition stands in a declared document is not `uncited`, not in the note and not recorded by `--fix`;
+  a held one `can fall` (`spec ID CALLING-3 is left to its implementers`) and `--fix` drops it (CITE-10). A citation by the
+  repository's own tests still counts as cited, and a held ID both cited and in a declared document falls as `is cited` first.
+  Undefined and retired citations and duplicates are judged there as anywhere.
+- **Malformed declarations (CITE-16).** Exit `2` naming the entry with its example. For `foreign`: a missing or extra key, a
+  `prefix` outside the ID pattern, an `owner` that is not `<owner>/<repo>`, or two entries for one prefix. For `implemented`: a
+  missing or extra key, a `path` that is not the exact path of one `.md` file (no folder, pattern, `..` or absolute path), a
+  malformed `item` or `date`, a `reason` that is not one line, or two entries for one path. Either key as anything but an array
+  of tables is refused too. It shows in `check` and `check --fix` as the `debt` row `✗ not checked`, and in the verdict and the
+  door naming the side, as GENERATED-6 to GENERATED-8; `check secrets --staged` reads only `[secrets]`. A quality older than
+  this release refuses `[spec_citations]` in `quality/config.toml` as an unknown key (the baseline's table of that name is
+  CITE-13's), so a repository declares only once its gate pins the release that holds the list.
+- **Unused declarations (CITE-17).** With the baseline table, a foreign prefix that matches no citation of an ID the tree
+  defines nowhere is `unused` at `quality/config.toml` (`[[spec_citations.foreign]] prefix LANG matches no citation`), and an
+  implemented path that is not tracked or holds no live ID's first definition is `unused` at that path
+  (`[[spec_citations.implemented]] matches no tracked file that defines a live spec ID`). Both fixes read
+  `delete its <heading> entry from quality/config.toml`. Without the table neither is judged (CITE-6).
+- **The owner's loosening (CITE-18).** On a pull request a head `[[spec_citations.implemented]]` path the base does not
+  declare prints `spec citation leaves <path> to its implementers · <item> of <date>`, declared by the entry's own `item` and
+  `date` and red until the operator's door merges it ([gate](gate.md#declared-loosenings)). A base without
+  `quality/config.toml` makes every entry new; an inherited or deleted entry and a changed `reason`, `item` or `date` loosen
+  nothing; a changed `path` is new; a `[[gate.loosened]]` entry with this text matches nothing and is red; without a base
+  nothing is judged. An implementer's foreign prefix is no loosening.
+- **A foreign prefix defined here (CITE-19).** With the baseline table, a declared prefix that the tree also defines, live or
+  retired, is `conflict` at `quality/config.toml` (`[[spec_citations.foreign]] prefix ST is defined here, first at
+  docs/spec.md:3`), fix `delete its [[spec_citations.foreign]] entry from quality/config.toml, or give the local IDs a prefix of
+  their own`. Without it a repository could silence every undefined citation of its own prefix through a declaration that is
+  no loosening.
 
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root

@@ -1,6 +1,8 @@
-"""A [[size.generated]] declaration is a loosening that declares itself."""
+"""A `[[size.generated]]` or `[[spec_citations.implemented]]` declaration is a loosening that declares itself."""
 
 import datetime
+from collections.abc import Callable
+from dataclasses import dataclass
 
 import pytest
 
@@ -8,10 +10,36 @@ from quality.ratchet import NO_RENAMES
 from quality.sides import side_of
 from quality.verdict import judge
 from tests.support.generated_files import TYPES_FILE, generated_config
+from tests.support.specs import foreign_entry, implemented_entry
 from tests.support.verdict import declaration, gate_config, job
 
-OTHER_FILE = "frontend/src/lib/api/other.ts"
-WITH_TYPES = gate_config("checks") + generated_config()
+DATE = datetime.date(2026, 10, 30)
+
+
+@dataclass(frozen=True)
+class Kind:
+    """One declaration that declares its own loosening: its entry as the config writes it and the line the verdict prints."""
+
+    entry: Callable[..., str]
+    first: str
+    second: str
+    line: str
+
+    def what(self, path: str) -> str:
+        return self.line.format(path=path)
+
+
+KINDS = {
+    "generated file": Kind(
+        lambda path, item="#174", date=DATE, reason="written by a script": generated_config(path=path, item=item, date=date, reason=reason),
+        TYPES_FILE, "frontend/src/lib/api/other.ts", "size leaves out generated file {path}",
+    ),
+    "implemented document": Kind(
+        lambda path, item="#174", date=DATE, reason="written by a script": implemented_entry(path, item, date, reason),
+        "docs/calling.md", "docs/hearing.md", "spec citation leaves {path} to its implementers",
+    ),
+}
+EACH_KIND = pytest.mark.parametrize("kind", KINDS.values(), ids=KINDS.keys())
 
 
 def judged(base: str | None, head: str, *, with_base: bool = True):
@@ -27,42 +55,61 @@ def green():
     return (), (), False, True
 
 
-def declared(path=TYPES_FILE, item="#174"):
-    return ((f"size leaves out generated file {path}", f"{item} of 2026-10-30"),), (), False, False
+def declared(kind: Kind, path: str, item="#174"):
+    return ((kind.what(path), f"{item} of 2026-10-30"),), (), False, False
 
 
-@pytest.mark.parametrize(
-    ("base", "head", "expected"),
-    [
-        (gate_config("checks"), WITH_TYPES, declared()),
-        (None, WITH_TYPES, declared()),
-        (WITH_TYPES, WITH_TYPES, green()),
-        (WITH_TYPES, gate_config("checks"), green()),
-        (WITH_TYPES, gate_config("checks", "other") + generated_config(job="other"), green()),
-        (WITH_TYPES, gate_config("checks") + generated_config(reason="reworded"), green()),
-        (WITH_TYPES, gate_config("checks") + generated_config(item="#999"), green()),
-        (WITH_TYPES, gate_config("checks") + generated_config(date=datetime.date(2026, 11, 1)), green()),
-        (WITH_TYPES, gate_config("checks") + generated_config(path=OTHER_FILE), declared(OTHER_FILE)),
-        (WITH_TYPES, WITH_TYPES + generated_config(path=OTHER_FILE, item="#175"), declared(OTHER_FILE, "#175")),
-    ],
-    ids=[
-        "added", "a base without config", "inherited", "removed", "job changed", "reason changed", "item changed",
-        "date changed", "path changed", "a second file added",
-    ],
-)
-def test_adding_or_re_pathing_a_declaration_is_a_self_declared_loosening(base, head, expected):
-    """VERDICT-68, VERDICT-69: only a head path the base does not declare loosens, bound to the head declaration's own
-    item and date; inherited, removed and other-key changes are green."""
+CHECKS = gate_config("checks")
+CHANGES = {
+    "added": lambda kind: (CHECKS, CHECKS + kind.entry(kind.first), declared(kind, kind.first)),
+    "a base without config": lambda kind: (None, CHECKS + kind.entry(kind.first), declared(kind, kind.first)),
+    "inherited": lambda kind: (CHECKS + kind.entry(kind.first), CHECKS + kind.entry(kind.first), green()),
+    "removed": lambda kind: (CHECKS + kind.entry(kind.first), CHECKS, green()),
+    "reason changed": lambda kind: (CHECKS + kind.entry(kind.first), CHECKS + kind.entry(kind.first, reason="reworded"), green()),
+    "item changed": lambda kind: (CHECKS + kind.entry(kind.first), CHECKS + kind.entry(kind.first, item="#999"), green()),
+    "date changed": lambda kind: (
+        CHECKS + kind.entry(kind.first), CHECKS + kind.entry(kind.first, date=datetime.date(2026, 11, 1)), green()
+    ),
+    "path changed": lambda kind: (CHECKS + kind.entry(kind.first), CHECKS + kind.entry(kind.second), declared(kind, kind.second)),
+    "a second path added": lambda kind: (
+        CHECKS + kind.entry(kind.first),
+        CHECKS + kind.entry(kind.first) + kind.entry(kind.second, item="#175"),
+        declared(kind, kind.second, "#175"),
+    ),
+}
+
+
+@EACH_KIND
+@pytest.mark.parametrize("change", CHANGES.values(), ids=CHANGES.keys())
+def test_adding_or_re_pathing_a_declaration_is_a_self_declared_loosening(kind, change):
+    """VERDICT-68, VERDICT-69, CITE-18: only a head path the base does not declare loosens, bound to the head
+    declaration's own item and date; inherited, removed and other-key changes are green."""
+    base, head, expected = change(kind)
     assert judged(base, head) == expected
 
 
-def test_a_run_without_a_base_judges_no_generated_file():
-    """VERDICT-61: a push judges no loosening, so a declaration leaves it green."""
-    assert judged(gate_config("checks"), WITH_TYPES, with_base=False) == green()
+def test_a_changed_job_of_a_generated_file_loosens_nothing():
+    """VERDICT-69."""
+    with_types = CHECKS + generated_config()
+    head = gate_config("checks", "other") + generated_config(job="other")
+    assert judged(with_types, head) == green()
 
 
-def test_a_gate_loosened_entry_with_the_generated_text_matches_nothing():
-    """VERDICT-70: the declaration declares itself, so a [[gate.loosened]] entry naming it binds nothing."""
-    what = f"size leaves out generated file {TYPES_FILE}"
-    head = gate_config("checks", declared=(declaration(what),)) + generated_config()
-    assert judged(gate_config("checks"), head) == (((what, "#174 of 2026-10-30"),), (what,), True, False)
+@EACH_KIND
+def test_a_run_without_a_base_judges_no_declaration(kind):
+    """VERDICT-61, CITE-18: a push judges no loosening, so a declaration leaves it green."""
+    assert judged(CHECKS, CHECKS + kind.entry(kind.first), with_base=False) == green()
+
+
+@EACH_KIND
+def test_a_gate_loosened_entry_with_the_declared_text_matches_nothing(kind):
+    """VERDICT-70, CITE-18: the declaration declares itself, so a [[gate.loosened]] entry naming it binds nothing."""
+    what = kind.what(kind.first)
+    head = gate_config("checks", declared=(declaration(what),)) + kind.entry(kind.first)
+    assert judged(CHECKS, head) == (((what, "#174 of 2026-10-30"),), (what,), True, False)
+
+
+def test_a_foreign_prefix_is_no_loosening():
+    """CITE-18: an implementer's declaration loosens nothing, in an adoption or beside a base that holds none."""
+    assert judged(CHECKS, CHECKS + foreign_entry("LANG")) == green()
+    assert judged(None, CHECKS + foreign_entry("LANG")) == green()

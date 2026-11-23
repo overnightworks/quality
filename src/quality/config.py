@@ -1,6 +1,6 @@
 import datetime
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path, PurePosixPath
@@ -11,7 +11,6 @@ from quality.rules import Rule
 
 SECRETS_KEYS = {"allow"}
 SECRETS_ALLOW = "[secrets] allow"
-ALLOW_ONLY = {"allow"}
 ALLOWANCE_KEYS = {"rule", "file", "secret_sha256", "reason"}
 DECLARATION_KEYS = {"what", "item", "date", "reason"}
 ROOT_ALLOWANCE_KEYS = {"entry", "reason"}
@@ -21,6 +20,8 @@ PYTHON_ALLOWANCE_KEYS = {"path", "reason"}
 COMPOSE_ALLOWANCE_KEYS = {"file", "service", "reason"}
 WORKFLOW_ALLOWANCE_KEYS = {"file", "reason"}
 GENERATED_FILE_KEYS = {"path", "job", "item", "date", "reason"}
+FOREIGN_PREFIX_KEYS = {"prefix", "owner"}
+IMPLEMENTED_DOCUMENT_KEYS = {"path", "item", "date", "reason"}
 ITEM_REFERENCE_EXPECTED = "item as #<number> or <owner>/<repo>#<number>"
 PATH_PATTERN_CHARACTERS = "*?["
 ADVISORY_ALLOWANCE_KEYS = {"id", "lock", "until", "date", "item", "reason"}
@@ -28,6 +29,10 @@ SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 # ASCII only, so a lookalike name (a Cyrillic letter in it) is no repository.
 REPOSITORY_NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 ITEM_REFERENCE = re.compile(rf"(?:{REPOSITORY_NAME.pattern})?#[1-9][0-9]*")
+# The part of a spec ID before its last number; `quality.spec_citations` builds the ID from it.
+ID_PREFIX = r"[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*"
+ID_PREFIX_PATTERN = re.compile(ID_PREFIX)
+MARKDOWN_SUFFIX = ".md"
 ONE_LINE_REASON = "a non-empty one-line reason"
 GATE_HEADING = "[gate]"
 LOOSENED_HEADING = "[[gate.loosened]]"
@@ -39,6 +44,8 @@ PYTHON_ALLOWANCE_HEADING = "[[python.allow]]"
 COMPOSE_ALLOWANCE_HEADING = "[[compose.allow]]"
 WORKFLOW_ALLOWANCE_HEADING = "[[workflow.allow]]"
 GENERATED_FILE_HEADING = "[[size.generated]]"
+FOREIGN_PREFIX_HEADING = "[[spec_citations.foreign]]"
+IMPLEMENTED_DOCUMENT_HEADING = "[[spec_citations.implemented]]"
 LANGUAGES_HEADING = "[languages]"
 EXAMPLE: config_entries.ExampleLines = (GATE_HEADING, 'mandatory_jobs = ["checks"]')
 LEGACY_EXAMPLE: config_entries.ExampleLines = (GATE_HEADING, 'legacy = "fail"')
@@ -103,19 +110,54 @@ GENERATED_FILE_EXAMPLE: config_entries.ExampleLines = (
     "date = 2026-10-30",
     'reason = "written by scripts/generate_types.py, proven by its --check"',
 )
-# Each table but [secrets] (which its own reader checks): its keys and the example of a refusal in it.
-TABLE_SHAPES: dict[str, tuple[set[str], config_entries.ExampleLines]] = {
-    "gate": ({"mandatory_jobs", "legacy", "sonar", "loosened"}, EXAMPLE),
-    "advisories": (ALLOW_ONLY, ADVISORY_ALLOWANCE_EXAMPLE),
-    "root": (ALLOW_ONLY, ROOT_ALLOWANCE_EXAMPLE),
-    "layout": (ALLOW_ONLY, LAYOUT_ALLOWANCE_EXAMPLE),
-    "python": (ALLOW_ONLY, PYTHON_ALLOWANCE_EXAMPLE),
-    "compose": (ALLOW_ONLY, COMPOSE_ALLOWANCE_EXAMPLE),
-    "workflow": (ALLOW_ONLY, WORKFLOW_ALLOWANCE_EXAMPLE),
-    "size": ({"generated"}, GENERATED_FILE_EXAMPLE),
-    "languages": ({"render_pass"}, LANGUAGES_EXAMPLE),
+FOREIGN_PREFIX_EXAMPLE: config_entries.ExampleLines = (
+    FOREIGN_PREFIX_HEADING,
+    'prefix = "LANG"',
+    'owner = "overnightworks/design"',
+)
+IMPLEMENTED_DOCUMENT_EXAMPLE: config_entries.ExampleLines = (
+    IMPLEMENTED_DOCUMENT_HEADING,
+    'path = "docs/calling.md"',
+    'item = "overnightworks/agents#312"',
+    "date = 2026-11-23",
+    'reason = "the implementers cite its rules, so no test of this repository does"',
+)
+
+
+class TableShape(NamedTuple):
+    """One table of the config: its keys as `[table] key` scalars or `[[table.key]]` arrays of tables, and the example of
+    a refusal in it; `own_reader` is set where a reader of its own refuses an unknown key."""
+
+    scalars: tuple[str, ...]
+    arrays: tuple[str, ...]
+    example: config_entries.ExampleLines
+    own_reader: bool = False
+
+    @property
+    def keys(self) -> set[str]:
+        return {*self.scalars, *self.arrays}
+
+    def headings(self, table: str) -> list[str]:
+        return [*(f"[{table}] {key}" for key in self.scalars), *(f"[[{table}.{key}]]" for key in self.arrays)]
+
+
+# Every table of the config, the one place that holds its keys.
+TABLE_SHAPES: dict[str, TableShape] = {
+    "gate": TableShape(("mandatory_jobs", "legacy", "sonar"), ("loosened",), EXAMPLE),
+    "secrets": TableShape(("allow",), (), ALLOWANCE_EXAMPLE, own_reader=True),
+    "advisories": TableShape((), ("allow",), ADVISORY_ALLOWANCE_EXAMPLE),
+    "root": TableShape((), ("allow",), ROOT_ALLOWANCE_EXAMPLE),
+    "layout": TableShape((), ("allow",), LAYOUT_ALLOWANCE_EXAMPLE),
+    "python": TableShape((), ("allow",), PYTHON_ALLOWANCE_EXAMPLE),
+    "compose": TableShape((), ("allow",), COMPOSE_ALLOWANCE_EXAMPLE),
+    "workflow": TableShape((), ("allow",), WORKFLOW_ALLOWANCE_EXAMPLE),
+    "size": TableShape((), ("generated",), GENERATED_FILE_EXAMPLE),
+    "spec_citations": TableShape((), ("foreign", "implemented"), FOREIGN_PREFIX_EXAMPLE),
+    "languages": TableShape(("render_pass",), (), LANGUAGES_EXAMPLE),
 }
 UNKNOWN_KEY_WITHOUT_EXAMPLE = {"gate", "advisories"}
+_HEADINGS = [heading for name, shape in TABLE_SHAPES.items() for heading in shape.headings(name)]
+KNOWN_KEYS = f"only {', '.join(_HEADINGS[:-1])} and {_HEADINGS[-1]} exist"
 
 
 class LegacyMode(Enum):
@@ -223,6 +265,25 @@ class GeneratedFile:
 
 
 @dataclass(frozen=True)
+class ForeignPrefix:
+    """A spec-ID prefix whose IDs the repository's tests cite and the document of `owner`, another repository, defines."""
+
+    prefix: str
+    owner: str
+
+
+@dataclass(frozen=True)
+class ImplementedDocument:
+    """A tracked Markdown file, by its exact path, that the repository declares a contract others implement: its IDs need
+    no citation here, ruled on `date` in `item`."""
+
+    path: str
+    item: str
+    date: datetime.date
+    reason: str
+
+
+@dataclass(frozen=True)
 class GateSettings:
     """What the gate reads from quality/config.toml: the settings a pull request must not loosen, the loosenings
     it declares, and the advisories and secret values it allows; `sonar` is whether the gate's `sonar` job scans."""
@@ -232,6 +293,7 @@ class GateSettings:
     loosened: tuple[Declaration, ...] = ()
     advisory_allowances: tuple[AdvisoryAllowance, ...] = ()
     generated_files: tuple[GeneratedFile, ...] = ()
+    implemented_documents: tuple[ImplementedDocument, ...] = ()
     sonar: bool = True
     secret_allowances: tuple[Allowance, ...] = ()
 
@@ -256,6 +318,8 @@ class AllowLists:
     compose: tuple[ComposeAllowance, ...] = ()
     workflow: tuple[WorkflowAllowance, ...] = ()
     generated: tuple[GeneratedFile, ...] = ()
+    foreign_prefixes: tuple[ForeignPrefix, ...] = ()
+    implemented_documents: tuple[ImplementedDocument, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -307,33 +371,30 @@ def _refuse_unknown_secrets_keys(secrets: dict) -> None:
 
 
 def _refuse_unknown_keys(document: dict, tables: dict[str, dict]) -> None:
-    unknown = set(document) - TABLE_SHAPES.keys() - {"secrets"}
+    unknown = set(document) - TABLE_SHAPES.keys()
     example = None
-    for name, (keys, table_example) in TABLE_SHAPES.items():
-        extra = set(tables[name]) - keys
+    for name, shape in TABLE_SHAPES.items():
+        if shape.own_reader:
+            continue
+        extra = set(tables[name]) - shape.keys
         unknown |= extra
         if extra and name not in UNKNOWN_KEY_WITHOUT_EXAMPLE:
-            example = table_example
+            example = shape.example
     if unknown:
-        raise config_entries.ConfigError(
-            f"{config_entries.CONFIG_PATH} has {config_entries.unknown_keys(unknown)} - only [gate] mandatory_jobs, [gate] legacy, [gate] sonar, "
-            "[[gate.loosened]], [secrets] allow, [[advisories.allow]], [[root.allow]], [[layout.allow]], "
-            "[[python.allow]], [[compose.allow]], [[workflow.allow]], [[size.generated]] and [languages] render_pass exist",
-            example,
-        )
+        raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} has {config_entries.unknown_keys(unknown)} - {KNOWN_KEYS}", example)
 
 
 def _validated_document(text: str) -> _Document:
     """The one validation of the whole config: one parse, one unknown-key check, and every entry of every table."""
     document = config_entries.parse(text, EXAMPLE)
-    tables = {name: config_entries.table_named(document, name, example) for name, (_, example) in TABLE_SHAPES.items()}
+    tables = {name: config_entries.table_named(document, name, shape.example) for name, shape in TABLE_SHAPES.items()}
     _refuse_unknown_keys(document, tables)
     gate = tables["gate"]
     return _Document(
         gate,
         _declarations(gate),
         AllowLists(
-            _parse_allowances(config_entries.table_named(document, "secrets", ALLOWANCE_EXAMPLE)),
+            _parse_allowances(tables["secrets"]),
             _advisory_allowances(tables["advisories"]),
             _root_allowances(tables["root"]),
             _layout_allowances(tables["layout"]),
@@ -341,6 +402,8 @@ def _validated_document(text: str) -> _Document:
             _compose_allowances(tables["compose"]),
             _workflow_allowances(tables["workflow"]),
             _generated_files(tables["size"], gate),
+            _foreign_prefixes(tables["spec_citations"]),
+            _implemented_documents(tables["spec_citations"]),
         ),
         RenderPass(_render_pass_job(tables["languages"]), _job_names(gate)),
     )
@@ -386,6 +449,16 @@ def _declarations(gate: dict) -> tuple[Declaration, ...]:
     )
 
 
+def _refuse_unless_ruled(refuse: Callable[[str], config_entries.ConfigError], item: object, date: object, reason: object) -> None:
+    """The item, date and reason every declaration that carries its own ruling needs."""
+    if not (isinstance(item, str) and ITEM_REFERENCE.fullmatch(item)):
+        raise refuse(ITEM_REFERENCE_EXPECTED)
+    if not config_entries.is_date_without_time(date):
+        raise refuse("date as a TOML date without a time")
+    if not config_entries.is_one_line_text(reason):
+        raise refuse(ONE_LINE_REASON)
+
+
 def _read_declaration(entry: object, position: int) -> Declaration:
     refuse = config_entries.entry_refusal(LOOSENED_HEADING, position, LOOSENED_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != DECLARATION_KEYS:
@@ -393,12 +466,7 @@ def _read_declaration(entry: object, position: int) -> Declaration:
     what, item, date, reason = (entry[key] for key in ("what", "item", "date", "reason"))
     if not (isinstance(what, str) and what.strip()):
         raise refuse("a non-empty what")
-    if not (isinstance(item, str) and ITEM_REFERENCE.fullmatch(item)):
-        raise refuse(ITEM_REFERENCE_EXPECTED)
-    if not config_entries.is_date_without_time(date):
-        raise refuse("date as a TOML date without a time")
-    if not config_entries.is_one_line_text(reason):
-        raise refuse(ONE_LINE_REASON)
+    _refuse_unless_ruled(refuse, item, date, reason)
     return Declaration(what, item, date, reason)
 
 
@@ -570,13 +638,46 @@ def _read_generated_file(entry: object, position: int, mandatory_jobs: tuple[str
         raise refuse("path as the exact tracked path of one file: no folder, pattern, .. or absolute path")
     if job not in mandatory_jobs:
         raise refuse("job as one of [gate] mandatory_jobs, the job whose generator check proves the file")
-    if not (isinstance(item, str) and ITEM_REFERENCE.fullmatch(item)):
-        raise refuse(ITEM_REFERENCE_EXPECTED)
-    if not config_entries.is_date_without_time(date):
-        raise refuse("date as a TOML date without a time")
-    if not config_entries.is_one_line_text(reason):
-        raise refuse(ONE_LINE_REASON)
+    _refuse_unless_ruled(refuse, item, date, reason)
     return GeneratedFile(path, job, item, date, reason)
+
+
+def _foreign_prefixes(spec_citations: dict) -> tuple[ForeignPrefix, ...]:
+    return config_entries.unique_entries(
+        spec_citations, "foreign", FOREIGN_PREFIX_HEADING, FOREIGN_PREFIX_EXAMPLE, _read_foreign_prefix, lambda foreign: foreign.prefix,
+        lambda foreign: f"declares prefix = {config_entries.toml_string(foreign.prefix)} twice; one entry per prefix",
+    )
+
+
+def _read_foreign_prefix(entry: object, position: int) -> ForeignPrefix:
+    refuse = config_entries.entry_refusal(FOREIGN_PREFIX_HEADING, position, FOREIGN_PREFIX_EXAMPLE)
+    if not isinstance(entry, dict) or set(entry) != FOREIGN_PREFIX_KEYS:
+        raise refuse("exactly a prefix and an owner")
+    prefix, owner = entry["prefix"], entry["owner"]
+    if not (isinstance(prefix, str) and ID_PREFIX_PATTERN.fullmatch(prefix)):
+        raise refuse("prefix as capital letters and digits, joined by -, like LANG or REQ-AUTH")
+    if not (isinstance(owner, str) and REPOSITORY_NAME.fullmatch(owner)):
+        raise refuse("owner as <owner>/<repo>")
+    return ForeignPrefix(prefix, owner)
+
+
+def _implemented_documents(spec_citations: dict) -> tuple[ImplementedDocument, ...]:
+    return config_entries.unique_entries(
+        spec_citations, "implemented", IMPLEMENTED_DOCUMENT_HEADING, IMPLEMENTED_DOCUMENT_EXAMPLE, _read_implemented_document,
+        lambda document: document.path,
+        lambda document: f"declares path = {config_entries.toml_string(document.path)} twice; one entry per document",
+    )
+
+
+def _read_implemented_document(entry: object, position: int) -> ImplementedDocument:
+    refuse = config_entries.entry_refusal(IMPLEMENTED_DOCUMENT_HEADING, position, IMPLEMENTED_DOCUMENT_EXAMPLE)
+    if not isinstance(entry, dict) or set(entry) != IMPLEMENTED_DOCUMENT_KEYS:
+        raise refuse("exactly a path, an item, a date and a reason")
+    path, item, date, reason = (entry[key] for key in ("path", "item", "date", "reason"))
+    if not _is_exact_file_path(path) or PurePosixPath(path).suffix != MARKDOWN_SUFFIX:
+        raise refuse(f"path as the exact tracked path of one {MARKDOWN_SUFFIX} file: no folder, pattern, .. or absolute path")
+    _refuse_unless_ruled(refuse, item, date, reason)
+    return ImplementedDocument(path, item, date, reason)
 
 
 def _sonar(gate: dict, legacy: LegacyMode) -> bool:
@@ -601,8 +702,8 @@ def load_gate_settings(text: str | None) -> GateSettings:
     legacy = _legacy_mode(document.gate)
     return GateSettings(
         jobs, legacy, document.declarations,
-        document.allow_lists.advisories, document.allow_lists.generated, _sonar(document.gate, legacy),
-        tuple(document.allow_lists.secrets),
+        document.allow_lists.advisories, document.allow_lists.generated, document.allow_lists.implemented_documents,
+        _sonar(document.gate, legacy), tuple(document.allow_lists.secrets),
     )
 
 

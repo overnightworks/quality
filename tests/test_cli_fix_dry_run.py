@@ -359,7 +359,7 @@ def shallow_new_row() -> str:
         pytest.param(
             a_config_refusal,
             "  ✗ debt          not checked    quality/config.toml has unknown key nope - only [gate] mandatory_jobs, [gate] legacy, [gate] sonar, [[gate.loosened]], "
-            "[secrets] allow, [[advisories.allow]], [[root.allow]], [[layout.allow]], [[python.allow]], [[compose.allow]], [[workflow.allow]], [[size.generated]] and [languages] render_pass exist\n",
+            "[secrets] allow, [[advisories.allow]], [[root.allow]], [[layout.allow]], [[python.allow]], [[compose.allow]], [[workflow.allow]], [[size.generated]], [[spec_citations.foreign]], [[spec_citations.implemented]] and [languages] render_pass exist\n",
             repair_rows_error(),
             id="a config refusal",
         ),

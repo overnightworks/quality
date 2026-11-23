@@ -137,7 +137,8 @@ rows, by area:
   the definition, `spec ID ST-02 is cited by no test`, fix `cite it at the head of a test`), `undefined` and `retired` (at the
   citing test, `ST-03 is cited and defined nowhere`, `ST-03 is cited and retired`), `duplicate` (at the later definition,
   `spec ID ST-01 is defined again, first at docs/spec.md:12`) and `can fall` (at `quality/baseline.toml`, `spec ID ST-01 is
-  cited`, fix `quality check --fix`) (CITE-8).
+  cited`, fix `quality check --fix`) (CITE-8); a declaration of `quality/config.toml` that conflicts with the tree or matches
+  nothing is `conflict` or `unused` at the config or the declared path, its fix deleting the entry (CITE-17, CITE-19).
 
 The `env-file` fix's own wording stands in [rules](rules.md).
 

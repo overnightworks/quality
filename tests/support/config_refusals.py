@@ -20,10 +20,10 @@ ONE_LINE_NEED = "a non-empty one-line reason"
 WORKFLOW_FILE_NEED = "file as the exact tracked path of one workflow: no folder, pattern, .. or absolute path"
 FILE_PATH_NEED = "path as the exact tracked path of one file: no folder, pattern, .. or absolute path"
 LAYOUT_RULE_NEED = "rule as one of agents-md, file-suffix, script-header, script-name, test-import, test-layout"
-KNOWN_KEYS = (
-    "only [gate] mandatory_jobs, [gate] legacy, [gate] sonar, [[gate.loosened]], [secrets] allow, [[advisories.allow]], "
-    "[[root.allow]], [[layout.allow]], [[python.allow]], [[compose.allow]], [[workflow.allow]], [[size.generated]] and [languages] render_pass exist"
-)
+KNOWN_KEYS = config.KNOWN_KEYS
+PREFIX_NEED = "prefix as capital letters and digits, joined by -, like LANG or REQ-AUTH"
+OWNER_NEED = "owner as <owner>/<repo>"
+DOCUMENT_PATH_NEED = "path as the exact tracked path of one .md file: no folder, pattern, .. or absolute path"
 
 
 @dataclass(frozen=True)
@@ -140,13 +140,30 @@ ARRAY_TABLES = (
          ({"item": "siehe Chat"}, ITEM_NEED), ({"date": "x"}, DATE_NEED), ({"reason": ""}, ONE_LINE_NEED)),
         'declares path = "types.ts" twice; one entry per file',
     ),
+    ArrayTable(
+        "spec_citations.foreign", config.FOREIGN_PREFIX_EXAMPLE, {"prefix": "LANG", "owner": "overnightworks/design"},
+        "exactly a prefix and an owner",
+        (({"prefix": "lang"}, PREFIX_NEED), ({"prefix": "LANG-7"}, PREFIX_NEED), ({"prefix": 7}, PREFIX_NEED),
+         ({"owner": "design"}, OWNER_NEED), ({"owner": "a/b/c"}, OWNER_NEED)),
+        'declares prefix = "LANG" twice; one entry per prefix',
+    ),
+    ArrayTable(
+        "spec_citations.implemented", config.IMPLEMENTED_DOCUMENT_EXAMPLE,
+        {"path": "docs/calling.md", "item": "#1", "date": DATE, "reason": "ruled"},
+        "exactly a path, an item, a date and a reason",
+        (({"path": "docs/"}, DOCUMENT_PATH_NEED), ({"path": "docs/*.md"}, DOCUMENT_PATH_NEED),
+         ({"path": "../calling.md"}, DOCUMENT_PATH_NEED), ({"path": "docs/calling.txt"}, DOCUMENT_PATH_NEED),
+         ({"item": "siehe Chat"}, ITEM_NEED), ({"date": "x"}, DATE_NEED), ({"reason": "two\nlines"}, ONE_LINE_NEED)),
+        'declares path = "docs/calling.md" twice; one entry per document',
+    ),
 )
 NOT_A_LIST_TEXT = {
     "gate.loosened": GATE + 'loosened = "x"\n', "advisories.allow": '[advisories]\nallow = "x"\n',
     "root.allow": '[root]\nallow = "x"\n', "layout.allow": '[layout]\nallow = "x"\n',
     "python.allow": '[python]\nallow = "x"\n', "compose.allow": '[compose]\nallow = "x"\n',
     "workflow.allow": '[workflow]\nallow = "x"\n',
-    "size.generated": '[size]\ngenerated = "x"\n',
+    "size.generated": '[size]\ngenerated = "x"\n', "spec_citations.foreign": '[spec_citations]\nforeign = "x"\n',
+    "spec_citations.implemented": '[spec_citations]\nimplemented = "x"\n',
 }
 
 
@@ -169,7 +186,8 @@ SECRET_NEEDS = (
 TABLE_VALUES = (("gate", config.EXAMPLE), ("secrets", config.ALLOWANCE_EXAMPLE), ("advisories", config.ADVISORY_ALLOWANCE_EXAMPLE),
                        ("root", config.ROOT_ALLOWANCE_EXAMPLE), ("layout", config.LAYOUT_ALLOWANCE_EXAMPLE),
                        ("python", config.PYTHON_ALLOWANCE_EXAMPLE), ("compose", config.COMPOSE_ALLOWANCE_EXAMPLE),
-                       ("workflow", config.WORKFLOW_ALLOWANCE_EXAMPLE), ("size", config.GENERATED_FILE_EXAMPLE))
+                       ("workflow", config.WORKFLOW_ALLOWANCE_EXAMPLE), ("size", config.GENERATED_FILE_EXAMPLE),
+                       ("spec_citations", config.FOREIGN_PREFIX_EXAMPLE))
 
 
 def parser_message(text: str) -> str:
@@ -230,7 +248,8 @@ def _unknown_key_refusals() -> list[Refusal]:
     ]
     for table, example in (("root", config.ROOT_ALLOWANCE_EXAMPLE), ("layout", config.LAYOUT_ALLOWANCE_EXAMPLE),
                            ("python", config.PYTHON_ALLOWANCE_EXAMPLE), ("compose", config.COMPOSE_ALLOWANCE_EXAMPLE),
-                           ("workflow", config.WORKFLOW_ALLOWANCE_EXAMPLE), ("size", config.GENERATED_FILE_EXAMPLE)):
+                           ("workflow", config.WORKFLOW_ALLOWANCE_EXAMPLE), ("size", config.GENERATED_FILE_EXAMPLE),
+                           ("spec_citations", config.FOREIGN_PREFIX_EXAMPLE)):
         refusals.append(Refusal(f"{table} unknown key", f"[{table}]\nignore = []\n", f"{where} ignore - {KNOWN_KEYS}", example))
     return refusals
 

@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from quality.baseline_file import BASELINE_PATH
+from quality.config_entries import CONFIG_PATH
 from quality.report import FindingEvent, NoteEvent
 from quality.rules import Area, Rule
 from tests.support.baselines import DEBT_BASELINE_STATES, holding_spec_ids, rendered, spec_table
@@ -17,7 +18,7 @@ from tests.support.check import (
     rule_notes,
     runs_apart_by_the_note,
 )
-from tests.support.specs import SPEC, spec_with
+from tests.support.specs import SPEC, declaring, foreign_entry, implemented_entry, spec_with
 
 UNCITED = "1 spec ID uncited"
 
@@ -412,3 +413,163 @@ def test_every_other_line_and_the_exit_stay_as_the_same_run_without_the_note(tmp
     a red debt area included."""
     with_note, without_note = runs_apart_by_the_note(tmp_path, capsys, state, spec_with("- X-1: a."), spec_with("Prose."), "spec ID")
     assert with_note == without_note
+
+
+CALLING = "docs/calling.md"
+OWNED = {CALLING: "- CALLING-1: a rule.\n- CALLING-2: another.\n"}
+BOTH_TABLES = {"with the table": held(), "without it": {}}
+
+
+@pytest.mark.parametrize("table", BOTH_TABLES.values(), ids=BOTH_TABLES.keys())
+def test_a_citation_of_an_id_defined_nowhere_is_not_judged_where_its_prefix_is_declared_foreign(build_repo, table):
+    """CITE-14: no `undefined` finding and no part of the note, with the table and without it."""
+    files = {**spec_with("- X-1: a."), **cited_by_python("X-1 and LANG-7: it."), **declaring(foreign_entry("LANG")), **table}
+    repo = build_repo(files)
+    assert (found(repo), note_of(repo)) == ([], None)
+
+
+@pytest.mark.parametrize(
+    ("entries", "expected"),
+    [
+        ((), [("undefined", "tests/test_a.py", 1)]),
+        ((foreign_entry("REQ"),), [("undefined", "tests/test_a.py", 1)]),
+        ((foreign_entry("REQ-AUTH"),), []),
+    ],
+    ids=["no declaration", "a shorter prefix", "the whole prefix"],
+)
+def test_a_prefix_is_compared_exactly_to_the_part_before_the_last_number(build_repo, entries, expected):
+    """CITE-14: `REQ` does not cover `REQ-AUTH-3`."""
+    repo = build_repo({**cited_by_python("REQ-AUTH-3: it."), **spec_with("- X-1 (retired)."), **declaring(*entries), **held()})
+    assert [row for row in found(repo) if row[0] != "unused"] == expected
+
+
+CONFLICTS = {
+    "a live ID of the prefix defined here": (["- LANG-7: a."], "", [("uncited", SPEC, 1), ("conflict", CONFIG_PATH, None)]),
+    "a retired ID of the prefix defined here and cited": (
+        ["- LANG-7 (retired)."], "LANG-7: it.", [("conflict", CONFIG_PATH, None), ("retired", "tests/test_a.py", 1)]
+    ),
+}
+
+
+@pytest.mark.parametrize(("spec", "docstring", "expected"), CONFLICTS.values(), ids=CONFLICTS.keys())
+def test_a_declared_prefix_the_tree_defines_is_a_conflict_and_its_ids_are_judged_as_any_other(build_repo, spec, docstring, expected):
+    """CITE-14, CITE-19: with the table, the declaration is `conflict` at the config, and the local ID is judged locally."""
+    files = {**spec_with(*spec), **(cited_by_python(docstring) if docstring else {}), **declaring(foreign_entry("LANG")), **held()}
+    assert found(build_repo(files)) == expected
+
+
+def test_a_declared_prefix_the_tree_defines_exempts_no_citation_of_a_deleted_id(build_repo):
+    """CITE-14, CITE-19: a repository cannot silence the undefined citations of its own prefix."""
+    files = {**spec_with("- ST-1: a."), **cited_by_python("ST-1 and ST-9: it."), **declaring(foreign_entry("ST")), **held()}
+    assert found(build_repo(files)) == [("conflict", CONFIG_PATH, None), ("undefined", "tests/test_a.py", 1)]
+
+
+def test_a_conflict_names_the_first_definition_of_the_prefix_and_the_way_out(build_repo):
+    """CITE-19."""
+    files = {**spec_with("- ST-3: a.", "- ST-1: b."), **cited_by_python("ST-1 and ST-3: it."), **declaring(foreign_entry("ST")), **held()}
+    (finding,) = rule_findings(build_repo(files), Rule.SPEC_CITATION)
+    assert (finding.fact, finding.fix) == (
+        f"[[spec_citations.foreign]] prefix ST is defined here, first at {SPEC}:1",
+        "delete its [[spec_citations.foreign]] entry from quality/config.toml, or give the local IDs a prefix of their own",
+    )
+
+
+def test_without_the_table_a_conflict_is_no_finding_and_the_local_id_stays_in_the_note(build_repo):
+    """CITE-6, CITE-19."""
+    repo = build_repo({**spec_with("- LANG-7: a."), **declaring(foreign_entry("LANG"))})
+    assert (found(repo), note_of(repo)) == ([], UNCITED)
+
+
+def test_a_declared_prefix_no_foreign_citation_matches_is_unused_with_the_table(build_repo):
+    """CITE-17: `unused` at the config, fixed by deleting the entry."""
+    files = {**spec_with("- X-1: a."), **cited_by_python("X-1: it."), **declaring(foreign_entry("LANG")), **held()}
+    (finding,) = rule_findings(build_repo(files), Rule.SPEC_CITATION)
+    assert (finding.event, finding.path, finding.fact, finding.fix) == (
+        FindingEvent.UNUSED, CONFIG_PATH, "[[spec_citations.foreign]] prefix LANG matches no citation",
+        "delete its [[spec_citations.foreign]] entry from quality/config.toml",
+    )
+
+
+def test_without_the_table_a_declared_prefix_no_citation_matches_is_not_judged(build_repo):
+    """CITE-17, CITE-6."""
+    repo = build_repo({**spec_with("- X-1: a."), **cited_by_python("X-1: it."), **declaring(foreign_entry("LANG"))})
+    assert (found(repo), note_of(repo)) == ([], None)
+
+
+@pytest.mark.parametrize(
+    ("table", "declared", "findings", "note"),
+    [
+        (held(), True, [], None),
+        ({}, True, [], None),
+        (held(), False, [("uncited", CALLING, 1), ("uncited", CALLING, 2)], None),
+        ({}, False, [], "2 spec IDs uncited"),
+    ],
+    ids=["declared, with the table", "declared, without it", "undeclared, with the table", "undeclared, without it"],
+)
+def test_an_id_of_a_declared_document_is_neither_uncited_nor_counted(build_repo, table, declared, findings, note):
+    """CITE-15: the declared document's ID is no `uncited` finding with the table and no part of the note without it."""
+    repo = build_repo({**OWNED, **(declaring(implemented_entry(CALLING)) if declared else {}), **table})
+    assert (found(repo), note_of(repo)) == (findings, note)
+
+
+def test_an_id_of_a_declared_document_that_the_repositorys_own_test_cites_stays_cited(build_repo):
+    """CITE-15: a held ID of the document that a test cites falls as `is cited`, not as left to its implementers."""
+    files = {**OWNED, **cited_by_python("CALLING-1: it."), **declaring(implemented_entry(CALLING)), **held("CALLING-1")}
+    (finding,) = rule_findings(build_repo(files), Rule.SPEC_CITATION)
+    assert (finding.event, finding.fact) == (FindingEvent.CAN_FALL, "spec ID CALLING-1 is cited")
+
+
+def test_a_held_id_of_a_declared_document_can_fall_as_left_to_its_implementers(build_repo):
+    """CITE-15."""
+    repo = build_repo({**OWNED, **declaring(implemented_entry(CALLING)), **held("CALLING-1")})
+    (finding,) = rule_findings(repo, Rule.SPEC_CITATION)
+    assert (finding.event, finding.fact, finding.fix) == (
+        FindingEvent.CAN_FALL, "spec ID CALLING-1 is left to its implementers", "quality check --fix"
+    )
+
+
+JUDGED_IN_A_DECLARED_DOCUMENT = {
+    "a second definition": ({"docs/a.md": "- CALLING-1: first.\n", CALLING: "- CALLING-1: again.\n- CALLING-2: b.\n"}, {}, [("uncited", "docs/a.md", 1), ("duplicate", CALLING, 1)]),
+    "a duplicate inside it": ({CALLING: "- CALLING-1: a.\n- CALLING-1: b.\n"}, {}, [("duplicate", CALLING, 2)]),
+    "a retired citation": ({CALLING: "- CALLING-1 (retired).\n- CALLING-2: b.\n"}, cited_by_python("CALLING-1: it."), [("retired", "tests/test_a.py", 1)]),
+    "an undefined citation": ({CALLING: "- CALLING-1: a.\n"}, cited_by_python("CALLING-9: it."), [("undefined", "tests/test_a.py", 1)]),
+}
+
+
+@pytest.mark.parametrize(("files", "tests", "expected"), JUDGED_IN_A_DECLARED_DOCUMENT.values(), ids=JUDGED_IN_A_DECLARED_DOCUMENT.keys())
+def test_a_declared_document_silences_neither_a_duplicate_nor_a_retired_or_undefined_citation(build_repo, files, tests, expected):
+    """CITE-15: only the uncited ID is left to the implementers."""
+    repo = build_repo({**files, **tests, **declaring(implemented_entry(CALLING)), **held()})
+    assert found(repo) == expected
+
+
+UNUSED_DOCUMENTS = {
+    "a path no file holds": {SPEC: "- X-1: a.\n"},
+    "a file with a retired ID only": {CALLING: "- CALLING-1 (retired).\n"},
+    "a file with no ID": {CALLING: "Prose.\n"},
+}
+
+
+@pytest.mark.parametrize("table", BOTH_TABLES.values(), ids=BOTH_TABLES.keys())
+@pytest.mark.parametrize("files", UNUSED_DOCUMENTS.values(), ids=UNUSED_DOCUMENTS.keys())
+def test_a_declared_document_that_defines_no_live_id_is_unused_with_the_table_only(build_repo, files, table):
+    """CITE-17, CITE-6: `unused` at the path with the table, fixed by deleting the entry, and nothing without it."""
+    repo = build_repo({**files, **declaring(implemented_entry(CALLING)), **table})
+    unused = [finding for finding in rule_findings(repo, Rule.SPEC_CITATION) if finding.event is FindingEvent.UNUSED]
+    assert [(finding.path, finding.fact, finding.fix) for finding in unused] == (
+        [
+            (
+                CALLING, "[[spec_citations.implemented]] matches no tracked file that defines a live spec ID",
+                "delete its [[spec_citations.implemented]] entry from quality/config.toml",
+            )
+        ]
+        if table
+        else []
+    )
+
+
+@pytest.mark.parametrize("table", BOTH_TABLES.values(), ids=BOTH_TABLES.keys())
+def test_a_malformed_declaration_refuses_the_rule(build_repo, table):
+    """CITE-16: the rule reads the declarations, so a config it cannot read leaves it unjudged, as every rule that reads the config."""
+    repo = build_repo({**spec_with("- X-1: a."), **declaring(implemented_entry("docs/")), **table})
+    assert Rule.SPEC_CITATION in refusals(repo)

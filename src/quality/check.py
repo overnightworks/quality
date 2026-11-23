@@ -513,7 +513,7 @@ def _judge_files(inputs: RunInputs) -> AreaVerdict:
 def _recorded(inputs: RunInputs, sources: dict[str, bytes], held: baseline_file.Baseline | None) -> ratchet.CeilingFix | DryRun:
     """The ceiling `--fix` makes, written under a write fix, wrapped as a dry run under `--dry-run`."""
     made = baseline_fix.fix_ceiling(
-        inputs.root, inputs.tracked, sources, held, lambda: _required(inputs.allow_lists).generated,
+        inputs.root, inputs.tracked, sources, held, lambda: _required(inputs.allow_lists),
         dry_run=inputs.fix is Fix.DRY_RUN, rerun_command=FIX_RUN_COMMAND.get(inputs.fix, baseline_file.FIX_COMMAND),
     )
     fix = baseline_fix.written(inputs.root, made, write=inputs.fix is Fix.WRITE)
@@ -540,7 +540,9 @@ def _judge_debt(inputs: RunInputs) -> AreaVerdict:
     held = None if isinstance(baseline, CannotJudge) else baseline  # a baseline that cannot be read refuses size and clone, so the area is refused and this rule only reports
     if fixed:
         held = made.ceiling
-    citations = sources if isinstance(sources, CannotJudge) else _attempt(lambda: spec_citations.check_spec_citations(inputs.root, inputs.tracked, sources, held))
+    citations = sources if isinstance(sources, CannotJudge) else _attempt(
+        lambda: spec_citations.check_spec_citations(inputs.root, inputs.tracked, sources, held, _required(inputs.allow_lists))
+    )
     judged: dict[Rule, Judged] = {
         Rule.SIZE: size, Rule.CLONE: clone, Rule.JOB_TIMEOUT: timeouts, Rule.TEST_TWIN: twin, Rule.SPEC_CITATION: citations
     }

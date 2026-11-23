@@ -207,7 +207,7 @@ reason = "the operator ruled the requirement shelf machinery out"
   its own `item` and `date`; deleting an inherited entry is no loosening (VERDICT-59). A new entry that matches no
   loosening of the pull request is red: it stands under `! declarations  1 unmatched` as the door shows it. A base
   without `quality/config.toml` (the adoption) holds no entry, so every entry there is new and matches nothing
-  (VERDICT-60). Without a base (push, `merge_group`) no entry, allowance or generated-file declaration is judged
+  (VERDICT-60). Without a base (push, `merge_group`) no entry, allowance, generated-file or implemented-document declaration is judged
   (VERDICT-61).
 - A declared loosening stays red (exit `1`) and says so: below its row it stands as
   `! mandatory job "…" removed · overnightworks/songmaker#1345 of 2026-10-20`, with `reason: …` beneath (VERDICT-62).
@@ -239,6 +239,11 @@ reason = "the operator ruled the requirement shelf machinery out"
   `reason`, `item` or `date` loosen nothing (VERDICT-69). A `[[gate.loosened]]` entry whose `what` is such a text
   matches nothing and is red (VERDICT-70). A [malformed `[size]` entry](rules.md) is exit `2` in the verdict and the
   door, naming the side.
+- An implemented-document declaration (`[[spec_citations.implemented]]`, see the `spec-citation` rule under `quality check`)
+  declares its own loosening the same way: a head `path` the base does not declare prints
+  `spec citation leaves <path> to its implementers · <item> of <date>`, after the generated-file lines, and every other case
+  of the bullet above holds for it (CITE-18). A [malformed `[spec_citations]` entry](rules.md) is exit `2` in the verdict and
+  the door, naming the side. An implementer's `[[spec_citations.foreign]]` entry is no loosening.
 - Ruled by the operator: removing, softening or bypassing an import-linter contract declares the same way, with one of these texts as `what`
   (the rule is in [rules](rules.md), "The import contracts only tighten"): `import contract "<name>" removed`,
   `import-linter config in <file> removed`, `import contract "<name>" ignores <expression>`,
