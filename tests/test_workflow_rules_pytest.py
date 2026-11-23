@@ -70,6 +70,9 @@ GREEN = [
     "uv run python -m pytest --numprocesses=2",
     "uv run coverage run -m pytest -n auto",
     "pytest -nauto",
+    "pytest -qn4",
+    "pytest -qn 4",
+    "pytest -qn=4",
     "pytest -n logical",
     "pytest -n 1",
     "PYTHONPATH=src pytest -n 2",
@@ -162,7 +165,6 @@ SERIAL_WITHOUT_N = [
     'PYTEST_ADDOPTS="-n auto" pytest',
     "a && pytest -q",
     "pytest --numproc 4",
-    "pytest -qn4",
     "poetry run pytest",
     "uv run --python 3.14 pytest",
     "x=`pytest -q`",
@@ -260,9 +262,25 @@ SERIAL_WITHOUT_N = [
 
 @pytest.mark.parametrize("command", SERIAL_WITHOUT_N)
 def test_a_pytest_call_without_a_readable_flag_is_serial(build_repo, scalar, command):
-    """PYTEST-3, PYTEST-5, PYTEST-8: every spelling of a call is read, and a missing, abbreviated or glued flag counts as no flag."""
+    """PYTEST-3, PYTEST-5, PYTEST-8: every spelling of a call is read, and a missing or abbreviated flag counts as no flag, as pytest refuses an abbreviated long option."""
     build, line = scalar
     assert shape(judged(build_repo, build(command))) == [(SERIAL, line, WITHOUT_N)]
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["pytest --collect-only", "pytest --collectonly", "pytest --co -q", "uv run pytest --collect-only tests"],
+)
+def test_a_listing_only_call_runs_no_test_and_is_not_judged(build_repo, scalar, command):
+    """PYTEST-5: a call that only lists tests needs no workers."""
+    build, _ = scalar
+    assert judged(build_repo, build(command)) == []
+
+
+def test_a_listing_flag_after_the_separator_is_a_path_and_the_call_is_serial(build_repo, scalar):
+    """PYTEST-5."""
+    build, line = scalar
+    assert shape(judged(build_repo, build("pytest -- --collect-only"))) == [(SERIAL, line, WITHOUT_N)]
 
 
 @pytest.mark.parametrize(
@@ -274,6 +292,7 @@ def test_a_pytest_call_without_a_readable_flag_is_serial(build_repo, scalar, com
         "pytest -n auto -n 0",
         "pytest -n 00",
         "pytest -n0",
+        "pytest -qn0",
         "pytest -n 0 -- -n auto",
     ],
 )
@@ -708,11 +727,13 @@ JOBS = "jobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    st
         f"{ANCHORS}on: push\n{JOBS}      - run: *run\n",
         f"{ANCHORS}on: push\n{JOBS}      - name: t\n        <<: {{run: pytest}}\n",
         f"{ANCHORS}<<: {{jobs: {{}}}}\non: push\n",
+        "on: push\njobs: [a]\n",
+        "on: push\njobs:\n  j: x\n",
     ],
     ids=[
         "yaml error", "run list", "run mapping", "alias as jobs", "merge key at jobs", "alias as a job",
         "merge key at a job", "alias as steps", "alias as a step", "merge key at a step", "alias as run",
-        "merge key at a step beside run", "merge key at the top",
+        "merge key at a step beside run", "merge key at the top", "jobs is a list", "a job is a scalar",
     ],
 )
 def test_a_workflow_the_rule_cannot_read_is_cannot_judge_naming_the_file_while_other_rules_still_judge(build_repo, capsys, text):

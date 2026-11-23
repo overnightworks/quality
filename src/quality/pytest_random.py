@@ -11,26 +11,15 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 
-import yaml
 from packaging.utils import canonicalize_name
 
-from quality import checkout, fleet_sources, repository
+from quality import fleet_sources, repository
+from quality.pytest_options import PLUGIN_NAMES, Option, lists_only, options, pytest_arguments
 from quality.report import CannotJudge, Finding, FindingEvent, RuleResult
 from quality.rules import Rule
-from quality.run_script import Marker, Segment, command_start, command_words
-from quality.workflow_rules import (
-    PYTEST_RULE,
-    Problem,
-    ScriptRule,
-    composed,
-    guarded,
-    judge_scripts,
-    line_of,
-    pytest_arguments,
-    readable_workflows,
-    scalar_text,
-    unreadable,
-)
+from quality.run_script import Segment, command_start, command_words
+from quality.workflow_document import Marker, composed, environment_values, readable_workflows, unreadable
+from quality.workflow_rules import PYTEST_RULE, Problem, ScriptRule, judge_scripts
 
 PYTEST_PACKAGE = "pytest"
 PLUGIN_PACKAGE = "pytest-randomly"
@@ -38,7 +27,7 @@ ADDOPTS_VARIABLE = "PYTEST_ADDOPTS"
 AUTOLOAD_VARIABLE = "PYTEST_DISABLE_PLUGIN_AUTOLOAD"
 ADDOPTS_KEY = "addopts"
 EVENTS = frozenset({FindingEvent.UNSHUFFLED, FindingEvent.UNSEEDED})
-MARKER = Marker.of(Rule.PYTEST_RANDOM.value, above_step=False)
+MARKER = Marker.of(Rule.PYTEST_RANDOM, above_step=False)
 MISSING_FIX = "add pytest-randomly to the dev dependency group, then uv lock"
 UNSHUFFLED_FIX = (
     "drop -p no:randomly, --randomly-dont-reorganize, --randomly-seed=<integer or last>, --disable-plugin-autoload "
@@ -53,16 +42,16 @@ TABLES = (("tool", "pytest", "ini_options"), ("tool", "pytest"))
 PYTEST_TABLE = re.compile(r"\s*\[\s*tool\s*\.\s*pytest\s*(\.\s*ini_options\s*)?\]")
 ADDOPTS_ASSIGNMENT = re.compile(r"\s*addopts\s*=")
 WHOLE_NUMBER = re.compile(r"[+-]?\d+", re.ASCII)
-# The short options that take a value, read from the parsers of pytest 9.2.0 and pytest-xdist 3.8.0: `-p`, `-o`, `-r`,
-# `-k`, `-m`, `-c`, `-W` and `-n`; the glued remainder of a cluster, or the next word, is the value.
-VALUE_LETTERS = frozenset("porkmcWn")
-LONG_VALUE_OPTIONS = frozenset({"--verbosity", "--randomly-seed"})
 PLUGIN_OFF = "no:randomly"
 PLUGIN_LOADS = frozenset({"randomly", "pytest_randomly"})
 LAST_SEED = "last"
-LISTING_FLAGS = frozenset({"--collect-only", "--co"})
-
-Option = tuple[str, str]
+VERBOSE_NAMES = frozenset({"-v", "--verbose"})
+QUIET_NAMES = frozenset({"-q", "--quiet"})
+VERBOSITY_NAMES = frozenset({"--verbosity"})
+HEADER_NAMES = frozenset({"--no-header"})
+SEED_NAMES = frozenset({"--randomly-seed"})
+REORDER_NAMES = frozenset({"--randomly-dont-reorganize"})
+AUTOLOAD_NAMES = frozenset({"--disable-plugin-autoload"})
 
 
 def check_pytest_random(root: Path, tracked: Sequence[str], pyprojects: Mapping[str, bytes]) -> RuleResult:
@@ -86,60 +75,38 @@ def _lock_findings(name: str, lock: dict) -> list[Finding]:
 
 def flags_problem(arguments: Sequence[str], source: str) -> Problem | None:
     """What the options switch off or hide: the no-shuffle problem first; `source` names where they stand."""
-    options = list(_options(arguments))
-    if _shuffle_is_off(options):
+    called = list(options(arguments))
+    if _shuffle_is_off(called):
         return FindingEvent.UNSHUFFLED, SWITCHES_OFF_FACT.format(source)
-    if _header_is_hidden(options):
+    if _header_is_hidden(called):
         return FindingEvent.UNSEEDED, HIDES_HEADER_FACT.format(source)
     return None
 
 
-def _options(arguments: Sequence[str]) -> Iterator[Option]:
-    """The options before the first `--`, each short option of a cluster apart, with its value."""
-    index = 0
-    while index < len(arguments) and arguments[index] != "--":
-        word = arguments[index]
-        index += 1
-        if word.startswith("--"):
-            name, _, glued = word.partition("=")
-            value, index = _value(arguments, index, glued) if name in LONG_VALUE_OPTIONS else (glued, index)
-            yield name, value
-        elif word.startswith("-"):
-            for position, letter in enumerate(word[1:], 1):
-                if letter in VALUE_LETTERS:
-                    value, index = _value(arguments, index, word[position + 1 :])
-                    yield f"-{letter}", value
-                    break
-                yield f"-{letter}", ""
+def _named(called: Sequence[Option], names: frozenset[str]) -> list[Option]:
+    return [option for option in called if option.name in names]
 
 
-def _value(arguments: Sequence[str], index: int, glued: str) -> tuple[str, int]:
-    """The glued value, or the next word when nothing is glued, and the index past what was read."""
-    if glued or index >= len(arguments):
-        return glued, index
-    return arguments[index], index + 1
-
-
-def _shuffle_is_off(options: Sequence[Option]) -> bool:
-    names = {name for name, _ in options}
-    plugins = {value for name, value in options if name == "-p"}
-    seeds = [value for name, value in options if name == "--randomly-seed"]
-    autoload_off = "--disable-plugin-autoload" in names and plugins.isdisjoint(PLUGIN_LOADS)
+def _shuffle_is_off(called: Sequence[Option]) -> bool:
+    """`-p` counts only as a word of its own, as pytest reads the plugin words."""
+    plugins = {option.value for option in _named(called, PLUGIN_NAMES) if option.starts_word}
+    seeds = [option.value for option in _named(called, SEED_NAMES)]
+    autoload_off = bool(_named(called, AUTOLOAD_NAMES)) and plugins.isdisjoint(PLUGIN_LOADS)
     fixed_seed = bool(seeds) and (seeds[-1] == LAST_SEED or WHOLE_NUMBER.fullmatch(seeds[-1]) is not None)
-    return PLUGIN_OFF in plugins or "--randomly-dont-reorganize" in names or fixed_seed or autoload_off
+    return PLUGIN_OFF in plugins or bool(_named(called, REORDER_NAMES)) or fixed_seed or autoload_off
 
 
-def _header_is_hidden(options: Sequence[Option]) -> bool:
+def _header_is_hidden(called: Sequence[Option]) -> bool:
     """Whether pytest runs below verbosity 0 or with `--no-header`; `-v` adds one, `-q` takes one and `--verbosity` sets the level."""
     level = 0
-    for name, value in options:
-        if name in ("-v", "--verbose"):
+    for option in called:
+        if option.name in VERBOSE_NAMES:
             level += 1
-        elif name in ("-q", "--quiet"):
+        elif option.name in QUIET_NAMES:
             level -= 1
-        elif name == "--verbosity" and WHOLE_NUMBER.fullmatch(value):
-            level = int(value)
-    return level < 0 or any(name == "--no-header" for name, _ in options)
+        elif option.name in VERBOSITY_NAMES and WHOLE_NUMBER.fullmatch(option.value):
+            level = int(option.value)
+    return level < 0 or bool(_named(called, HEADER_NAMES))
 
 
 def _addopts_findings(name: str, content: bytes) -> list[Finding]:
@@ -201,13 +168,8 @@ def _call_findings(root: Path, tracked: Sequence[str]) -> list[Finding]:
 def _segment_problem(parts: Sequence[Segment], index: int) -> Problem | None:
     segment = parts[index]
     arguments = pytest_arguments(command_words(segment))
-    call = None if arguments is None or _lists_only(arguments) else flags_problem(arguments, "the call")
+    call = None if arguments is None or lists_only(list(options(arguments))) else flags_problem(arguments, "the call")
     return next((problem for problem in (*_assignment_problems(segment.words), call) if problem is not None), None)
-
-
-def _lists_only(arguments: Sequence[str]) -> bool:
-    """Whether the call lists tests and runs none: `--collect-only` or `--co` before the first `--`."""
-    return not LISTING_FLAGS.isdisjoint(arguments[: arguments.index("--")] if "--" in arguments else arguments)
 
 
 def _assignment_problems(words: tuple[str, ...]) -> Iterator[Problem | None]:
@@ -248,30 +210,12 @@ def _environment_findings(root: Path, tracked: Sequence[str]) -> list[Finding]:
     for name, text in readable_workflows(root, list(tracked)):
         file_lines = text.split("\n")
         marked = MARKER.lines(file_lines)
-        for variable, value, line in _environment_values(name, composed(name, text)):
+        for variable, value, line in environment_values(name, composed(name, text), (ADDOPTS_VARIABLE, AUTOLOAD_VARIABLE)):
             problem = _environment_problem(name, variable, value)
             if problem is not None and not MARKER.clears(file_lines, marked, line, line):
                 event, fact = problem
                 findings.append(Finding(Rule.PYTEST_RANDOM, name, line, fact, _fix(event, marker=True), event=event))
     return findings
-
-
-def _environment_values(name: str, document: checkout.Document) -> Iterator[tuple[str, str, int]]:
-    """Each watched variable of every `env:` mapping with its text and line; an alias or a merge key that could hide one cannot be judged."""
-    top = guarded(name, document, document.root)
-    owners = [top]
-    for job in checkout.mapping_values(guarded(name, document, checkout.mapping_values(top).get("jobs"))).values():
-        steps = checkout.mapping_values(guarded(name, document, job)).get("steps")
-        owners += [job, *(guarded(name, document, step) for step in _items(guarded(name, document, steps)))]
-    for owner in owners:
-        environment = guarded(name, document, checkout.mapping_values(owner).get("env"))
-        for variable, (_, value) in checkout.mapping_entries(environment).items():
-            if variable in (ADDOPTS_VARIABLE, AUTOLOAD_VARIABLE) and isinstance(guarded(name, document, value), yaml.ScalarNode):
-                yield variable, scalar_text(value), line_of(value)
-
-
-def _items(sequence: yaml.Node | None) -> list[yaml.Node]:
-    return sequence.value if isinstance(sequence, yaml.SequenceNode) else []
 
 
 def _environment_problem(name: str, variable: str, value: str) -> Problem | None:

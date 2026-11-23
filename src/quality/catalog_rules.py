@@ -14,11 +14,12 @@ from design.catalogs import DeclarationError, catalog_directory
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 
-from quality import checkout, makefile, repository, workflow_rules
+from quality import checkout, makefile, repository
 from quality.report import Finding, FindingEvent, RuleResult, Unparsable
 from quality.rules import Rule
 from quality.run_script import LineReading, Segment, Tool, command_words, line_problems, tool_arguments
-from quality.workflow_rules import UNREADABLE_FACT, PullRequestRunStep
+from quality.workflow_document import PullRequestRunStep, pull_request_run_steps
+from quality.workflow_rules import UNREADABLE_FACT
 
 PYPROJECT = "pyproject.toml"
 DESIGN_DISTRIBUTION = "overnightworks-design"
@@ -231,7 +232,7 @@ def check_catalog_call(root: Path, tracked: list[str]) -> RuleResult:
     extent is the steps read. The Makefile is read only when no counted step calls the check directly."""
     if not declares_catalogs(root, tracked):
         return RuleResult([], 0, False)
-    steps = list(workflow_rules.pull_request_run_steps(root, tracked))
+    steps = list(pull_request_run_steps(root, tracked))
     counted = [step for step in steps if _counts(step)]
     problems = [
         (step.workflow, number, problem)

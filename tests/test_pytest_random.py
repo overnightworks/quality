@@ -57,6 +57,8 @@ FLAG_CASES = [
     pytest.param("-n4 -k q", None, id="quiet as a separate value"),
     pytest.param("--disable-plugin-autoload -p randomly", None, id="autoload off, plugin named"),
     pytest.param("--disable-plugin-autoload -p pytest_randomly", None, id="autoload off, module named"),
+    pytest.param("-vpno:randomly", None, id="a -p inside a cluster is no plugin word"),
+    pytest.param("--disable-plugin-autoload -qp randomly", UNSHUFFLED, id="a -p inside a cluster names no plugin"),
     pytest.param("--randomly-seed=${{ inputs.seed }}", None, id="seed chosen at run time"),
     pytest.param("-q -- -x", UNSEEDED, id="before the first --"),
     pytest.param("-n auto -- -q", None, id="after the first --"),
@@ -253,8 +255,8 @@ def test_a_marker_trailing_another_commands_line_clears_that_command_only(build_
 
 @pytest.mark.parametrize(
     ("line", "event"),
-    [("pytest --collect-only -q", None), ("pytest --co -q", None), ("pytest -q", UNSEEDED), ("pytest -q -- --collect-only", UNSEEDED)],
-    ids=["collect-only", "co", "a run", "after the separator"],
+    [("pytest --collect-only -q", None), ("pytest --collectonly -q", None), ("pytest --co -q", None), ("pytest -q", UNSEEDED), ("pytest -q -- --collect-only", UNSEEDED)],
+    ids=["collect-only", "collectonly", "co", "a run", "after the separator"],
 )
 def test_a_listing_only_call_is_not_judged(build_repo, line, event):
     """RANDOM-9: a call that only lists tests runs none, so its quiet flag hides no seed."""
@@ -365,11 +367,13 @@ def test_an_env_value_built_at_run_time_is_not_read(build_repo):
         lambda: "on: push\nx: &o -q\njobs:\n  j:\n    env:\n      PYTEST_ADDOPTS: *o\n    steps: []\n",
         lambda: "on: push\nx: &e {PYTEST_ADDOPTS: -q}\njobs:\n  j:\n    steps:\n      - run: echo\n        env: *e\n",
         lambda: "on: push\nenv:\n  PYTEST_ADDOPTS: \"-k 'a\"\njobs: {}\n",
+        lambda: "on: push\njobs: [a]\n",
+        lambda: "on: push\njobs:\n  j: x\n",
     ],
-    ids=["no YAML", "merge key in env", "alias as a value", "alias as env", "value no shell words"],
+    ids=["no YAML", "merge key in env", "alias as a value", "alias as env", "value no shell words", "jobs is a list", "a job is a scalar"],
 )
 def test_a_workflow_the_env_reader_cannot_read_refuses_the_rule_naming_the_file(build_repo, build):
-    """RANDOM-12: YAML that cannot be read, an alias or a merge key where it hides `env`, or a value that is no shell words is exit 2."""
+    """RANDOM-12: YAML that cannot be read, an alias or a merge key where it hides `env`, a `jobs` or a job that is no mapping, or a value that is no shell words is exit 2."""
     assert WORKFLOW in refusals(build_repo({WORKFLOW: build()}))[RULE]
 
 
