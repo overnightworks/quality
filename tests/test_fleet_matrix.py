@@ -569,26 +569,31 @@ def test_spec_citation_on_main_reads_whether_the_clone_holds_the_table(has_spec_
     assert rule_cell(SPEC_CITATION, Gate.MAIN, declared(has_spec_table=has_spec_table)) == words
 
 
+FUTURE_SPEC_RULE = RuleRelease("future", "v0.1.0", Switch.REPORT_ONLY, (SwitchChange("v0.5.0", Switch.SPEC_TABLE),))
+
+
 @pytest.mark.parametrize(
-    ("pin", "has_spec_table", "words"),
-    [("v0.4.0", True, "report-only"), ("v0.5.0", True, "enforced"), ("v0.5.0", False, "report-only")],
-    ids=["before the switch's release", "the switch's release with a table", "the switch's release with none"],
+    ("rule", "tag", "has_spec_table", "words"),
+    [
+        (FUTURE_SPEC_RULE, "v0.4.0", True, "report-only"),
+        (FUTURE_SPEC_RULE, "v0.5.0", True, "enforced"),
+        (FUTURE_SPEC_RULE, "v0.5.0", False, "report-only"),
+        (SPEC_CITATION, SPEC_CITATION.switched[0].release, True, "enforced"),
+        (SPEC_CITATION, SPEC_CITATION.switched[0].release, False, "report-only"),
+    ],
+    ids=[
+        "before the switch's release",
+        "the switch's release with a table",
+        "the switch's release with none",
+        "spec-citation at its switch's release with a table",
+        "spec-citation at its switch's release with none",
+    ],
 )
-def test_a_pinned_gate_reads_the_spec_table_from_the_release_that_names_it(pin, has_spec_table, words):
+def test_a_pinned_gate_reads_the_spec_table_from_the_release_that_names_it(rule, tag, has_spec_table, words):
     """FLEET-118, FLEET-17: a tag before the switch's release only reports; from it the cell reads the table."""
-    rule = RuleRelease("future", "v0.1.0", Switch.REPORT_ONLY, (SwitchChange("v0.5.0", Switch.SPEC_TABLE),))
-    release = gate_release((gate_call("e" * 40),), False, {**FIRST_RELEASES, pin: "e" * 40})
+    pin = "e" * 40
+    release = gate_release((gate_call(pin),), False, {**FIRST_RELEASES, tag: pin})
     assert rule_cell(rule, release, declared(has_spec_table=has_spec_table)) == words
-
-
-@pytest.mark.parametrize(
-    ("has_spec_table", "words"), [(True, "enforced"), (False, "report-only")], ids=["a table", "no table"]
-)
-def test_spec_citation_under_the_release_of_its_switch_reads_whether_the_clone_holds_the_table(has_spec_table, words):
-    """FLEET-118: a gate pinned at the release that switches the rule reads the table."""
-    pin = "d" * 40
-    release = gate_release((gate_call(pin),), False, {**FIRST_RELEASES, SPEC_CITATION.switched[0].release: pin})
-    assert rule_cell(SPEC_CITATION, release, declared(has_spec_table=has_spec_table)) == words
 
 
 @pytest.mark.parametrize(
