@@ -1,7 +1,7 @@
 import time
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum, auto
 from functools import cached_property, partial
@@ -12,6 +12,7 @@ from quality import (
     agent_guidance,
     architecture,
     baseline_file,
+    baseline_fix,
     catalog_rules,
     checkout,
     clones,
@@ -44,14 +45,11 @@ from quality.config import (
     read_declarations,
 )
 from quality.deadline import RunDeadline
-from quality.output import SEPARATOR, counted
 from quality.report import (
     CannotJudge,
     Extent,
     Finding,
-    Instruction,
     Note,
-    NoteEvent,
     Reason,
     RuleResult,
     ScannerRun,
@@ -216,14 +214,6 @@ class Fix(Enum):
 DRY_RUN_WORD = "--dry-run"
 DRY_RUN_COMMAND = f"{baseline_file.FIX_COMMAND} {DRY_RUN_WORD}"
 FIX_RUN_COMMAND = {Fix.WRITE: baseline_file.FIX_COMMAND, Fix.DRY_RUN: DRY_RUN_COMMAND}
-
-
-PLANNED_EVENT = {
-    NoteEvent.LOWERED: NoteEvent.LOWER,
-    NoteEvent.DROPPED: NoteEvent.DROP,
-    NoteEvent.MOVED: NoteEvent.MOVE,
-    NoteEvent.RECORDED: NoteEvent.RECORD,
-}
 
 
 @dataclass(frozen=True)
@@ -519,123 +509,14 @@ def _judge_files(inputs: RunInputs) -> AreaVerdict:
     )
 
 
-def _require_whole_history(inputs: RunInputs) -> None:
-    if checkout.is_shallow(inputs.root):
-        raise CannotJudge("this clone is shallow, so git cannot show the ceiling is new", (checkout.UNSHALLOW_STEP,))
-
-
-def _require_no_ceiling_in_git(inputs: RunInputs) -> None:
-    if baseline_file.BASELINE_PATH in inputs.tracked or checkout.blobs_of(inputs.root, baseline_file.BASELINE_PATH):
-        raise CannotJudge(f"{baseline_file.BASELINE_PATH} is gone from the tree but git holds it", (ratchet.RESTORE_STEP,))
-    _require_whole_history(inputs)
-
-
-def _require_no_table_in_git(inputs: RunInputs, table: str) -> None:
-    name = baseline_file.BASELINE_PATH
-    revisions = [f":{name}"] if name in inputs.tracked else []
-    revisions += checkout.blobs_of(inputs.root, name)
-    try:
-        held = any(baseline_file.holds_table(checkout.blob(inputs.root, revision), table) for revision in revisions)
-    except baseline_file.SizeError as error:
-        raise CannotJudge(str(error), (ratchet.RESTORE_STEP,)) from error
-    if held:
-        raise CannotJudge(f"{name} lost its [{table}] table, which git holds", (ratchet.RESTORE_STEP,))
-    _require_whole_history(inputs)
-
-
-def _written(inputs: RunInputs, fix: ratchet.CeilingFix) -> ratchet.CeilingFix | DryRun:
-    """The ceiling rendered, so one no file can hold refuses a dry run too; written, when it changed or its text
-    is not the file's, only by the fix."""
-    try:
-        text = baseline_file.render_baseline(fix.ceiling)
-        if not fix.changed:
-            fix = replace(fix, text_differs=repository.read_text(inputs.root, baseline_file.BASELINE_PATH) != text)
-        if fix.changed and inputs.fix is Fix.WRITE:
-            repository.write_text(inputs.root, baseline_file.BASELINE_PATH, text)
-    except (repository.RepositoryFileError, baseline_file.SizeError) as error:
-        raise CannotJudge(str(error)) from error
+def _recorded(inputs: RunInputs, sources: dict[str, bytes], held: baseline_file.Baseline | None) -> ratchet.CeilingFix | DryRun:
+    """The ceiling `--fix` makes, written under a write fix, wrapped as a dry run under `--dry-run`."""
+    made = baseline_fix.fix_ceiling(
+        inputs.root, inputs.tracked, sources, held, lambda: _required(inputs.allow_lists).generated,
+        dry_run=inputs.fix is Fix.DRY_RUN, rerun_command=FIX_RUN_COMMAND.get(inputs.fix, baseline_file.FIX_COMMAND),
+    )
+    fix = baseline_fix.written(inputs.root, made, write=inputs.fix is Fix.WRITE)
     return DryRun(fix) if inputs.fix is Fix.DRY_RUN else fix
-
-
-def _with_what_they_held(gone: dict[baseline_file.Key, str], held: baseline_file.SizeEntries) -> dict[baseline_file.Key, str]:
-    """Each gone entry's reason, then the value the ceiling held."""
-    return {key: SEPARATOR.join((why, f"was {ratchet.describe_value(key.metric, held[key])}")) for key, why in gone.items()}
-
-
-def _commit_repair_step(fix: Fix | None) -> Instruction:
-    return Instruction(f"commit the repaired {baseline_file.BASELINE_PATH}, then run {FIX_RUN_COMMAND.get(fix, baseline_file.FIX_COMMAND)} again")
-
-
-def _ceiling_lineage(inputs: RunInputs) -> tuple[baseline_file.Baseline, ratchet.Renames] | None:
-    """The ceiling at its last commit and what git renamed from there to the index; None where no commit holds it."""
-    change = checkout.last_change(inputs.root, baseline_file.BASELINE_PATH)
-    if change is None:
-        return None
-    if not change.has_parent and checkout.is_shallow(inputs.root):
-        fact = f"this clone is shallow, so git cannot show where {baseline_file.BASELINE_PATH} last changed"
-        raise CannotJudge(fact, (checkout.UNSHALLOW_STEP,))
-    where = f"{baseline_file.BASELINE_PATH} at its last commit {change.commit}"
-    try:
-        text = process.read_blob(inputs.root, change.commit, baseline_file.BASELINE_PATH, f"cannot read {where}", f"cannot read {where}")
-    except process.ProcessError as error:
-        raise CannotJudge(str(error)) from error
-    if text is None:
-        return None
-    try:
-        committed = baseline_file.load_baseline(text)
-    except baseline_file.SizeError as error:
-        raise CannotJudge(f"the ceiling at its last commit {change.commit}: {error}", (_commit_repair_step(inputs.fix),)) from error
-    return committed, ratchet.renames_of(checkout.renamed_since(inputs.root, change.commit))
-
-
-def _followed(inputs: RunInputs, held: baseline_file.Baseline) -> ratchet.CeilingFix:
-    lineage = _ceiling_lineage(inputs)
-    return ratchet.CeilingFix(held, ()) if lineage is None else ratchet.follow_renames(held, *lineage, frozenset(inputs.tracked))
-
-
-def _with_recorded_jobs(inputs: RunInputs, made: ratchet.CeilingFix) -> ratchet.CeilingFix:
-    """The fix with the job table recorded where the ceiling has none, git never held one and a judged job is debt;
-    a first recording carries the table in the ceiling alone, which its row counts."""
-    if made.ceiling.job_minutes is not None:
-        return made
-    limits = workflow_rules.recordable_job_limits(inputs.root, inputs.tracked)
-    if not limits:
-        return made
-    _require_no_table_in_git(inputs, baseline_file.JOB_MINUTES)
-    fact = counted(len(limits), baseline_file.JOB_LIMIT)
-    recorded = () if made.first else (Note(baseline_file.BASELINE_PATH, NoteEvent.RECORDED, fact),)
-    return replace(made, ceiling=replace(made.ceiling, job_minutes=limits), changes=(*made.changes, *recorded))
-
-
-def _fix_ceiling(inputs: RunInputs, sources: dict[str, bytes], held: baseline_file.Baseline | None) -> ratchet.CeilingFix:
-    """The ceiling lowered, or recorded where git never held one; the caller writes it."""
-    tree = ratchet.measure(sources)
-    ratchet.complete(tree)
-    generated = _required(inputs.allow_lists).generated
-    measurements = ratchet.without_generated(tree, generated).measurements
-    pairs = clones.find_pairs(sources).pairs
-    if held is None:
-        _require_no_ceiling_in_git(inputs)
-        first = ratchet.CeilingFix(baseline_file.Baseline(ratchet.debt(measurements), pairs), (), first=True)
-        return _with_recorded_jobs(inputs, first)
-    if held.clones is None:
-        _require_no_table_in_git(inputs, baseline_file.CLONES)
-    followed = _followed(inputs, held)  # renames first, so a renamed file's entries move instead of falling as gone
-    gone = ratchet.gone_entries(followed.ceiling.size, measurements, frozenset(inputs.tracked), generated)
-    if inputs.fix is Fix.DRY_RUN:
-        gone = _with_what_they_held(gone, followed.ceiling.size)
-    lowered = ratchet.lower_ceiling(followed.ceiling, measurements, pairs, gone)
-    jobs = workflow_rules.lower_job_entries(inputs.root, inputs.tracked, lowered.ceiling)
-    changes = (*followed.changes, *lowered.changes, *jobs.changes)
-    return _with_recorded_jobs(inputs, replace(jobs, changes=changes))
-
-
-def _reported(ceiling: ratchet.CeilingFix | DryRun) -> ratchet.CeilingFix:
-    """The fix whose changes the debt rows list: done, or under a dry run planned."""
-    if isinstance(ceiling, ratchet.CeilingFix):
-        return ceiling
-    planned = tuple(replace(change, event=PLANNED_EVENT[change.event]) for change in ceiling.fix.changes)
-    return replace(ceiling.fix, changes=planned)
 
 
 def _judge_debt(inputs: RunInputs) -> AreaVerdict:
@@ -643,14 +524,14 @@ def _judge_debt(inputs: RunInputs) -> AreaVerdict:
     baseline = sources if isinstance(sources, CannotJudge) else _attempt(lambda: judged_baseline(inputs.root))
     ceiling = None
     if inputs.fix is not None and not isinstance(baseline, CannotJudge):
-        ceiling = _attempt(lambda: _written(inputs, _fix_ceiling(inputs, sources, baseline)))
+        ceiling = _attempt(lambda: _recorded(inputs, sources, baseline))
     made = ceiling.fix if isinstance(ceiling, DryRun) else ceiling
     fixed = isinstance(made, ratchet.CeilingFix)
     size, clone = _judge_baseline_rules(
         sources, made.ceiling if fixed else baseline, inputs.allow_lists, frozenset(inputs.tracked)
     )
     if fixed:
-        size = ratchet.after_fix(_required(size), _reported(ceiling))  # the config was read and the tree is complete
+        size = ratchet.after_fix(_required(size), baseline_fix.reported(made, planned=isinstance(ceiling, DryRun)))  # the config was read and the tree is complete
     timeouts = _attempt(
         lambda: workflow_rules.check_job_timeouts(inputs.root, inputs.tracked, made.ceiling if fixed else judged_baseline(inputs.root))
     )

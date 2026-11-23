@@ -86,6 +86,7 @@ layers = [
     "sonar_properties | sonar_scanner",
     "sonar | fleet",
     "check | staged",
+    "baseline_fix",
     "pin",
     "advisories",
     "python_lint",
