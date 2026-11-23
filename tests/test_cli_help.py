@@ -167,7 +167,7 @@ def test_the_check_help_stands_in_its_frame(capsys):
         "                compose ports, the Python floor, literal page text, catalog\n"
         "                texts in test locators\n"
         "  debt          size, near copies and job time limits against the debt\n"
-        "                ceiling (quality/baseline.toml)\n"
+        "                ceiling (quality/baseline.toml), and spec IDs no test cites\n"
         "  imports       the import contracts\n"
         "  secrets       secrets in the committed history\n"
         "  workflows     GitHub workflows: lint, security, concurrency, the workflows\n"

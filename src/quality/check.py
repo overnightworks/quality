@@ -33,6 +33,7 @@ from quality import (
     repository,
     root_layout,
     scanners,
+    spec_citations,
     twins,
     workflow_rules,
 )
@@ -654,7 +655,10 @@ def _judge_debt(inputs: RunInputs) -> AreaVerdict:
         lambda: workflow_rules.check_job_timeouts(inputs.root, inputs.tracked, made.ceiling if fixed else judged_baseline(inputs.root))
     )
     twin = sources if isinstance(sources, CannotJudge) else twins.check_test_twins(sources)
-    judged: dict[Rule, Judged] = {Rule.SIZE: size, Rule.CLONE: clone, Rule.JOB_TIMEOUT: timeouts, Rule.TEST_TWIN: twin}
+    citations = sources if isinstance(sources, CannotJudge) else _attempt(lambda: spec_citations.check_spec_citations(inputs.root, inputs.tracked, sources))
+    judged: dict[Rule, Judged] = {
+        Rule.SIZE: size, Rule.CLONE: clone, Rule.JOB_TIMEOUT: timeouts, Rule.TEST_TWIN: twin, Rule.SPEC_CITATION: citations
+    }
     return _area_verdict(Area.DEBT, judged, ceiling=ceiling)
 
 

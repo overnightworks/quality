@@ -56,7 +56,7 @@ class Area(StrEnum):
     help_line: str
 
     FILES = "files", "what the repository tracks: layout, tests, env files, compose ports, the Python floor, literal page text, catalog texts in test locators"
-    DEBT = "debt", "size, near copies and job time limits against the debt ceiling (quality/baseline.toml)"
+    DEBT = "debt", "size, near copies and job time limits against the debt ceiling (quality/baseline.toml), and spec IDs no test cites"
     IMPORTS = "imports", "the import contracts"
     SECRETS = "secrets", "secrets in the committed history"
     WORKFLOWS = "workflows", "GitHub workflows: lint, security, concurrency, the workflows a pull request triggers, pytest -n, run-time installs, the languages standard's catalog-check and render-pass"
@@ -82,6 +82,7 @@ class Rule(StrEnum):
     CLONE = "clone", Area.DEBT, "v0.4.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE)
     JOB_TIMEOUT = "job-timeout", Area.DEBT, RELEASE_0_12, Switch.ALWAYS
     TEST_TWIN = "test-twin", Area.DEBT, RELEASE_0_23, Switch.REPORT_ONLY
+    SPEC_CITATION = "spec-citation", Area.DEBT, None, Switch.REPORT_ONLY
     IMPORT_CONTRACT = "import-contract", Area.IMPORTS, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
     CLAUDE_MD = "claude-md", Area.FILES, RELEASE_0_3, Switch.ALWAYS
     AGENTS_MD = "agents-md", Area.FILES, RELEASE_0_11, Switch.ALWAYS
