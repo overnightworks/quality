@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from email.message import Message
 from pathlib import Path
-from urllib.parse import quote
 
 from quality import ci_time, fleet_job_time, output
 from quality.deadline import RunDeadline
@@ -17,7 +16,7 @@ from quality.report import CannotJudge
 WINDOW_DAYS = 7
 PAGE_SIZE = 100
 CALLS_PER_REPORT = 600
-RUNS_URL = "https://api.github.com/repos/{name}/actions/runs?created={created}&per_page={size}&page={page}"
+RUNS_URL = "https://api.github.com/repos/{name}/actions/runs?per_page={size}&page={page}"
 PULL_REQUEST, PUSH = "pull_request", "push"
 COUNTED_EVENTS = frozenset({PULL_REQUEST, PUSH})
 RED_CONCLUSIONS = frozenset({"failure", "timed_out"})
@@ -69,7 +68,7 @@ class PartlyRead:
 
 @dataclass(frozen=True)
 class FleetCiTime:
-    """One entry per repository, the calls the whole read made and the window start the runs query used."""
+    """One entry per repository, the calls the whole read made and the instant from which a run counts."""
 
     window_start: datetime
     rows: dict[str, WeeklyCiTime | PartlyRead]
@@ -101,13 +100,12 @@ def read_fleet_ci_time(
     """Each repository's weekly CI time, read page by page within the report's call cap and deadline, then the jobs of
     a sample of each one's runs within what both leave."""
     window_start = datetime.combine(today - timedelta(days=WINDOW_DAYS), time.min, UTC)
-    created = quote(f">={window_start.date()}", safe="")
     headers = api_headers(token)
     rows: dict[str, WeeklyCiTime | PartlyRead] = {}
     sampled: dict[str, list[fleet_job_time.RunToSample]] = {}
     calls = 0
     for name in names:
-        rows[name], sampled[name], used = _read_repository(name, created, headers, fetch, default_branch, CALLS_PER_REPORT - calls, deadline)
+        rows[name], sampled[name], used = _read_repository(name, window_start, headers, fetch, default_branch, CALLS_PER_REPORT - calls, deadline)
         calls += used
     jobs = {}
     share = sum(bool(runs) for runs in sampled.values())
@@ -137,7 +135,7 @@ def document(fleet: FleetCiTime, generated_at: datetime) -> str:
     """The weekly numbers as the JSON document platform's alert reads: one flat row per repository in the report's order,
     only numbers and booleans beside the name. A repository is measured when it has a median over at least one counted
     commit, and breaches when that median is strictly above LIMIT; `complete` is false when any repository's runs were
-    cut by the call cap or the deadline or could not be read. The window is what the runs query reads: midnight UTC
+    cut by the call cap or the deadline or could not be read. The window is the runs read: midnight UTC
     seven days before the report's day, up to the moment the document is made."""
     generated = generated_at.astimezone(UTC)
     return json.dumps(
@@ -175,47 +173,76 @@ def _duration(wall: timedelta) -> str:
 
 
 def _read_repository(
-    name: str, created: str, headers: Mapping[str, str], fetch: RunsFetch, default_branch: str, budget: int, deadline: RunDeadline
+    name: str, window_start: datetime, headers: Mapping[str, str], fetch: RunsFetch, default_branch: str, budget: int, deadline: RunDeadline
 ) -> tuple[WeeklyCiTime | PartlyRead, list[fleet_job_time.RunToSample], int]:
-    runs: list[_Run] = []
+    runs: dict[int, _Run] = {}
     pages = 0
     try:
         while pages < budget and deadline.left() > 0:
             pages += 1
-            body, _ = fetch(RUNS_URL.format(name=name, created=created, size=PAGE_SIZE, page=pages), headers, _unreadable)
-            answered, total = _parse_page(body)
-            runs.extend(answered)
-            if pages * PAGE_SIZE >= total:
-                return _weekly(runs, default_branch), [fleet_job_time.RunToSample(run.run_id, run.created) for run in runs if run.finished], pages
+            body, _ = fetch(RUNS_URL.format(name=name, size=PAGE_SIZE, page=pages), headers, _unreadable)
+            page = _parse_page(body)
+            runs.update({run.run_id: run for run in page.runs if run.created >= window_start})
+            if page.oldest is not None and page.oldest < window_start:
+                return _read(runs, default_branch, pages)
+            if len(page.entries) < PAGE_SIZE:
+                if (pages - 1) * PAGE_SIZE + len(page.entries) < page.total:
+                    break
+                return _read(runs, default_branch, pages)
     except CannotJudge:
         return PartlyRead(UNREADABLE), [], pages
     return PartlyRead(f"{output.counted(pages, 'page')} read"), [], pages
+
+
+def _read(runs: dict[int, _Run], default_branch: str, pages: int) -> tuple[WeeklyCiTime, list[fleet_job_time.RunToSample], int]:
+    counted = list(runs.values())
+    return _weekly(counted, default_branch), [fleet_job_time.RunToSample(run.run_id, run.created) for run in counted if run.finished], pages
 
 
 def _unreadable(error: Exception) -> CannotJudge:
     return CannotJudge(UNREADABLE)
 
 
-def _parse_page(body: bytes) -> tuple[list[_Run], int]:
-    """The counted runs of one page and the total GitHub reports; anything else is unreadable."""
+@dataclass(frozen=True)
+class _Page:
+    """One page of the listing: its counted runs, the creation of its oldest entry of any event, how many entries it
+    held and the total GitHub reports."""
+
+    runs: list[_Run]
+    oldest: datetime | None
+    entries: list[object]
+    total: int
+
+
+def _parse_page(body: bytes) -> _Page:
+    """The counted runs of one page, its oldest creation and the total GitHub reports; anything else is unreadable."""
     try:
         page = json.loads(body)
         total = page["total_count"]
         if not isinstance(total, int):
             raise _unreadable(ValueError(total))
-        return [run for entry in page["workflow_runs"] if (run := _run(entry))], total
+        entries = page["workflow_runs"]
+        created = [_created(entry) for entry in entries]
+        return _Page([run for entry, moment in zip(entries, created, strict=True) if (run := _run(entry, moment))], min(created, default=None), entries, total)
     except (ValueError, KeyError, TypeError, RecursionError) as error:
         raise _unreadable(error) from error
 
 
-def _run(entry: Mapping[str, object]) -> _Run | None:
+def _created(entry: Mapping[str, object]) -> datetime:
+    created = ci_time.parsed_moment(entry["created_at"])
+    if created is None:
+        raise _unreadable(ValueError(entry))
+    return created
+
+
+def _run(entry: Mapping[str, object], created: datetime) -> _Run | None:
     """None for an event no commit's CI time counts; a counted run missing its moments is unreadable."""
     if entry["event"] not in COUNTED_EVENTS:
         return None
-    created, updated = ci_time.parsed_moment(entry["created_at"]), ci_time.parsed_moment(entry["updated_at"])
+    updated = ci_time.parsed_moment(entry["updated_at"])
     run_id, sha, branch = entry["id"], entry["head_sha"], entry["head_branch"] or ""
     attempt = entry["run_attempt"]
-    if created is None or updated is None or type(run_id) is not int or type(attempt) is not int or not isinstance(sha, str) or not isinstance(branch, str):
+    if updated is None or type(run_id) is not int or type(attempt) is not int or not isinstance(sha, str) or not isinstance(branch, str):
         raise _unreadable(ValueError(entry))
     conclusion = entry["conclusion"]
     return _Run(run_id, sha, entry["event"], branch, created, updated, entry["status"] == ci_time.COMPLETED, conclusion if isinstance(conclusion, str) else None, attempt)
