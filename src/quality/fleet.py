@@ -481,15 +481,11 @@ def render(
     between: list[fleet_clones.RepositoryPair],
 ) -> tuple[str, ...]:
     heading = f"**Fleet report, {today.isoformat()}, quality {__version__}**"
-    table = [table_line(COLUMNS), "|---" * len(COLUMNS) + "|", *(table_line(cells(row)) for row in rows)]
+    table = table_lines(COLUMNS, (cells(row) for row in rows))
     pins = release_tags_or_none(tags)
     matrix_heading = f"**Repo × rule, {newest_release_words(tags)}**"
     every_release = f"Every gate release enforces {words_joined([rule.rule for rule in EVERY_RELEASE_ENFORCES])}."
-    matrix = [
-        table_line(MATRIX_COLUMNS),
-        "|---" * len(MATRIX_COLUMNS) + "|",
-        *(table_line(matrix_cells(row, pins)) for row in rows),
-    ]
+    matrix = table_lines(MATRIX_COLUMNS, (matrix_cells(row, pins) for row in rows))
     ci_heading = f"**CI time, last {fleet_ci_time.WINDOW_DAYS} days{output.SEPARATOR}{output.counted(ci_time.calls, 'API call')}**"
     ci_table = table_lines(fleet_ci_time.COLUMNS, (fleet_ci_time.table_cells(name, ci_time) for name in ci_time.rows))
     between_table = table_lines(fleet_clones.COLUMNS, (pair.cells for pair in between))
