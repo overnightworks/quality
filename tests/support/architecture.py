@@ -1,6 +1,8 @@
 import json
+from pathlib import Path
 
 from quality import architecture
+from quality.report import RuleResult
 
 SHOP = {"src/shop/__init__.py": "", "src/shop/web.py": "", "src/shop/api.py": "", "src/shop/db.py": "x = 1\n"}
 
@@ -54,3 +56,30 @@ def one(options: dict) -> dict[str, dict]:
 
 
 GUARDED_CHANGES = 'import contract "guarded" changes '
+
+
+CORE_MODULE = "src/skat/table/core.py"
+CALLING_AND_MEMBER = ["skat.table.** -> agents.calling", "skat.table.** -> agents.member"]
+CORE_KEEPS_TO_TWO_OF_AGENTS = {
+    "type": "forbidden", "source_modules": ["skat.table"], "forbidden_modules": ["agents"], "ignore_imports": CALLING_AND_MEMBER,
+}
+SKAT = {
+    "src/skat/__init__.py": "", "src/skat/table/__init__.py": "", CORE_MODULE: "", "src/skat/web.py": "",
+    "src/skat/helper.py": "",
+}
+
+
+def judged_in(root: Path, files: dict[str, str], contracts: dict[str, dict], untracked: tuple[str, ...] = (), **session) -> RuleResult:
+    """`check_contracts` over `files` written under `root` and tracked but for `untracked`, with `skat` the one root
+    package and agents external."""
+    for name, content in files.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text(content, encoding="utf-8")
+    configs = {"pyproject.toml": contracts_toml(contracts, ("skat",), include_external_packages=True, **session)}
+    return architecture.check_contracts(root, [name for name in files if name not in untracked], configs)
+
+
+def judged_core(root: Path, core: str, contract: dict | None = None, **session) -> RuleResult:
+    """The `skat` repository whose `skat.table.core` holds `core`, judged against `contract` (by default, the core
+    keeps to `agents.calling` and `agents.member`)."""
+    return judged_in(root, {**SKAT, CORE_MODULE: core}, one(contract or CORE_KEEPS_TO_TWO_OF_AGENTS), **session)
