@@ -1,0 +1,144 @@
+from collections.abc import Mapping
+
+import pytest
+
+from quality.suites import Layer, Suites, count_suites
+
+PYTHON_TEST = "def test_a():\n    pass\n"
+SCRIPT_TEST = "test('a', () => {});\n"
+UNIT, FLOW, LIVE = Layer.UNIT_INTEGRATION, Layer.FLOW, Layer.LIVE
+
+
+def counted(files: Mapping[str, str | bytes]) -> Suites:
+    sources = {path: content.encode() if isinstance(content, str) else content for path, content in files.items()}
+    return count_suites(list(files), sources)
+
+
+def python_counts(source: str) -> tuple[int, int, int]:
+    found = counted({"tests/test_a.py": source})
+    return found.layers[UNIT], found.skipped, found.fixme
+
+
+def script_counts(source: str) -> tuple[int, int, int]:
+    found = counted({"web/a.test.ts": source})
+    return found.layers[UNIT], found.skipped, found.fixme
+
+
+@pytest.mark.parametrize(
+    ("path", "manifest", "source", "layer"),
+    [
+        ("tests/test_a.py", None, PYTHON_TEST, UNIT),
+        ("tests/e2e/test_a.py", None, PYTHON_TEST, FLOW),
+        ("tests/e2e/live/test_a.py", None, PYTHON_TEST, LIVE),
+        ("api/tests/e2e/test_a.py", "api/pyproject.toml", PYTHON_TEST, FLOW),
+        ("api/tests/e2e/live/test_a.py", "api/pyproject.toml", PYTHON_TEST, LIVE),
+        ("web/src/a.test.ts", "web/package.json", SCRIPT_TEST, UNIT),
+        ("web/e2e/a.spec.ts", "web/package.json", SCRIPT_TEST, FLOW),
+        ("web/e2e/live/a.spec.ts", "web/package.json", SCRIPT_TEST, LIVE),
+    ],
+    ids=[
+        "unit under the root tests", "flow under the root e2e", "live under the root live", "flow under a project's e2e",
+        "live under a project's live", "unit beside its source", "flow in a frontend project's e2e", "live in a frontend project's live",
+    ],
+)
+def test_a_test_is_counted_in_the_layer_its_path_names(path, manifest, source, layer):
+    """FLEET-121: the layer comes from the path alone."""
+    found = counted({path: source, **({manifest: ""} if manifest else {})})
+    assert {each: found.layers[each] for each in Layer} == {each: int(each is layer) for each in Layer}
+
+
+@pytest.mark.parametrize(
+    ("source", "tests"),
+    [
+        ("test('a', () => {});", 1),
+        ("it('a', () => {});", 1),
+        ("test(`a ${b}`, () => {});", 1),
+        ("it.skip('a', () => {});", 1),
+        ("test.only('a', () => {});", 1),
+        ("test.fixme('a', () => {});", 1),
+        ("it.concurrent('a', () => {});", 1),
+        ("it.skipIf(c)('a', () => {});", 1),
+        ("it.runIf(c)('a', () => {});", 1),
+        ("it.each([1, 2])('a', () => {});", 1),
+        ("test.describe('d', () => { test('a', () => {}); });", 1),
+        ("test('a', async () => { await test.step('s', async () => {}); });", 1),
+        ("test.use({ locale: 'de' });", 0),
+        ("beforeEach(() => {});", 0),
+        ("x.test('a', () => {});", 0),
+        ("test.skip(browserName === 'x', 'why');", 0),
+        ("test.describe.configure({ mode: 'serial' });", 0),
+    ],
+    ids=[
+        "test", "it", "template title", "skip", "only", "fixme", "concurrent", "skipIf", "runIf", "each", "inside a describe",
+        "step is no test", "use is no test", "hook is no test", "member call is no test", "runtime skip is no test", "configure is no test",
+    ],
+)
+def test_a_script_call_is_a_test_only_in_the_forms_the_standard_names(source, tests):
+    """FLEET-120: a call of it or test, bare or with a modifier, whose first argument is a string or a template."""
+    assert script_counts(source)[0] == tests
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("@pytest.mark.skip\ndef test_a(): ...", (1, 1, 0)),
+        ('@pytest.mark.skip(reason="x")\ndef test_a(): ...', (1, 1, 0)),
+        ('@pytest.mark.skipif(True, reason="x")\ndef test_a(): ...', (1, 1, 0)),
+        ("@pytest.mark.xfail\ndef test_a(): ...", (1, 0, 1)),
+        ("@pytest.mark.slow\ndef test_a(): ...", (1, 0, 0)),
+        ("@pytest.mark.skip\nclass TestA:\n    def test_a(self): ...\n    def test_b(self): ...", (2, 2, 0)),
+        ("pytestmark = pytest.mark.skip\ndef test_a(): ...\ndef test_b(): ...", (2, 2, 0)),
+        ("pytestmark = [pytest.mark.slow, pytest.mark.xfail]\ndef test_a(): ...", (1, 0, 1)),
+        ("pytestmark = (pytest.mark.skipif(True, reason='x'),)\ndef test_a(): ...", (1, 1, 0)),
+        ("slow = pytest.mark.skipif(True, reason='x')\n@slow\ndef test_a(): ...", (1, 1, 0)),
+        ("@pytest.mark.skip\n@pytest.mark.xfail\ndef test_a(): ...", (1, 1, 1)),
+        ("@pytest.mark.parametrize('x', [1, 2, 3])\ndef test_a(x): ...", (1, 0, 0)),
+        ("def helper(): ...\ndef test_a(): ...", (1, 0, 0)),
+    ],
+    ids=[
+        "bare skip", "called skip", "skipif", "xfail is fixme", "other mark", "class mark", "module mark", "list of marks", "tuple of marks",
+        "module alias", "skip and xfail count in both", "parametrized counts once", "helper is no test",
+    ],
+)
+def test_a_python_test_counts_the_skip_and_xfail_marks_that_reach_it(source, expected):
+    """FLEET-120, FLEET-122, FLEET-123: a test function counts once, and each skip or xfail mark that reaches it counts."""
+    assert python_counts(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("it.skip('a', f);", (1, 1, 0)),
+        ("it.skipIf(c)('a', f);", (1, 1, 0)),
+        ("it.runIf(c)('a', f);", (1, 0, 0)),
+        ("test.fixme('a', f);", (1, 0, 1)),
+        ("describe.skip('d', () => { it('a', f); it('b', f); });", (2, 2, 0)),
+        ("describe.skipIf(c)('d', () => { it('a', f); });", (1, 1, 0)),
+        ("test.describe.skip('d', () => { test('a', f); });", (1, 1, 0)),
+        ("test.describe.fixme('d', () => { test('a', f); test('b', f); });", (2, 0, 2)),
+        ("test('a', async () => { test.skip(name === 'x', 'why'); test.skip(other); });", (1, 1, 0)),
+        ("test.describe('d', () => { test.skip(c); test('a', f); test('b', f); });", (2, 2, 0)),
+        ("test.describe.fixme('d', () => { test.skip('a', f); });", (1, 1, 1)),
+        ("test.describe('d', () => { test('a', f); });\ntest('b', f);", (2, 0, 0)),
+    ],
+    ids=[
+        "skip", "skipIf", "runIf is no mark", "fixme", "describe skip", "describe skipIf", "playwright describe skip",
+        "playwright describe fixme", "runtime skip marks its test once", "runtime skip in a describe marks every test",
+        "both marks", "a mark stays in its describe",
+    ],
+)
+def test_a_script_test_counts_the_skip_and_fixme_marks_that_reach_it(source, expected):
+    """FLEET-122, FLEET-123: a skip or fixme on the call, an enclosing describe or a runtime call counts each test it reaches."""
+    assert script_counts(source) == expected
+
+
+def test_a_file_that_cannot_be_read_is_counted_apart_and_the_others_still_count():
+    """FLEET-124: a Python file that does not parse, a script that is not UTF-8 and one the lexer refuses are not read."""
+    found = counted({
+        "tests/test_good.py": PYTHON_TEST,
+        "tests/test_bad.py": "def (:\n",
+        "web/good.test.ts": SCRIPT_TEST,
+        "web/bytes.test.ts": b"\xff\xfe",
+        "web/open.test.ts": "/* never closed",
+    })
+    assert (found.layers[UNIT], found.unread) == (2, 3)
