@@ -200,9 +200,9 @@ def test_the_tests_per_layer_table_stands_last_with_the_counts_of_each_cloned_ti
     assert (printed.code, printed.out.splitlines()[-5:]) == (0, [
         "**Tests per layer**",
         "",
-        "| Repo | Unit + integration | Flow | Live | Skipped | Fixme | Note |",
-        "|---|---|---|---|---|---|---|",
-        "| o/alpha | 3 | 1 | 1 | 1 | 1 | 1 file not read |",
+        "| Repo | Unit | Integration | Flow | Live | Skipped | Fixme | Note |",
+        "|---|---|---|---|---|---|---|---|",
+        "| o/alpha | 3 | 0 | 1 | 1 | 1 | 1 | 1 file not read |",
     ])
 
 
@@ -212,7 +212,7 @@ def test_a_repository_that_cannot_be_cloned_says_so_in_the_tests_per_layer_table
     printed = report_in(write_fleet(tmp_path / "fleet", [alpha, missing]), capsys, monkeypatch, ticks(0, 1, 2, 3, 4))
     assert (printed.code, printed.out.splitlines()[-2:]) == (
         2,
-        ["| o/alpha | 0 | 0 | 0 | 0 | 0 |  |", "| o/gone | — | — | — | — | — | cannot judge: cannot clone (git exited 128) |"],
+        ["| o/alpha | 0 | 0 | 0 | 0 | 0 | 0 |  |", "| o/gone | — | — | — | — | — | — | cannot judge: cannot clone (git exited 128) |"],
     )
 
 

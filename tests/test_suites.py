@@ -6,7 +6,7 @@ from quality.suites import Layer, Suites, count_suites
 
 PYTHON_TEST = "def test_a():\n    pass\n"
 SCRIPT_TEST = "test('a', () => {});\n"
-UNIT, FLOW, LIVE = Layer.UNIT_INTEGRATION, Layer.FLOW, Layer.LIVE
+UNIT, INTEGRATION, FLOW, LIVE = Layer.UNIT, Layer.INTEGRATION, Layer.FLOW, Layer.LIVE
 
 
 def counted(files: Mapping[str, str | bytes]) -> Suites:
@@ -132,6 +132,41 @@ def test_a_python_test_counts_the_skip_and_xfail_marks_that_reach_it(source, exp
 def test_a_script_test_counts_the_skip_and_fixme_marks_that_reach_it(source, expected):
     """FLEET-122, FLEET-123: a skip or fixme on the call, an enclosing describe or a runtime call counts each test it reaches."""
     assert script_counts(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("path", "source", "layer", "skipped"),
+    [
+        ("tests/test_a.py", "@pytest.mark.integration\ndef test_a(): ...", INTEGRATION, 0),
+        ("tests/test_a.py", "@pytest.mark.integration()\ndef test_a(): ...", INTEGRATION, 0),
+        ("tests/test_a.py", "@pytest.mark.integration\nclass TestA:\n    def test_a(self): ...", INTEGRATION, 0),
+        ("tests/test_a.py", "class TestA:\n    pytestmark = pytest.mark.integration\n    def test_a(self): ...", INTEGRATION, 0),
+        ("tests/test_a.py", "pytestmark = [pytest.mark.slow, pytest.mark.integration]\ndef test_a(): ...", INTEGRATION, 0),
+        ("tests/test_a.py", "pytestmark = (pytest.mark.integration,)\ndef test_a(): ...", INTEGRATION, 0),
+        ("tests/test_a.py", "slow = pytest.mark.integration\n@slow\ndef test_a(): ...", INTEGRATION, 0),
+        ("tests/test_a.py", "def test_a(): ...", UNIT, 0),
+        ("tests/test_a.py", "@pytest.mark.slow\ndef test_a(): ...", UNIT, 0),
+        ("tests/e2e/test_a.py", "@pytest.mark.integration\ndef test_a(): ...", FLOW, 0),
+        ("tests/e2e/live/test_a.py", "@pytest.mark.integration\ndef test_a(): ...", LIVE, 0),
+        ("tests/test_a.py", "@pytest.mark.skip\n@pytest.mark.integration\ndef test_a(): ...", INTEGRATION, 1),
+        ("tests/test_a.py", "@pytest.mark.parametrize('x', [pytest.param(1, marks=pytest.mark.integration)])\ndef test_a(x): ...", UNIT, 0),
+    ],
+    ids=[
+        "bare mark", "called mark", "class mark", "class pytestmark", "module pytestmark list", "module pytestmark tuple", "module alias",
+        "unmarked is unit", "other mark is unit", "the e2e path wins", "the live path wins", "skipped and integration count in both",
+        "a mark given only through pytest.param is not read",
+    ],
+)
+def test_a_python_test_is_integration_when_an_integration_mark_reaches_it_and_the_path_has_not_named_its_layer(path, source, layer, skipped):
+    """FLEET-121: the path names Live and Flow first; every other Python test is Integration when the mark reaches it, else Unit."""
+    found = counted({path: source})
+    assert ({each: found.layers[each] for each in Layer}, found.skipped) == ({each: int(each is layer) for each in Layer}, skipped)
+
+
+def test_a_script_test_outside_the_flow_folder_is_a_unit_test():
+    """FLEET-121: a script test has no integration mark."""
+    found = counted({"web/a.test.ts": "test.integration('a', () => {});\ntest('b', () => {});", "web/package.json": ""})
+    assert (found.layers[UNIT], found.layers[INTEGRATION]) == (1, 0)
 
 
 def test_a_file_that_cannot_be_read_is_counted_apart_and_the_others_still_count():
