@@ -184,7 +184,8 @@ It applies these rules:
   the pairs where it records the job table) only where none lies on
   disk, in the index or in any commit `HEAD` reaches (FIX-11); a ceiling or a `[clones]` table git holds and the tree
   lacks (a `[job_minutes]` table too, where a job above 15 would be recorded) is `✗ not fixed` with `restore quality/baseline.toml from git, or repair it by hand` (FIX-12) (a version no TOML
-  parser reads refuses likewise) (FIX-13), and a shallow clone that cannot prove it names
+  parser reads refuses likewise where its bytes name the table, `a version of quality/baseline.toml in git cannot be read and
+  names clones`) (FIX-13), a version no TOML parser reads whose bytes never name the table holds no table (FIX-46; named limit: an escaped or non-UTF-8 spelling of the name in such a version passes), and a shallow clone that cannot prove it names
   `git fetch --unshallow` (FIX-14). A file without `[clones]` that git never held it in records the pairs and keeps its
   entries (FIX-15); a file without `[job_minutes]` records the jobs above 15 under the same condition (TIMEOUT-27). It also rewrites a file whose text is not what it would render (an older header, other blank lines
   or order, a comment), though no entry changes: `rewritten`, `quality/baseline.toml` (FIX-16), or beside a finding
@@ -1451,7 +1452,7 @@ empty one, where no job is; a first `--fix` with no ceiling file records it with
 under the same condition, and a second `--fix` changes nothing (TIMEOUT-27). The question to git is asked only where a
 recording would happen: a ceiling that lost the table although a version of it held one refuses the whole fix as
 `[clones]` does (`quality/baseline.toml lost its [job_minutes] table, which git holds`, exit `2`, the restore step,
-nothing written), and a version no TOML parser reads or a shallow clone that cannot prove the table never held names
+nothing written), and a version no TOML parser reads that names the table (FIX-13) or a shallow clone that cannot prove the table never held names
 its step, `--dry-run` alike; a table-less file with no job above 15 reads no history for it (TIMEOUT-28). A recording
 is not a raise: after the table exists `--fix` adds no entry to it, so a job above 15 with no entry stays `new debt`
 (TIMEOUT-29). A job whose limit cannot be read is never recorded, and where a workflow the rule must read cannot be
