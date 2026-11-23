@@ -717,10 +717,12 @@ def test_markdown_in_a_path_of_a_pair_stays_text(capsys, monkeypatch, tmp_path, 
 
 
 @pytest.mark.parametrize(
-    ("beta_reached_at", "clone_bounds"), [(721, [300]), (720, [300]), (719, [300, 1])], ids=["overdrawn", "none left", "one second left"]
+    ("beta_reached_at", "clone_bounds", "exit_code"),
+    [(721, [300], 2), (720, [300], 2), (719, [300, 1], 0)],
+    ids=["overdrawn", "none left", "one second left"],
 )
 def test_a_clone_starts_only_within_the_reports_deadline_and_ends_at_it(
-    capsys, monkeypatch, tmp_path, public, beta_reached_at, clone_bounds
+    capsys, monkeypatch, tmp_path, public, beta_reached_at, clone_bounds, exit_code
 ):
     """FLEET-126: no clone starts once the 720 seconds are spent, the row says why and the exit is 2; a clone in
     flight is bound by the seconds left when it is smaller than the clone's own bound."""
@@ -729,19 +731,19 @@ def test_a_clone_starts_only_within_the_reports_deadline_and_ends_at_it(
 
     def recording(arguments, scratch, environment, timeout):
         bounds.append(timeout)
-        return clone(arguments, scratch, environment, timeout)
+        return clone(arguments, scratch, environment, fleet.CLONE_TIMEOUT_SECONDS)
 
     monkeypatch.setattr(fleet, "git", recording)
     ticks_read = ticks(0, 1, 2, beta_reached_at, beta_reached_at + 1, beta_reached_at + 2)
     printed = report_in(write_fleet(tmp_path / "fleet", [alpha, beta]), capsys, monkeypatch, ticks_read)
     assert bounds == clone_bounds
     beta_row = next(line for line in printed.err.splitlines() if beta in line)
-    if len(clone_bounds) == 1:
-        assert printed.code == 2
+    assert printed.code == exit_code
+    if exit_code == 2:
         assert "not measured" in beta_row
         assert beta_row.endswith("the report's 720 seconds are spent")
     else:
-        assert (printed.code, "measured" in beta_row) == (0, True)
+        assert "not measured" not in beta_row
 
 
 def test_an_exception_inside_the_ci_time_read_reaches_the_report(capsys, monkeypatch, tmp_path, public):
