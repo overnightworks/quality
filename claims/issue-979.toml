@@ -1,7 +1,0 @@
-claim_id = "5ff961e1aed84b7496b5a97eaf3bd0b8"
-agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
-role = "builder"
-base = "e01e5974826906eb0bc1ccc899956cc996a6f6cd"
-branch = "claude/issue-979-import-5-test-order"
-scope = ["tests/test_architecture.py"]
-opened_commit = "7fc71ae0f88098c895f359ddfa7964eb51f17593"
