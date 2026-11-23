@@ -3,6 +3,6 @@ agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
 role = "builder"
 base = "de4f5beb9c739eaa34656c27b88ac232472139f6"
 branch = "claude/issue-954-live-layer-rule"
-scope = ["docs/output.md", "docs/proof.md", "docs/rules.md", "pyproject.toml", "src/quality/check.py", "src/quality/live_layer.py", "src/quality/marker_expression.py", "src/quality/report.py", "src/quality/rules.py", "src/quality/workflow_rules.py", "tests/test_cli_help.py", "tests/test_fleet_matrix.py", "tests/test_live_layer.py", "tests/test_marker_expression.py"]
+scope = ["docs/output.md", "docs/proof.md", "docs/rules.md", "pyproject.toml", "src/quality/check.py", "src/quality/live_layer.py", "src/quality/marker_expression.py", "src/quality/pytest_options.py", "src/quality/pytest_random.py", "src/quality/report.py", "src/quality/rules.py", "src/quality/workflow_rules.py", "tests/test_cli_help.py", "tests/test_fleet_matrix.py", "tests/test_live_layer.py", "tests/test_marker_expression.py"]
 opened_commit = "e899cefa870742cc4f59b5ae76ce8badf9465c00"
 whole_reason = "One new enforced rule with its own marker-grammar reader, its wiring and event, and the standard's live row and R7 that it checks."
