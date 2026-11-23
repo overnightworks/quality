@@ -234,6 +234,15 @@ def test_a_script_test_file_that_is_not_utf_8_is_named(build_repo):
     assert note_of(repo) == f"{UNCITED} · 1 file not read: web/c.test.ts"
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads every file")
+def test_a_markdown_file_the_filesystem_refuses_is_named_and_does_not_refuse_the_area(build_repo):
+    """CITE-5: the file is left out and the note says so."""
+    repo = build_repo({**spec_with("- X-1: a."), "docs/x.md": "- X-2: a.\n"})
+    (repo / "docs/x.md").chmod(0)
+    assert Rule.SPEC_CITATION not in refusals(repo)
+    assert note_of(repo) == f"{UNCITED} · 1 file not read: docs/x.md"
+
+
 def test_unreadable_files_alone_still_give_a_note(build_repo):
     """CITE-5: what the rule cannot read is never silent."""
     repo = build_repo({"docs/x.md": ""})

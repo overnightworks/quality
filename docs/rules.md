@@ -1476,7 +1476,7 @@ and reports three counts as one `open` [note](output.md#notes); it only reports 
   citations, and a cited retired ID counts with them. A count of zero leaves its part out, and with all three at zero no note
   stands.
 - **What cannot be read (CITE-5).** Sources the `debt` area cannot read refuse the area as before, and no note stands. A
-  tracked `.md` file that is not UTF-8 and a TypeScript or JavaScript test file that is not UTF-8 or that the lexer refuses are left out and named in
+  tracked `.md` file that cannot be read or is not UTF-8 and a TypeScript or JavaScript test file that is not UTF-8 or that the lexer refuses are left out and named in
   the note's last part (`· 1 file not read: docs/x.md`), so the rule changes no exit code; with only such files the note is
   that part alone. A Python test file that does not parse is skipped, since `size` and `clone` refuse it.
 - **Report only (CITE-6).** The rule changes no verdict and its extent is 0, never measured only. It names no first release

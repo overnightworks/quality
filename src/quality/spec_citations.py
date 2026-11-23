@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from quality import checkout, clones, repository
+from quality import clones, repository
 from quality.markdown_fences import live_line_indexes
 from quality.output import counted
 from quality.ratchet import Language, language_of
@@ -112,14 +112,15 @@ def _script_citations(sources: dict[str, bytes]) -> tuple[list[str], list[str]]:
 
 
 def _read_markdown(root: Path, tracked: list[str]) -> tuple[dict[str, str], list[str]]:
-    """The tracked Markdown files the tree holds as text, and those that are not UTF-8."""
-    names = checkout.on_disk(root, [name for name in tracked if PurePosixPath(name).suffix == MARKDOWN_SUFFIX])
+    """The tracked Markdown files the tree holds as text, and those that cannot be read or are not UTF-8."""
     texts: dict[str, str] = {}
     unread: list[str] = []
-    for name, content in checkout.read_existing(repository.read_bytes, root, names).items():
+    for name in (name for name in tracked if PurePosixPath(name).suffix == MARKDOWN_SUFFIX):
         try:
-            texts[name] = content.decode("utf-8")
-        except UnicodeDecodeError:
+            content = repository.read_bytes(root, name) if repository.is_on_disk(root, name) else None
+            if content is not None:
+                texts[name] = content.decode("utf-8")
+        except (repository.RepositoryFileError, UnicodeDecodeError):
             unread.append(name)
     return texts, unread
 
@@ -140,7 +141,7 @@ def _note_facts(defined: Definitions, cited: set[str], unread: list[str]) -> lis
 def check_spec_citations(root: Path, tracked: list[str], sources: dict[str, bytes]) -> RuleResult:
     """The note with the counts, a count of zero left out and no note when all are zero; no finding, no extent.
 
-    A tracked Markdown file that is not UTF-8 and a script test file the lexer refuses are named in the note, so the rule never
+    A tracked Markdown file that cannot be read or is not UTF-8 and a script test file the lexer refuses are named in the note, so the rule never
     changes an exit code; `sources` that cannot be read refuse the area before this rule runs."""
     texts, unread = _read_markdown(root, tracked)
     script_cited, unread_scripts = _script_citations(sources)
