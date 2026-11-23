@@ -8,7 +8,8 @@ NONE = "—"
 
 
 def cells(name: str, suites: Suites) -> tuple[str, ...]:
-    note = f"{suites.unread} {'file' if suites.unread == 1 else 'files'} not read" if suites.unread else ""
+    noun = "file" if suites.unread == 1 else "files"
+    note = f"{suites.unread} {noun} not read" if suites.unread else ""
     return name, *(f"{suites.layers[layer]:,}" for layer in Layer), f"{suites.skipped:,}", f"{suites.fixme:,}", note
 
 
