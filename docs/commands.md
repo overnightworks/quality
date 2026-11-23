@@ -305,8 +305,8 @@ repository a token can list is dropped without a trace (FLEET-72).
   an enclosing class, a module's `pytestmark` (one mark, a list or a tuple) or through a module-level name bound to
   such a mark; script `skip` or `skipIf(…)` on the call, every test inside `describe.skip(`, `describe.skipIf(…)(` or
   `test.describe.skip(`, and a runtime `test.skip(<condition>, …)`, which marks the innermost enclosing test or, in a
-  describe outside any test, every test of that describe, and outside any test or describe every test of the file; a conditional mark counts even where CI runs the test
-  (FLEET-122). `Fixme` counts the same way for Playwright `test.fixme`, `describe.fixme` and pytest `pytest.mark.xfail`;
+  describe outside any test, every test of that describe, and outside any test or describe every test of the file; a
+  conditional mark counts even where CI runs the test (FLEET-122). `Fixme` counts the same way for Playwright `test.fixme`, `describe.fixme` and pytest `pytest.mark.xfail`;
   a test with both marks counts in both columns (FLEET-123). A Python test file that does not parse and a script test
   file that is not UTF-8 or that the lexer refuses count no test; `Note` reads `N files not read`, and an unmeasured
   repository reads `cannot judge: <reason>` there with `—` in every number (FLEET-124). Named limits: unit and
