@@ -1,0 +1,8 @@
+claim_id = "21d3733ebfc94f418ab86c542494d035"
+agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
+role = "builder"
+base = "ea571811e4f768f6b48552c4318a76afc9cc1ffa"
+branch = "claude/issue-973-fix-recording-leaves-check"
+scope = ["docs/ARCHITECTURE.md", "pyproject.toml", "src/quality/baseline_fix.py", "src/quality/check.py"]
+opened_commit = "1b62e13f40c09a1f7ec1733d060f7090abf85171"
+whole_reason = "One pure move of the --fix recording family from check.py into baseline_fix.py, with its layers row and its line in the architecture diagram."
