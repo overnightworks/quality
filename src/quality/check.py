@@ -20,6 +20,7 @@ from quality import (
     fleet_sources,
     layout,
     literal_text,
+    live_layer,
     locator_text,
     logging_rule,
     naming,
@@ -691,6 +692,7 @@ def _judge_workflows(inputs: RunInputs) -> AreaVerdict:
     judged[Rule.PR_CONCURRENCY] = _attempt(lambda: workflow_rules.check_pr_concurrency(inputs.root, inputs.tracked))
     judged[Rule.PR_WORKFLOWS] = _attempt(lambda: pr_workflows.check_pr_workflows(inputs.root, inputs.tracked, _required(inputs.allow_lists).workflow))
     judged[Rule.PYTEST_WORKERS] = _attempt(lambda: workflow_rules.check_pytest_workers(inputs.root, inputs.tracked))
+    judged[Rule.LIVE_LAYER] = _attempt(lambda: live_layer.check_live_layer(inputs.root, inputs.tracked))
     judged[Rule.RUNTIME_INSTALL] = _attempt(lambda: workflow_rules.check_runtime_install(inputs.root, inputs.tracked))
     judged[Rule.CATALOG_CHECK] = _attempt(lambda: catalog_rules.check_catalog_call(inputs.root, inputs.tracked))
     judged[Rule.RENDER_PASS] = _attempt(lambda: render_pass.check_render_pass(inputs.root, inputs.tracked, lambda: _required(inputs.declarations)))
