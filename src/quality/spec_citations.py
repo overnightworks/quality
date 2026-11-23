@@ -22,7 +22,7 @@ from quality.typescript_tokens import Kind, ScriptSyntaxError, Token, tokenize
 NOTE_PATH = "."
 MARKDOWN_SUFFIX = ".md"
 BYTE_ORDER_MARK = "\ufeff"
-ID = r"[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-[0-9]+"
+ID = r"[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\d+"
 ID_PATTERN = re.compile(ID)
 DEFINING_ITEM = re.compile(rf"\s*(?:[-*+]|\d+[.)])\s+(?P<id>{ID})(?::|(?P<retired> \(retired\)\.))")
 HEAD = re.compile(rf"\s*(?:Spec:\s*)?{ID}(?:\s*(?:,(?:\s*and\b)?|\band\b)\s*{ID})*")
