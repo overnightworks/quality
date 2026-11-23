@@ -23,3 +23,8 @@ def typescript_function(lines: int) -> str:
 
 def minified_bundle(characters: int = 46_106) -> str:
     return "var a=function(){return 1};" * (characters // 27) + "\n"
+
+
+def typescript_branchy_function(ccn: int) -> str:
+    branches = "".join(f"  if (x === {value}) return {value};\n" for value in range(ccn - 1))
+    return f"export function branchy(x: number): number {{\n{branches}  return -1;\n}}\n"

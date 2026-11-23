@@ -81,8 +81,16 @@ def checked(capsys, repo: Path) -> tuple[int, str, str]:
             [entry(Metric.FILE_LINES, "src/a.ts")],
             {"src/a.ts"},
             [],
+            "function big is gone",
+            id="a function entry its TypeScript file lost",
+        ),
+        pytest.param(
+            entry(Metric.FUNCTION_LINES, "src/a.tsx", "big"),
+            [entry(Metric.FILE_LINES, "src/a.tsx")],
+            {"src/a.tsx"},
+            [],
             None,
-            id="a function entry under a TypeScript file stands",
+            id="a function entry under a lines-only suffix stands",
         ),
         pytest.param(entry(Metric.FILE_LINES, "docs.md"), [], {"docs.md"}, [], None, id="an undeclared file in no measured language stands"),
         pytest.param(
@@ -93,7 +101,7 @@ def checked(capsys, repo: Path) -> tuple[int, str, str]:
 )
 def test_a_held_entry_without_a_measurement_is_gone_left_out_or_stands_by_the_index_and_the_declarations(held, measured, tracked, generated, expected):
     """CEILING-1, CEILING-7, CEILING-8, GENERATED-10: an entry whose path the index no longer tracks, or whose Python
-    file lost the function, is gone; a tracked file off the disk and an entry under no measured function stand; a
+    or script file lost the function, is gone; a tracked file off the disk and an entry under no measured function stand; a
     declared file's entry is left out as generated."""
     measurements = {key: Measured(90, 1) for key in measured}
     gone = gone_entries({held: 900}, measurements, frozenset(tracked), generated)
