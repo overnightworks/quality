@@ -260,7 +260,7 @@ CLONE_RELEASES = {**FIRST_RELEASES, "v0.4.0": CLONE_RELEASE, "v0.5.0": CLONE_TAB
 
 def declared(**fields) -> Declared:
     """A clone that declares nothing, with the given fields set."""
-    return Declared(**{"settings": None, "has_baseline": False, "has_clone_table": False, "has_literal_table": False, "has_import_config": False, "has_judged_project": False,
+    return Declared(**{"settings": None, "has_baseline": False, "has_clone_table": False, "has_literal_table": False, "has_spec_table": False, "has_import_config": False, "has_judged_project": False,
                        "declares_catalogs": False, "unreadable": frozenset(), **fields})
 
 
@@ -557,6 +557,42 @@ def test_literal_text_under_a_tag_reads_the_declaration_from_the_release_that_na
     tags = {**FIRST_RELEASES, LITERAL_TEXT.first_release: FIRST_RELEASE_COMMIT, declaration_release: LITERAL_SWITCH_PIN}
     release = gate_release((gate_call(LITERAL_SWITCH_PIN),), False, tags)
     assert rule_cell(LITERAL_TEXT, release, declared(declares_catalogs=declares_catalogs)) == words
+
+
+SPEC_CITATION = Rule.SPEC_CITATION.release
+
+
+@pytest.mark.parametrize(("has_spec_table", "words"), [(True, "enforced"), (False, "report-only")], ids=["a table", "no table"])
+def test_spec_citation_on_main_reads_whether_the_clone_holds_the_table(has_spec_table, words):
+    """FLEET-118: on main the `[spec_citations]` table switches the rule on."""
+    assert rule_cell(SPEC_CITATION, Gate.MAIN, declared(has_spec_table=has_spec_table)) == words
+
+
+@pytest.mark.parametrize(
+    ("pin", "has_spec_table", "words"),
+    [("v0.4.0", True, "report-only"), ("v0.5.0", True, "enforced"), ("v0.5.0", False, "report-only")],
+    ids=["before the switch's release", "the switch's release with a table", "the switch's release with none"],
+)
+def test_a_pinned_gate_reads_the_spec_table_from_the_release_that_names_it(pin, has_spec_table, words):
+    """FLEET-118, FLEET-17: a tag before the switch's release only reports; from it the cell reads the table."""
+    rule = RuleRelease("future", "v0.1.0", Switch.REPORT_ONLY, (SwitchChange("v0.5.0", Switch.SPEC_TABLE),))
+    release = gate_release((gate_call("e" * 40),), False, {**FIRST_RELEASES, pin: "e" * 40})
+    assert rule_cell(rule, release, declared(has_spec_table=has_spec_table)) == words
+
+
+@pytest.mark.parametrize(
+    ("files", "words"),
+    [
+        ({baseline_file.BASELINE_PATH: "[spec_citations]\n"}, "enforced"),
+        ({baseline_file.BASELINE_PATH: "[file_lines]\n"}, "report-only"),
+        ({baseline_file.BASELINE_PATH: "[spec_citations\n"}, "cannot read quality/baseline.toml"),
+    ],
+    ids=["a table", "a baseline without it", "a baseline that cannot be read"],
+)
+def test_the_gates_own_clone_reads_the_spec_citation_cell_from_its_baseline_on_main(fleet_report, gate_clone, files, words):
+    """FLEET-118: the clone's tracked `quality/baseline.toml` decides the cell on main, an unreadable one is named."""
+    _, output = fleet_report(gate_clone({**caller("./.github/workflows/gate.yml"), **files}), tags=first_releases())
+    assert cell(output, GATE_REPOSITORY, "spec-citation") == words, output
 
 
 @pytest.mark.parametrize(

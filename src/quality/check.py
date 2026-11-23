@@ -257,9 +257,11 @@ class Measurement(Enum):
 
 
 def _decides_measurement(rule: Rule) -> bool:
-    """A rule that a switch turns on or off; one that only reports and never changes its switch leaves the area's state as it is."""
+    """A rule that a switch turns on or off; one that only reports and never changes its switch leaves the area's state as it is,
+    and so does spec-citation, whose note stands without its table and is never measured only."""
     release = rule.release
-    return release.switch is not Switch.ALWAYS and not (release.switch is Switch.REPORT_ONLY and not release.switched)
+    reports_only = release.switch is Switch.REPORT_ONLY and not release.switched
+    return release.switch is not Switch.ALWAYS and not reports_only and rule is not Rule.SPEC_CITATION
 
 
 @dataclass(frozen=True)
@@ -539,7 +541,10 @@ def _judge_debt(inputs: RunInputs) -> AreaVerdict:
         lambda: workflow_rules.check_job_timeouts(inputs.root, inputs.tracked, made.ceiling if fixed else judged_baseline(inputs.root))
     )
     twin = sources if isinstance(sources, CannotJudge) else twins.check_test_twins(sources)
-    citations = sources if isinstance(sources, CannotJudge) else _attempt(lambda: spec_citations.check_spec_citations(inputs.root, inputs.tracked, sources))
+    held = None if isinstance(baseline, CannotJudge) else baseline  # a baseline that cannot be read refuses size and clone, so the area is refused and this rule only reports
+    if fixed:
+        held = made.ceiling
+    citations = sources if isinstance(sources, CannotJudge) else _attempt(lambda: spec_citations.check_spec_citations(inputs.root, inputs.tracked, sources, held))
     judged: dict[Rule, Judged] = {
         Rule.SIZE: size, Rule.CLONE: clone, Rule.JOB_TIMEOUT: timeouts, Rule.TEST_TWIN: twin, Rule.SPEC_CITATION: citations
     }

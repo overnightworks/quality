@@ -423,10 +423,12 @@ def _lowered_fact(ceiling: ratchet.CeilingFix | DryRun) -> str:
 
 
 def _recorded_extent(fix: ratchet.CeilingFix) -> str:
-    """What a first recording holds: its entries and clone pairs, and its job limits when it holds a job table."""
+    """What a first recording holds: its entries and clone pairs, and its job limits and uncited spec IDs when it holds them."""
     parts = [counted(len(fix.ceiling.size), "entry", "entries"), counted(len(fix.ceiling.clones), CLONE_PAIR)]
     if fix.ceiling.job_minutes:
         parts.append(counted(len(fix.ceiling.job_minutes), baseline_file.JOB_LIMIT))
+    if fix.ceiling.spec_citations:
+        parts.append(counted(len(fix.ceiling.spec_citations), baseline_file.UNCITED_SPEC_ID))
     return ", ".join(parts)
 
 
@@ -547,13 +549,14 @@ def _dependencies_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | N
 def _debt_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
     entries, pairs = counted(extents[Rule.SIZE], "entry", "entries"), counted(extents[Rule.CLONE], CLONE_PAIR)
     limits = [counted(extents[Rule.JOB_TIMEOUT], baseline_file.JOB_LIMIT)] if extents[Rule.JOB_TIMEOUT] else []
+    held_ids = [counted(extents[Rule.SPEC_CITATION], baseline_file.UNCITED_SPEC_ID)] if extents[Rule.SPEC_CITATION] else []
     match verdict.measurement:
         case Measurement.MEASURED_ONLY:
             return f"{entries} over the thresholds"
         case Measurement.PARTLY_MEASURED_ONLY:
-            return pairs
+            return ", ".join([pairs, *held_ids])
         case Measurement.ENFORCED:
-            return f"{CEILING_HELD}{SEPARATOR}{', '.join([entries, pairs, *limits])}"
+            return f"{CEILING_HELD}{SEPARATOR}{', '.join([entries, pairs, *limits, *held_ids])}"
 
 
 def _workflows_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:

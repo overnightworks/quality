@@ -2,7 +2,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
-from quality import baseline_file, checkout, clones, process, ratchet, repository, workflow_rules
+from quality import baseline_file, checkout, clones, process, ratchet, repository, spec_citations, workflow_rules
 from quality.config import GeneratedFile
 from quality.output import SEPARATOR, counted
 from quality.report import CannotJudge, Instruction, Note, NoteEvent
@@ -86,6 +86,16 @@ def _followed(root: Path, tracked: list[str], rerun_command: str, held: baseline
     return ratchet.CeilingFix(held, ()) if lineage is None else ratchet.follow_renames(held, *lineage, frozenset(tracked))
 
 
+def _recording(
+    root: Path, tracked: list[str], made: ratchet.CeilingFix, table: str, fact: str, ceiling: baseline_file.Baseline
+) -> ratchet.CeilingFix:
+    """The fix with a held table recorded in `ceiling`, once git is known never to have held it; a first recording
+    carries the table in the ceiling alone, which its row counts, so only a later one is noted."""
+    _require_no_table_in_git(root, tracked, table)
+    recorded = () if made.first else (Note(baseline_file.BASELINE_PATH, NoteEvent.RECORDED, fact),)
+    return replace(made, ceiling=ceiling, changes=(*made.changes, *recorded))
+
+
 def _with_recorded_jobs(root: Path, tracked: list[str], made: ratchet.CeilingFix) -> ratchet.CeilingFix:
     """The fix with the job table recorded where the ceiling has none, git never held one and a judged job is debt;
     a first recording carries the table in the ceiling alone, which its row counts."""
@@ -94,10 +104,26 @@ def _with_recorded_jobs(root: Path, tracked: list[str], made: ratchet.CeilingFix
     limits = workflow_rules.recordable_job_limits(root, tracked)
     if not limits:
         return made
-    _require_no_table_in_git(root, tracked, baseline_file.JOB_MINUTES)
-    fact = counted(len(limits), baseline_file.JOB_LIMIT)
-    recorded = () if made.first else (Note(baseline_file.BASELINE_PATH, NoteEvent.RECORDED, fact),)
-    return replace(made, ceiling=replace(made.ceiling, job_minutes=limits), changes=(*made.changes, *recorded))
+    return _recording(root, tracked, made, baseline_file.JOB_MINUTES, counted(len(limits), baseline_file.JOB_LIMIT), replace(made.ceiling, job_minutes=limits))
+
+
+def _with_spec_citations(root: Path, tracked: list[str], sources: dict[str, bytes], made: ratchet.CeilingFix) -> ratchet.CeilingFix:
+    """The fix with the spec table made: a held table keeps only the IDs that are still defined and uncited, and never
+    gains one; a ceiling without it records the table where the tree is clean and git never held one, which a first
+    recording carries in the ceiling alone, as its row counts."""
+    tree = spec_citations.read_tree(root, tracked, sources)
+    held = made.ceiling.spec_citations
+    if held is not None:
+        spec_citations.require_read(tree)
+        dropped = {identifier: reason for identifier in sorted(held) if (reason := tree.fall_reason(identifier))}
+        changes = tuple(Note(baseline_file.BASELINE_PATH, NoteEvent.DROPPED, reason) for reason in dropped.values())
+        kept = held.difference(dropped)
+        return replace(made, ceiling=replace(made.ceiling, spec_citations=kept), changes=(*made.changes, *changes))
+    uncited = tree.recordable()
+    if uncited is None:
+        return made
+    fact = counted(len(uncited), baseline_file.UNCITED_SPEC_ID)
+    return _recording(root, tracked, made, baseline_file.SPEC_CITATIONS, fact, replace(made.ceiling, spec_citations=uncited))
 
 
 def fix_ceiling(
@@ -118,7 +144,7 @@ def fix_ceiling(
     if held is None:
         _require_no_ceiling_in_git(root, tracked)
         first = ratchet.CeilingFix(baseline_file.Baseline(ratchet.debt(measurements), pairs), (), first=True)
-        return _with_recorded_jobs(root, tracked, first)
+        return _with_spec_citations(root, tracked, sources, _with_recorded_jobs(root, tracked, first))
     if held.clones is None:
         _require_no_table_in_git(root, tracked, baseline_file.CLONES)
     followed = _followed(root, tracked, rerun_command, held)  # renames first, so a renamed file's entries move instead of falling as gone
@@ -128,7 +154,8 @@ def fix_ceiling(
     lowered = ratchet.lower_ceiling(followed.ceiling, measurements, pairs, gone)
     jobs = workflow_rules.lower_job_entries(root, tracked, lowered.ceiling)
     changes = (*followed.changes, *lowered.changes, *jobs.changes)
-    return _with_recorded_jobs(root, tracked, replace(jobs, changes=changes))
+    recorded_jobs = _with_recorded_jobs(root, tracked, replace(jobs, changes=changes))
+    return _with_spec_citations(root, tracked, sources, recorded_jobs)
 
 
 def reported(fix: ratchet.CeilingFix, planned: bool) -> ratchet.CeilingFix:

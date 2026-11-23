@@ -4,12 +4,10 @@ from pathlib import Path
 import pytest
 
 from quality import twins
-from quality.baseline_file import ClonePair, Place, render_baseline
 from quality.report import NoteEvent
 from quality.rules import Area, Rule
-from tests.support.baselines import ceiling
-from tests.support.check import check_output, check_result, note_rows, refusals, rule_notes
-from tests.support.git_repositories import make_repo
+from tests.support.baselines import DEBT_BASELINE_STATES
+from tests.support.check import check_output, check_result, note_rows, refusals, rule_notes, runs_apart_by_the_note
 from tests.support.twins import helper, twin_test
 
 BASELINE_PATH = "quality/baseline.toml"
@@ -133,17 +131,8 @@ def test_the_rule_stands_in_the_debt_area_after_the_job_timeouts_and_only_report
     assert [verdict.rule for verdict in debt.verdicts] == [Rule.SIZE, Rule.CLONE, Rule.JOB_TIMEOUT, Rule.TEST_TWIN, Rule.SPEC_CITATION]
 
 
-BASELINES = {
-    "a baseline held": render_baseline(ceiling({}, frozenset())),
-    "no baseline": None,
-    "a baseline without clones": render_baseline(ceiling({})),
-    "a red area": render_baseline(ceiling({}, frozenset({ClonePair.of(Place("tests/a.py", "x"), Place("tests/b.py", "y"))}))),
-    "a baseline that cannot be read": "[size\n",
-}
-
-
 @pytest.mark.integration
-@pytest.mark.parametrize("state", BASELINES, ids=list(BASELINES))
+@pytest.mark.parametrize("state", DEBT_BASELINE_STATES, ids=list(DEBT_BASELINE_STATES))
 def test_every_other_line_and_the_exit_stay_as_the_same_run_without_the_rule(tmp_path, capsys, state):
     """TWIN-4: the note is the only line the rule adds, in every state of the baseline. The second repository has the same
     size and clone rows, because those streams fold names and literals, and no twin or copied helper."""
@@ -153,15 +142,8 @@ def test_every_other_line_and_the_exit_stay_as_the_same_run_without_the_rule(tmp
         "tests/b.py": helper("a"),
         "tests/c.py": helper("b", literal=2),
     }
-    baseline = {} if BASELINES[state] is None else {BASELINE_PATH: BASELINES[state]}
-    (tmp_path / "with").mkdir()
-    (tmp_path / "without").mkdir()
-    code, with_rule = check_output(capsys, make_repo(tmp_path / "with", {**twins_files, **baseline}))
-    assert note_rows(with_rule, ".")
-    without_code, without_rule = check_output(capsys, make_repo(tmp_path / "without", {**plain_files, **baseline}))
-    assert not note_rows(without_rule, ".")
-    kept = [line for line in with_rule.splitlines() if " open  " not in line or "test twins" not in line]
-    assert (code, kept) == (without_code, without_rule.splitlines())
+    with_rule, without_rule = runs_apart_by_the_note(tmp_path, capsys, state, twins_files, plain_files, "test twins")
+    assert with_rule == without_rule
 
 
 def test_a_baseline_that_cannot_be_read_refuses_size_and_clone_and_the_note_still_prints(build_repo):

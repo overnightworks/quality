@@ -104,13 +104,16 @@ one that renders byte for byte stays untouched. It never raises an entry and nev
 what grew or is new stays a finding, and a raise is a hand edit with a declared loosening ([rules](rules.md)). A file git renamed into the index
 since the ceiling's last commit takes its entries with it ([rules](rules.md)). An entry whose path the index no longer
 tracks, whose Python or script function is gone or whose file is declared generated goes; one only missing from disk stands; a
-held pair the tree lost goes. A held `[job_minutes]` entry falls to its job's rounded-up limit or goes where it is no
+held pair the tree lost goes, and so does a held spec ID that is now cited, retired or undefined, which `--fix` never adds
+([rules](rules.md)). A held `[job_minutes]` entry falls to its job's rounded-up limit or goes where it is no
 debt or its job is gone, and a workflow that cannot be read refuses the whole fix while such an entry is held
 ([rules](rules.md)). Where the file has no `[job_minutes]` table and git never held one, it records the jobs above 15 at
-their rounded-up limits, none where no job is above 15 and none where a workflow cannot be read ([rules](rules.md)). A
+their rounded-up limits, none where no job is above 15 and none where a workflow cannot be read ([rules](rules.md)), and
+without a `[spec_citations]` table, where git never held one and the tree defines a live ID with no undefined or retired citation, no
+duplicate and no unread file, it records the uncited IDs ([rules](rules.md)). A
 `[literal_text]` table is read and ignored, and the rewrite leaves it out ([rules](rules.md)). A
 ceiling or `[clones]` table git holds and the tree lacks, or a `[job_minutes]` table where a job above 15 would be
-recorded, refuses with the restore step, and a
+recorded or a `[spec_citations]` table where it would be recorded, refuses with the restore step, and a
 shallow clone that cannot prove a first recording names `git fetch --unshallow` ([rules](rules.md)). It takes no
 `--staged` (HELP-25) and needs `debt` among the named areas (HELP-26), or no area named; either refusal keeps a
 `--dry-run` in its `next:` (HELP-27). `quality check --fix --dry-run` makes, judges and renders the same ceiling,
@@ -308,7 +311,7 @@ repository a token can list is dropped without a trace (FLEET-72).
   sentence under the heading (FLEET-14). A rule cell says what the pinned gate does with the rule, never whether the
   repository passes it: `enforced`, `report-only` (`size` without `quality/baseline.toml` (FLEET-15), `import-contract`
   without an import-linter config (FLEET-16), `clone` on v0.4.0 and, from v0.5.0 on, without a `[clones]` table in
-  `quality/baseline.toml` (FLEET-17), `catalog-check` under a tag, which only reports it (FLEET-98), `logging`, `test-twin` and `spec-citation` on every release that has them, which report notes only (LOGGING-6, TWIN-6, CITE-6), `literal-text` under a tag below v0.16.0, which only measures, and from v0.16.0 until the release that names the catalogs declaration without a `[literal_text]` table (FLEET-101, FLEET-102; `SwitchChange` in `src/quality/rules.py`)),
+  `quality/baseline.toml` (FLEET-17), `catalog-check` under a tag, which only reports it (FLEET-98), `logging` and `test-twin` on every release that has them, which report notes only (LOGGING-6, TWIN-6), `spec-citation` without a `[spec_citations]` table in `quality/baseline.toml` (CITE-6, FLEET-118), `literal-text` under a tag below v0.16.0, which only measures, and from v0.16.0 until the release that names the catalogs declaration without a `[literal_text]` table (FLEET-101, FLEET-102; `SwitchChange` in `src/quality/rules.py`)),
   `not in <tag>` when the pinned release predates the rule (FLEET-18),
   `not released` when only main has the rule (FLEET-19), `no catalogs declaration` (`catalog-check` on main, `literal-text` on main and from the release that names the catalogs declaration as its switch, `locator-text` on main and from v0.21.0 on, `render-pass` on main and from v0.17.0 on, in the gate's own
   repository, when the clone's `pyproject.toml` does not declare `overnightworks-design[catalogs]`; `enforced` when it does)

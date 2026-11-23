@@ -158,14 +158,15 @@ class ReleaseTagsError(Exception):
 
 @dataclass(frozen=True)
 class Declared:
-    """What a clone's own files switch on: the gate settings, a size baseline, a clone table, a literal-text table, an
-    import-linter config, a project whose tests the layout rules judge, a catalogs declaration, and the files among them
+    """What a clone's own files switch on: the gate settings, a size baseline, a clone table, a literal-text table, a spec
+    citation table, an import-linter config, a project whose tests the layout rules judge, a catalogs declaration, and the files among them
     that could not be read."""
 
     settings: config.GateSettings | None
     has_baseline: bool
     has_clone_table: bool
     has_literal_table: bool
+    has_spec_table: bool
     has_import_config: bool
     has_judged_project: bool
     declares_catalogs: bool
@@ -419,9 +420,9 @@ def measure_repository(name: str) -> Row:
 
 
 def read_declared(clone: Path, tracked: list[str]) -> Declared:
-    """The clone's gate settings, size baseline, clone table, literal-text table and import-linter config; a file that cannot be read is named."""
+    """The clone's gate settings, size baseline, clone table, literal-text table, spec citation table and import-linter config; a file that cannot be read is named."""
     unreadable: set[str] = set()
-    settings, has_baseline, has_clone_table, has_literal_table, has_import_config = None, False, False, False, False
+    settings, has_baseline, has_clone_table, has_literal_table, has_spec_table, has_import_config = None, False, False, False, False, False
     try:
         settings = config.read_gate_settings(clone) if config.CONFIG_PATH in tracked else None
     except config.ConfigError:
@@ -430,6 +431,7 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
         baseline = baseline_file.read_baseline(clone)
         has_baseline = baseline is not None
         has_clone_table = baseline is not None and baseline.clones is not None
+        has_spec_table = baseline is not None and baseline.spec_citations is not None
         held = checkout.judged(repository.read_bytes, clone, baseline_file.BASELINE_PATH)
         has_literal_table = held is not None and baseline_file.holds_table(held, baseline_file.LITERAL_TEXT)
     except (report.CannotJudge, baseline_file.SizeError):
@@ -447,8 +449,8 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
         layout.frontend_projects(tracked)
     )
     return Declared(
-        settings, has_baseline, has_clone_table, has_literal_table, has_import_config, has_judged_project, declares_catalogs,
-        frozenset(unreadable),
+        settings, has_baseline, has_clone_table, has_literal_table, has_spec_table, has_import_config, has_judged_project,
+        declares_catalogs, frozenset(unreadable),
     )
 
 
@@ -685,6 +687,7 @@ def switch_words(switch: Switch, declared: Declared) -> Cell:
         Switch.SIZE_BASELINE: (baseline_file.BASELINE_PATH, declared.has_baseline),
         Switch.CLONE_TABLE: (baseline_file.BASELINE_PATH, declared.has_clone_table),
         Switch.LITERAL_TABLE: (baseline_file.BASELINE_PATH, declared.has_literal_table),
+        Switch.SPEC_TABLE: (baseline_file.BASELINE_PATH, declared.has_spec_table),
         Switch.IMPORT_LINTER_CONFIG: (IMPORT_LINTER_CONFIG, declared.has_import_config),
     }[switch]
     if file in declared.unreadable:

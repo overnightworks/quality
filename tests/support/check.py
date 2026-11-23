@@ -16,7 +16,9 @@ from quality.baseline_file import BASELINE_PATH, load_baseline
 from quality.output import Glyph
 from quality.report import Example, Finding, FindingEvent, Note, NoteEvent, printable
 from quality.rules import Rule
+from tests.support.baselines import DEBT_BASELINE_STATES
 from tests.support.door import FIX_WORDS, PinnedJudging, check_door, door_in
+from tests.support.git_repositories import make_repo
 
 installed_ruff = cli.INSTALLED_RUFF
 
@@ -415,6 +417,22 @@ def check_output(
     """The exit code and the whole output of the check over `path`, through the real door."""
     code, out, err = check_streams(capsys, path, locate_ruff)
     return code, out + err
+
+
+def runs_apart_by_the_note(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], state: str, with_note: dict[str, str], without_note: dict[str, str], word: str
+) -> tuple[tuple[int, list[str]], tuple[int, list[str]]]:
+    """The exit and lines of the run over `with_note`, its one open note row of `word` left out, and of the run over
+    `without_note`, both beside the baseline `DEBT_BASELINE_STATES` holds under `state`; the first run has the note, the second none."""
+    baseline = {} if DEBT_BASELINE_STATES[state] is None else {BASELINE_PATH: DEBT_BASELINE_STATES[state]}
+    (tmp_path / "with").mkdir()
+    (tmp_path / "without").mkdir()
+    code, noted = check_output(capsys, make_repo(tmp_path / "with", {**with_note, **baseline}))
+    assert note_rows(noted, ".")
+    without_code, plain = check_output(capsys, make_repo(tmp_path / "without", {**without_note, **baseline}))
+    assert not note_rows(plain, ".")
+    kept = [line for line in noted.splitlines() if " open  " not in line or word not in line]
+    return (code, kept), (without_code, plain.splitlines())
 
 
 def compose(*port_lines: str) -> dict[str, str]:
