@@ -23,7 +23,6 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
-from functools import partial
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 
@@ -33,23 +32,23 @@ from grimp.application.ports.filesystem import AbstractFileSystem
 from grimp.application.ports.packagefinder import AbstractPackageFinder
 from grimp.exceptions import SourceSyntaxError
 from importlinter import configuration
-from importlinter.application import output, use_cases
+from importlinter.application import use_cases
 from importlinter.application.user_options import UserOptions
 from importlinter.contracts.acyclic_siblings import AcyclicSiblingsContract
 from importlinter.contracts.forbidden import ForbiddenContract
 from importlinter.contracts.independence import IndependenceContract
 from importlinter.contracts.layers import Layer, LayersContract
 from importlinter.contracts.protected import ProtectedContract
-from importlinter.domain.contract import Contract, ContractCheck, InvalidContractOptions
+from importlinter.domain.contract import Contract, InvalidContractOptions
 from importlinter.domain.helpers import MissingImport
 from importlinter.domain.imports import ImportExpression, ModuleExpression
 
-from quality import external_imports, python_imports, ratchet
+from quality import contract_results, external_imports, python_imports, ratchet
 from quality import repository as checkout_files
-from quality.report import Finding, FindingEvent, Note, NoteEvent, RuleResult
-from quality.rules import Rule
+from quality.report import Note, NoteEvent, RuleResult
 
 CONFIG_FILES = (".importlinter", "setup.cfg", "pyproject.toml")
+ADAPTER_CONTRACT_ID = "core-imports-no-adapter"
 BUILT_IN_CONTRACT_TYPES: Mapping[str, type[Contract]] = {
     "forbidden": ForbiddenContract,
     "layers": LayersContract,
@@ -82,10 +81,6 @@ _TIGHTENING_HOLDS: Mapping[Tightening, Callable[[object, object], bool]] = Mappi
 STRUCK_FIELDS = ("layers", "containers", "source_modules", "forbidden_modules", "modules", "protected_modules")
 UNCOMPARED_FIELDS = frozenset({"ignore_imports", "broken_contract_guidance"})
 SESSION_OPTIONS = ("root_packages", "include_external_packages", "exclude_type_checking_imports")
-UNMATCHED_IGNORE = re.compile(r"No matches for ignored import (?P<expression>.+)\.")
-ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
-BROKEN_FIX = "change the import or the contract"
-STALE_IGNORE_FIX = "delete it from the contract's ignore_imports"
 GRIMP_WARNING_PREFIX = "Warning: "
 PANIC_MODULE = "pyo3_runtime"
 MAX_ECHOED_SOURCE = 200
@@ -123,11 +118,25 @@ class ContractFields:
 @dataclass(frozen=True)
 class SideContracts:
     """The import contracts of one side of a pull request, by name; `config` is the file holding the section, None
-    when the side has none."""
+    when the side has none, and `adapter_contract` the name of the contract that carries the adapter id."""
 
     config: str | None = None
     session: Mapping[str, object] = field(default_factory=dict)
     contracts: Mapping[str, ContractFields] = field(default_factory=dict)
+    adapter_contract: str | None = None
+
+
+@dataclass(frozen=True)
+class ContractsRead:
+    """One read of the config and of the root packages: every rule of the imports area judges this one graph."""
+
+    root: Path
+    tracked: frozenset[str]
+    config: Config
+    contracts: tuple[Contract, ...]
+    roots: Mapping[str, str]
+    graph: grimp.ImportGraph
+    warnings: tuple[Note, ...]
 
 
 @dataclass(frozen=True)
@@ -141,29 +150,45 @@ class PullTree:
     renames: ratchet.Renames
 
 
-def check_contracts(root: Path, tracked: Sequence[str], configs: Mapping[str, str]) -> RuleResult:
-    """Measured only without a config; with one, every contract must be kept and the extent is how many it declares.
+def read_contracts(root: Path, tracked: Sequence[str], configs: Mapping[str, str]) -> ContractsRead | None:
+    """The contracts and the one import graph of the config among `configs`, None without a config.
 
     `configs` maps each tracked config file at the repository's top to its text.
     """
     config = find_config(configs)
     if config is None:
-        return RuleResult([], 0, True)
+        return None
     if "contract_types" in config.options.session_options:
         raise ContractError(f"{config.name} sets contract_types, whose plugin modules would be imported;"
                             " only the built-in contract types are judged")
     repository = os.path.realpath(root)
     with _judging(f"the config {config.name}", repository):
-        contracts = [_contract(config, index, options)
-                     for index, options in enumerate(config.options.contracts_options, 1)]
+        contracts = tuple(_contract(config, index, options) for index, options in enumerate(config.options.contracts_options, 1))
         roots = {package: _source_root(tracked, package) for package in config.options.session_options["root_packages"]}
         with _library_warnings(repository) as graph_warnings:
             graph = _build_graph(repository, roots, config.options)
-    statements_of = partial(_statements_of, root, frozenset(tracked), roots)
-    results = [_check(contract, graph, config.name, repository, partial(_refined, roots, statements_of)) for contract in contracts]
     grimp_notes = tuple(Note(config.name, NoteEvent.WARNING, message.removeprefix(GRIMP_WARNING_PREFIX)) for message in graph_warnings)
-    return RuleResult([finding for result in results for finding in result.findings], len(contracts), False,
-                      (*grimp_notes, *(note for result in results for note in result.notes)))
+    return ContractsRead(root, frozenset(tracked), config, contracts, roots, graph, grimp_notes)
+
+
+def check_contracts(read: ContractsRead) -> RuleResult:
+    """Every contract must be kept and the extent is how many it declares."""
+    repository = os.path.realpath(read.root)
+    results = [_check(contract, read, repository) for contract in read.contracts]
+    return RuleResult([finding for result in results for finding in result.findings], len(read.contracts), False,
+                      (*read.warnings, *(note for result in results for note in result.notes)))
+
+
+def carries_adapter_id(options: Mapping[str, object]) -> bool:
+    """Whether a contract's raw options (a TOML key, or an INI section suffix) make it the adapter contract."""
+    return options.get("id") == ADAPTER_CONTRACT_ID and options.get("type") == ForbiddenContract.type_name
+
+
+def one_adapter_carrier[T](config_name: str, carriers: Sequence[T]) -> T | None:
+    """The one contract that carries the adapter id, None without one; two leave it open which one is the split."""
+    if len(carriers) > 1:
+        raise ContractError(f"{config_name} holds {len(carriers)} contracts carrying the id {ADAPTER_CONTRACT_ID}; keep one")
+    return carriers[0] if carriers else None
 
 
 def find_config(configs: Mapping[str, str]) -> Config | None:
@@ -194,13 +219,15 @@ def contracts_of(configs: Mapping[str, str]) -> SideContracts:
     if config is None:
         return SideContracts()
     contracts: dict[str, ContractFields] = {}
+    carriers: list[str] = []
     with _judging(f"the config {config.name}", ""):
         for index, options in enumerate(config.options.contracts_options, 1):
             contract = _contract(config, index, options)
             if contract.name in contracts:
                 raise ContractError(f'import contract "{contract.name}" is declared twice in {config.name}')
             contracts[contract.name] = _fields_of(contract, options["type"])
-        return SideContracts(config.name, _session_of(config.options), contracts)
+            carriers += [contract.name] * carries_adapter_id(options)
+        return SideContracts(config.name, _session_of(config.options), contracts, one_adapter_carrier(config.name, carriers))
 
 
 def contract_loosenings(base: SideContracts, head: SideContracts, tree: PullTree | None = None) -> list[str]:
@@ -224,7 +251,15 @@ def contract_loosenings(base: SideContracts, head: SideContracts, tree: PullTree
             lines += _contract_loosenings(name, _resolved(contract, kept, gone), kept)
         elif tree is None or not _guards_nothing(contract, gone, head, tree):
             lines.append(f'import contract "{name}" removed')
-    return sorted(lines)
+    return sorted(lines + _adapter_id_loosenings(base, head))
+
+
+def _adapter_id_loosenings(base: SideContracts, head: SideContracts) -> list[str]:
+    """The adapter id a contract that stays at the head has lost: removed, or moved to another contract of the head."""
+    if base.adapter_contract not in head.contracts or head.adapter_contract == base.adapter_contract:
+        return []
+    line = f"import contract id {ADAPTER_CONTRACT_ID} "
+    return [line + ("removed" if head.adapter_contract is None else f'moves "{base.adapter_contract}" -> "{head.adapter_contract}"')]
 
 
 def struck_modules(base: SideContracts, head: SideContracts) -> frozenset[str]:
@@ -676,87 +711,46 @@ def _library_warnings(repository: str) -> Iterator[list[str]]:
         logger.propagate = propagates
 
 
-def _refined(roots: Mapping[str, str], statements_of: Callable[[str], list[python_imports.Statement]],
-             contract: Contract, graph: grimp.ImportGraph) -> None:
+def _refined(contract: Contract, graph: grimp.ImportGraph, read: ContractsRead) -> None:
     """The contract's own copy keeps the submodules of an external package that its
     `ignore_imports` name, read from the tracked statements of the modules importing it."""
     if not isinstance(contract, ForbiddenContract):
         return
-    for package, names in external_imports.named_submodules(contract.ignore_imports or (), roots).items():
+    for package, names in external_imports.named_submodules(contract.ignore_imports or (), read.roots).items():
         if not contract.as_packages:
             raise ContractError(f"contract {contract.name} ignores imports of {package} submodules and sets as_packages = false;"
                                 " an import of a submodule that no line covers cannot be judged")
         if package in graph.modules:
             importers = sorted(graph.find_modules_that_directly_import(package))
-            external_imports.refine(graph, package, names, {importer: statements_of(importer) for importer in importers})
+            external_imports.refine(graph, package, names, {importer: _statements_of(read, importer) for importer in importers})
 
 
-def _statements_of(root: Path, tracked: frozenset[str], roots: Mapping[str, str], module: str) -> list[python_imports.Statement]:
+def _statements_of(read: ContractsRead, module: str) -> list[python_imports.Statement]:
     """The import statements of the tracked file of a module of a root package."""
-    place = _module_place(roots[module.partition(".")[0]], module)
-    path = next((path for path in (f"{place}.py", f"{place}/{PACKAGE_INIT}") if path in tracked), None)
-    content = None if path is None else checkout_files.read_bytes(root, path)
-    if path is None or content is None:
-        raise ContractError(f"module {module} cannot be examined: the checkout holds no tracked file for it")
+    place = _module_place(read.roots[module.partition(".")[0]], module)
+    path = next((path for path in (f"{place}.py", f"{place}/{PACKAGE_INIT}") if path in read.tracked), None)
+    if path is None:
+        raise ContractError(f"module {module} cannot be examined: git tracks no file for it")
+    content = checkout_files.read_bytes(read.root, path)
+    if content is None:
+        raise ContractError(f"module {module} cannot be examined: the checkout holds nothing at {path}")
     try:
         return python_imports.import_statements(path, content)
     except ratchet.PARSE_ERRORS as error:
         raise UnparsableModule(_cut(f"{path} is not valid Python ({error})")) from error
 
 
-def _check(contract: Contract, graph: grimp.ImportGraph, config_name: str, repository: str,
-           refine: Callable[[Contract, grimp.ImportGraph], None]) -> RuleResult:
+def _check(contract: Contract, read: ContractsRead, repository: str) -> RuleResult:
     """Checks one contract on its own copy of the graph, as import-linter does."""
+    config_name = read.config.name
     with _judging(f"contract {contract.name} in {config_name}", repository):
-        own_graph = copy.deepcopy(graph)
-        refine(contract, own_graph)
+        own_graph = copy.deepcopy(read.graph)
+        _refined(contract, own_graph, read)
         try:
             check = contract.check(own_graph, verbose=False)
         except MissingImport as stale:
-            return RuleResult([
-                Finding(Rule.IMPORT_CONTRACT, config_name, None, _ignore_fact(contract.name, line, _ignored_expression(line)), STALE_IGNORE_FIX, event=FindingEvent.UNUSED)
-                for line in str(stale).splitlines()
-            ], 1, False)
-        notes = tuple(_warning_note(contract.name, config_name, warning) for warning in check.warnings)
-        if check.kept:
-            return RuleResult([], 1, False, notes)
-        broken = Finding(
-            Rule.IMPORT_CONTRACT, config_name, None, f"contract {contract.name}", BROKEN_FIX,
-            detail=_rendered(contract, check), event=FindingEvent.BROKEN,
-        )
-        return RuleResult([broken], 1, False, notes)
-
-
-def _ignored_expression(message: str) -> str | None:
-    """The expression an unmatched-ignore message names, or None for any other message."""
-    match = UNMATCHED_IGNORE.fullmatch(message)
-    return None if match is None else match["expression"]
-
-
-def _ignore_fact(contract_name: str, message: str, expression: str | None) -> str:
-    """What a message says of a contract: the expression it ignores, else import-linter's own words."""
-    return f"contract {contract_name} {message}" if expression is None else f"contract {contract_name} ignores {expression}"
-
-
-def _warning_note(contract_name: str, config_name: str, message: str) -> Note:
-    """An unmatched ignore at `warn` is an `unused` note, any other warning of the contract a `warning` note."""
-    expression = _ignored_expression(message)
-    event = NoteEvent.WARNING if expression is None else NoteEvent.UNUSED
-    return Note(config_name, event, _ignore_fact(contract_name, message, expression))
-
-
-def _rendered(contract: Contract, check: ContractCheck) -> tuple[str, ...]:
-    """The broken contract as import-linter renders it, as plain text, one entry per line. Rich's soft_wrap mode is on,
-    so rich never cuts a line at the console width; a line feed in repository text still splits a print, and the door
-    prints every line behind its marker, so repository text never starts a printed line."""
-    soft_wrap_before = output.console.soft_wrap
-    output.console.soft_wrap = True
-    try:
-        with output.console.capture() as captured:
-            contract.render_broken_contract(check)
-    finally:
-        output.console.soft_wrap = soft_wrap_before
-    return tuple(ANSI_ESCAPE.sub("", captured.get()).strip().split("\n"))
+            return contract_results.unmatched_ignores(contract.name, config_name, stale)
+        return contract_results.judged(contract, config_name, check)
 
 
 @contextmanager

@@ -1,7 +1,7 @@
 import json
 import re
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
@@ -32,7 +32,9 @@ PROJECT_FILE = "pyproject.toml"
 PACKAGE_FILE = "package.json"
 PROJECT_FILES = frozenset({PROJECT_FILE, PACKAGE_FILE})
 SOURCE_DIRECTORY = "src"
-INIT_FILE = "__init__.py"
+INIT_MODULE = "__init__"
+INIT_FILE = f"{INIT_MODULE}.py"
+OWN_NAME = ""
 CONFTEST_FILE = "conftest.py"
 FIXTURES_DIRECTORY = "fixtures"
 END_TO_END_DIRECTORY = "e2e"
@@ -47,6 +49,7 @@ SCRIPT_LANGUAGES = frozenset({ratchet.Language.TYPESCRIPT, ratchet.Language.JAVA
 SPEC_WORD = "spec"
 FRONTEND_WORD_BOUNDARY = re.compile(r"[-_]|(?<=[a-z0-9])(?=[A-Z])")
 PYTHON_WORD_BOUNDARY = re.compile(r"_")
+NOT_MIRRORED_FOLDERS = frozenset({SCRIPTS_DIRECTORY, WORKFLOWS_TESTS_DIRECTORY, END_TO_END_DIRECTORY})
 TEST_PREFIX = "test_"
 WRAPPED_NAME = re.compile(r"__(.+)__")
 
@@ -274,19 +277,19 @@ class _Destination:
     folder: str
     noun: str
     placeholder: str
-    keys: frozenset[str]
+    keys: Mapping[str, str]
 
 
 @dataclass(frozen=True)
 class _ProjectMirror:
     """What a project's tests may mirror: the keys of each `src/` package folder and `scripts/` folder, and the
-    root's workflows."""
+    root's workflows, each key with the name it stands for."""
 
     directory: PurePosixPath
     packages: tuple[str, ...]
-    sources: Mapping[PurePosixPath, frozenset[str]]
-    scripts: Mapping[PurePosixPath, frozenset[str]]
-    workflows: frozenset[str]
+    sources: Mapping[PurePosixPath, Mapping[str, str]]
+    scripts: Mapping[PurePosixPath, Mapping[str, str]]
+    workflows: Mapping[str, str]
 
     @classmethod
     def of(cls, project: PythonProject, tracked: Sequence[PurePosixPath]) -> _ProjectMirror:
@@ -297,12 +300,18 @@ class _ProjectMirror:
             project.packages,
             _folder_keys([path for path in tracked if path.suffix == ".py" and source in path.parents], source),
             _folder_keys([path for path in tracked if scripts in path.parents], scripts),
-            frozenset(
-                _key(path.stem.replace("-", "_"))
-                for path in tracked
-                if checkout.is_workflow(path)
-            ),
+            {_key(name): name for name in (path.stem.replace("-", "_") for path in tracked if checkout.is_workflow(path))},
         )
+
+    def subject(self, folders: tuple[str, ...], test_name: str) -> str | None:
+        """The module or package the test named `test_<test_name>.py` in `folders` is named after, by its longest key."""
+        destination = self.destination(folders)[1]
+        key = None if destination is None else _longest_key(test_name, destination.keys)
+        if destination is None or key is None:
+            return None
+        name = destination.keys[key]
+        package = PurePosixPath(destination.folder).relative_to(self.directory / SOURCE_DIRECTORY).parts
+        return ".".join(package if name in (OWN_NAME, INIT_MODULE) else (*package, name))
 
     def destination(self, folders: tuple[str, ...]) -> tuple[list[_Problem], _Destination | None]:
         if folders[:1] == (SCRIPTS_DIRECTORY,):
@@ -339,20 +348,20 @@ class _ProjectMirror:
                 f"its folder mirrors {folder}, which is no package folder",
                 "move it to the folder that mirrors its module's package",
             )], None
-        own_name = frozenset() if below else frozenset({_key(package)})
-        return [], _Destination(str(folder), "module or package", "module", self.sources[folder] | own_name)
+        own_name = {} if below else {_key(package): OWN_NAME}
+        return [], _Destination(str(folder), "module or package", "module", {**own_name, **self.sources[folder]})
 
 
-def _folder_keys(files: Sequence[PurePosixPath], root: PurePosixPath) -> dict[PurePosixPath, frozenset[str]]:
-    """The key of each file in its folder and of each subfolder in its parent, for every folder below `root`'s
-    files."""
-    keys: defaultdict[PurePosixPath, set[str]] = defaultdict(set)
+def _folder_keys(files: Sequence[PurePosixPath], root: PurePosixPath) -> dict[PurePosixPath, dict[str, str]]:
+    """The key of each file in its folder and of each subfolder in its parent, each with the name it stands for, for
+    every folder below `root`'s files."""
+    keys: defaultdict[PurePosixPath, dict[str, str]] = defaultdict(dict)
     for file in files:
-        keys[file.parent].add(_key(file.stem))
+        keys[file.parent].setdefault(_key(file.stem), file.stem)
         for directory in file.parents:
             if root in directory.parents:
-                keys[directory.parent].add(_key(directory.name))
-    return {folder: frozenset(names) for folder, names in keys.items()}
+                keys[directory.parent].setdefault(_key(directory.name), directory.name)
+    return dict(keys)
 
 
 def _key(name: str) -> str:
@@ -371,8 +380,11 @@ def _word_prefixes(name: str, boundary: re.Pattern[str]) -> list[str]:
     return [prefix for prefix in prefixes if prefix] + ([name] if name else [])
 
 
-def _names_a_key(name: str, keys: frozenset[str]) -> bool:
-    return not name.startswith("_") and any(prefix in keys for prefix in _word_prefixes(name, PYTHON_WORD_BOUNDARY))
+def _longest_key(name: str, keys: Mapping[str, str]) -> str | None:
+    """The longest word prefix of `name` that is a key, None for a name that starts with `_` or names no key."""
+    if name.startswith("_"):
+        return None
+    return max((prefix for prefix in _word_prefixes(name, PYTHON_WORD_BOUNDARY) if prefix in keys), key=len, default=None)
 
 
 def _mirror_findings(path: PurePosixPath, folders: tuple[str, ...], mirror: _ProjectMirror) -> list[Finding]:
@@ -385,7 +397,7 @@ def _mirror_findings(path: PurePosixPath, folders: tuple[str, ...], mirror: _Pro
         )])]
     problems, destination = mirror.destination(folders)
     name = path.stem.removeprefix(TEST_PREFIX)
-    if destination is not None and not _names_a_key(name, destination.keys):
+    if destination is not None and _longest_key(name, destination.keys) is None:
         named = f"is named by a word prefix of {name}" if name else "is named by an empty name"
         problems.append((
             f"no {destination.noun} in {destination.folder} {named}",
@@ -477,6 +489,23 @@ def _stray_under_tests(path: str) -> Finding:
     )
 
 
+def test_subjects(modes: Mapping[str, str], allowances: Sequence[LayoutAllowance]) -> dict[str, str | None]:
+    """The module or package each tracked `test_*.py` under a Python project's `tests/` is named after, None where the
+    layout rules name none: a `test-layout` declaration exempts the path, the project has no package, or no key of the
+    mirrored folder is a word prefix of its name. A test under the `scripts/`, `workflows/` or `e2e/` of its `tests/` has
+    no entry."""
+    declared = declared_paths(allowances, Rule.TEST_LAYOUT)
+    tracked = [PurePosixPath(path) for path in modes]
+    mirrors = {project.tests_directory: _ProjectMirror.of(project, tracked) for project in python_projects(modes) if project.packages}
+    subjects: dict[str, str | None] = {}
+    for file, tests, folders in _judged_paths(modes):
+        if not _is_test_module(file) or (folders and folders[0] in NOT_MIRRORED_FOLDERS):
+            continue
+        mirror = mirrors.get(tests)
+        subjects[str(file)] = None if mirror is None or str(file) in declared else mirror.subject(folders, file.stem.removeprefix(TEST_PREFIX))
+    return subjects
+
+
 class UnparsableTestModule(Exception):
     """A test importer Python cannot decode or parse."""
 
@@ -484,11 +513,7 @@ class UnparsableTestModule(Exception):
 def test_import_candidates(modes: Mapping[str, str]) -> list[str]:
     """The tracked paths whose imports are judged: every `.py` that is no link under a Python project's `tests/`,
     except inside a `fixtures/` folder. The project need not have a package."""
-    tests = _tests_directories(modes)
-    return [
-        path for path, mode in modes.items()
-        if mode not in LINK_MODES and path.endswith(".py") and _in_judged_tests(PurePosixPath(path), tests)
-    ]
+    return [str(path) for path, _, _ in _judged_paths(modes)]
 
 
 def check_test_import(
@@ -500,7 +525,7 @@ def check_test_import(
     module and each imported name. A declaration exempts its importer; a declaration of an untracked path is a finding.
     `contents` holds the bytes of `test_import_candidates`. Findings are sorted by path and line."""
     declared = declared_paths(allowances, Rule.TEST_IMPORT)
-    targets = _ImportTargets.of(modes)
+    targets = ImportTargets.among(file for file, _, _ in _judged_paths(modes) if _is_import_target(file))
     findings = []
     for path, content in contents.items():
         if path not in declared:
@@ -509,47 +534,51 @@ def check_test_import(
     return sorted(findings, key=lambda finding: (finding.path, finding.line or 0))
 
 
-def _tests_directories(modes: Iterable[str]) -> list[PurePosixPath]:
-    return [project.tests_directory for project in python_projects(modes)]
-
-
-def _in_judged_tests(path: PurePosixPath, tests: Iterable[PurePosixPath]) -> bool:
-    return any(
-        directory in path.parents and not _in_fixtures(path.relative_to(directory).parts[:-1])
-        for directory in tests
-    )
+def _judged_paths(modes: Mapping[str, str]) -> Iterator[tuple[PurePosixPath, PurePosixPath, tuple[str, ...]]]:
+    """Each tracked `.py` that is no link under a Python project's `tests/` outside `fixtures/`, with that `tests/` and
+    the folders between."""
+    tests = [project.tests_directory for project in python_projects(modes)]
+    for path, mode in modes.items():
+        file = PurePosixPath(path)
+        directory = next((directory for directory in tests if directory in file.parents), None)
+        if directory is not None and mode not in LINK_MODES and file.suffix == ".py":
+            folders = file.relative_to(directory).parts[:-1]
+            if not _in_fixtures(folders):
+                yield file, directory, folders
 
 
 @dataclass(frozen=True)
-class _ImportTargets:
-    """The tracked test modules and conftests: their paths, and every trailing run of components of their paths
-    without `.py`, which is how a `pythonpath` entry names them."""
+class ImportTargets:
+    """Tracked modules, by their paths and by every trailing run of components of a path without `.py`, which is how a
+    `pythonpath` entry names them."""
 
     paths: frozenset[str]
-    suffixes: frozenset[tuple[str, ...]]
+    by_suffix: Mapping[tuple[str, ...], frozenset[str]]
 
     @classmethod
-    def of(cls, modes: Mapping[str, str]) -> _ImportTargets:
-        tests = _tests_directories(modes)
-        named = [
-            PurePosixPath(path) for path in modes
-            if _in_judged_tests(PurePosixPath(path), tests) and _is_import_target(PurePosixPath(path))
-        ]
-        components = [path.with_suffix("").parts for path in named]
-        return cls(
-            frozenset(str(path) for path in named),
-            frozenset(parts[start:] for parts in components for start in range(len(parts))),
-        )
+    def among(cls, named: Iterable[PurePosixPath]) -> ImportTargets:
+        files = list(named)
+        suffixes: defaultdict[tuple[str, ...], set[str]] = defaultdict(set)
+        for file in files:
+            parts = file.with_suffix("").parts
+            for start in range(len(parts)):
+                suffixes[parts[start:]].add(str(file))
+        return cls(frozenset(str(file) for file in files), {suffix: frozenset(paths) for suffix, paths in suffixes.items()})
 
-    def absolute(self, name: str) -> bool:
-        return tuple(name.split(".")) in self.suffixes
+    @classmethod
+    def support(cls, modes: Mapping[str, str]) -> ImportTargets:
+        """The `support/` modules of every judged `tests/`."""
+        return cls.among(file for file, _, folders in _judged_paths(modes) if SUPPORT_DIRECTORY in folders)
 
-    def relative(self, folder: PurePosixPath, level: int, name: str) -> bool:
+    def absolute(self, name: str) -> frozenset[str]:
+        return self.by_suffix.get(tuple(name.split(".")), frozenset())
+
+    def relative(self, folder: PurePosixPath, level: int, name: str) -> frozenset[str]:
         up = level - 1
         if up > len(folder.parts):
-            return False
+            return frozenset()
         base = folder.parts[: len(folder.parts) - up]
-        return "/".join((*base, *name.split("."))) + ".py" in self.paths
+        return frozenset({"/".join((*base, *name.split("."))) + ".py"}) & self.paths
 
 
 def _is_test_module(path: PurePosixPath) -> bool:
@@ -560,26 +589,50 @@ def _is_import_target(path: PurePosixPath) -> bool:
     return _is_test_module(path) or (path.name == CONFTEST_FILE and path.suffix == ".py")
 
 
-def _import_findings(path: str, content: bytes, targets: _ImportTargets) -> list[Finding]:
+def _import_findings(path: str, content: bytes, targets: ImportTargets) -> list[Finding]:
+    return [_imports_a_test_module(path, statement.line, list(statement.targets)) for statement in module_imports(path, content, targets) if statement.targets]
+
+
+def _imported_names(statement: python_imports.Statement) -> list[str]:
+    """The names a statement imports as it spells them, without the dots of a relative one: a from-import names its
+    module and each imported name."""
+    if isinstance(statement, python_imports.Import):
+        return list(statement.names)
+    module = statement.module
+    return ([module] if module else []) + [f"{module}.{name}" if module else name for name in statement.names if name != "*"]
+
+
+def _level(statement: python_imports.Statement) -> int:
+    return 0 if isinstance(statement, python_imports.Import) else statement.level
+
+
+@dataclass(frozen=True)
+class ModuleImport:
+    """One import statement of a module: its line, the absolute dotted names it imports (none for a relative one) and
+    each name, spelled as written, that names a tracked module of the `ImportTargets`, with the paths it names."""
+
+    line: int
+    names: tuple[str, ...]
+    targets: Mapping[str, frozenset[str]]
+
+    @property
+    def modules(self) -> frozenset[str]:
+        return frozenset().union(*self.targets.values())
+
+
+def module_imports(path: str, content: bytes, targets: ImportTargets) -> list[ModuleImport]:
+    """Every `import` and `from ... import` statement of the module, in a function or under `if TYPE_CHECKING:` too."""
     try:
         statements = python_imports.import_statements(path, content)
     except ratchet.PARSE_ERRORS as error:
         raise UnparsableTestModule(f"{path} is not valid Python ({error})") from error
     folder = PurePosixPath(path).parent
-    named = ((statement, _imported_targets(statement, folder, targets)) for statement in statements)
-    return [_imports_a_test_module(path, statement.line, names) for statement, names in named if names]
-
-
-def _imported_targets(statement: python_imports.Statement, folder: PurePosixPath, targets: _ImportTargets) -> list[str]:
-    if isinstance(statement, python_imports.Import):
-        return [name for name in statement.names if targets.absolute(name)]
-    module = statement.module
-    names = [module] if module else []
-    names += [f"{module}.{name}" if module else name for name in statement.names if name != "*"]
-    if statement.level:
-        dots = "." * statement.level
-        return [dots + name for name in names if targets.relative(folder, statement.level, name)]
-    return [name for name in names if targets.absolute(name)]
+    imports = []
+    for statement in statements:
+        level, names = _level(statement), _imported_names(statement)
+        named = {"." * level + name: (targets.relative(folder, level, name) if level else targets.absolute(name)) for name in names}
+        imports.append(ModuleImport(statement.line, () if level else tuple(names), {name: paths for name, paths in named.items() if paths}))
+    return imports
 
 
 def _imports_a_test_module(path: str, line: int, names: Sequence[str]) -> Finding:

@@ -2,7 +2,7 @@ import re
 import string
 import time
 import unicodedata
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass
 from enum import StrEnum
@@ -15,7 +15,7 @@ from quality import DISTRIBUTION, check, cli, deadline, env_file, output, report
 from quality.baseline_file import BASELINE_PATH, load_baseline
 from quality.output import Glyph
 from quality.report import Example, Finding, FindingEvent, Note, NoteEvent, printable
-from quality.rules import Rule
+from quality.rules import Area, Rule
 from tests.support.baselines import DEBT_BASELINE_STATES
 from tests.support.door import FIX_WORDS, PinnedJudging, check_door, door_in
 from tests.support.git_repositories import make_repo
@@ -447,12 +447,12 @@ def refusal_row(area: str, event: str = "not checked") -> str:
 
 def check_result(
     repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None,
-    monotonic: Callable[[], float] = time.monotonic,
+    monotonic: Callable[[], float] = time.monotonic, named: Iterable[Area] = (),
 ) -> check.CheckResult:
-    """What the rule runner judged over `repo`, before the door prints it."""
+    """What the rule runner judged over `repo` (over the areas `named`, every one without), before the door prints it."""
     return check.judge_repository(
         repo, locate_ruff, locate_zizmor or cli.INSTALLED_ZIZMOR, lambda _verdict, _tracked_paths: None,
-        lambda _area, _scanner: nullcontext(), monotonic=monotonic,
+        lambda _area, _scanner: nullcontext(), monotonic=monotonic, named=named,
     )
 
 

@@ -2,7 +2,9 @@ import json
 from pathlib import Path
 
 from quality import architecture
-from quality.report import RuleResult
+from quality.report import CannotJudge, Finding, RuleResult
+from quality.rules import Area, Rule
+from tests.support.check import check_result
 
 SHOP = {"src/shop/__init__.py": "", "src/shop/web.py": "", "src/shop/api.py": "", "src/shop/db.py": "x = 1\n"}
 
@@ -70,16 +72,63 @@ SKAT = {
 
 
 def judged_in(root: Path, files: dict[str, str], contracts: dict[str, dict], untracked: tuple[str, ...] = (), **session) -> RuleResult:
-    """`check_contracts` over `files` written under `root` and tracked but for `untracked`, with `skat` the one root
+    """`read_contracts` and `check_contracts` over `files` written under `root` and tracked but for `untracked`, with `skat` the one root
     package and agents external."""
     for name, content in files.items():
         (root / name).parent.mkdir(parents=True, exist_ok=True)
         (root / name).write_text(content, encoding="utf-8")
     configs = {"pyproject.toml": contracts_toml(contracts, ("skat",), include_external_packages=True, **session)}
-    return architecture.check_contracts(root, [name for name in files if name not in untracked], configs)
+    read = architecture.read_contracts(root, [name for name in files if name not in untracked], configs)
+    assert read is not None
+    return architecture.check_contracts(read)
 
 
 def judged_core(root: Path, core: str, contract: dict | None = None, **session) -> RuleResult:
     """The `skat` repository whose `skat.table.core` holds `core`, judged against `contract` (by default, the core
     keeps to `agents.calling` and `agents.member`)."""
     return judged_in(root, {**SKAT, CORE_MODULE: core}, one(contract or CORE_KEEPS_TO_TWO_OF_AGENTS), **session)
+
+
+CORE_TEST = "tests/core/test_config.py"
+ADAPTER_IMPORT = "import shop.adapters.db\n"
+
+
+def adapter_split(source: tuple[str, ...] = ("shop.core",), forbidden: tuple[str, ...] = ("shop.adapters",), **options) -> dict:
+    """A forbidden contract that keeps the core off the adapters and carries no id."""
+    return {"type": "forbidden", "source_modules": list(source), "forbidden_modules": list(forbidden), **options}
+
+
+def adapter_contract(**options) -> dict:
+    """`adapter_split` carrying the id the adapter-import rule reads."""
+    return {"id": architecture.ADAPTER_CONTRACT_ID, **adapter_split(**options)}
+
+
+def shop_with_adapters(tests: dict[str, str], contract: dict | None = None, **session) -> dict[str, str]:
+    """The tracked files of a `shop` repository: a core, adapters and a `shop.main` that composes them, `tests` beside
+    them and a `pyproject.toml` that holds `contract` (by default, the core never reaches the adapters)."""
+    return {
+        "src/shop/__init__.py": "", "src/shop/core/__init__.py": "", "src/shop/core/config.py": "",
+        "src/shop/core/config_stores.py": "", "src/shop/adapters/__init__.py": "", "src/shop/adapters/db.py": "",
+        "src/shop/main.py": ADAPTER_IMPORT,
+        "pyproject.toml": contracts_toml({"guard": contract or adapter_contract()}, **session),
+        **tests,
+    }
+
+
+def adapter_verdict(repo: Path):
+    """The verdict of the adapter-import rule over the imports area of `repo`."""
+    (verdict,) = (verdict for verdict in check_result(repo, named=[Area.IMPORTS]).verdicts if verdict.rule is Rule.ADAPTER_IMPORT)
+    return verdict
+
+
+def adapter_findings(repo: Path) -> list[Finding]:
+    """The findings of the adapter-import rule over `repo`; a rule that cannot judge fails the test."""
+    verdict = adapter_verdict(repo)
+    assert verdict.refusal is None, verdict.refusal
+    return list(verdict.findings)
+
+
+def adapter_refusal(repo: Path) -> CannotJudge:
+    verdict = adapter_verdict(repo)
+    assert verdict.refusal is not None
+    return verdict.refusal
