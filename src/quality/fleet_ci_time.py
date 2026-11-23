@@ -223,15 +223,20 @@ def _weekly(runs: list[_Run], default_branch: str) -> WeeklyCiTime:
     for run in runs:
         by_commit[run.sha].append(run)
     counted = [commit for commit in by_commit.values() if all(run.finished for run in commit) and any(run.conclusion != CANCELLED for run in commit)]
-    reruns = [run for run in runs if run.finished and run.attempt > 1]
-    green_on_rerun = sum(run.conclusion == SUCCESS for run in reruns)
+    reruns, green_on_rerun = _reruns(runs)
     none = RedShare(0, 0)
     if not counted:
-        return WeeklyCiTime(0, None, None, none, none, len(reruns), green_on_rerun)
+        return WeeklyCiTime(0, None, None, none, none, reruns, green_on_rerun)
     walls = [max(run.updated for run in commit) - min(run.created for run in commit) for commit in counted]
     red = _red_share(counted, lambda run: run.event == PULL_REQUEST)
     red_on_main = _red_share(counted, lambda run: run.event == PUSH and run.branch == default_branch)
-    return WeeklyCiTime(len(counted), ci_time.nearest_rank(walls, MEDIAN), ci_time.nearest_rank(walls, P90), red, red_on_main, len(reruns), green_on_rerun)
+    return WeeklyCiTime(len(counted), ci_time.nearest_rank(walls, MEDIAN), ci_time.nearest_rank(walls, P90), red, red_on_main, reruns, green_on_rerun)
+
+
+def _reruns(runs: list[_Run]) -> tuple[int, int]:
+    """The finished runs past their first attempt, and those among them that concluded green."""
+    reruns = [run for run in runs if run.finished and run.attempt > 1]
+    return len(reruns), sum(run.conclusion == SUCCESS for run in reruns)
 
 
 def _red_share(commits: list[list[_Run]], in_population: Callable[[_Run], bool]) -> RedShare:
