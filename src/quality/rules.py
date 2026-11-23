@@ -47,6 +47,7 @@ RELEASE_0_20 = "v0.20.0"
 RELEASE_0_21 = "v0.21.0"
 RELEASE_0_23 = "v0.23.0"
 RELEASE_0_24 = "v0.24.0"
+RELEASE_0_25 = "v0.25.0"
 
 
 class Area(StrEnum):
@@ -82,7 +83,7 @@ class Rule(StrEnum):
     CLONE = "clone", Area.DEBT, "v0.4.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE)
     JOB_TIMEOUT = "job-timeout", Area.DEBT, RELEASE_0_12, Switch.ALWAYS
     TEST_TWIN = "test-twin", Area.DEBT, RELEASE_0_23, Switch.REPORT_ONLY
-    SPEC_CITATION = "spec-citation", Area.DEBT, None, Switch.REPORT_ONLY
+    SPEC_CITATION = "spec-citation", Area.DEBT, RELEASE_0_25, Switch.REPORT_ONLY
     IMPORT_CONTRACT = "import-contract", Area.IMPORTS, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
     CLAUDE_MD = "claude-md", Area.FILES, RELEASE_0_3, Switch.ALWAYS
     AGENTS_MD = "agents-md", Area.FILES, RELEASE_0_11, Switch.ALWAYS
@@ -109,7 +110,7 @@ class Rule(StrEnum):
     PR_WORKFLOWS = "pr-workflows", Area.WORKFLOWS, RELEASE_0_23, Switch.ALWAYS
     PYTEST_WORKERS = "pytest-workers", Area.WORKFLOWS, RELEASE_0_11, Switch.ALWAYS
     RUNTIME_INSTALL = "runtime-install", Area.WORKFLOWS, RELEASE_0_12, Switch.ALWAYS
-    LIVE_LAYER = "live-layer", Area.WORKFLOWS, None, Switch.ALWAYS
+    LIVE_LAYER = "live-layer", Area.WORKFLOWS, RELEASE_0_25, Switch.ALWAYS
     CATALOG_CHECK = (
         "catalog-check", Area.WORKFLOWS, RELEASE_0_12, Switch.REPORT_ONLY, SwitchChange(RELEASE_0_13, Switch.CATALOG_DECLARATION)
     )
@@ -117,7 +118,7 @@ class Rule(StrEnum):
     ADVISORY = "advisory", Area.DEPENDENCIES, RELEASE_0_3, Switch.ALWAYS
     FLEET_SOURCE = "fleet-source", Area.DEPENDENCIES, RELEASE_0_21, Switch.ALWAYS
     PYTEST_RANDOM = "pytest-random", Area.DEPENDENCIES, RELEASE_0_24, Switch.ALWAYS
-    VITEST_RANDOM = "vitest-random", Area.DEPENDENCIES, None, Switch.ALWAYS
+    VITEST_RANDOM = "vitest-random", Area.DEPENDENCIES, RELEASE_0_25, Switch.ALWAYS
 
     def __new__(
         cls, rule_id: str, area: Area, first_release: str | None, switch: Switch, *switched: SwitchChange
