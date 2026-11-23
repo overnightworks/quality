@@ -100,6 +100,8 @@ layers = [
     "makefile | pytest_options | workflow_document",
     "markdown_fences",
     "run_script",
+    "external_imports",
+    "python_imports",
     "ratchet",
     "ratchet_scripts",
     "baseline_file",
