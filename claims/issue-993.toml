@@ -3,6 +3,6 @@ agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
 role = "builder"
 base = "1e51d154996d48e7ce60130bc6a989375419ccf2"
 branch = "claude/issue-993-unparseable-history"
-scope = ["docs/rules.md", "src/quality/baseline_file.py", "tests/test_baseline_file.py", "tests/test_cli_fix.py", "tests/test_cli_fix_job_recording.py", "tests/test_cli_fix_spec_citations.py"]
+scope = ["docs/rules.md", "src/quality/baseline_file.py", "tests/support/baselines.py", "tests/test_baseline_file.py", "tests/test_cli_fix.py", "tests/test_cli_fix_job_recording.py", "tests/test_cli_fix_spec_citations.py"]
 opened_commit = "5e022172e49a7ca3be447d5e8f3f1846f1c78480"
 whole_reason = "One guard decision and its proof: the name scan in holds_table, its two spec lines and the refusal pins at each table's --fix tests."
