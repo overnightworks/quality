@@ -6,7 +6,7 @@ import pytest
 from quality.baseline_file import BASELINE_PATH
 from quality.report import FindingEvent, NoteEvent
 from quality.rules import Area, Rule
-from tests.support.baselines import DEBT_BASELINE_STATES, holding_spec_ids, rendered
+from tests.support.baselines import DEBT_BASELINE_STATES, holding_spec_ids, rendered, spec_table
 from tests.support.check import (
     area_fact,
     check_output,
@@ -88,11 +88,11 @@ def test_a_table_row_under_a_rule_defines_its_first_cell(build_repo):
 
 
 def test_only_tracked_markdown_files_that_the_tree_holds_define(build_repo):
-    """CITE-1: an untracked or deleted `.md` file defines nothing."""
+    """CITE-1, CITE-5: an untracked `.md` file defines nothing, and a deleted one defines nothing and is named unread."""
     repo = build_repo({**spec_with("- X-1: a rule."), "docs/gone.md": "- X-2: a rule.\n"})
     (repo / "docs/gone.md").unlink()
     (repo / "docs/untracked.md").write_text("- X-3: a rule.\n")
-    assert note_of(repo) == UNCITED
+    assert note_of(repo) == f"{UNCITED} · 1 file not read: docs/gone.md"
 
 
 @pytest.mark.parametrize(
@@ -380,6 +380,22 @@ def test_with_the_table_a_file_the_rule_cannot_read_makes_it_cannot_judge(build_
         (repo / path).write_bytes(content)
     assert unread in refusals(repo)[Rule.SPEC_CITATION]
     assert check_output(capsys, repo)[0] == 2
+
+
+@pytest.mark.parametrize("name", ["docs/x.md", "web/a.test.ts"], ids=["a Markdown file", "a script test"])
+def test_with_the_table_a_tracked_file_the_tree_lacks_makes_it_cannot_judge(build_repo, capsys, name):
+    """CITE-9: a sparse checkout or a deletion hides what the file defines or cites, so the rule names it and the run exits 2."""
+    repo = build_repo({**spec_with("- X-1: a."), **held("X-1"), name: ""})
+    (repo / name).unlink()
+    assert name in refusals(repo)[Rule.SPEC_CITATION]
+    assert check_output(capsys, repo)[0] == 2
+
+
+def test_a_baseline_with_the_table_and_without_clones_counts_the_held_ids_in_the_debt_row(build_repo, capsys):
+    """CITE-8: the extent names the held IDs although the clone table is missing and the area is only partly measured."""
+    repo = build_repo({**spec_with("- X-1: a."), BASELINE_PATH: rendered(f"[file_lines]\n\n{spec_table('X-1')}")})
+    code, out = check_output(capsys, repo)
+    assert (code, area_fact(out, "debt").split(" · ")[0].endswith("1 uncited spec ID")) == (0, True), out
 
 
 def test_with_the_table_a_python_test_file_that_does_not_parse_is_skipped(build_repo):

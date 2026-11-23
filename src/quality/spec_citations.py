@@ -150,11 +150,15 @@ def _is_script_test(path: str) -> bool:
     return language in SCRIPT_LANGUAGES and language.is_test_file(PurePosixPath(path))
 
 
-def _script_citations(sources: dict[str, bytes]) -> tuple[list[tuple[str, Site]], list[str]]:
-    """The citations of the TypeScript and JavaScript test files, and the files that cannot be read."""
+def _script_citations(tracked: list[str], sources: dict[str, bytes]) -> tuple[list[tuple[str, Site]], list[str]]:
+    """The citations of the tracked TypeScript and JavaScript test files, and the files that are absent from the tree,
+    not UTF-8 or refused by the lexer."""
     cited: list[tuple[str, Site]] = []
     unread: list[str] = []
-    for path in (path for path in sources if _is_script_test(path)):
+    for path in (path for path in tracked if _is_script_test(path)):
+        if path not in sources:
+            unread.append(path)
+            continue
         try:
             tokens = tokenize(sources[path].decode("utf-8"))
         except (UnicodeDecodeError, ScriptSyntaxError):
@@ -165,13 +169,15 @@ def _script_citations(sources: dict[str, bytes]) -> tuple[list[tuple[str, Site]]
 
 
 def _read_markdown(root: Path, tracked: list[str]) -> tuple[dict[str, str], list[str]]:
-    """The tracked Markdown files the tree holds as text, and those that cannot be read or are not UTF-8."""
+    """The tracked Markdown files the tree holds as text, and those that are absent from it, cannot be read or are not UTF-8."""
     texts: dict[str, str] = {}
     unread: list[str] = []
     for name in (name for name in tracked if PurePosixPath(name).suffix == MARKDOWN_SUFFIX):
         try:
             content = repository.read_bytes(root, name) if repository.is_on_disk(root, name) else None
-            if content is not None:
+            if content is None:
+                unread.append(name)
+            else:
                 texts[name] = content.decode("utf-8")
         except (repository.RepositoryFileError, UnicodeDecodeError):
             unread.append(name)
@@ -181,7 +187,7 @@ def _read_markdown(root: Path, tracked: list[str]) -> tuple[dict[str, str], list
 def read_tree(root: Path, tracked: list[str], sources: dict[str, bytes]) -> Tree:
     """The definitions and citations of the tree; a file that cannot be read is named, never guessed."""
     texts, unread = _read_markdown(root, tracked)
-    script_cited, unread_scripts = _script_citations(sources)
+    script_cited, unread_scripts = _script_citations(tracked, sources)
     citations: dict[str, list[Site]] = {}
     for identifier, site in sorted({*_python_citations(sources), *script_cited}, key=lambda each: (each[1], each[0])):
         citations.setdefault(identifier, []).append(site)
@@ -227,7 +233,7 @@ def _findings(tree: Tree, held: frozenset[str]) -> list[Finding]:
     ]
     cited = [
         _citation_finding(identifier, site, tree.definitions.keys())
-        for identifier in tree.undefined_or_retired
+        for identifier in sorted(tree.undefined_or_retired)
         for site in tree.citations[identifier]
     ]
     twice = [

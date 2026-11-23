@@ -1521,8 +1521,8 @@ no spec defines or one that is retired, and a duplicate definition are red, and 
   citations, and a cited retired ID counts with them. A count of zero leaves its part out, and with all three at zero no note
   stands.
 - **What cannot be read (CITE-5).** Sources the `debt` area cannot read refuse the area as before, and no note stands. Without
-  the table a tracked `.md` file that cannot be read or is not UTF-8 and a TypeScript or JavaScript test file that is not UTF-8
-  or that the lexer refuses are left out and named in the note's last part (`· 1 file not read: docs/x.md`), so the rule
+  the table a tracked `.md` file that cannot be read, is absent from the tree or is not UTF-8 and a TypeScript or JavaScript test
+  file that is absent, is not UTF-8 or that the lexer refuses are left out and named in the note's last part (`· 1 file not read: docs/x.md`), so the rule
   changes no exit code; with only such files the note is that part alone. A Python test file that does not parse is skipped,
   since `size` and `clone` refuse it.
 - **Report only (CITE-6).** The rule is report-only exactly where the baseline has no `[spec_citations]` table, a missing
@@ -1542,7 +1542,7 @@ no spec defines or one that is retired, and a duplicate definition are red, and 
   IDs (`ceiling held · 0 entries, 0 clone pairs, 16 uncited spec IDs`, nothing for an empty table), the rule's extent is that
   count, it is never measured only, and no note stands.
 - **What cannot be read with the table (CITE-9).** A tracked `.md` file or a TypeScript or JavaScript test file that cannot be
-  read can hide a definition or a citation, so with the table the rule is `cannot judge`, naming the files (`spec IDs cannot be
+  read, or that the tree lacks (a sparse checkout, a deletion), can hide a definition or a citation, so with the table the rule is `cannot judge`, naming the files (`spec IDs cannot be
   judged, 1 file not read: docs/x.md`), exit `2`, as for `clone` (CLONE-9). A Python test file that does not parse is skipped as
   before.
 - **Dropping under `--fix` (CITE-10).** `quality check --fix` drops each held ID that is now cited, retired or undefined (a

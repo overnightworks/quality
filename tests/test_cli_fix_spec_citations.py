@@ -109,15 +109,28 @@ def test_a_fix_with_the_table_and_nothing_to_drop_changes_nothing(build_repo, ca
     assert (code, digest(repo), "nothing to lower" in out) == (0, before, True)
 
 
-UNREAD = {"a Markdown file that is not UTF-8": ("docs/x.md", b"\xff"), "a script test the lexer refuses": ("web/a.test.ts", b"const a = `\n")}
+UNREAD = {
+    "a Markdown file that is not UTF-8": ("docs/x.md", b"\xff"),
+    "a script test the lexer refuses": ("web/a.test.ts", b"const a = `\n"),
+    "a Markdown file the tree lacks": ("docs/x.md", None),
+    "a script test the tree lacks": ("web/a.test.ts", None),
+}
+
+
+def spoiled(repo: Path, name: str, content: bytes | None) -> None:
+    """Leaves the tracked file `name` with `content`, or absent from the tree for None."""
+    if content is None:
+        (repo / name).unlink()
+    else:
+        (repo / name).write_bytes(content)
 
 
 @pytest.mark.parametrize(("name", "content"), UNREAD.values(), ids=UNREAD.keys())
 def test_while_a_file_is_unread_the_fix_with_the_table_cannot_judge_and_writes_nothing(build_repo, capsys, name, content):
-    """CITE-10: an ID defined in the unread file would look undefined and be dropped, so the rule reads `cannot judge`
+    """CITE-10: an ID defined in the unread or absent file would look undefined and be dropped, so the rule reads `cannot judge`
     naming the file, exit 2, in the dry run too."""
     repo = build_repo({**spec_with("- X-1: a.", "- X-2: b."), name: "", BASELINE_PATH: holding_spec_ids("X-1", "X-2")})
-    (repo / name).write_bytes(content)
+    spoiled(repo, name, content)
     tree = tree_of(repo)
     for words in (DRY_RUN_WORDS, FIX_WORDS):
         code, out, _ = fixed(capsys, repo, *words)
@@ -128,7 +141,7 @@ def test_while_a_file_is_unread_the_fix_with_the_table_cannot_judge_and_writes_n
 def test_while_a_file_is_unread_the_fix_without_the_table_records_nothing_and_the_note_stays(build_repo, capsys, name, content):
     """CITE-10: nothing is recorded, the report-only note names the file, and the exit is as without the fix."""
     repo = build_repo({**spec_with("- X-1: a."), name: "", BASELINE_PATH: rendered(HELD)})
-    (repo / name).write_bytes(content)
+    spoiled(repo, name, content)
     before = digest(repo)
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
     assert (code, digest(repo), name in out) == (0, before, True), out
