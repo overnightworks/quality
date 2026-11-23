@@ -1,8 +1,0 @@
-claim_id = "04504ea122104198a5d02a8bb3c1de3b"
-agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
-role = "builder"
-base = "9577eb42a58d1707b0b58a69b5de647261811d44"
-branch = "claude/issue-964-an-import-contract-can-hold-the-submodul"
-scope = ["docs/ARCHITECTURE.md", "docs/rules.md", "pyproject.toml", "src/quality/architecture.py", "src/quality/external_imports.py", "src/quality/layout.py", "src/quality/python_imports.py", "tests/support/architecture.py", "tests/test_architecture_external_imports.py"]
-opened_commit = "a8888daef32a497588e413d0a2e255415c6a6bf7"
-whole_reason = "One rule change: the shared import-statement reader, the per-contract refinement and the imports area's call to it, with their rule lines, layer rows and tests; a part alone leaves the rule unjudged or a second reader of import statements."
