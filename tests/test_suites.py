@@ -119,12 +119,14 @@ def test_a_python_test_counts_the_skip_and_xfail_marks_that_reach_it(source, exp
         ("test('a', async () => { test.skip(name === 'x', 'why'); test.skip(other); });", (1, 1, 0)),
         ("test.describe('d', () => { test.skip(c); test('a', f); test('b', f); });", (2, 2, 0)),
         ("test.describe.fixme('d', () => { test.skip('a', f); });", (1, 1, 1)),
+        ("test.skip(c, 'why');\ntest('a', f);\ntest('b', f);", (2, 2, 0)),
+        ("test.fixme(c);\ntest.describe('d', () => { test('a', f); });", (1, 0, 1)),
         ("test.describe('d', () => { test('a', f); });\ntest('b', f);", (2, 0, 0)),
     ],
     ids=[
         "skip", "skipIf", "runIf is no mark", "fixme", "describe skip", "describe skipIf", "playwright describe skip",
         "playwright describe fixme", "runtime skip marks its test once", "runtime skip in a describe marks every test",
-        "both marks", "a mark stays in its describe",
+        "both marks", "file-level skip marks every test of the file", "file-level fixme marks a test in a describe", "a mark stays in its describe",
     ],
 )
 def test_a_script_test_counts_the_skip_and_fixme_marks_that_reach_it(source, expected):
