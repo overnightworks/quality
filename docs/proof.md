@@ -48,11 +48,11 @@ The weekly report prints them in the run summary of `report.yml`, for the heads 
 | Number | What it counts | Where it stands |
 |---|---|---|
 | M1 | a run's wall clock, slowest job and longest chain of waiting jobs; per repository the median, p90, red share, queue p90 and the jobs over 12 minutes at p90 | the verdict's `time` note (VERDICT-74 in [gate.md](gate.md)); the CI-time table (FLEET-104) |
-| M2 | jobs that failed and then passed on a re-run | open: quality#953 |
+| M2 | jobs that failed and then passed on a re-run | the `Re-runs` and `Green on re-run` columns (FLEET-104); by test id: open on quality#720 |
 | M3 | the share of red push runs on main | the `Red on main` column (FLEET-104) |
-| M4 | test lines against source lines and tests per layer | open: quality#720, slice 13 |
-| M5 | re-runs and failures before a job's first test step | open: quality#953 |
-| M6 | skipped and fixme-marked tests | open: quality#720, slice 13 |
+| M4 | test lines against source lines and tests per layer | the size table's `Lines prod / test` and `test:prod` (FLEET-77, FLEET-84); the `Tests per layer` table (FLEET-119 to FLEET-121) |
+| M5 | re-runs and failures before a job's first test step | the `Re-runs` column (FLEET-104); failures before a job's first test step: open on quality#720 |
+| M6 | skipped and fixme-marked tests | the `Skipped` and `Fixme` columns of the `Tests per layer` table (FLEET-122, FLEET-123) |
 
 ## The alert route
 
