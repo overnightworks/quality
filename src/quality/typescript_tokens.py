@@ -1,6 +1,6 @@
 """A lexer for the TypeScript and JavaScript a test file holds: strings, templates, regex literals, identifiers, punctuation and
-numbers as typed tokens with the line they start on, comments skipped. It decides only what a reader of locator positions
-needs, and it refuses only a construct that does not close, because the tokens after it would be wrong in silence."""
+numbers as typed tokens with the line they start on, comments skipped. It decides only what a reader of locator positions or
+of a config's keys needs, and it refuses only a construct that does not close, because the tokens after it would be wrong in silence."""
 
 import re
 from dataclasses import dataclass

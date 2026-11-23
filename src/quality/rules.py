@@ -60,7 +60,7 @@ class Area(StrEnum):
     IMPORTS = "imports", "the import contracts"
     SECRETS = "secrets", "secrets in the committed history"
     WORKFLOWS = "workflows", "GitHub workflows: lint, security, concurrency, the workflows a pull request triggers, pytest -n, pytest calls that can run the live layer, run-time installs, the languages standard's catalog-check and render-pass"
-    DEPENDENCIES = "dependencies", "known advisories, fleet package sources, and the shuffling plugin in lockfiles, pytest's addopts and workflow calls"
+    DEPENDENCIES = "dependencies", "known advisories, fleet package sources, and the shuffling of pytest (plugin in lockfiles, addopts, workflow calls) and of vitest (config)"
     CODE = "code", "Python source: security findings and print calls"
 
     def __new__(cls, word: str, help_line: str) -> Self:
@@ -117,6 +117,7 @@ class Rule(StrEnum):
     ADVISORY = "advisory", Area.DEPENDENCIES, RELEASE_0_3, Switch.ALWAYS
     FLEET_SOURCE = "fleet-source", Area.DEPENDENCIES, RELEASE_0_21, Switch.ALWAYS
     PYTEST_RANDOM = "pytest-random", Area.DEPENDENCIES, RELEASE_0_24, Switch.ALWAYS
+    VITEST_RANDOM = "vitest-random", Area.DEPENDENCIES, None, Switch.ALWAYS
 
     def __new__(
         cls, rule_id: str, area: Area, first_release: str | None, switch: Switch, *switched: SwitchChange
