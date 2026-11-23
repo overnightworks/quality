@@ -347,8 +347,8 @@ def test_a_held_id_that_is_cited_retired_or_no_longer_defined_can_fall(build_rep
     findings = rule_findings(repo, Rule.SPEC_CITATION)
     assert len(findings) == 3
     assert {(finding.event, finding.fix) for finding in findings} == {(FindingEvent.CAN_FALL, "quality check --fix")}
-    assert ["cited" in findings[0].fact, "retired" in findings[1].fact, "no longer defined" in findings[2].fact] == [True] * 3
-    assert [identifier in finding.fact for identifier, finding in zip(["X-1", "X-2", "X-3"], findings, strict=True)] == [True] * 3
+    said = [("X-1", "cited"), ("X-2", "retired"), ("X-3", "no longer defined")]
+    assert [(identifier in finding.fact, word in finding.fact) for (identifier, word), finding in zip(said, findings, strict=True)] == [(True, True)] * 3
 
 
 def test_with_the_table_the_debt_row_counts_the_held_ids_and_no_note_stands(build_repo, capsys):
