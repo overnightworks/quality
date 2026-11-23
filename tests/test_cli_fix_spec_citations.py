@@ -117,20 +117,12 @@ UNREAD = {
 }
 
 
-def spoiled(repo: Path, name: str, content: bytes | None) -> None:
-    """Leaves the tracked file `name` with `content`, or absent from the tree for None."""
-    if content is None:
-        (repo / name).unlink()
-    else:
-        (repo / name).write_bytes(content)
-
-
 @pytest.mark.parametrize(("name", "content"), UNREAD.values(), ids=UNREAD.keys())
 def test_while_a_file_is_unread_the_fix_with_the_table_cannot_judge_and_writes_nothing(build_repo, capsys, name, content):
     """CITE-10: an ID defined in the unread or absent file would look undefined and be dropped, so the rule reads `cannot judge`
     naming the file, exit 2, in the dry run too."""
     repo = build_repo({**spec_with("- X-1: a.", "- X-2: b."), name: "", BASELINE_PATH: holding_spec_ids("X-1", "X-2")})
-    spoiled(repo, name, content)
+    put(repo / name, content)
     tree = tree_of(repo)
     for words in (DRY_RUN_WORDS, FIX_WORDS):
         code, out, _ = fixed(capsys, repo, *words)
@@ -141,7 +133,7 @@ def test_while_a_file_is_unread_the_fix_with_the_table_cannot_judge_and_writes_n
 def test_while_a_file_is_unread_the_fix_without_the_table_records_nothing_and_the_note_stays(build_repo, capsys, name, content):
     """CITE-10: nothing is recorded, the report-only note names the file, and the exit is as without the fix."""
     repo = build_repo({**spec_with("- X-1: a."), name: "", BASELINE_PATH: rendered(HELD)})
-    spoiled(repo, name, content)
+    put(repo / name, content)
     before = digest(repo)
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
     assert (code, digest(repo), name in out) == (0, before, True), out

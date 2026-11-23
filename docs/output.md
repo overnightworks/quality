@@ -180,7 +180,7 @@ findings (ROW-10); the extent of a clean row is:
 With ` · K allowed` appended where files were allowed, leaks were allowed (secrets), advisories were allowed
 (dependencies) or output owners were honoured (code). Without a ceiling file the debt row is `· debt  not recorded  N
 entries over the thresholds · measured only` (`M clone pairs · partly measured only` when the ceiling file has no
-`[clones]` table, O21), with `fix: quality check --fix` under it. Under `quality check debt --fix` it is `✓
+`[clones]` table, O21, with `, K uncited spec IDs` after the pairs where a `[spec_citations]` table holds an ID, CITE-8), with `fix: quality check --fix` under it. Under `quality check debt --fix` it is `✓
 debt  lowered  N entries · quality/baseline.toml` with a `✓` row per lowered or dropped entry, `✓ debt  moved  N entries
 · quality/baseline.toml` where it moves entries and lowers none, `✓ debt  recorded  N entries, M clone pairs ·
 quality/baseline.toml is new` (`, K job limits` after the pairs where it records the job table, `, K uncited spec IDs` after them where it records the spec table), `✓ debt  recorded  K job limits · quality/baseline.toml` with a `✓` row `recorded  K job limits` under
