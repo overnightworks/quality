@@ -5,7 +5,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta, timezone
 from email.message import Message
-from urllib.parse import unquote
+from itertools import count
 
 import pytest
 
@@ -26,12 +26,17 @@ from tests.support.clock import Clock
 TODAY = date(2026, 11, 21)
 START = datetime(2026, 11, 20, 10, tzinfo=UTC)
 DEFAULT_BRANCH = "trunk"
+WINDOW_START = datetime(2026, 11, 14, tzinfo=UTC)
+WINDOW_START_SECONDS = int((WINDOW_START - START).total_seconds())
+SEARCH_RESULT_LIMIT = 1000
+PAGE_SIZE = 100
+fresh_ids = count(1_000_000)
 
 
-def run(sha, created=0, updated=60, event="pull_request", status="completed", conclusion="success", branch="feature", run_id=1, attempt=1):
-    """A workflow run of `sha` on `branch` whose moments are seconds after START."""
+def run(sha, created=0, updated=60, event="pull_request", status="completed", conclusion="success", branch="feature", run_id=None, attempt=1):
+    """A workflow run of `sha` on `branch` whose moments are seconds after START; without a `run_id` it gets its own."""
     return {
-        "id": run_id,
+        "id": next(fresh_ids) if run_id is None else run_id,
         "head_branch": branch,
         "head_sha": sha,
         "event": event,
@@ -45,7 +50,9 @@ def run(sha, created=0, updated=60, event="pull_request", status="completed", co
 
 @dataclass
 class Runs:
-    """A fake runs listing: per repository the runs it serves 100 to a page, or a failure; every url it was asked."""
+    """A fake runs listing as GitHub documents it: per repository the runs newest first by creation and id, 100 to a page,
+    or a failure; a url with a `created` filter returns at most 1,000 results and `total_count` 0 past them. Every url it
+    was asked."""
 
     served: dict[str, list[dict] | Exception]
     jobs: dict[int, list[dict]] = field(default_factory=dict)
@@ -64,7 +71,10 @@ class Runs:
             entries = self.jobs.get(int(url.split("/runs/")[1].split("/jobs")[0]), [])
             return json.dumps({"total_count": len(entries), "jobs": entries}).encode(), Message()
         page = int(url.split("&page=")[1])
-        body = {"total_count": len(runs), "workflow_runs": runs[(page - 1) * 100 : page * 100]}
+        newest_first = sorted(runs, key=lambda entry: (entry["created_at"], entry["id"]), reverse=True)
+        if "created=" in url:
+            newest_first = newest_first[:SEARCH_RESULT_LIMIT]
+        body = {"total_count": len(newest_first), "workflow_runs": newest_first[(page - 1) * PAGE_SIZE : page * PAGE_SIZE]}
         return json.dumps(body).encode(), Message()
 
 
@@ -147,7 +157,7 @@ def test_a_repository_with_many_pages_is_read_whole_within_the_call_cap():
 
 
 def test_the_calls_of_the_whole_report_are_capped_and_the_repository_it_stops_is_partly_read():
-    served = {f"o/r{number}": [run(f"c{number}-{page}") for page in range(30 * 100)] for number in range(CALLS_PER_REPORT // 30 + 1)}
+    served = {f"o/r{number}": [run(f"c{number}-{page}") for page in range(30 * 100 - 1)] for number in range(CALLS_PER_REPORT // 30 + 1)}
     served["o/r0"] = [run("only")]
     reading, fetch = read(served)
     assert (reading.calls, len(fetch.urls)) == (CALLS_PER_REPORT, CALLS_PER_REPORT)
@@ -194,9 +204,63 @@ def test_a_run_without_its_moments_cannot_be_read():
     assert weekly({"o/a": [broken]}) == PartlyRead("cannot read CI time")
 
 
-def test_the_window_starts_seven_days_before_the_report_day():
-    _, fetch = read({"o/a": []})
-    assert "created=%3E%3D2026-11-14" in fetch.urls[0]
+@pytest.mark.parametrize(("seconds_from_start", "commits"), [(0, 1), (-1, 0)], ids=["at the window start", "a second before"])
+def test_a_run_counts_from_midnight_seven_days_before_the_report_day(seconds_from_start, commits):
+    """FLEET-105, FLEET-128: a run created at the window's start counts, one created a second earlier does not."""
+    assert weekly({"o/a": [run("x", created=WINDOW_START_SECONDS + seconds_from_start)]}).commits == commits
+
+
+def runs_listing_calls(fetch):
+    return [url for url in fetch.urls if "/jobs?" not in url]
+
+
+def test_a_window_of_more_than_a_thousand_runs_is_counted_whole():
+    """FLEET-128: a window of 1,235 runs is counted whole, past the 1,000 results a filtered listing returns."""
+    runs = [run(f"c{number}", created=-number) for number in range(1235)]
+    assert weekly({"o/a": runs}).commits == 1235
+
+
+def test_a_run_that_a_new_run_pushes_onto_the_next_page_counts_once():
+    """FLEET-129: a run listed on two pages counts once."""
+    served = {"o/a": [run(f"c{number}", created=-number - 1) for number in range(150)]}
+    listing = Runs(served)
+
+    def fetch(url, headers, unreadable):
+        answer = listing(url, headers, unreadable)
+        served["o/a"].append(run("newest", created=1000))
+        return answer
+
+    reading = read_fleet_ci_time(("o/a",), TODAY, "", fetch, DEFAULT_BRANCH, RunDeadline(1e9, Clock()))
+    assert reading.rows["o/a"].commits == 150
+
+
+def test_the_read_stops_at_the_first_page_whose_oldest_run_predates_the_window():
+    """FLEET-128: the runs before the window are not counted and no page past that one is read."""
+    in_window = [run(f"in{number}", created=-number) for number in range(150)]
+    older = [run(f"old{number}", created=WINDOW_START_SECONDS - 1 - number) for number in range(300)]
+    reading, fetch = read({"o/a": in_window + older})
+    assert (reading.rows["o/a"].commits, len(runs_listing_calls(fetch))) == (150, 2)
+
+
+def test_a_page_of_runs_of_an_uncounted_event_older_than_the_window_stops_the_read():
+    """FLEET-128: the oldest run of any event decides the stop."""
+    in_window = [run(f"in{number}", created=-number) for number in range(30)]
+    scheduled = [run(f"old{number}", created=WINDOW_START_SECONDS - 1 - number, event="schedule") for number in range(170)]
+    reading, fetch = read({"o/a": in_window + scheduled})
+    assert (reading.rows["o/a"].commits, len(runs_listing_calls(fetch))) == (30, 1)
+
+
+def test_a_listing_that_ends_short_of_its_total_is_partly_read_and_the_report_is_not_complete():
+    """FLEET-130: the pages read are named and `complete` is false."""
+    page = {"total_count": 150, "workflow_runs": [run(f"c{number}", created=-number) for number in range(40)]}
+    reading = read_fleet_ci_time(("o/a",), TODAY, "", lambda *_: (json.dumps(page).encode(), Message()), DEFAULT_BRANCH, RunDeadline(1e9, Clock()))
+    assert reading.rows["o/a"] == PartlyRead("1 page read")
+    assert json.loads(document(reading, datetime.combine(TODAY, time(1), UTC)))["complete"] is False
+
+
+def test_an_uncounted_event_without_its_creation_moment_cannot_be_read():
+    """FLEET-128: the stop reads every entry's `created_at`, whatever its event."""
+    assert weekly({"o/a": [{**run("x", event="schedule"), "created_at": None}]}) == PartlyRead("cannot read CI time")
 
 
 def test_a_request_that_failed_still_counts_as_a_call():
@@ -336,10 +400,10 @@ def test_the_document_is_complete_unless_a_repository_is_partly_read(rows, compl
 
 
 @pytest.mark.parametrize("zone", [UTC, timezone(timedelta(hours=-10)), timezone(timedelta(hours=13))], ids=["UTC", "ten hours behind", "thirteen hours ahead"])
-def test_the_document_window_starts_where_the_runs_query_starts_whatever_the_clock_zone(zone):
-    """FLEET-106: `window_start` is the midnight UTC the runs query's `created>=` bound names, taken from the report's
-    day and not from the instant or the zone the document is made in."""
-    reading, fetch = read({"o/a": [run("c1")]})
-    text = document(reading, datetime.combine(TODAY, time(0, 30), zone))
-    bound = unquote(fetch.urls[0].split("created=")[1].split("&")[0]).removeprefix(">=")
-    assert json.loads(text)["window_start"] == f"{bound}T00:00:00Z"
+def test_the_document_window_starts_where_the_runs_count_starts_whatever_the_clock_zone(zone):
+    """FLEET-106: `window_start` is the instant from which a run counts, taken from the report's day and not from the
+    instant or the zone the document is made in."""
+    reading, _ = read({"o/a": []})
+    edge = datetime.fromisoformat(json.loads(document(reading, datetime.combine(TODAY, time(0, 30), zone)))["window_start"])
+    seconds = int((edge - START).total_seconds())
+    assert (weekly({"o/a": [run("at", created=seconds)]}).commits, weekly({"o/a": [run("before", created=seconds - 1)]}).commits) == (1, 0)
