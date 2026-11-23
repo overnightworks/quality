@@ -240,11 +240,12 @@ def test_a_line_that_is_no_pytest_call_is_clean(build_repo, line):
         ("pytest -q  " + MARKER,),
         (MARKER, "pytest -q"),
         ("pytest -p no:randomly \\", "  tests  " + MARKER),
+        (MARKER, "# a plain comment", "pytest -q"),
     ],
-    ids=["on the line", "directly above", "on a continuation line"],
+    ids=["on the line", "directly above", "on a continuation line", "above a plain comment"],
 )
 def test_a_marker_with_a_reason_clears_a_workflow_call(build_repo, lines):
-    """RANDOM-8: `# pytest-random: <reason>` on the call's line or directly above clears it."""
+    """RANDOM-8: `# pytest-random: <reason>` on the call's line or in the unbroken comment run directly above it clears it."""
     assert workflow_judged(build_repo, script(*lines)) == []
 
 
@@ -270,11 +271,12 @@ def test_a_listing_only_call_is_not_judged(build_repo, line, event):
         ("# pytest-random: 1", "pytest -q"),
         ("# pytest-workers: reason", "pytest -q"),
         (MARKER, "echo x", "pytest -q"),
+        (MARKER, "echo x", "# a plain comment", "pytest -q"),
     ],
-    ids=["no reason", "reason of no letter", "another rule's marker", "two lines above"],
+    ids=["no reason", "reason of no letter", "another rule's marker", "two lines above", "above a command and a comment"],
 )
 def test_a_marker_without_a_reason_or_too_far_clears_nothing(build_repo, lines):
-    """RANDOM-8: the marker needs its own id, a reason with a letter and the line on or directly above."""
+    """RANDOM-8: the marker needs its own id, a reason with a letter and a place on the call's line or in the unbroken comment run above it."""
     assert [finding.event for finding in workflow_judged(build_repo, script(*lines))] == [UNSEEDED]
 
 
@@ -341,6 +343,23 @@ def test_a_marker_clears_an_env_value_on_its_line_or_directly_above(build_repo, 
     above = "\n".join([*lines[: line - 1], MARKER, *lines[line - 1 :]])
     beside = "\n".join([*lines[: line - 1], f"{lines[line - 1]}  {MARKER}", *lines[line:]])
     assert workflow_judged(build_repo, above) == [] == workflow_judged(build_repo, beside)
+
+
+@pytest.mark.parametrize("level", LEVELS)
+def test_two_comment_lines_above_an_env_value_clear_it(build_repo, level):
+    """RANDOM-8: the marker is read anywhere in the unbroken comment run above the value."""
+    text, line = env_workflow(level, "PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+    lines = text.split("\n")
+    above = "\n".join([*lines[: line - 1], MARKER, "# a plain comment", *lines[line - 1 :]])
+    assert workflow_judged(build_repo, above) == []
+
+
+@pytest.mark.parametrize("markers", [("# pytest-workers: one worker", MARKER), (MARKER, "# pytest-workers: one worker")], ids=["workers first", "random first"])
+def test_two_markers_on_two_lines_above_a_plain_run_clear_the_call_for_both_rules(build_repo, markers):
+    """RANDOM-8, PYTEST-7: a call that both rules judge carries each marker on a line of its own."""
+    text = head() + "".join(f"      {marker}\n" for marker in markers) + "      - run: pytest -n 0 -q\n"
+    repo = build_repo({WORKFLOW: text})
+    assert [rule_findings(repo, rule) for rule in (RULE, Rule.PYTEST_WORKERS)] == [[], []]
 
 
 @pytest.mark.parametrize("level", LEVELS)
