@@ -21,7 +21,7 @@ from tests.support.check import (
 from tests.support.check import check_output as run
 from tests.support.door import FIX_WORDS, door_in
 from tests.support.generated_files import MANDATORY_JOB, TYPES_FILE, generated_config
-from tests.support.source_code import long_function, typescript_file
+from tests.support.source_code import long_function, typescript_branchy_function, typescript_file
 
 GATE = f'[gate]\nmandatory_jobs = ["{MANDATORY_JOB}"]\n'
 
@@ -34,8 +34,18 @@ GATE = f'[gate]\nmandatory_jobs = ["{MANDATORY_JOB}"]\n'
         ({TYPES_FILE: typescript_file(900)}, True, f'[file_lines]\n"{TYPES_FILE}" = 850\n', [(TYPES_FILE, FindingEvent.CAN_FALL)]),
         ({"gen/api.py": long_function(70)}, True, "", []),
         ({"gen/api.py": long_function(70)}, False, "", [("gen/api.py:1", FindingEvent.NEW_DEBT)]),
+        ({"gen/bundle.ts": typescript_branchy_function(16)}, True, "", []),
+        ({"gen/bundle.ts": typescript_branchy_function(16)}, False, "", [("gen/bundle.ts:1", FindingEvent.NEW_DEBT)]),
     ],
-    ids=["a declared TypeScript file", "the same file undeclared", "grown past its leftover entry", "a declared Python function", "undeclared Python function"],
+    ids=[
+        "a declared TypeScript file",
+        "the same file undeclared",
+        "grown past its leftover entry",
+        "a declared Python function",
+        "undeclared Python function",
+        "a declared TypeScript bundle's CCN",
+        "undeclared TypeScript bundle's CCN",
+    ],
 )
 def test_a_declared_file_is_clean_at_any_size_and_the_same_file_undeclared_is_debt(build_repo, capsys, files, declared, baseline, expected):
     """GENERATED-1, GENERATED-10: lines, functions and the held entry of a declared file are not judged, where the same
