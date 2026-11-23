@@ -149,6 +149,8 @@ def test_a_file_that_cannot_be_read_is_counted_apart_and_the_others_still_count(
     [
         pytest.param("@a" + ".b" * 400 + "\ndef test_a(): ...\n", id="a-deep-dotted-decorator"),
         pytest.param("x = a" + ".b" * 600 + "\ndef test_a(): ...\n", id="a-deep-dotted-expression"),
+        pytest.param("@a" + "()" * 3000 + "\ndef test_a(): ...\n", id="a-deep-call-chain-decorator"),
+        pytest.param("x = a" + "()" * 3000 + "\ndef test_a(): ...\n", id="a-deep-call-chain-expression"),
     ],
 )
 def test_a_deeply_nested_python_file_still_counts_its_tests(source):

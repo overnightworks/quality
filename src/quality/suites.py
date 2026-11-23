@@ -81,10 +81,10 @@ def read_script_tests(tracked: list[str], sources: dict[str, bytes]) -> tuple[di
 
 def _python_marks(node: ast.expr, aliases: dict[str, Marks]) -> Marks:
     """The marks an expression names: a pytest mark bare or called, a module name bound to one, or a list or tuple of them."""
+    while isinstance(node, ast.Call):
+        node = node.func
     if isinstance(node, ast.List | ast.Tuple):
         return NO_MARKS.union(*(_python_marks(element, aliases) for element in node.elts))
-    if isinstance(node, ast.Call):
-        return _python_marks(node.func, aliases)
     if isinstance(node, ast.Name):
         return aliases.get(node.id, NO_MARKS)
     written = _dotted_name(node)
