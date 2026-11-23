@@ -86,6 +86,16 @@ def _followed(root: Path, tracked: list[str], rerun_command: str, held: baseline
     return ratchet.CeilingFix(held, ()) if lineage is None else ratchet.follow_renames(held, *lineage, frozenset(tracked))
 
 
+def _recording(
+    root: Path, tracked: list[str], made: ratchet.CeilingFix, table: str, fact: str, ceiling: baseline_file.Baseline
+) -> ratchet.CeilingFix:
+    """The fix with a held table recorded in `ceiling`, once git is known never to have held it; a first recording
+    carries the table in the ceiling alone, which its row counts, so only a later one is noted."""
+    _require_no_table_in_git(root, tracked, table)
+    recorded = () if made.first else (Note(baseline_file.BASELINE_PATH, NoteEvent.RECORDED, fact),)
+    return replace(made, ceiling=ceiling, changes=(*made.changes, *recorded))
+
+
 def _with_recorded_jobs(root: Path, tracked: list[str], made: ratchet.CeilingFix) -> ratchet.CeilingFix:
     """The fix with the job table recorded where the ceiling has none, git never held one and a judged job is debt;
     a first recording carries the table in the ceiling alone, which its row counts."""
@@ -94,10 +104,7 @@ def _with_recorded_jobs(root: Path, tracked: list[str], made: ratchet.CeilingFix
     limits = workflow_rules.recordable_job_limits(root, tracked)
     if not limits:
         return made
-    _require_no_table_in_git(root, tracked, baseline_file.JOB_MINUTES)
-    fact = counted(len(limits), baseline_file.JOB_LIMIT)
-    recorded = () if made.first else (Note(baseline_file.BASELINE_PATH, NoteEvent.RECORDED, fact),)
-    return replace(made, ceiling=replace(made.ceiling, job_minutes=limits), changes=(*made.changes, *recorded))
+    return _recording(root, tracked, made, baseline_file.JOB_MINUTES, counted(len(limits), baseline_file.JOB_LIMIT), replace(made.ceiling, job_minutes=limits))
 
 
 def _with_spec_citations(root: Path, tracked: list[str], sources: dict[str, bytes], made: ratchet.CeilingFix) -> ratchet.CeilingFix:
@@ -115,10 +122,8 @@ def _with_spec_citations(root: Path, tracked: list[str], sources: dict[str, byte
     uncited = tree.recordable()
     if uncited is None:
         return made
-    _require_no_table_in_git(root, tracked, baseline_file.SPEC_CITATIONS)
     fact = counted(len(uncited), baseline_file.UNCITED_SPEC_ID)
-    recorded = () if made.first else (Note(baseline_file.BASELINE_PATH, NoteEvent.RECORDED, fact),)
-    return replace(made, ceiling=replace(made.ceiling, spec_citations=uncited), changes=(*made.changes, *recorded))
+    return _recording(root, tracked, made, baseline_file.SPEC_CITATIONS, fact, replace(made.ceiling, spec_citations=uncited))
 
 
 def fix_ceiling(
