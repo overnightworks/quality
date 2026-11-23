@@ -108,8 +108,11 @@ Each line has a reason:
   checkout and no secret and runs only `actions/deploy-pages`, pinned by commit with its tag in a comment, so it runs no
   caller code (RELEASE-24). It deploys the artifact the build uploaded with `actions/upload-pages-artifact`, which lies
   outside the release files (TAG-4 never sees it), so a broken page generator stops the release before the tag. A failed
-  publish leaves the release standing and is re-run with "re-run failed jobs" (RELEASE-25). The precedent for the permission
+  publish leaves the release standing; "re-run failed jobs" deploys the page again within the Pages artifact's retention (one
+  day by default, `retention-days` of the upload sets it) (RELEASE-25). The precedent for the permission
   pair is quality's `report.yml` publish job.
+- `timeout-minutes` on `publish` is a convention that `report.yml` shares; `job-timeout` judges only workflows that run on
+  `pull_request` or `push` (TIMEOUT-2), so it does not judge this `workflow_dispatch` workflow.
 - `commit` is the gate's output, the commit it judged (GATE-2).
 - `artifact` names an artifact of the same run (TAG-3). Its regular top-level files, dotfiles included, are the release's files and
   nothing else is uploaded (TAG-4); a file name carries no `#`, which gh reads as the start of an asset label. A build that makes
@@ -249,9 +252,11 @@ These refusals stop the attempt before publishing; none creates or changes a tag
 | `Refused: the file <name> has a # in its name, which gh reads as the start of an asset label.` (TAG-12) | Rename the file in the build. |
 | `Refused: the tag v<version> exists at <sha>, not at the gated commit <sha>.` (TAG-13) | Choose the next version; a tag is never moved. |
 
-Re-run the failed jobs after a failed publish: the tag job runs whole again, keeps the tag at the commit and completes the
-release (TAG-14); after a failed `publish` job it runs that job alone. "Re-run all jobs" runs the gate again, which refuses the existing tag. A tag left without a release by a defective
-publish step is completed by hand with `gh release create v<version> <files> --verify-tag`.
+Re-run the failed jobs after a failed publish step: the tag job runs whole again, keeps the tag at the commit and completes
+the release (TAG-14). After a failed `publish` job, "re-run failed jobs" runs that job alone, within the Pages artifact's
+retention (one day by default); after that the build must run again under a new version. "Re-run all jobs" runs the gate
+again, which refuses the existing tag. A tag left without a release by a defective publish step is completed by hand with
+`gh release create v<version> <files> --verify-tag`.
 
 ## Concurrency
 
