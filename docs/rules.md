@@ -908,8 +908,8 @@ the top mapping or `on:`, are exit `2` naming the file (PRWORKFLOW-6). The clean
 the rule's extent is the number of pull-request workflows. No configuration switches the rule off. It first ships in v0.23.0, so a gate pinned below that release shows
 `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `enforced` (FLEET-18).
 
-The `pytest-workers` rule judges every pytest call in a `run:` step of every tracked workflow, whether or not a pull
-request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a composite
+The `pytest-workers` rule judges every pytest call that runs tests in a `run:` step of every tracked workflow, whether or
+not a pull request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a composite
 action is not (PYTEST-1). The script is never run. The value is read line by line, as the shell reads it: a literal
 block scalar at each file line, a folded or quoted one with each line break kept at the scalar's first line; each `${{
 }}` on a line becomes one dynamic word; a line ending in a backslash joins the next; a `#` that starts a word outside
@@ -949,12 +949,16 @@ the words it splits into, in its place (PYTEST-3). The word `pytest` anywhere el
 `echo "run pytest"`, a path, a comment. A script, `make`, `tox`, `nox`, `xvfb-run` or `docker run` starting pytest is
 the rule's named gap and reads as no call (PYTEST-4).
 
-The last of `-n N`, `-nN`, `-n=N`, `--numprocesses N` and `--numprocesses=N` counts, as argparse reads repeated flags.
-`N` is `auto`, `logical` or a whole number above zero: the call passes. No such flag, `-n 0` (`00` too), an abbreviated
-flag (`--numproc 4`) or one glued to other short flags (`-qn4`) is `serial`; any other `N`, a missing one or a dynamic
-one (`$WORKERS`, `$(nproc)`, `${{ matrix.n }}`) is `invalid`. The words after the first `--` are paths for pytest, not
-its flags, so `pytest tests -- -n auto` is `serial` (PYTEST-5). A quoted lone `--` (`pytest -k "--" -n 4`) reads as that
-same word, because the reader does not keep the quote, so it is a false `serial` that the marker clears.
+The options before the first `--` are read as pytest reads them, by the reader `pytest-random` shares (RANDOM-7): the
+last of `-n N`, `-nN`, `-n=N`, `--numprocesses N` and `--numprocesses=N` counts, as argparse reads repeated flags, also
+behind other short flags in one word (`-qn4`, `-qn 4`, `-qn=4`). `N` is `auto`, `logical` or a whole number above zero: the
+call passes. No such flag, `-n 0` (`00` too, `-qn0` too) or an abbreviated flag (`--numproc 4`, which pytest refuses) is
+`serial`; any other `N`, a missing one or a dynamic one (`$WORKERS`, `$(nproc)`, `${{ matrix.n }}`) is `invalid`. The
+words after the first `--` are paths for pytest, not its flags, so `pytest tests -- -n auto` is `serial`. A call that only
+lists tests, with any spelling pytest declares for `--collect-only` (`--collect-only`, `--collectonly`, `--co`) before the
+first `--`, runs none and is not judged (`pytest --collect-only` is clean, `pytest -- --collect-only` is `serial`)
+(PYTEST-5). A quoted lone `--` (`pytest -k "--" -n 4`) reads as that same word, because the reader does not keep the
+quote, so it is a false `serial` that the marker clears; pytest itself refuses `-k "--"`.
 `PYTEST_ADDOPTS` and a `-n` in `pyproject.toml` are not read. A line `shlex` refuses that holds the word `pytest`, and a
 command word built at run time (`eval`, or a word starting with `$`) in a `run:` that holds the word `pytest` outside
 comments, are `invalid`, because the rule sees a call it cannot read; without the word `pytest` in the `run:` they are
@@ -976,8 +980,8 @@ and a marker above it clears it (PYTEST-13). A finding is at the call's first li
 without -n` or `pytest runs with -n 0`, or `invalid` with the fact `-n count is not a number above zero or auto`,
 `command cannot be read to its end` or `command is built at run time, pytest -n cannot be read`, its fix `pass -n auto,
 or explain on the line above: # pytest-workers: <reason>` (PYTEST-8). A workflow whose YAML or file cannot be read, a
-`run:` that is no string, and an alias or a merge key where it can hide `jobs`, a job, `steps`, a step or a `run:` are
-exit `2` naming the file; a step with no `run:` is skipped (PYTEST-9). The clean row of `workflows` keeps its words, and
+`run:` that is no string, a `jobs` or a job that is no mapping, and an alias or a merge key where it can hide `jobs`, a
+job, `steps`, a step or a `run:` are exit `2` naming the file; a step with no `run:` is skipped (PYTEST-9). The clean row of `workflows` keeps its words, and
 the rule's extent is the count of workflows it read (PYTEST-10). quality's own checkout needs no workflow edit
 (PYTEST-11). No configuration switches the rule off. It first ships in v0.11.0, so a dependent meets it
 at its first bump to that release.
@@ -1037,9 +1041,9 @@ finding: each rule reads only its own id, and `pytest-workers` keeps its per-lin
 that proves an install on a fresh system, and for nothing else: the reader cannot see a step's purpose, so the review of the dependent's diff judges it, and any other use is a deviation from
 the fleet standard, which only the operator rules. The findings stand in the `workflows` area, their fix `take the
 tool from the lockfile, the runner image or an image pinned by digest, or explain on the line above: #
-runtime-install: <reason>` (RUNTIME-8). A workflow whose YAML or file cannot be read, a `run:` that is no string, and
-an alias or a merge key where it can hide `jobs`, a job, `steps`, a step or a `run:` are exit `2` naming the file; a
-step with no `run:` is skipped and a tracked name gone from the tree is skipped (RUNTIME-9). The clean row of
+runtime-install: <reason>` (RUNTIME-8). A workflow whose YAML or file cannot be read, a `run:` that is no string, a
+`jobs` or a job that is no mapping, and an alias or a merge key where it can hide `jobs`, a job, `steps`, a step or a
+`run:` are exit `2` naming the file; a step with no `run:` is skipped and a tracked name gone from the tree is skipped (RUNTIME-9). The clean row of
 `workflows` keeps its words, the rule's extent is the count of workflows it read (RUNTIME-10). No configuration
 switches the rule off. It first ships in v0.12.0, so a dependent meets it at its first bump to that release.
 quality's own checkout needs no workflow edit.
@@ -1089,8 +1093,8 @@ is not UTF-8, or is a symlink that resolves outside the repository, is exit `2` 
 a `make` goal and no step calls the check directly (CATALOG-23). A word in an `echo`, a script, `tox`, `nox`, a
 composite action or a reusable workflow called through `uses:` is no call (CATALOG-9); every other form the reading does
 not follow is no call too (CATALOG-22). A step with `continue-on-error: true` or with a `working-directory` other than
-`.` does not count. An unreadable workflow, a `run:` that is no string, or an alias or a merge key where it can hide a
-step is exit `2` naming the workflow (CATALOG-11).
+`.` does not count. An unreadable workflow, a `run:` that is no string, a `jobs` or a job that is no mapping, or an alias
+or a merge key where it can hide a step is exit `2` naming the workflow (CATALOG-11).
 
 A covered repository is judged in this order (CATALOG-24). Any counted step with a call, directly or through `make`, makes the
 rule clean: no row, whatever else the workflows hold. Otherwise each unreadable line and each command built at run time is an
@@ -1681,11 +1685,15 @@ with the seed printed" (pytest-randomly). Three readers judge that one decision.
     `--verbosity=<n>` and `--verbosity <n>` set it, read in order of appearance; a level below zero, or `--no-header`, is
     `unseeded`. So `-q`, `-qq`, `-qn4` and `--verbosity=-1` hide the seed, `-q -v`, `-qv`, `-q --verbosity=0` and
     `-n auto` show it, and `--verbosity=0 -q` hides it.
-  - *Reading (RANDOM-7):* only the words before the first `--` are options. In a short cluster (`-abc`) each letter is
-    read from the left, and a letter that takes a value (`-p`, `-o`, `-r`, `-k`, `-m`, `-c`, `-W`, `-n`, the set of
-    pytest 9.2.0 and pytest-xdist 3.8.0) ends the cluster with the rest of the word, or the next word, as its value:
-    `-kquick`, `-rfq` and `-n4 -k q` are clean, `-qn4` and `-qk quick` are `unseeded`. An option a plugin of the
-    repository adds is not known. A `--randomly-seed` value built with `${{ }}` is chosen at run time and is clean (a
+  - *Reading (RANDOM-7):* the options are read by the reader `pytest-workers` shares (PYTEST-5), and only the words
+    before the first `--` are options. In a short cluster (`-abc`) each letter is read from the left, and a letter that
+    takes a value (the set pytest's and xdist's parsers declare) ends the cluster with the rest of the word, or the next
+    word, as its value: `-kquick`, `-rfq` and `-n4 -k q` are clean, `-qn4` and `-qk quick` are `unseeded`. A long option
+    is read by its full name only. A `-p` counts only as a word of its own (`-p X`, `-pX`), as pytest reads the plugin
+    words: `-vpno:randomly` is clean, and `--disable-plugin-autoload -qp randomly` is `unshuffled`, since no plugin is
+    named. The value-taking letters and the spellings of the options the rules read are declared, never read from pytest
+    at run time, and a test holds them against the installed parsers. An option a plugin of the repository adds is not
+    known. A `--randomly-seed` value built with `${{ }}` is chosen at run time and is clean (a
     named gap), and so is a value of `PYTEST_ADDOPTS` that holds `${{ }}`. `PYTEST_ADDOPTS` is split as shell words, as
     pytest splits it, so `-p "no:randomly"` is read as `-p no:randomly`.
   - An `addopts` finding stands at the key's line in the `pyproject.toml` (no line where the key is not a plain
@@ -1697,9 +1705,9 @@ with the seed printed" (pytest-randomly). Three readers judge that one decision.
   or after `export`. Any value of `PYTEST_DISABLE_PLUGIN_AUTOLOAD` that is not empty (a blank one included) switches the
   autoload off, as pytest reads it, so it is `unshuffled`, whatever else `env:` holds. A call behind a script, `make` or
   a mise task, a `pytest.main([...])`, a flag in `pytest.ini`, `.pytest.ini`, `pytest.toml`, `.pytest.toml`, `tox.ini` or
-  `setup.cfg` and a plugin disabled in a `conftest.py` are not read. A call with `--collect-only` or `--co` before the
-  first `--` only lists tests, runs none and is not judged (`pytest --collect-only -q` is clean, `pytest -q -- --collect-only`
-  is `unseeded`).
+  `setup.cfg` and a plugin disabled in a `conftest.py` are not read. A call that only lists tests, as `pytest-workers`
+  reads it (PYTEST-5: `--collect-only`, `--collectonly` or `--co` before the first `--`), runs none and is not judged
+  (`pytest --collect-only -q` is clean, `pytest -q -- --collect-only` is `unseeded`).
 - **The marker (RANDOM-8).** A comment `# pytest-random: <reason>`, with a reason that holds a letter, on the line of a
   workflow call, assignment or `env:` value, or alone on the line directly above it, clears the finding (the form of
   `# pytest-workers:`, PYTEST-7); a marker that trails another command's line clears that command only. It is the way out of a flow layer (end-to-end, browser, image); it clears nothing in `addopts`, and it has
@@ -1714,7 +1722,8 @@ with the seed printed" (pytest-randomly). Three readers judge that one decision.
 - **What cannot be read (RANDOM-3, RANDOM-12, RANDOM-13).** A lock or `pyproject.toml` that is no UTF-8 TOML, a lock
   whose packages are no list of tables and an `addopts` that is neither a string of shell words nor a list of strings are
   exit `2` naming the file. A workflow whose YAML cannot be read, and an alias or a merge key where it can hide `jobs`, a
-  job, `steps`, a step or an `env:`, are exit `2` naming the file, as for `pytest-workers` (PYTEST-9), and so is an
+  job, `steps`, a step or an `env:`, and a `jobs` or a job that is no mapping, are exit `2` naming the file, as for
+  `pytest-workers` (PYTEST-9), and so is an
   `env:` value of the two variables, or a script assignment of `PYTEST_ADDOPTS`, that is no shell words. A pytest line
   the shared reading cannot read or finds built at run time is `invalid` for `pytest-workers` (PYTEST-6) and no finding
   of this rule, so it is red once.

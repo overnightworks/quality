@@ -294,10 +294,11 @@ def test_a_pyproject_quality_cannot_read_is_exit_two(build_repo, body, reason):
             "on: pull_request\njobs:\n  j:\n    runs-on: ubuntu-latest\n    <<: {steps: []}\n",
             id="a merge key hides the job",
         ),
+        pytest.param("on: pull_request\njobs: [a]\n", id="jobs is a list"),
     ],
 )
 def test_a_workflow_the_rule_cannot_read_in_a_covered_repository_is_exit_two(build_repo, workflow_text):
-    """CATALOG-11: a workflow that cannot be read, a run that is no string, an alias or a merge key that can hide a step."""
+    """CATALOG-11: a workflow that cannot be read, a run that is no string, an alias or a merge key that can hide a step, a `jobs` that is no mapping."""
     repo = build_repo({"pyproject.toml": pyproject(DECLARED), WORKFLOW: workflow_text})
     refusal = catalog_verdict(repo).refusal
     assert refusal is not None
