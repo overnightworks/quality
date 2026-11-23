@@ -127,7 +127,8 @@ rows, by area:
   found in its file is `unused` ([rules](rules.md)). A `logging` finding is no finding row but an `open` note at the
   file and line, its fact the logline rule it breaks (LOGGING-3).
 - `debt`: the `test-twin` rule is no finding row but one `open` note at `.`, its fact the groups of test twins and of
-  copied test helpers it counts (TWIN-4).
+  copied test helpers it counts (TWIN-4); so is `spec-citation`, its fact the spec IDs no test cites, the cited IDs no spec
+  defines and the IDs defined twice (CITE-4).
 
 The `env-file` fix's own wording stands in [rules](rules.md).
 
@@ -185,7 +186,7 @@ that cannot check is `✗ <area>  not checked  <reason>` ([Refusals](#refusals))
 
 A note is a `·` row under its area, after the area's findings, aligned with them (ROW-15):
 `· <path[:line]>  <event>  <fact>`, with no `fix:` of its own (ROW-16). Its events are `allowed` (file rules,
-dependencies, secrets and python-print), `open` (logging, test-twin), `not measured` (a Python file the size rule cannot parse or a script file that is not UTF-8, without a ceiling
+dependencies, secrets and python-print), `open` (logging, test-twin, spec-citation), `not measured` (a Python file the size rule cannot parse or a script file that is not UTF-8, without a ceiling
 file; O22), `unused` and `warning` (import-contract) and `unused` (secret). An allowed advisory and an honoured output
 owner stand as notes, and the clean row counts them (O15, O49):
 
