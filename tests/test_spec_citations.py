@@ -3,14 +3,22 @@ from pathlib import Path
 
 import pytest
 
-from quality.baseline_file import BASELINE_PATH, render_baseline
+from quality.baseline_file import BASELINE_PATH
 from quality.report import FindingEvent, NoteEvent
 from quality.rules import Area, Rule
-from tests.support.baselines import DEBT_BASELINE_STATES, ceiling, rendered
-from tests.support.check import area_fact, check_output, check_result, note_rows, refusals, rule_findings, rule_notes
-from tests.support.git_repositories import make_repo
+from tests.support.baselines import DEBT_BASELINE_STATES, holding_spec_ids, rendered
+from tests.support.check import (
+    area_fact,
+    check_output,
+    check_result,
+    note_rows,
+    refusals,
+    rule_findings,
+    rule_notes,
+    runs_apart_by_the_note,
+)
+from tests.support.specs import SPEC, spec_with
 
-SPEC = "docs/rules.md"
 UNCITED = "1 spec ID uncited"
 
 
@@ -19,10 +27,6 @@ def note_of(repo: Path) -> str | None:
     notes = rule_notes(repo, Rule.SPEC_CITATION)
     assert len(notes) <= 1
     return notes[0].fact if notes else None
-
-
-def spec_with(*lines: str) -> dict[str, str]:
-    return {SPEC: "\n".join(lines) + "\n"}
 
 
 def cited_by_python(docstring: str, name: str = "test_it") -> dict[str, str]:
@@ -269,7 +273,7 @@ def test_sources_that_cannot_be_read_refuse_the_area_and_print_no_note(build_rep
 
 def held(*identifiers: str) -> dict[str, str]:
     """The baseline of a repository whose `[spec_citations]` table holds `identifiers` as uncited."""
-    return {BASELINE_PATH: render_baseline(ceiling({}, frozenset(), spec_citations=frozenset(identifiers)))}
+    return {BASELINE_PATH: holding_spec_ids(*identifiers)}
 
 
 def found(repo: Path) -> list[tuple[str, str, int | None]]:
@@ -389,12 +393,5 @@ def test_with_the_table_a_python_test_file_that_does_not_parse_is_skipped(build_
 def test_every_other_line_and_the_exit_stay_as_the_same_run_without_the_note(tmp_path, capsys, state):
     """CITE-4, CITE-6: without the table the note is the only line the rule adds, in every state of the baseline,
     a red debt area included."""
-    baseline = {} if DEBT_BASELINE_STATES[state] is None else {BASELINE_PATH: DEBT_BASELINE_STATES[state]}
-    (tmp_path / "with").mkdir()
-    (tmp_path / "without").mkdir()
-    code, with_note = check_output(capsys, make_repo(tmp_path / "with", {**spec_with("- X-1: a."), **baseline}))
-    assert note_rows(with_note, ".")
-    without_code, without_note = check_output(capsys, make_repo(tmp_path / "without", {**spec_with("Prose."), **baseline}))
-    assert not note_rows(without_note, ".")
-    kept = [line for line in with_note.splitlines() if " open  " not in line or "spec ID" not in line]
-    assert (code, kept) == (without_code, without_note.splitlines())
+    with_note, without_note = runs_apart_by_the_note(tmp_path, capsys, state, spec_with("- X-1: a."), spec_with("Prose."), "spec ID")
+    assert with_note == without_note

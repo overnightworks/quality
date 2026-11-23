@@ -26,6 +26,17 @@ def ceiling(
     return Baseline(size, clones, job_minutes, spec_citations)
 
 
+def spec_table(*identifiers: str) -> str:
+    """The `[spec_citations]` table, as TOML text, that holds `identifiers` as uncited."""
+    listed = "".join(f'"{identifier}", ' for identifier in identifiers)
+    return f"[spec_citations]\nuncited = [{listed}]\n"
+
+
+def holding_spec_ids(*identifiers: str) -> str:
+    """The rendered baseline of a repository whose `[spec_citations]` table holds `identifiers` as uncited."""
+    return rendered(f"[file_lines]\n\n[clones]\n\n{spec_table(*identifiers)}")
+
+
 # Every state of the baseline a report-only debt rule must leave as it is; None is no baseline file.
 DEBT_BASELINE_STATES = {
     "a baseline held": render_baseline(ceiling({}, frozenset())),

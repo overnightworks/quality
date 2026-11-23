@@ -13,6 +13,7 @@ from quality.sides import side_of
 from quality.verdict import judge
 from tests.support.advisories import allowance_config
 from tests.support.architecture import FORBIDDEN, contracts_ini
+from tests.support.baselines import spec_table
 from tests.support.generated_files import generated_config
 from tests.support.verdict import declaration, gate_config, job
 
@@ -92,11 +93,6 @@ def jobs(**limits):
     return f'[job_minutes."{CI}"]\n' + "".join(f"{job_id} = {minutes}\n" for job_id, minutes in limits.items())
 
 
-def held(*identifiers):
-    """A `[spec_citations]` table holding `identifiers` as its uncited IDs."""
-    return "[spec_citations]\nuncited = [" + ", ".join(f'"{identifier}"' for identifier in identifiers) + "]\n"
-
-
 def pages(**counts):
     """A `[literal_text]` table holding `counts` for page paths under `frontend/src/lib`, named `A` to `C`."""
     return "[literal_text]\n" + "".join(f'"frontend/src/lib/{name}.svelte" = {count}\n' for name, count in counts.items())
@@ -120,8 +116,8 @@ UNDECLARED_KINDS = [
     kind(CHECKS, CHECKS, (jobs(e2e=40), jobs(e2e=45)), id="a job limit raised"),
     kind(CHECKS, CHECKS, (jobs(e2e=40), jobs(e2e=40, other=20)), id="a job limit added"),
     kind(CHECKS, CHECKS, (jobs(e2e=40), ""), id="the job limit baseline removed"),
-    kind(CHECKS, CHECKS, (held("ST-01"), held("ST-01", "ST-02")), id="a spec ID added"),
-    kind(CHECKS, CHECKS, (held("ST-01"), ""), id="the spec citation baseline removed"),
+    kind(CHECKS, CHECKS, (spec_table("ST-01"), spec_table("ST-01", "ST-02")), id="a spec ID added"),
+    kind(CHECKS, CHECKS, (spec_table("ST-01"), ""), id="the spec citation baseline removed"),
     kind(CHECKS, CHECKS, imports=(GUARDED, None), id="an import-linter config removed"),
     kind(CHECKS, CHECKS, imports=(GUARDED, contracts_ini({"guarded": FORBIDDEN}, roots=("shop", "extra"))),
          id="a session option changed"),
@@ -264,19 +260,19 @@ def test_the_job_lines_come_after_the_size_and_clone_lines_whatever_the_base_clo
 @pytest.mark.parametrize(
     ("baselines", "expected"),
     [
-        pytest.param(("", held("ST-01")), [], id="a base without the table: adoption"),
-        pytest.param((None, held("ST-01")), [], id="no base file: adoption of the file"),
-        pytest.param((held("ST-01"), held("ST-01")), [], id="equal"),
-        pytest.param((held("ST-01", "ST-02"), held("ST-02")), [], id="an ID dropped"),
-        pytest.param((held("ST-01"), "[spec_citations]\n"), [], id="the table held and emptied"),
+        pytest.param(("", spec_table("ST-01")), [], id="a base without the table: adoption"),
+        pytest.param((None, spec_table("ST-01")), [], id="no base file: adoption of the file"),
+        pytest.param((spec_table("ST-01"), spec_table("ST-01")), [], id="equal"),
+        pytest.param((spec_table("ST-01", "ST-02"), spec_table("ST-02")), [], id="an ID dropped"),
+        pytest.param((spec_table("ST-01"), "[spec_citations]\n"), [], id="the table held and emptied"),
         pytest.param(("", ""), [], id="neither side holds the table"),
         pytest.param(
-            (file_lines("src/a.py", 800), file_lines("src/a.py", 820) + held("ST-01")),
+            (file_lines("src/a.py", 800), file_lines("src/a.py", 820) + spec_table("ST-01")),
             ["    ! size baseline raises file_lines src/a.py 800 -> 820"],
             id="adoption beside a size entry that rises",
         ),
         pytest.param(
-            (held("ST-01") + jobs(e2e=40), held("ST-01", "ST-03", "ST-02") + jobs(e2e=45)),
+            (spec_table("ST-01") + jobs(e2e=40), spec_table("ST-01", "ST-03", "ST-02") + jobs(e2e=45)),
             [f"    ! job limit baseline raises {CI} e2e 40 -> 45", "    ! spec citation baseline adds ST-02", "    ! spec citation baseline adds ST-03"],
             id="the added IDs sorted after the job lines",
         ),
