@@ -717,12 +717,12 @@ def test_markdown_in_a_path_of_a_pair_stays_text(capsys, monkeypatch, tmp_path, 
 
 
 @pytest.mark.parametrize(
-    ("beta_reached_at", "clone_bounds", "exit_code"),
-    [(721, [300], 2), (720, [300], 2), (719, [300, 1], 0)],
+    ("beta_reached_at", "clone_bounds", "exit_code", "not_measured"),
+    [(721, [300], 2, True), (720, [300], 2, True), (719, [300, 1], 0, False)],
     ids=["overdrawn", "none left", "one second left"],
 )
 def test_a_clone_starts_only_within_the_reports_deadline_and_ends_at_it(
-    capsys, monkeypatch, tmp_path, public, beta_reached_at, clone_bounds, exit_code
+    capsys, monkeypatch, tmp_path, public, beta_reached_at, clone_bounds, exit_code, not_measured
 ):
     """FLEET-126: no clone starts once the 720 seconds are spent, the row says why and the exit is 2; a clone in
     flight is bound by the seconds left when it is smaller than the clone's own bound."""
@@ -739,11 +739,8 @@ def test_a_clone_starts_only_within_the_reports_deadline_and_ends_at_it(
     assert bounds == clone_bounds
     beta_row = next(line for line in printed.err.splitlines() if beta in line)
     assert printed.code == exit_code
-    if exit_code == 2:
-        assert "not measured" in beta_row
-        assert beta_row.endswith("the report's 720 seconds are spent")
-    else:
-        assert "not measured" not in beta_row
+    assert ("not measured" in beta_row) == not_measured
+    assert beta_row.endswith("the report's 720 seconds are spent") == not_measured
 
 
 def test_an_exception_inside_the_ci_time_read_reaches_the_report(capsys, monkeypatch, tmp_path, public):
