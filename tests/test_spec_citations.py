@@ -61,8 +61,10 @@ def test_a_list_item_that_opens_with_an_id_and_a_colon_defines_it(build_repo, sp
         ["# Rules", "", "| X-1 | row |"],
         ["- Rules:", "", "# Table", "", "| X-1 | row |"],
         ["- Rules:", "", "Prose.", "", "| X-1 | row |"],
+        ["- X-\u0662\u0666: Arabic-Indic digits."],
+        ["- X-\uff12\uff16: fullwidth digits."],
     ],
-    ids=["retired", "no colon", "parenthesised prose", "backtick fence", "tilde fence", "tilde line in a backtick fence", "short fence in a longer one", "table without rule", "table after heading", "table after prose"],
+    ids=["retired", "no colon", "parenthesised prose", "backtick fence", "tilde fence", "tilde line in a backtick fence", "short fence in a longer one", "table without rule", "table after heading", "table after prose", "arabic-indic digits", "fullwidth digits"],
 )
 def test_nothing_else_defines_an_id(build_repo, spec):
     """CITE-1: retired IDs need no test; a colon-less item, a fence, prose and a table not under a rule define nothing."""
