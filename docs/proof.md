@@ -15,11 +15,11 @@ Flow and probe tests that share one running app turn flaky when more workers hit
 
 ## The limits
 
-No CI job runs longer than 15 minutes, every pull request shows its CI time, and a repository whose weekly median exceeds 10 minutes breaches the standard. Every job runs on every pull request; no job is skipped because of the paths a change touches.
+No CI job runs longer than 15 minutes, every pull request shows its CI time, and a repository whose weekly median exceeds 10 minutes breaches the standard. Every job runs on every pull request; no job is skipped because of the paths a change touches. The verdict checks it for a mandatory job: one that was skipped is red (VERDICT-8, `docs/gate.md`); the skip of a non-mandatory job is not machine-read.
 
 ## The rules a machine checks
 
-Each is a rule of quality's gate on the repository's files, so the check has no timing noise.
+Each is checked by quality's gate, either as a rule on the repository's files or through the verdict on the run, so the check has no timing noise.
 
 | Rule | What it holds | Checked by |
 |---|---|---|
@@ -27,7 +27,7 @@ Each is a rule of quality's gate on the repository's files, so the check has no 
 | R2 | every pytest call in a workflow passes `-n` with workers, or carries its reason in the rule's marker | `pytest-workers` (PYTEST-1 and on) |
 | R3 | every workflow a pull request triggers groups its pull-request runs by number and cancels only those; every other run gets a group of its own, so a run on main always finishes | `pr-concurrency` (CONCURRENCY-1 and on) |
 | R4 | every workflow a pull request triggers is the gate's caller, CodeQL's, or declared with its reason | `pr-workflows` (PRWORKFLOW-1 and on) |
-| R5 | a sharded mandatory job keeps its name as an aggregator job that needs every shard | no rule yet; quality#720 holds the slice |
+| R5 | a sharded mandatory job keeps its name as an aggregator job that needs every shard | the verdict: a name the run holds only as shard legs is `missing  not in the run` (VERDICT-7), and dropping the name from the config is a loosening (VERDICT-13), both in `docs/gate.md`; whether the aggregator fails on a failed or skipped shard is not machine-read |
 | R6 | the unit and integration layers run in random order with the seed printed | `pytest-random` (RANDOM-1 and on) |
 
 ## The rules only judgement sees
@@ -54,7 +54,7 @@ The weekly report prints them in the run summary of `report.yml`, for the heads 
 
 ## The alert route
 
-A breach reaches the operator only as a mail through the platform's alert route, never as a list. quality publishes the weekly median per repository as a file the platform reads without a credential (`site/fleet-ci-time.json`, FLEET-106 to FLEET-110); the platform's own alert route mails the operator (platform#359). The breach knows no recorded debt: every repository whose weekly median exceeds 10 minutes fires the alert each week. Until that check stands, the table in the weekly summary is the only place a breach shows.
+A breach reaches the operator only as a mail through the platform's alert route, never as a list. quality publishes the weekly median per repository as a file the platform reads without a credential (`site/fleet-ci-time.json`, FLEET-106 to FLEET-111); the platform's own alert route mails the operator (platform#359). The breach knows no recorded debt: every repository whose weekly median exceeds 10 minutes fires the alert each week. Until that check stands, the table in the weekly summary is the only place a breach shows.
 
 ## Where the standard bends
 
