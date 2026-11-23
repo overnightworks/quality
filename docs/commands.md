@@ -312,16 +312,19 @@ repository a token can list is dropped without a trace (FLEET-72).
   drifted below the threshold leaves it, and a repository not measured adds no pair (FLEET-116). It raises no finding
   and changes no exit (FLEET-117). Named limit: the detector reads Python, not workflow files, so the copied jobs of
   `ci.yml` are outside it; the CI standard's shared building blocks own them.
-- Under `Tests per layer`, last, stands one row per repository: `Repo`, `Unit + integration`, `Flow`, `Live`, `Skipped`,
-  `Fixme` and `Note`, numbers with thousands separators as the size table. It is counted in the clone the size table
+- Under `Tests per layer`, last, stands one row per repository: `Repo`, `Unit`, `Integration`, `Flow`, `Live`,
+  `Skipped`, `Fixme` and `Note`, numbers with thousands separators as the size table. It is counted in the clone the size table
   measures, with no further GitHub call or clone, runs no repository code, raises no finding, changes no exit and is
   not in `site/fleet-ci-time.json` (FLEET-119). A Python test is a function named `test*` in a Python test file, a
   parametrized one once; a script test is a call of `it` or `test` in a TypeScript or JavaScript test file, bare or
   with a modifier (`skip`, `skipIf(…)`, `runIf(…)`, `only`, `fixme`, `concurrent`, `each(…)`), whose first argument is
   a string or a template; `test.step(`, `test.describe(`, `test.use(`, hooks, a member `x.test(` and a runtime
-  `test.skip(<condition>, …)` are no test (FLEET-120). The layer comes from the path alone: `Live` is a test under
+  `test.skip(<condition>, …)` are no test (FLEET-120). The layer comes from the path first: `Live` is a test under
   `tests/e2e/live/` of the root or of a judged project, or under a frontend project's `e2e/live/`; `Flow` is one under
-  `tests/e2e/` or a frontend project's `e2e/` otherwise; every other test is `Unit + integration` (FLEET-121).
+  `tests/e2e/` or a frontend project's `e2e/` otherwise. Every other Python test is `Integration` when an `integration`
+  mark reaches it, in the forms `Skipped` reads (on the test, on an enclosing class, in a class's or the module's
+  `pytestmark`, or through a module-level name bound to the mark), and `Unit` otherwise; every other script test is
+  `Unit` (FLEET-121).
   `Skipped` counts each test a skip mark reaches: Python `pytest.mark.skip` or `skipif`, bare or called, on the test,
   an enclosing class, a module's `pytestmark` (one mark, a list or a tuple) or through a module-level name bound to
   such a mark; script `skip` or `skipIf(…)` on the call, every test inside `describe.skip(`, `describe.skipIf(…)(` or
@@ -332,9 +335,10 @@ repository a token can list is dropped without a trace (FLEET-72).
   and pytest `pytest.mark.xfail`;
   a test with both marks counts in both columns (FLEET-123). A Python test file that does not parse and a script test
   file that is not UTF-8 or that the lexer refuses count no test; `Note` reads `N files not read`, and an unmeasured
-  repository reads `cannot judge: <reason>` there with `—` in every number (FLEET-124). Named limits: unit and
-  integration share a column, and probe and `browser`-marked pytest tests outside `tests/e2e/` are unit and
-  integration; not read are imperative `pytest.skip()` and `pytest.xfail()`, `pytest.param(marks=…)`,
+  repository reads `cannot judge: <reason>` there with `—` in every number (FLEET-124). Named limits: probe and
+  `browser`-marked pytest tests outside `tests/e2e/` count by their `integration` mark; an `integration` mark that only
+  a conftest hook adds counts as `Unit`, as does an integration layer by folder (`tests/integration/`), and a script test
+  has no integration mark; not read are imperative `pytest.skip()` and `pytest.xfail()`, `pytest.param(marks=…)`,
   `from pytest import mark`, marks added by conftest hooks, `-m` or `--deselect` in workflows, `unittest.skip`,
   Playwright `test.fail`, vitest `todo` and `fails` and `.only`; a test written in a loop counts once; the counts are
   static, not what a run skipped.
