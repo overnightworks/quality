@@ -429,16 +429,16 @@ def _judge_baseline_rules(
     return size, _attempt(lambda: clones.check_clones(tree, sources, baseline))
 
 
-def _content_findings(
+def _content_findings[T: list[Finding] | RuleResult](
     root: Path,
     modes: dict[str, str] | CannotJudge,
     allow_lists: AllowLists | CannotJudge,
     candidates: Callable[[dict[str, str]], list[str]],
-    check: Callable[..., list[Finding]],
-) -> list[Finding] | CannotJudge:
-    """The findings of a rule over the index modes and the contents of the files `candidates` names."""
+    check: Callable[..., T],
+) -> T | CannotJudge:
+    """The verdict of a rule over the index modes and the contents of the files `candidates` names."""
 
-    def judge() -> list[Finding]:
+    def judge() -> T:
         indexed = _required(modes)
         contents = checkout.read_existing(repository.read_bytes, root, checkout.on_disk(root, candidates(indexed)))
         try:

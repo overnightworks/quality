@@ -89,6 +89,14 @@ def test_a_finding_prints_as_one_row_of_its_own_kind(build_repo, capsys):
     assert_prints_as_kind(capsys, repo, Rule.ADAPTER_IMPORT, FindingEvent.ADAPTER_IMPORT, "shop.adapters.db")
 
 
+def test_a_clean_imports_row_counts_its_contracts_with_the_adapter_contract_declared(build_repo, capsys):
+    """ADAPTERIMPORT-16, ROW-11: judging the declared split leaves the imports row its contract count."""
+    repo = build_repo(shop_with_adapters({CORE_TEST: "import shop.core.config\n"}))
+    code, out = check_output(capsys, repo)
+    (row,) = [line for line in out.splitlines() if line.split()[1:2] == ["imports"]]
+    assert (code, row.split()[2:]) == (0, ["clean", "1", "contract"])
+
+
 FOUND = [f"{CORE_TEST}:1"]
 
 

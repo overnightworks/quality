@@ -12,7 +12,7 @@ import grimp
 
 from quality import architecture, layout
 from quality.config import LayoutAllowance
-from quality.report import Finding, FindingEvent
+from quality.report import Finding, FindingEvent, RuleResult
 from quality.rules import Rule
 
 FIX = "name the test after an adapter or composition module, or import no adapter in it"
@@ -106,9 +106,10 @@ class _Judgement:
 def check_adapter_imports(
     split: Split, graph: grimp.ImportGraph, modes: Mapping[str, str], contents: Mapping[str, bytes],
     allowances: Sequence[LayoutAllowance],
-) -> list[Finding]:
+) -> RuleResult:
     """One finding per import statement of a core test that is red, itself or through a support module it imports,
-    sorted by path and line. `contents` holds the bytes of `layout.test_import_candidates`."""
+    sorted by path and line, with the count of core tests judged as its extent. `contents` holds the bytes of
+    `layout.test_import_candidates`."""
     judgement = _Judgement(split, _reach(split, graph))
     support = layout.ImportTargets.support(modes)
     parsed: dict[str, list[layout.ModuleImport]] = {}
@@ -120,13 +121,14 @@ def check_adapter_imports(
 
     subjects = layout.test_subjects(modes, allowances)
     findings = []
-    for path in sorted(path for path, subject in subjects.items() if split.is_core_test(subject) and path in contents):
+    core_tests = sorted(path for path, subject in subjects.items() if split.is_core_test(subject) and path in contents)
+    for path in core_tests:
         for statement in imports_of(path):
             reds = judgement.reds(statement, imports_of)
             if reds:
                 words = ", ".join(red.words() for red in sorted(reds, key=lambda red: (red.name, red.through or "")))
                 findings.append(Finding(Rule.ADAPTER_IMPORT, path, statement.line, f"imports {words}", FIX, event=FindingEvent.ADAPTER_IMPORT))
-    return sorted(findings, key=lambda finding: (finding.path, finding.line or 0))
+    return RuleResult(sorted(findings, key=lambda finding: (finding.path, finding.line or 0)), len(core_tests), False)
 
 
 def _support_modules(start: Iterable[str], imports_of: Callable[[str], list[layout.ModuleImport]]) -> list[str]:
