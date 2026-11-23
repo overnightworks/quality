@@ -554,7 +554,7 @@ def _debt_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) ->
         case Measurement.MEASURED_ONLY:
             return f"{entries} over the thresholds"
         case Measurement.PARTLY_MEASURED_ONLY:
-            return pairs
+            return ", ".join([pairs, *held_ids])
         case Measurement.ENFORCED:
             return f"{CEILING_HELD}{SEPARATOR}{', '.join([entries, pairs, *limits, *held_ids])}"
 
