@@ -14,7 +14,7 @@ from quality.baseline_file import (
     load_baseline,
     render_baseline,
 )
-from tests.support.baselines import ceiling
+from tests.support.baselines import CONFLICT_MARKERS, ceiling
 
 SPELLINGS = [
     pytest.param("[{name}]\n", True, id="a header"),
@@ -50,7 +50,7 @@ UNREAD_NAMING = [
     pytest.param("\xff[{name}]", id="not UTF-8"),
 ]
 UNREAD_NOT_NAMING = [
-    pytest.param(b"[file_lines]\n<<<<<<< ours\n\"a.py\" = 900\n=======\n\"a.py\" = 800\n>>>>>>> theirs\n", id="conflict markers"),
+    pytest.param(CONFLICT_MARKERS, id="conflict markers"),
     pytest.param(b"\xff\xfe", id="not UTF-8"),
 ]
 

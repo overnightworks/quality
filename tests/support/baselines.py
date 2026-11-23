@@ -45,3 +45,7 @@ DEBT_BASELINE_STATES = {
     "a red area": render_baseline(ceiling({}, frozenset({ClonePair.of(Place("tests/a.py", "x"), Place("tests/b.py", "y"))}))),
     "a baseline that cannot be read": "[size\n",
 }
+
+
+# A baseline a merge left with its conflict markers: no parser reads it, and it names no table.
+CONFLICT_MARKERS = b"[file_lines]\n<<<<<<< ours\n\"a.py\" = 900\n=======\n\"a.py\" = 800\n>>>>>>> theirs\n"
