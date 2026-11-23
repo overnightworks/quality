@@ -11,6 +11,8 @@ no tool does; the scans of markup the fleet's languages standard assigns to it a
 
 quality owns and judges the fleet's shared naming rule, written in [naming.md](naming.md).
 
+quality owns and judges the fleet's shared proof and CI-time standard, written in [proof.md](proof.md).
+
 ## Who uses it today
 
 - Engineers, who check their repository before they push.
