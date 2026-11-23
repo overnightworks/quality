@@ -95,6 +95,7 @@ layers = [
     "render_pass",
     "catalog_rules",
     "live_layer | node_test_random | pr_workflows | pytest_random | spec_citations | vitest_random",
+    "suites",
     "read_attributes | typescript_tokens",
     "twins",
     "naming",
