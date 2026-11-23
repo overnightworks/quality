@@ -681,7 +681,7 @@ It applies these rules:
     order: `spec citation baseline adds ST-02`; the base's table gone from a head that still has the file:
     `spec citation baseline removed` (CITE-12);
   - the base's file deleted: `quality/baseline.toml removed` (BASELINE-6);
-  - a `[[size.generated]]` declaration is judged as in [gate](gate.md), "Declared loosenings".
+  - a `[[size.generated]]` or `[[spec_citations.implemented]]` declaration is judged as in [gate](gate.md), "Declared loosenings".
 
   Ruled by the operator: a file git recognises as renamed (BASELINE-11), a directory move included, is no loosening when
   its numbers do not rise (BASELINE-12).
