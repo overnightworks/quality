@@ -92,6 +92,11 @@ def jobs(**limits):
     return f'[job_minutes."{CI}"]\n' + "".join(f"{job_id} = {minutes}\n" for job_id, minutes in limits.items())
 
 
+def held(*identifiers):
+    """A `[spec_citations]` table holding `identifiers` as its uncited IDs."""
+    return "[spec_citations]\nuncited = [" + ", ".join(f'"{identifier}"' for identifier in identifiers) + "]\n"
+
+
 def pages(**counts):
     """A `[literal_text]` table holding `counts` for page paths under `frontend/src/lib`, named `A` to `C`."""
     return "[literal_text]\n" + "".join(f'"frontend/src/lib/{name}.svelte" = {count}\n' for name, count in counts.items())
@@ -115,6 +120,8 @@ UNDECLARED_KINDS = [
     kind(CHECKS, CHECKS, (jobs(e2e=40), jobs(e2e=45)), id="a job limit raised"),
     kind(CHECKS, CHECKS, (jobs(e2e=40), jobs(e2e=40, other=20)), id="a job limit added"),
     kind(CHECKS, CHECKS, (jobs(e2e=40), ""), id="the job limit baseline removed"),
+    kind(CHECKS, CHECKS, (held("ST-01"), held("ST-01", "ST-02")), id="a spec ID added"),
+    kind(CHECKS, CHECKS, (held("ST-01"), ""), id="the spec citation baseline removed"),
     kind(CHECKS, CHECKS, imports=(GUARDED, None), id="an import-linter config removed"),
     kind(CHECKS, CHECKS, imports=(GUARDED, contracts_ini({"guarded": FORBIDDEN}, roots=("shop", "extra"))),
          id="a session option changed"),
@@ -149,6 +156,8 @@ PRINTED = {
     "a job limit raised": [f"    ! job limit baseline raises {CI} e2e 40 -> 45"],
     "a job limit added": [f"    ! job limit baseline adds {CI} other 20"],
     "the job limit baseline removed": ["    ! job limit baseline removed"],
+    "a spec ID added": ["    ! spec citation baseline adds ST-02"],
+    "the spec citation baseline removed": ["    ! spec citation baseline removed"],
     "an import-linter config removed": ["    ! import-linter config in .importlinter removed"],
     "a session option changed": ["    ! import-linter changes root_packages"],
     "a contract removed": ['    ! import contract "guarded" removed'],
@@ -249,6 +258,33 @@ def test_a_job_limit_table_adopted_equal_lowered_or_dropped_loosens_nothing(base
 )
 def test_the_job_lines_come_after_the_size_and_clone_lines_whatever_the_base_clone_state_is(baselines, expected):
     """TIMEOUT-18."""
+    assert printed(judged(CHECKS, CHECKS, baselines, (None, None))) == expected
+
+
+@pytest.mark.parametrize(
+    ("baselines", "expected"),
+    [
+        pytest.param(("", held("ST-01")), [], id="a base without the table: adoption"),
+        pytest.param((None, held("ST-01")), [], id="no base file: adoption of the file"),
+        pytest.param((held("ST-01"), held("ST-01")), [], id="equal"),
+        pytest.param((held("ST-01", "ST-02"), held("ST-02")), [], id="an ID dropped"),
+        pytest.param((held("ST-01"), "[spec_citations]\n"), [], id="the table held and emptied"),
+        pytest.param(("", ""), [], id="neither side holds the table"),
+        pytest.param(
+            (file_lines("src/a.py", 800), file_lines("src/a.py", 820) + held("ST-01")),
+            ["    ! size baseline raises file_lines src/a.py 800 -> 820"],
+            id="adoption beside a size entry that rises",
+        ),
+        pytest.param(
+            (held("ST-01") + jobs(e2e=40), held("ST-01", "ST-03", "ST-02") + jobs(e2e=45)),
+            [f"    ! job limit baseline raises {CI} e2e 40 -> 45", "    ! spec citation baseline adds ST-02", "    ! spec citation baseline adds ST-03"],
+            id="the added IDs sorted after the job lines",
+        ),
+    ],
+)
+def test_a_spec_citation_table_loosens_only_by_an_added_id_or_its_removal(baselines, expected):
+    """CITE-12, BASELINE-9: a set has no raise, so an ID the base's table lacks is the loosening; a base without the table
+    is an adoption."""
     assert printed(judged(CHECKS, CHECKS, baselines, (None, None))) == expected
 
 
