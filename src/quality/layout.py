@@ -1,11 +1,10 @@
-import ast
 import re
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
-from quality import checkout, ratchet
+from quality import checkout, python_imports, ratchet
 from quality.config import LayoutAllowance, declared_paths
 from quality.report import Finding, FindingEvent, allowance_clause, stale_declaration
 from quality.rules import Rule
@@ -549,29 +548,28 @@ def _is_import_target(path: PurePosixPath) -> bool:
     return _is_test_module(path) or (path.name == CONFTEST_FILE and path.suffix == ".py")
 
 
-def _parsed(path: str, content: bytes) -> ast.Module:
+def _parsed(path: str, content: bytes) -> list[python_imports.Statement]:
     try:
-        return ast.parse(ratchet.python_text(content), filename=path)
+        return python_imports.import_statements(path, content)
     except ratchet.PARSE_ERRORS as error:
         raise UnparsableTestModule(f"{path} is not valid Python ({error})") from error
 
 
-def _import_findings(path: str, tree: ast.Module, targets: _ImportTargets) -> list[Finding]:
+def _import_findings(path: str, statements: list[python_imports.Statement], targets: _ImportTargets) -> list[Finding]:
     folder = PurePosixPath(path).parent
-    statements = [node for node in ast.walk(tree) if isinstance(node, ast.Import | ast.ImportFrom)]
-    named = ((node, _imported_targets(node, folder, targets)) for node in statements)
-    return [_imports_a_test_module(path, node.lineno, names) for node, names in named if names]
+    named = ((statement, _imported_targets(statement, folder, targets)) for statement in statements)
+    return [_imports_a_test_module(path, statement.line, names) for statement, names in named if names]
 
 
-def _imported_targets(node: ast.Import | ast.ImportFrom, folder: PurePosixPath, targets: _ImportTargets) -> list[str]:
-    if isinstance(node, ast.Import):
-        return [alias.name for alias in node.names if targets.absolute(alias.name)]
-    module = node.module or ""
+def _imported_targets(statement: python_imports.Statement, folder: PurePosixPath, targets: _ImportTargets) -> list[str]:
+    if isinstance(statement, python_imports.Import):
+        return [name for name in statement.names if targets.absolute(name)]
+    module = statement.module
     names = [module] if module else []
-    names += [f"{module}.{alias.name}" if module else alias.name for alias in node.names if alias.name != "*"]
-    if node.level:
-        dots = "." * node.level
-        return [dots + name for name in names if targets.relative(folder, node.level, name)]
+    names += [f"{module}.{name}" if module else name for name in statement.names if name != "*"]
+    if statement.level:
+        dots = "." * statement.level
+        return [dots + name for name in names if targets.relative(folder, statement.level, name)]
     return [name for name in names if targets.absolute(name)]
 
 
