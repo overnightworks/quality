@@ -157,7 +157,7 @@ def test_a_measured_fleet_prints_its_rows_on_stderr_and_only_the_tables_on_stdou
     )
     lines = printed.out.splitlines()
     assert lines[:6] == [
-        f"**Fleet report, 2026-11-06, quality {__version__} — functions and CCN: Python only**",
+        f"**Fleet report, 2026-11-06, quality {__version__}**",
         "",
         ("| Repo | Commit | Languages | Lines prod / test | test:prod | Files ≥ 800 prod / test | Functions ≥ 60 prod / test "
         "| CCN \\> 15 prod / test | Clone pairs prod / test | Note |"),

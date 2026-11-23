@@ -69,7 +69,6 @@ LISTING_URL = "https://api.github.com/orgs/{organization}/repos?type=public&per_
 NEXT_PAGE = re.compile(r'rel="next"')
 LISTING_CREDENTIAL_VARIABLE = "GITHUB_TOKEN"
 NOTHING_MEASURED = "nothing measured"
-FUNCTION_SCOPE = "functions and CCN: Python only"
 CLONE_TIMEOUT_SECONDS = 300
 LS_REMOTE_TIMEOUT_SECONDS = 60
 SHORT_COMMIT = 7
@@ -199,7 +198,7 @@ class Measured:
     commit: str
     languages: dict[ratchet.Language, int]
     areas: dict[ratchet.Area, ratchet.AreaSummary]
-    unparsable: int
+    unparsable: dict[ratchet.FunctionSource, int]
     pairs: dict[ratchet.Area, int]
     workflows: checkout.Workflows
     declared: Declared
@@ -413,7 +412,7 @@ def measure_repository(name: str) -> Row:
     pairs = clones.summarise_pairs(clones.find_pairs(sources).pairs)
     commit = head[:SHORT_COMMIT]
     languages, areas = ratchet.language_lines(tree), ratchet.summarise(tree)
-    return Measured(name, commit, languages, areas, len(tree.unparsable), pairs, workflows, declared)
+    return Measured(name, commit, languages, areas, {source: tree.unparsable_count(source) for source in ratchet.FunctionSource}, pairs, workflows, declared)
 
 
 def read_declared(clone: Path, tracked: list[str]) -> Declared:
@@ -462,7 +461,7 @@ def git(
 
 
 def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTagsError, ci_time: fleet_ci_time.FleetCiTime) -> tuple[str, ...]:
-    heading = f"**Fleet report, {today.isoformat()}, quality {__version__} — {FUNCTION_SCOPE}**"
+    heading = f"**Fleet report, {today.isoformat()}, quality {__version__}**"
     table = [table_line(COLUMNS), "|---" * len(COLUMNS) + "|", *(table_line(cells(row)) for row in rows)]
     pins = release_tags_or_none(tags)
     matrix_heading = f"**Repo × rule, {newest_release_words(tags)}**"
@@ -746,6 +745,6 @@ def clone_pairs_cell(row: Measured) -> str:
 
 
 def unparsable_note(row: Measured) -> str:
-    if not row.unparsable:
-        return ""
-    return f"{row.unparsable} {'file' if row.unparsable == 1 else 'files'} not valid Python"
+    return ", ".join(
+        f"{count} {'file' if count == 1 else 'files'} {source.value}" for source, count in row.unparsable.items() if count
+    )

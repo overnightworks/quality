@@ -19,6 +19,13 @@ def make_repo(directory: Path, files: dict[str, str]) -> Path:
     return directory
 
 
+def build_repo_with_source(build_repo, files: dict[str, str], name: str, source: bytes) -> Path:
+    """A repository tracking `name` with exactly these bytes, which a text fixture cannot carry."""
+    repo = build_repo({**files, name: ""})
+    (repo / name).write_bytes(source)
+    return repo
+
+
 def git(repo: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", "-C", str(repo), *GIT_IDENTITY, *arguments], check=check, capture_output=True, text=True, timeout=60)
 

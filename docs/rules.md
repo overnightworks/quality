@@ -70,11 +70,12 @@ It applies these rules:
   interpolation (COMPOSE-14), is a finding unless `quality/config.toml` declares its file and service
   (COMPOSE-16, COMPOSE-17).
 - `size`: every tracked file of Python, TypeScript (`.ts` `.tsx` `.mts` `.cts`), JavaScript (`.js` `.jsx` `.mjs`
-  `.cjs`), Svelte or Vue is measured by its lines (SIZE-1), and no other file is (SIZE-2), and every tracked `*.py`
-  file also with [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a Python function from 60 lines
-  and a Python function with a CCN above 15 are debt (SIZE-3), [counted apart](commands.md#quality-report) for
-  production and tests (a path under `test/` or `tests/`; Python also `conftest.py`, `test_*.py`, `*_test.py`;
-  TypeScript and JavaScript also `__tests__/`, `*.test.*`, `*.spec.*`, `*.test-d.*` and `*.spec-d.*`).
+  `.cjs`), Svelte, Vue or CSS (`.css`) is measured by its lines (SIZE-1), and no other file is (SIZE-2), and every
+  tracked `.py`, `.ts`, `.js`, `.mjs`, `.svelte` and `.vue` file also by its functions with
+  [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a named function from 60 lines and a named
+  function with a CCN above 15 are debt (SIZE-3), [counted apart](commands.md#quality-report) for production and tests
+  (a path under `test/` or `tests/`; Python also `conftest.py`, `test_*.py`, `*_test.py`; TypeScript and JavaScript
+  also `__tests__/`, `*.test.*`, `*.spec.*`, `*.test-d.*` and `*.spec-d.*`).
 
   Ruled by the operator: a file that `quality/config.toml` declares generated is left out of the `size` rule
   (GENERATED-1); a minified or generated file the repository does not declare is counted by its lines like any other
@@ -109,19 +110,43 @@ It applies these rules:
   rule leaves the file out: `clone` and the report still read it. quality cannot see what the declared job runs; the
   operator checks it once, at the door.
 
-  Functions of the other languages are not measured (SIZE-4): lizard misplaces their boundaries
-  ([lizard's issue tracker](https://github.com/terryyin/lizard/issues/521)). Functions are named by their qualified
-  symbol (`Class.method`); a second one of the same name, such as a property setter, is `Class.method#2` (SIZE-5).
+  Functions are measured as follows (SIZE-4). lizard 1.26.1 is pinned exactly, and quality's suffix table names the
+  reader, never lizard's fallback to C: `.ts` is read by lizard's TypeScript reader, `.js` and `.mjs` by its JavaScript
+  reader, `.svelte` and `.vue` by its Vue reader, which reads their `<script>` blocks as TypeScript at the lines of the
+  file. A function lizard gives no name (a callback passed to a call, an anonymous default export, an arrow under a
+  quoted or computed key) is no entry: its lines and its branches count in the smallest named function whose lines
+  hold it (of two on the same lines, the one lizard lists first), and a named function inside another adds nothing to
+  the outer one. The measurement has these limits. A test pins each of the first five, so a lizard release that changes
+  one fails the pull request that moves the pin; the last two are not pinned:
+  - `.tsx`, `.jsx`, `.mts`, `.cts` and `.cjs` are counted by lines only.
+  - A function written in Svelte or Vue markup is not measured.
+  - A callback no named function holds counts nowhere, and only the 800-line file limit holds it.
+  - An arrow under a quoted or computed key reads as anonymous.
+  - Six misreadings of lizard stand: a statement that calls a function named `type` ends the function there; `as` with an
+    object type over several lines ends an expression-bodied arrow there; an arrow whose parameters, or a function whose
+    type parameters, span lines starts at their last line (all three read short); a function type as a type argument and
+    each overload signature read as a function of their own, which shifts the `#n` of the same name; a call in a
+    ternary branch reads as a function and takes its holder's branches (reads low); a regex literal before `!` in an
+    expression body runs one statement on (reads long).
+  - A byte order mark and a carriage return in a script file are unproven readings, and so are minified and built files,
+    which are measured like any other file unless declared (GENERATED-1).
+  - An optional chain is no decision for lizard.
+
+  A Python function is named by its qualified symbol (`Class.method`); lizard names a function of the script languages
+  without its class (`render`, an accessor `get name`, an assignment target `window.onload`). A second function of the
+  same name, such as a property setter or a method of another class, is `Class.method#2` or `render#2`, numbered in
+  source order, so a function inserted above a held one renumbers it (SIZE-5).
   Without `quality/baseline.toml` the [debt row](output.md#area-rows) is
   `· debt  not recorded  N entries over the thresholds · measured only`, N the size entries over the thresholds that
   quality measured (a declared file left out); it equals what a first `quality check --fix` records only when every
-  Python file parses, otherwise that fix refuses (SIZE-6). The size debt leaves the exit unchanged (SIZE-7). The
+  Python file parses and every script file is UTF-8, otherwise that fix refuses (SIZE-6). The size debt leaves the exit unchanged (SIZE-7). The
   per-class and language counts leave `check`; the report keeps them.
   A `.py` file is read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding)
-  (SIZE-8). One Python 3.14 cannot decode or parse is named as not valid Python: without a baseline it stands as a
+  (SIZE-8). One Python 3.14 cannot decode or parse is named as not valid Python, and a script file that is not UTF-8
+  as `not UTF-8`: without a baseline it stands as a
   [note row](output.md#notes) under the debt row (`· bad.py  not measured  not valid Python`) and the size verdict is
   unchanged (SIZE-9), while `python-security` judges the file unparsable or cannot judge it (exit `2`); with a baseline
-  the `debt` row is `✗ not checked` with `bad.py is not valid Python (...)` (SIZE-10), and `quality check --fix`
+  the `debt` row is `✗ not checked` with `bad.py is not valid Python (...)` or `bad.ts is not UTF-8` (SIZE-10), and `quality check --fix`
   refuses the same way, writing nothing; both exit `2`. Only where no baseline is held does `--fix` refuse with
   `✗ not fixed`, since only recording the first ceiling is refused (SIZE-11). A tracked file the operating system
   refuses to read makes the `debt` row `✗ not checked` with or without a baseline, and `quality check --fix` refuses
@@ -138,10 +163,10 @@ It applies these rules:
   (`file has 800 lines · debt from 800 lines`, fix: split the file below 800 lines) (CEILING-4), `grew`
   (`function read_rows has 71 lines · ceiling 64`, fix: bring it back to 64 lines or below) (CEILING-5) and `can fall`
   (`file has 742 lines · ceiling 766`, fix: `quality check --fix`) (CEILING-6); an entry whose path the index no longer
-  tracks, or whose Python file is measured without the function, can fall after the measured rows, with no line
+  tracks, or whose Python or script file is measured without the function, can fall after the measured rows, with no line
   (`file is gone · ceiling 802 lines`, `function total is gone · ceiling CCN 19`, fix: `quality check --fix`)
   (CEILING-7); an entry with no measurement otherwise (a tracked file missing from disk, a function entry under a file
-  of another language) stands (CEILING-8) and counts in the [clean row](output.md#area-rows)'s
+  of a suffix measured by lines only) stands (CEILING-8) and counts in the [clean row](output.md#area-rows)'s
   `ceiling held · N entries, M clone pairs`, followed by `, K job limits` when the held `[job_minutes]` table holds
   jobs (TIMEOUT-34).
   [`quality check debt --fix`](commands.md#quality-check---fix) (`--fix` takes no `--staged` and needs `debt` among the
@@ -883,8 +908,8 @@ the top mapping or `on:`, are exit `2` naming the file (PRWORKFLOW-6). The clean
 the rule's extent is the number of pull-request workflows. No configuration switches the rule off. It first ships in v0.23.0, so a gate pinned below that release shows
 `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `enforced` (FLEET-18).
 
-The `pytest-workers` rule judges every pytest call in a `run:` step of every tracked workflow, whether or not a pull
-request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a composite
+The `pytest-workers` rule judges every pytest call that runs tests in a `run:` step of every tracked workflow, whether or
+not a pull request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a composite
 action is not (PYTEST-1). The script is never run. The value is read line by line, as the shell reads it: a literal
 block scalar at each file line, a folded or quoted one with each line break kept at the scalar's first line; each `${{
 }}` on a line becomes one dynamic word; a line ending in a backslash joins the next; a `#` that starts a word outside
@@ -924,12 +949,16 @@ the words it splits into, in its place (PYTEST-3). The word `pytest` anywhere el
 `echo "run pytest"`, a path, a comment. A script, `make`, `tox`, `nox`, `xvfb-run` or `docker run` starting pytest is
 the rule's named gap and reads as no call (PYTEST-4).
 
-The last of `-n N`, `-nN`, `-n=N`, `--numprocesses N` and `--numprocesses=N` counts, as argparse reads repeated flags.
-`N` is `auto`, `logical` or a whole number above zero: the call passes. No such flag, `-n 0` (`00` too), an abbreviated
-flag (`--numproc 4`) or one glued to other short flags (`-qn4`) is `serial`; any other `N`, a missing one or a dynamic
-one (`$WORKERS`, `$(nproc)`, `${{ matrix.n }}`) is `invalid`. The words after the first `--` are paths for pytest, not
-its flags, so `pytest tests -- -n auto` is `serial` (PYTEST-5). A quoted lone `--` (`pytest -k "--" -n 4`) reads as that
-same word, because the reader does not keep the quote, so it is a false `serial` that the marker clears.
+The options before the first `--` are read as pytest reads them, by the reader `pytest-random` shares (RANDOM-7): the
+last of `-n N`, `-nN`, `-n=N`, `--numprocesses N` and `--numprocesses=N` counts, as argparse reads repeated flags, also
+behind other short flags in one word (`-qn4`, `-qn 4`, `-qn=4`). `N` is `auto`, `logical` or a whole number above zero: the
+call passes. No such flag, `-n 0` (`00` too, `-qn0` too) or an abbreviated flag (`--numproc 4`, which pytest refuses) is
+`serial`; any other `N`, a missing one or a dynamic one (`$WORKERS`, `$(nproc)`, `${{ matrix.n }}`) is `invalid`. The
+words after the first `--` are paths for pytest, not its flags, so `pytest tests -- -n auto` is `serial`. A call that only
+lists tests, with any spelling pytest declares for `--collect-only` (`--collect-only`, `--collectonly`, `--co`) before the
+first `--`, runs none and is not judged (`pytest --collect-only` is clean, `pytest -- --collect-only` is `serial`)
+(PYTEST-5). A quoted lone `--` (`pytest -k "--" -n 4`) reads as that same word, because the reader does not keep the
+quote, so it is a false `serial` that the marker clears; pytest itself refuses `-k "--"`.
 `PYTEST_ADDOPTS` and a `-n` in `pyproject.toml` are not read. A line `shlex` refuses that holds the word `pytest`, and a
 command word built at run time (`eval`, or a word starting with `$`) in a `run:` that holds the word `pytest` outside
 comments, are `invalid`, because the rule sees a call it cannot read; without the word `pytest` in the `run:` they are
@@ -951,8 +980,8 @@ and a marker above it clears it (PYTEST-13). A finding is at the call's first li
 without -n` or `pytest runs with -n 0`, or `invalid` with the fact `-n count is not a number above zero or auto`,
 `command cannot be read to its end` or `command is built at run time, pytest -n cannot be read`, its fix `pass -n auto,
 or explain on the line above: # pytest-workers: <reason>` (PYTEST-8). A workflow whose YAML or file cannot be read, a
-`run:` that is no string, and an alias or a merge key where it can hide `jobs`, a job, `steps`, a step or a `run:` are
-exit `2` naming the file; a step with no `run:` is skipped (PYTEST-9). The clean row of `workflows` keeps its words, and
+`run:` that is no string, a `jobs` or a job that is no mapping, and an alias or a merge key where it can hide `jobs`, a
+job, `steps`, a step or a `run:` are exit `2` naming the file; a step with no `run:` is skipped (PYTEST-9). The clean row of `workflows` keeps its words, and
 the rule's extent is the count of workflows it read (PYTEST-10). quality's own checkout needs no workflow edit
 (PYTEST-11). No configuration switches the rule off. It first ships in v0.11.0, so a dependent meets it
 at its first bump to that release.
@@ -1012,9 +1041,9 @@ finding: each rule reads only its own id, and `pytest-workers` keeps its per-lin
 that proves an install on a fresh system, and for nothing else: the reader cannot see a step's purpose, so the review of the dependent's diff judges it, and any other use is a deviation from
 the fleet standard, which only the operator rules. The findings stand in the `workflows` area, their fix `take the
 tool from the lockfile, the runner image or an image pinned by digest, or explain on the line above: #
-runtime-install: <reason>` (RUNTIME-8). A workflow whose YAML or file cannot be read, a `run:` that is no string, and
-an alias or a merge key where it can hide `jobs`, a job, `steps`, a step or a `run:` are exit `2` naming the file; a
-step with no `run:` is skipped and a tracked name gone from the tree is skipped (RUNTIME-9). The clean row of
+runtime-install: <reason>` (RUNTIME-8). A workflow whose YAML or file cannot be read, a `run:` that is no string, a
+`jobs` or a job that is no mapping, and an alias or a merge key where it can hide `jobs`, a job, `steps`, a step or a
+`run:` are exit `2` naming the file; a step with no `run:` is skipped and a tracked name gone from the tree is skipped (RUNTIME-9). The clean row of
 `workflows` keeps its words, the rule's extent is the count of workflows it read (RUNTIME-10). No configuration
 switches the rule off. It first ships in v0.12.0, so a dependent meets it at its first bump to that release.
 quality's own checkout needs no workflow edit.
@@ -1064,8 +1093,8 @@ is not UTF-8, or is a symlink that resolves outside the repository, is exit `2` 
 a `make` goal and no step calls the check directly (CATALOG-23). A word in an `echo`, a script, `tox`, `nox`, a
 composite action or a reusable workflow called through `uses:` is no call (CATALOG-9); every other form the reading does
 not follow is no call too (CATALOG-22). A step with `continue-on-error: true` or with a `working-directory` other than
-`.` does not count. An unreadable workflow, a `run:` that is no string, or an alias or a merge key where it can hide a
-step is exit `2` naming the workflow (CATALOG-11).
+`.` does not count. An unreadable workflow, a `run:` that is no string, a `jobs` or a job that is no mapping, or an alias
+or a merge key where it can hide a step is exit `2` naming the workflow (CATALOG-11).
 
 A covered repository is judged in this order (CATALOG-24). Any counted step with a call, directly or through `make`, makes the
 rule clean: no row, whatever else the workflows hold. Otherwise each unreadable line and each command built at run time is an
@@ -1656,11 +1685,15 @@ with the seed printed" (pytest-randomly). Three readers judge that one decision.
     `--verbosity=<n>` and `--verbosity <n>` set it, read in order of appearance; a level below zero, or `--no-header`, is
     `unseeded`. So `-q`, `-qq`, `-qn4` and `--verbosity=-1` hide the seed, `-q -v`, `-qv`, `-q --verbosity=0` and
     `-n auto` show it, and `--verbosity=0 -q` hides it.
-  - *Reading (RANDOM-7):* only the words before the first `--` are options. In a short cluster (`-abc`) each letter is
-    read from the left, and a letter that takes a value (`-p`, `-o`, `-r`, `-k`, `-m`, `-c`, `-W`, `-n`, the set of
-    pytest 9.2.0 and pytest-xdist 3.8.0) ends the cluster with the rest of the word, or the next word, as its value:
-    `-kquick`, `-rfq` and `-n4 -k q` are clean, `-qn4` and `-qk quick` are `unseeded`. An option a plugin of the
-    repository adds is not known. A `--randomly-seed` value built with `${{ }}` is chosen at run time and is clean (a
+  - *Reading (RANDOM-7):* the options are read by the reader `pytest-workers` shares (PYTEST-5), and only the words
+    before the first `--` are options. In a short cluster (`-abc`) each letter is read from the left, and a letter that
+    takes a value (the set pytest's and xdist's parsers declare) ends the cluster with the rest of the word, or the next
+    word, as its value: `-kquick`, `-rfq` and `-n4 -k q` are clean, `-qn4` and `-qk quick` are `unseeded`. A long option
+    is read by its full name only. A `-p` counts only as a word of its own (`-p X`, `-pX`), as pytest reads the plugin
+    words: `-vpno:randomly` is clean, and `--disable-plugin-autoload -qp randomly` is `unshuffled`, since no plugin is
+    named. The value-taking letters and the spellings of the options the rules read are declared, never read from pytest
+    at run time, and a test holds them against the installed parsers. An option a plugin of the repository adds is not
+    known. A `--randomly-seed` value built with `${{ }}` is chosen at run time and is clean (a
     named gap), and so is a value of `PYTEST_ADDOPTS` that holds `${{ }}`. `PYTEST_ADDOPTS` is split as shell words, as
     pytest splits it, so `-p "no:randomly"` is read as `-p no:randomly`.
   - An `addopts` finding stands at the key's line in the `pyproject.toml` (no line where the key is not a plain
@@ -1672,9 +1705,9 @@ with the seed printed" (pytest-randomly). Three readers judge that one decision.
   or after `export`. Any value of `PYTEST_DISABLE_PLUGIN_AUTOLOAD` that is not empty (a blank one included) switches the
   autoload off, as pytest reads it, so it is `unshuffled`, whatever else `env:` holds. A call behind a script, `make` or
   a mise task, a `pytest.main([...])`, a flag in `pytest.ini`, `.pytest.ini`, `pytest.toml`, `.pytest.toml`, `tox.ini` or
-  `setup.cfg` and a plugin disabled in a `conftest.py` are not read. A call with `--collect-only` or `--co` before the
-  first `--` only lists tests, runs none and is not judged (`pytest --collect-only -q` is clean, `pytest -q -- --collect-only`
-  is `unseeded`).
+  `setup.cfg` and a plugin disabled in a `conftest.py` are not read. A call that only lists tests, as `pytest-workers`
+  reads it (PYTEST-5: `--collect-only`, `--collectonly` or `--co` before the first `--`), runs none and is not judged
+  (`pytest --collect-only -q` is clean, `pytest -q -- --collect-only` is `unseeded`).
 - **The marker (RANDOM-8).** A comment `# pytest-random: <reason>`, with a reason that holds a letter, on the line of a
   workflow call, assignment or `env:` value, or alone on the line directly above it, clears the finding (the form of
   `# pytest-workers:`, PYTEST-7); a marker that trails another command's line clears that command only. It is the way out of a flow layer (end-to-end, browser, image); it clears nothing in `addopts`, and it has
@@ -1689,7 +1722,8 @@ with the seed printed" (pytest-randomly). Three readers judge that one decision.
 - **What cannot be read (RANDOM-3, RANDOM-12, RANDOM-13).** A lock or `pyproject.toml` that is no UTF-8 TOML, a lock
   whose packages are no list of tables and an `addopts` that is neither a string of shell words nor a list of strings are
   exit `2` naming the file. A workflow whose YAML cannot be read, and an alias or a merge key where it can hide `jobs`, a
-  job, `steps`, a step or an `env:`, are exit `2` naming the file, as for `pytest-workers` (PYTEST-9), and so is an
+  job, `steps`, a step or an `env:`, and a `jobs` or a job that is no mapping, are exit `2` naming the file, as for
+  `pytest-workers` (PYTEST-9), and so is an
   `env:` value of the two variables, or a script assignment of `PYTEST_ADDOPTS`, that is no shell words. A pytest line
   the shared reading cannot read or finds built at run time is `invalid` for `pytest-workers` (PYTEST-6) and no finding
   of this rule, so it is red once.

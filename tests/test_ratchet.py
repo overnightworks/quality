@@ -49,12 +49,13 @@ from tests.support.check import (
 )
 from tests.support.check import check_output as run
 from tests.support.door import CHECK_WORD, FIX_WORDS, check_door, door_in
-from tests.support.git_repositories import make_repo
+from tests.support.git_repositories import build_repo_with_source, make_repo
 from tests.support.source_code import (
     branchy_function,
     long_file,
     long_function,
     minified_bundle,
+    typescript_branchy_function,
     typescript_file,
     typescript_function,
 )
@@ -74,13 +75,6 @@ def test_without_a_baseline_the_debt_row_counts_the_entries_a_first_recording_wr
     assert code == 0, output
     assert leading_count(area_fact(output, "debt")) == 4
     assert recorded_entries(repo) == 4
-
-
-def build_repo_with_source(build_repo, files: dict[str, str], name: str, source: bytes) -> Path:
-    """A repository tracking `name` with exactly these bytes, which a text fixture cannot carry."""
-    repo = build_repo({**files, name: ""})
-    (repo / name).write_bytes(source)
-    return repo
 
 
 SOURCE_NAME = "src/source.py"
@@ -179,6 +173,7 @@ def test_a_fix_refuses_a_file_python_cannot_read(build_repo, capsys, source):
 
 
 HELD_70 = '[function_lines."src/a.py"]\nlong_one = 70\n'
+HELD_TS_64 = '[function_lines."src/a.ts"]\nbig = 64\n'
 
 
 @pytest.mark.parametrize(
@@ -189,8 +184,22 @@ HELD_70 = '[function_lines."src/a.py"]\nlong_one = 70\n'
         ({"src/a.py": branchy_function(16)}, EMPTY_BASELINE, "src/a.py", 1, FindingEvent.NEW_DEBT, ("branchy", str(debt_from(Metric.CCN)))),
         ({"src/a.py": long_function(71)}, HELD_70, "src/a.py", 1, FindingEvent.GREW, ("long_one", "71", "70")),
         ({"src/a.py": long_function(65)}, HELD_70, "src/a.py", 1, FindingEvent.CAN_FALL, ("long_one", "65", "70")),
+        ({"src/a.ts": typescript_function(60)}, EMPTY_BASELINE, "src/a.ts", 1, FindingEvent.NEW_DEBT, ("big", str(debt_from(Metric.FUNCTION_LINES)))),
+        ({"src/a.ts": typescript_branchy_function(16)}, EMPTY_BASELINE, "src/a.ts", 1, FindingEvent.NEW_DEBT, ("branchy", str(debt_from(Metric.CCN)))),
+        ({"src/a.ts": typescript_function(71)}, HELD_TS_64, "src/a.ts", 1, FindingEvent.GREW, ("big", "71", "64")),
+        ({"src/a.ts": typescript_function(61)}, HELD_TS_64, "src/a.ts", 1, FindingEvent.CAN_FALL, ("big", "61", "64")),
     ],
-    ids=["new-file-from-800-lines", "new-function-from-60-lines", "new-ccn-above-15", "grown-entry", "stale-entry"],
+    ids=[
+        "new-file-from-800-lines",
+        "new-function-from-60-lines",
+        "new-ccn-above-15",
+        "grown-entry",
+        "stale-entry",
+        "new-typescript-function-from-60-lines",
+        "new-typescript-ccn-above-15",
+        "grown-typescript-entry",
+        "stale-typescript-entry",
+    ],
 )
 def test_against_a_baseline_new_grown_and_stale_entries_are_red(build_repo, capsys, files, baseline, path, line, event, values):
     """CEILING-4, CEILING-5, CEILING-6, SIZE-3, SIZE-5, ROW-7, ROW-14: against a baseline a new violation, a grown entry
@@ -383,6 +392,34 @@ def test_a_first_recording_writes_the_measured_debt_sorted_and_check_then_holds_
     capsys.readouterr()
     code, output = run(capsys, repo)
     assert (code, is_clean(output)) == (0, True), output
+
+
+@pytest.mark.parametrize(
+    ("lines", "held", "expected"),
+    [
+        pytest.param(62, HELD_TS_64.replace("64", "70"), {"src/a.ts": {"big": 62}}, id="a held entry falls"),
+        pytest.param(40, HELD_TS_64.replace("64", "70"), {}, id="a held entry below the threshold goes"),
+        pytest.param(62, None, {"src/a.ts": {"big": 62}}, id="a first ceiling is recorded under the script path"),
+    ],
+)
+def test_the_fix_treats_a_typescript_function_entry_as_a_python_one(build_repo, lines, held, expected):
+    """FIX-3, FIX-4, FIX-11: the fix lowers, drops and first records the entries of a script file by its path and name."""
+    repo = build_repo({"src/a.ts": typescript_function(lines)} | ({} if held is None else {BASELINE_PATH: held}))
+    assert door_in(repo, *FIX_WORDS) == 0
+    written = tomllib.loads((repo / BASELINE_PATH).read_text(encoding="utf-8"))
+    assert written.get("function_lines", {}) == expected
+
+
+def test_a_function_inserted_above_a_held_script_function_of_the_same_name_renumbers_it(build_repo, capsys):
+    """SIZE-5: the held `render#2` becomes `render#3` when a `render` is inserted above it, so the old key can fall and
+    the new `render#3` is new debt."""
+    named = "".join(typescript_function(lines).replace("big", "render") for lines in (61, 60, 70))
+    held = '[function_lines."src/a.ts"]\nrender = 61\n"render#2" = 70\n'
+    repo = build_repo({"src/a.ts": named, BASELINE_PATH: held})
+    code, _ = run(capsys, repo)
+    findings = [(finding.fact.split()[1], finding.event) for finding in rule_findings(repo, Rule.SIZE)]
+    assert code == 1
+    assert sorted(findings, key=str) == sorted([("render#2", FindingEvent.CAN_FALL), ("render#3", FindingEvent.NEW_DEBT)], key=str)
 
 
 def test_fixing_twice_yields_the_same_file(build_repo):
@@ -696,7 +733,7 @@ def test_a_baseline_that_is_not_utf8_is_malformed_and_names_the_restore_step_onc
     assert (output.count("restore quality/baseline.toml from git, or repair it by hand"), "rewrite it with" in output) == (1, False), output
 
 
-@pytest.mark.parametrize("suffix", ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "svelte", "vue"])
+@pytest.mark.parametrize("suffix", ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "svelte", "vue", "css"])
 def test_a_file_of_every_table_language_is_new_debt_from_800_lines_against_a_baseline(build_repo, capsys, suffix):
     """SIZE-1, SIZE-3: against a baseline a file of any measured language is new debt at 1210 lines, not at 799."""
     path = f"frontend/src/lib/api/types.{suffix}"
@@ -707,19 +744,12 @@ def test_a_file_of_every_table_language_is_new_debt_from_800_lines_against_a_bas
     assert len(rows_of(output, finding)) == 1
 
 
-@pytest.mark.parametrize("name", ["tool.rs", "run.sh", "app.css", "index.html", "notes.md"])
+@pytest.mark.parametrize("name", ["tool.rs", "run.sh", "app.scss", "app.less", "index.html", "notes.md"])
 def test_a_file_of_a_language_the_table_lacks_is_never_debt(build_repo, capsys, name):
     """SIZE-2: a file of no measured language is never debt, however long."""
     repo = build_repo({f"src/{name}": "line\n" * 2000, BASELINE_PATH: EMPTY_BASELINE})
     code, output = run(capsys, repo)
     assert (code, rule_findings(repo, Rule.SIZE)) == (0, []), output
-
-
-def test_a_function_of_120_lines_in_typescript_is_no_finding_and_the_file_is_not_unparsable(build_repo, capsys):
-    """SIZE-4: a 120-line TypeScript function is no finding and its file is not unparsable under a held baseline."""
-    repo = build_repo({"src/a.py": "x = 1\n", "src/api.ts": typescript_function(120), BASELINE_PATH: EMPTY_BASELINE})
-    code, output = run(capsys, repo)
-    assert (code, rule_notes(repo, Rule.SIZE), rule_findings(repo, Rule.SIZE)) == (0, [], []), output
 
 
 @pytest.mark.parametrize(

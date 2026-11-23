@@ -3,7 +3,7 @@
 `pr-concurrency`: a workflow a pull request triggers sets a top-level `concurrency` that groups a pull-request run by its
 number and cancels only pull-request runs; no expression is read.
 
-`pytest-workers`: every pytest call in a `run:` script passes `-n` with more than zero workers or carries a
+`pytest-workers`: every pytest call that runs tests in a `run:` script passes `-n` with more than zero workers or carries a
 `# pytest-workers: <reason>` marker; the script is read as POSIX shell words, never run.
 
 `runtime-install`: no `run:` script installs through an operating-system package manager or pipes a download into a
@@ -27,8 +27,9 @@ from quality import checkout
 from quality.baseline_file import FIX_COMMAND, Baseline, JobKey, JobMinutes
 from quality.checkout import Document, PullRequestEvent
 from quality.output import SEPARATOR
+from quality.pytest_options import WORKERS_NAMES, Option, lists_only, options, pytest_arguments
 from quality.ratchet import CeilingFix
-from quality.report import CannotJudge, Example, Finding, FindingEvent, Instruction, Note, NoteEvent, RuleResult
+from quality.report import CannotJudge, Example, Finding, FindingEvent, Note, NoteEvent, RuleResult
 from quality.rules import Rule
 from quality.run_script import (
     C_STRING_OPENER,
@@ -36,7 +37,6 @@ from quality.run_script import (
     PIPES,
     SHELLS,
     LineReading,
-    Marker,
     ScriptLine,
     Segment,
     Tool,
@@ -46,12 +46,26 @@ from quality.run_script import (
     physical_lines,
     tool_arguments,
 )
+from quality.workflow_document import (
+    Job,
+    Marker,
+    composed,
+    guarded,
+    hidden,
+    hides_keys,
+    jobs,
+    line_of,
+    parsed,
+    readable,
+    readable_workflows,
+    run_steps,
+    scalar_text,
+    unreadable,
+)
 
 EXPRESSION = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
 OPERATORS = re.compile(r" ?(\|\||==|!=) ?")
 FALLBACK = re.compile(r"github\.(?:sha|ref_name|head_ref|ref)(?!\w)")
-MERGE_KEY = "<<"
-BLOCK_STYLES = ("|", ">")
 GROUP_KEY = "group"
 FLAG_KEY = "cancel-in-progress"
 FIX_LABEL = "add this at the top level of the workflow, beside the on key"
@@ -85,7 +99,7 @@ def check_pr_concurrency(root: Path, tracked: list[str]) -> RuleResult:
     findings: list[Finding] = []
     roots = 0
     for name, text in readable_workflows(root, tracked):
-        document = _document(name, text)
+        document = parsed(name, text)
         events = checkout.pull_request_events(document)
         if events:
             roots += 1
@@ -95,61 +109,7 @@ def check_pr_concurrency(root: Path, tracked: list[str]) -> RuleResult:
 
 def pull_request_workflows(texts: Mapping[str, str | checkout.Unread]) -> list[str]:
     """The paths of the workflows a pull request triggers among `texts` (`checkout.workflow_texts`' mapping), in its order."""
-    return [name for name, text in _readable(texts) if checkout.pull_request_events(_document(name, text))]
-
-
-def readable_workflows(root: Path, tracked: list[str]) -> Iterator[tuple[str, str]]:
-    return _readable(checkout.workflow_texts(root, tracked))
-
-
-def _readable(texts: Mapping[str, str | checkout.Unread]) -> Iterator[tuple[str, str]]:
-    """Each workflow with its text; one gone from the tree is skipped and one the reader refuses cannot be judged."""
-    for name, text in texts.items():
-        if text is checkout.Unread.REFUSED:
-            raise unreadable(name, "the file cannot be read")
-        if text is not checkout.Unread.ABSENT:
-            yield name, text
-
-
-def unreadable(name: str, reason: str) -> CannotJudge:
-    return CannotJudge(f"cannot read {name}: {reason}", (Instruction(f"fix {name}"),))
-
-
-def composed(name: str, text: str) -> Document:
-    try:
-        return checkout.composed_document(text)
-    except checkout.UnreadableWorkflow as error:
-        raise unreadable(name, "it is no YAML quality can read") from error
-
-
-def _document(name: str, text: str) -> Document:
-    """The parsed workflow; one whose top mapping or `on:` an alias or a merge key could hide the keys of cannot be judged."""
-    document = composed(name, text)
-    top = checkout.mapping_entries(document.root)
-    triggers = top.get("on")
-    hidden_at_top = _hides_keys(document, document.root)
-    hidden_in_triggers = triggers is not None and _hides_events(document, triggers[1])
-    if hidden_at_top or hidden_in_triggers:
-        raise _hidden(name)
-    return document
-
-
-def _hidden(name: str) -> CannotJudge:
-    return unreadable(name, "an alias or a merge key can hide what the rule reads")
-
-
-def _hides_keys(document: Document, mapping: yaml.Node | None) -> bool:
-    """Whether a merge key stands in the mapping, or an alias stands as one of its keys."""
-    entries = checkout.mapping_entries(mapping)
-    return MERGE_KEY in entries or any(document.is_alias(key) for key, _ in entries.values())
-
-
-def _hides_events(document: Document, triggers: yaml.Node) -> bool:
-    if document.is_alias(triggers):
-        return True
-    if isinstance(triggers, yaml.SequenceNode):
-        return any(document.is_alias(item) for item in triggers.value)
-    return _hides_keys(document, triggers)
+    return [name for name, text in readable(texts) if checkout.pull_request_events(parsed(name, text))]
 
 
 def _concurrency_findings(name: str, document: Document, events: frozenset[PullRequestEvent]) -> Iterator[Finding]:
@@ -177,8 +137,8 @@ def _concurrency_findings(name: str, document: Document, events: frozenset[PullR
 
 def _group_and_flag(name: str, document: Document, key: yaml.ScalarNode, node: yaml.Node) -> tuple[Entry | None, Entry | None]:
     """The `group` and `cancel-in-progress` of a `concurrency`; a scalar is a group with no flag."""
-    if document.is_alias(node) or _hides_keys(document, node):
-        raise _hidden(name)
+    if document.is_alias(node) or hides_keys(document, node):
+        raise hidden(name)
     if isinstance(node, yaml.ScalarNode):
         return Entry(scalar_text(node), line_of(key)), None
     if not isinstance(node, yaml.MappingNode):
@@ -192,19 +152,10 @@ def _entry(name: str, document: Document, pair: tuple[yaml.ScalarNode, yaml.Node
         return None
     key, value = pair
     if document.is_alias(value):
-        raise _hidden(name)
+        raise hidden(name)
     if not isinstance(value, yaml.ScalarNode):
         raise unreadable(name, f"{key.value} is not a string")
     return Entry(scalar_text(value), line_of(key))
-
-
-def scalar_text(node: yaml.ScalarNode) -> str:
-    """A block scalar is read by its content: the loader keeps its final line breaks, which `>-` would drop."""
-    return node.value.rstrip("\n") if node.style in BLOCK_STYLES else node.value
-
-
-def line_of(node: yaml.Node) -> int:
-    return node.start_mark.line + 1
 
 
 def _group_fact(group: Entry) -> str:
@@ -240,9 +191,7 @@ BAD_COUNT_FACT = "-n count is not a number above zero or auto"
 UNREADABLE_FACT = "command cannot be read to its end"
 RUN_TIME_FACT = "command is built at run time, pytest -n cannot be read"
 PYTEST_WORD = re.compile(r"(?<![\w-])pytest(?![\w-])")
-WORKERS_FLAG = re.compile(r"(?:-n|--numprocesses)(?:=(.*))?|-n(.+)", re.DOTALL)
 WHOLE_NUMBER = re.compile(r"\d+", re.ASCII)
-PYTEST = Tool(commands=frozenset({"pytest", "py.test"}), module="pytest")
 AUTOMATIC_COUNTS = frozenset({"auto", "logical"})
 Problem = tuple[FindingEvent, str]
 
@@ -257,18 +206,15 @@ class ScriptRule:
     fix: str
 
 
-def pytest_arguments(command: Sequence[str]) -> tuple[str, ...] | None:
-    return tool_arguments(command, PYTEST)
-
-
 def _pytest_problem(parts: Sequence[Segment], index: int) -> Problem | None:
     arguments = pytest_arguments(command_words(parts[index]))
-    return None if arguments is None else _workers_problem(arguments)
+    called = None if arguments is None else list(options(arguments))
+    return None if called is None or lists_only(called) else _workers_problem(called)
 
 
 PYTEST_RULE = ScriptRule(
     Rule.PYTEST_WORKERS,
-    Marker.of(Rule.PYTEST_WORKERS.value, above_step=False),
+    Marker.of(Rule.PYTEST_WORKERS, above_step=False),
     LineReading(
         judge=_pytest_problem,
         starts_call=lambda command: pytest_arguments(command) is not None,
@@ -293,7 +239,7 @@ def judge_scripts(script_rule: ScriptRule, root: Path, tracked: list[str]) -> Ru
         read += 1
         file_lines = text.split("\n")
         marked = script_rule.marker.lines(file_lines)
-        for step, run in _run_steps(name, composed(name, text)):
+        for step, run in run_steps(name, composed(name, text)):
             if not script_rule.marker.clears_step(file_lines, step):
                 lines = list(logical_lines(physical_lines(run)))
                 marks = script_rule.marker.per_line_marks(file_lines, marked, step, run)
@@ -302,51 +248,6 @@ def judge_scripts(script_rule: ScriptRule, root: Path, tracked: list[str]) -> Ru
                 except CannotJudge as error:
                     raise unreadable(name, error.reason.fact) from error
     return RuleResult(findings, read, False)
-
-
-def guarded(name: str, document: Document, node: yaml.Node | None) -> yaml.Node | None:
-    """The node, unless an alias or a merge key could hide the script it leads to."""
-    if node is not None and (document.is_alias(node) or _hides_keys(document, node)):
-        raise _hidden(name)
-    return node
-
-
-def _run_steps(name: str, document: Document) -> Iterator[tuple[yaml.Node, yaml.ScalarNode]]:
-    """Every step of every job that has a `run:`, with that `run:`."""
-    top = guarded(name, document, document.root)
-    jobs = guarded(name, document, checkout.mapping_values(top).get("jobs"))
-    for job in checkout.mapping_values(jobs).values():
-        steps = checkout.mapping_values(guarded(name, document, job)).get("steps")
-        for step in guarded(name, document, steps).value if isinstance(steps, yaml.SequenceNode) else ():
-            run = checkout.mapping_values(guarded(name, document, step)).get("run")
-            if run is not None:
-                yield step, _script(name, document, run)
-
-
-@dataclass(frozen=True)
-class PullRequestRunStep:
-    """A `run:` step of a workflow a pull request triggers: the workflow's name, the step's mapping and its script's logical lines."""
-
-    workflow: str
-    step: yaml.Node
-    lines: tuple[ScriptLine, ...]
-
-
-def pull_request_run_steps(root: Path, tracked: list[str]) -> Iterator[PullRequestRunStep]:
-    """Every `run:` step of every workflow a pull request triggers, its script read line by line; the walk the rules over `run:` scripts share."""
-    for name, text in readable_workflows(root, tracked):
-        document = _document(name, text)
-        if checkout.pull_request_events(document):
-            for step, run in _run_steps(name, document):
-                yield PullRequestRunStep(name, step, tuple(logical_lines(physical_lines(run))))
-
-
-def _script(name: str, document: Document, run: yaml.Node) -> yaml.ScalarNode:
-    if document.is_alias(run):
-        raise _hidden(name)
-    if not isinstance(run, yaml.ScalarNode):
-        raise unreadable(name, "run is not a string")
-    return run
 
 
 def _script_findings(script_rule: ScriptRule, name: str, lines: list[ScriptLine], file_lines: list[str], marked: frozenset[int]) -> Iterator[Finding]:
@@ -359,35 +260,16 @@ def _script_findings(script_rule: ScriptRule, name: str, lines: list[ScriptLine]
             yield Finding(script_rule.rule, name, line.first, fact, script_rule.fix, event=event)
 
 
-def _workers_problem(arguments: Sequence[str]) -> Problem | None:
-    counts = _worker_counts(arguments)
+def _workers_problem(called: Sequence[Option]) -> Problem | None:
+    counts = [option.value for option in called if option.name in WORKERS_NAMES]
     if not counts:
         return FindingEvent.SERIAL, WITHOUT_WORKERS_FACT
     count = counts[-1]
     if count in AUTOMATIC_COUNTS:
         return None
-    if count is not None and WHOLE_NUMBER.fullmatch(count):
+    if WHOLE_NUMBER.fullmatch(count):
         return None if count.strip("0") else (FindingEvent.SERIAL, ZERO_WORKERS_FACT)
     return FindingEvent.INVALID, BAD_COUNT_FACT
-
-
-def _worker_counts(arguments: Sequence[str]) -> list[str | None]:
-    """The value of each readable workers flag before the first `--`, None for one with no value; an abbreviated or glued flag is not read."""
-    if "--" in arguments:
-        arguments = arguments[: arguments.index("--")]
-    counts: list[str | None] = []
-    index = 0
-    while index < len(arguments):
-        flag = WORKERS_FLAG.fullmatch(arguments[index])
-        index += 1
-        if flag is None:
-            continue
-        count = flag[1] if flag[1] is not None else flag[2]
-        if count is None:
-            count = arguments[index] if index < len(arguments) else None
-            index += 1
-        counts.append(count)
-    return counts
 
 
 INSTALL_FIX = (
@@ -483,7 +365,7 @@ def _install_problem(parts: Sequence[Segment], index: int) -> Problem | None:
 
 INSTALL_RULE = ScriptRule(
     Rule.RUNTIME_INSTALL,
-    Marker.of(Rule.RUNTIME_INSTALL.value, above_step=True),
+    Marker.of(Rule.RUNTIME_INSTALL, above_step=True),
     LineReading(
         judge=_install_problem,
         starts_call=lambda command: _install_fact(command) is not None,
@@ -506,8 +388,6 @@ MINUTES = re.compile(r"\d+(?:\.\d+)?", re.ASCII)
 SET_TIMEOUT_FIX = f"set {TIMEOUT_KEY} to a number of at most {MAXIMUM_MINUTES}"
 LOWER_TIMEOUT_FIX = f"lower {TIMEOUT_KEY} to {MAXIMUM_MINUTES} or less"
 RECORD_TIMEOUT_FIX = f"{LOWER_TIMEOUT_FIX}, or run {FIX_COMMAND} to record it"
-
-Job = tuple[str, yaml.ScalarNode, yaml.MappingNode]
 
 
 class Unmeasured(Enum):
@@ -554,7 +434,7 @@ def check_job_timeouts(root: Path, tracked: list[str], baseline: Baseline | None
     judged = _judged_jobs(root, tracked)
     findings: list[Finding] = []
     for name, document, job in judged:
-        findings.extend(_limit_findings(name, document, job, debt.get(JobKey(name, job[0])), new_debt_fix))
+        findings.extend(_limit_findings(name, document, job, debt.get(JobKey(name, job.id)), new_debt_fix))
     findings.extend(_unmeasured_entries(held, _limits(judged)))
     return RuleResult(findings, len(held), False)
 
@@ -608,19 +488,19 @@ def _entry_fall(key: JobKey, entry: int, limit: int | Unmeasured) -> tuple[Note,
 
 
 def _limits(judged: list[tuple[str, Document, Job]]) -> Limits:
-    return {JobKey(name, job[0]): _job_debt(name, document, job) for name, document, job in judged}
+    return {JobKey(name, job.id): _job_debt(name, document, job) for name, document, job in judged}
 
 
 def _judged_jobs(root: Path, tracked: list[str]) -> list[tuple[str, Document, Job]]:
     """Each job the rule judges with its file's document: the jobs of the roots and of what they call that are no call."""
-    parsed = {name: _root_document(name, text) for name, text in readable_workflows(root, tracked)}
-    documents = {name: parsed.get(name) for name in tracked if checkout.is_workflow(PurePosixPath(name))}
-    roots = frozenset(name for name, document in parsed.items() if _is_root(name, document))
+    read = {name: _root_document(name, text) for name, text in readable_workflows(root, tracked)}
+    documents = {name: read.get(name) for name in tracked if checkout.is_workflow(PurePosixPath(name))}
+    roots = frozenset(name for name, document in read.items() if _is_root(name, document))
     return [
         (name, documents[name], job)
         for name in _reached(documents, roots)
-        for job in _jobs(name, documents[name])
-        if "uses" not in checkout.mapping_values(job[2])
+        for job in jobs(name, documents[name])
+        if "uses" not in checkout.mapping_values(job.mapping)
     ]
 
 
@@ -637,9 +517,9 @@ def _unmeasured_entries(held: JobMinutes, limits: Limits) -> Iterator[Finding]:
 
 def _root_document(name: str, text: str) -> Document:
     """The parsed workflow; one whose `push` filters an alias or a merge key could hide cannot be judged."""
-    document = _document(name, text)
+    document = parsed(name, text)
     if _hides_push(document, checkout.mapping_values(document.root).get("on")):
-        raise _hidden(name)
+        raise hidden(name)
     return document
 
 
@@ -647,7 +527,7 @@ def _hides_push(document: Document, triggers: yaml.Node | None) -> bool:
     push = checkout.mapping_values(triggers).get("push")
     if push is None:
         return False
-    if document.is_alias(push) or _hides_keys(document, push):
+    if document.is_alias(push) or hides_keys(document, push):
         return True
     filters = checkout.mapping_values(push)
     return any(_hides_items(document, filters[key]) for key in checkout.PUSH_FILTER_KEYS if key in filters)
@@ -674,45 +554,28 @@ def _reached(documents: dict[str, Document | None], roots: frozenset[str]) -> li
 
 
 def _called_files(name: str, document: Document) -> list[str]:
-    calls = (guarded(name, document, checkout.mapping_values(job).get("uses")) for _, _, job in _jobs(name, document))
+    calls = (guarded(name, document, checkout.mapping_values(job.mapping).get("uses")) for job in jobs(name, document))
     return [call.value for call in calls if isinstance(call, yaml.ScalarNode)]
-
-
-def _jobs(name: str, document: Document) -> list[Job]:
-    """The entries of `jobs`, which an alias or a merge key could hide, and each of which must be a mapping."""
-    top = guarded(name, document, document.root)
-    jobs = guarded(name, document, checkout.mapping_values(top).get("jobs"))
-    if jobs is None:
-        return []
-    if not isinstance(jobs, yaml.MappingNode):
-        raise unreadable(name, "jobs is not a mapping")
-    entries = []
-    for job_id, (key, job) in checkout.mapping_entries(jobs).items():
-        if not isinstance(guarded(name, document, job), yaml.MappingNode):
-            raise unreadable(name, f"job {job_id} is not a mapping")
-        entries.append((job_id, key, job))
-    return entries
 
 
 def _limit_findings(name: str, document: Document, job: Job, ceiling: int | None, new_debt_fix: str) -> Iterator[Finding]:
     """The job's finding against the debt entry that holds it, if any; a job with no entry that is debt is new debt,
     whose fix is `new_debt_fix`."""
-    job_id, id_key, mapping = job
 
     def finding(event: FindingEvent, line: int, fact: str, fix: str) -> Finding:
         return Finding(Rule.JOB_TIMEOUT, name, line, fact, fix, event=event)
 
-    limit, minutes = _read_limit(name, document, mapping)
+    limit, minutes = _read_limit(name, document, job.mapping)
     if limit is None:
-        yield finding(FindingEvent.MISSING, line_of(id_key), f"job {job_id} has no {TIMEOUT_KEY}", SET_TIMEOUT_FIX)
+        yield finding(FindingEvent.MISSING, line_of(job.key), f"job {job.id} has no {TIMEOUT_KEY}", SET_TIMEOUT_FIX)
         return
     key, value = limit
     if minutes is None:
-        fact = f"job {job_id} has a {TIMEOUT_KEY} that is not a number above zero"
+        fact = f"job {job.id} has a {TIMEOUT_KEY} that is not a number above zero"
         yield finding(FindingEvent.INVALID, line_of(key), fact, SET_TIMEOUT_FIX)
         return
     debt = _debt_minutes(minutes)
-    given = f"job {job_id} has {TIMEOUT_KEY} {value.value}"
+    given = f"job {job.id} has {TIMEOUT_KEY} {value.value}"
     if ceiling is None and debt > MAXIMUM_MINUTES:
         yield finding(FindingEvent.NEW_DEBT, line_of(key), f"{given} · limit {MAXIMUM_MINUTES}", new_debt_fix)
     elif ceiling is not None and debt > ceiling:
@@ -729,7 +592,7 @@ def _read_limit(name: str, document: Document, mapping: yaml.MappingNode) -> tup
 
 def _job_debt(name: str, document: Document, job: Job) -> int | Unmeasured:
     """The whole minutes the job's limit counts as debt, unmeasured where the limit is missing or invalid."""
-    minutes = _read_limit(name, document, job[2])[1]
+    minutes = _read_limit(name, document, job.mapping)[1]
     return Unmeasured.UNREADABLE if minutes is None else _debt_minutes(minutes)
 
 
@@ -750,11 +613,11 @@ def job_names(root: Path, tracked: list[str]) -> frozenset[str]:
     A `name:` that holds an expression is no name the run lists, so it adds none."""
     names: set[str] = set()
     for name, text in readable_workflows(root, tracked):
-        document = _document(name, text)
-        for job_id, _, job in _jobs(name, document):
-            label = guarded(name, document, checkout.mapping_values(job).get("name"))
+        document = parsed(name, text)
+        for job in jobs(name, document):
+            label = guarded(name, document, checkout.mapping_values(job.mapping).get("name"))
             if label is None:
-                names.add(job_id)
+                names.add(job.id)
             elif isinstance(label, yaml.ScalarNode) and label.value and "${{" not in label.value:
                 names.add(label.value)
     return frozenset(names)

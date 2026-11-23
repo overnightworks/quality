@@ -446,8 +446,9 @@ JOBS = "jobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    st
         f"{ANCHORS}on: push\n{JOBS[: -len('    steps:\n')]}    steps: *steps\n",
         f"{ANCHORS}on: push\n{JOBS}      - run: *run\n",
         f"{ANCHORS}on: push\n{JOBS}      - name: t\n        <<: {{run: apt-get install x}}\n",
+        "on: push\njobs: [a]\n",
     ],
-    ids=["yaml error", "run list", "alias as jobs", "alias as steps", "alias as run", "merge key at a step beside run"],
+    ids=["yaml error", "run list", "alias as jobs", "alias as steps", "alias as run", "merge key at a step beside run", "jobs is a list"],
 )
 def test_a_workflow_the_rule_cannot_read_is_cannot_judge_naming_the_file(build_repo, text):
     """RUNTIME-9."""

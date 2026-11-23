@@ -19,13 +19,13 @@ MIXED_TREE = {
     ("files", "languages"),
     [
         ({"src/a.py": long_file(3)}, [Language.PYTHON]),
-        (MIXED_TREE, [Language.PYTHON, Language.TYPESCRIPT, Language.SVELTE, Language.JAVASCRIPT]),
+        (MIXED_TREE, [Language.CSS, Language.PYTHON, Language.TYPESCRIPT, Language.SVELTE, Language.JAVASCRIPT]),
         ({"src/a.svelte": long_file(5), "src/b.js": long_file(5), "src/c.vue": long_file(5)}, [Language.JAVASCRIPT, Language.SVELTE, Language.VUE]),
         ({"src/a.py": long_file(3), "src/dist/index.js": minified_bundle()}, [Language.PYTHON, Language.JAVASCRIPT]),
     ],
     ids=[
         "a Python-only tree names Python",
-        "a mixed tree lists its languages largest first, shell and CSS absent",
+        "a mixed tree lists its languages largest first, shell absent",
         "equal lines are ordered by name",
         "a minified bundle's language is listed",
     ],
@@ -50,8 +50,10 @@ def test_the_measured_languages_are_listed_largest_first_and_by_name_on_a_tie(fi
         ("src/test_x.ts", Area.PRODUCTION),
         ("src/Card.test.svelte", Area.PRODUCTION),
         ("src/__tests__/Card.svelte", Area.PRODUCTION),
+        ("tests/app.css", Area.TESTS),
+        ("src/a.test.css", Area.PRODUCTION),
     ],
 )
 def test_the_name_rule_of_a_typescript_or_javascript_file_is_the_runners_defaults(path, area):
-    """FLEET-83: `*.test.*`, `*.spec.*` and `__tests__/` for TS and JS; Svelte and Vue by directory only."""
+    """FLEET-83: `*.test.*`, `*.spec.*` and `__tests__/` for TS and JS; Svelte, Vue and CSS by directory only."""
     assert area_of(f"src/{path}") is area
