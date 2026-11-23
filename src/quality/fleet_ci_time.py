@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from quality import ci_time, fleet_job_time, output
+from quality.deadline import RunDeadline
 from quality.report import CannotJudge
 
 WINDOW_DAYS = 7
@@ -61,7 +62,7 @@ class WeeklyCiTime:
 
 @dataclass(frozen=True)
 class PartlyRead:
-    """A repository whose runs a cap or a failed read kept from a number."""
+    """A repository whose runs a cap, the deadline or a failed read kept from a number."""
 
     reason: str
 
@@ -94,9 +95,11 @@ def api_headers(token: str) -> dict[str, str]:
     return {"Accept": "application/vnd.github+json", **({"Authorization": f"Bearer {token}"} if token else {})}
 
 
-def read_fleet_ci_time(names: tuple[str, ...], today: date, token: str, fetch: RunsFetch, default_branch: str) -> FleetCiTime:
-    """Each repository's weekly CI time, read page by page within the report's call cap, then the jobs of a sample of
-    each one's runs within what the cap leaves."""
+def read_fleet_ci_time(
+    names: tuple[str, ...], today: date, token: str, fetch: RunsFetch, default_branch: str, deadline: RunDeadline
+) -> FleetCiTime:
+    """Each repository's weekly CI time, read page by page within the report's call cap and deadline, then the jobs of
+    a sample of each one's runs within what both leave."""
     window_start = datetime.combine(today - timedelta(days=WINDOW_DAYS), time.min, UTC)
     created = quote(f">={window_start.date()}", safe="")
     headers = api_headers(token)
@@ -104,17 +107,17 @@ def read_fleet_ci_time(names: tuple[str, ...], today: date, token: str, fetch: R
     sampled: dict[str, list[fleet_job_time.RunToSample]] = {}
     calls = 0
     for name in names:
-        rows[name], sampled[name], used = _read_repository(name, created, headers, fetch, default_branch, CALLS_PER_REPORT - calls)
+        rows[name], sampled[name], used = _read_repository(name, created, headers, fetch, default_branch, CALLS_PER_REPORT - calls, deadline)
         calls += used
     jobs = {}
     share = sum(bool(runs) for runs in sampled.values())
     for name, runs in sampled.items():
         size = fleet_job_time.sample_size(len(runs), CALLS_PER_REPORT - calls, share)
         if size:
-            jobs[name], used = fleet_job_time.read_job_time(name, fleet_job_time.evenly(runs, size), headers, fetch)
+            jobs[name], used = fleet_job_time.read_job_time(name, fleet_job_time.evenly(runs, size), headers, fetch, deadline)
             calls += used
         elif runs:
-            jobs[name] = fleet_job_time.JobsCut()
+            jobs[name] = fleet_job_time.JobsCut(fleet_job_time.CUT_BY_CAP)
         share -= bool(runs)
     return FleetCiTime(window_start, rows, jobs, calls)
 
@@ -134,8 +137,8 @@ def document(fleet: FleetCiTime, generated_at: datetime) -> str:
     """The weekly numbers as the JSON document platform's alert reads: one flat row per repository in the report's order,
     only numbers and booleans beside the name. A repository is measured when it has a median over at least one counted
     commit, and breaches when that median is strictly above LIMIT; `complete` is false when any repository's runs were
-    cut by the call cap or could not be read. The window is what the runs query reads: midnight UTC seven days before
-    the report's day, up to the moment the document is made."""
+    cut by the call cap or the deadline or could not be read. The window is what the runs query reads: midnight UTC
+    seven days before the report's day, up to the moment the document is made."""
     generated = generated_at.astimezone(UTC)
     return json.dumps(
         {
@@ -172,12 +175,12 @@ def _duration(wall: timedelta) -> str:
 
 
 def _read_repository(
-    name: str, created: str, headers: Mapping[str, str], fetch: RunsFetch, default_branch: str, budget: int
+    name: str, created: str, headers: Mapping[str, str], fetch: RunsFetch, default_branch: str, budget: int, deadline: RunDeadline
 ) -> tuple[WeeklyCiTime | PartlyRead, list[fleet_job_time.RunToSample], int]:
     runs: list[_Run] = []
     pages = 0
     try:
-        while pages < budget:
+        while pages < budget and deadline.left() > 0:
             pages += 1
             body, _ = fetch(RUNS_URL.format(name=name, created=created, size=PAGE_SIZE, page=pages), headers, _unreadable)
             answered, total = _parse_page(body)

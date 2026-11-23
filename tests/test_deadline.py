@@ -6,14 +6,7 @@ import pytest
 
 from quality import deadline, process
 from quality.report import CannotJudge
-
-
-class Clock:
-    def __init__(self, now: float = 0.0) -> None:
-        self.now = now
-
-    def __call__(self) -> float:
-        return self.now
+from tests.support.clock import Clock
 
 
 def test_the_time_left_falls_with_the_clock():
