@@ -189,9 +189,14 @@ def file_pairs(units: list[Unit]) -> ClonePairs:
     return ClonePairs(pairs, {unit.place: unit.line for pair in found for unit in pair})
 
 
+def both_tests(first_path: str, second_path: str) -> bool:
+    """Whether both files are tests: the one decision that makes a pair a test pair."""
+    return ratchet.area_of(first_path) is Area.TESTS and ratchet.area_of(second_path) is Area.TESTS
+
+
 def summarise_pairs(pairs: frozenset[ClonePair]) -> dict[Area, int]:
     """A pair counts as tests only when both of its files are; a test that copies production code is production."""
-    tests = sum(ratchet.area_of(pair.first.path) is Area.TESTS and ratchet.area_of(pair.second.path) is Area.TESTS for pair in pairs)
+    tests = sum(both_tests(pair.first.path, pair.second.path) for pair in pairs)
     return {Area.PRODUCTION: len(pairs) - tests, Area.TESTS: tests}
 
 

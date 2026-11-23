@@ -3,7 +3,7 @@ functions of every measured repository, keeping the pairs whose two sides lie in
 
 from dataclasses import dataclass
 
-from quality import clones, output, ratchet
+from quality import clones, output
 
 COLUMNS = ("Repo", "Function", "Repo", "Function", "Kind")
 PROD = "prod"
@@ -30,8 +30,7 @@ class RepositoryPair:
 
     @property
     def kind(self) -> str:
-        both_tests = all(ratchet.area_of(side.path) is ratchet.Area.TESTS for side in (self.first, self.second))
-        return TEST if both_tests else PROD
+        return TEST if clones.both_tests(self.first.path, self.second.path) else PROD
 
     @property
     def order(self) -> tuple[bool, Side, Side]:
