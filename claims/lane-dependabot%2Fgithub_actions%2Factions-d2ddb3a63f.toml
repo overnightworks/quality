@@ -1,7 +1,0 @@
-claim_id = "63d718eeb59f46fbb2d4ff56828d137e"
-agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
-role = "builder"
-base = "5106269ea5170ed8bae4fdbffca05799f94a8ed3"
-branch = "dependabot/github_actions/actions-d2ddb3a63f"
-scope = [".github/workflows/ci.yml", ".github/workflows/gate.yml"]
-opened_commit = "418d834d08f2cc34c2f394622e26cbea3afdfba8"
