@@ -93,7 +93,7 @@ layers = [
     "literal_text | locator_text | logging_rule",
     "render_pass",
     "catalog_rules",
-    "live_layer | pr_workflows | pytest_random | spec_citations",
+    "live_layer | pr_workflows | pytest_random | spec_citations | vitest_random",
     "read_attributes | typescript_tokens",
     "twins",
     "naming",

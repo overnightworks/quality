@@ -37,6 +37,7 @@ from quality import (
     scanners,
     spec_citations,
     twins,
+    vitest_random,
     workflow_rules,
 )
 from quality.config import (
@@ -590,7 +591,13 @@ def _judge_dependencies(inputs: RunInputs) -> AreaVerdict:
     pytest_random_result = _attempt(
         lambda: pytest_random.check_pytest_random(inputs.root, inputs.tracked, _pyproject_contents(inputs.root, _required(inputs.modes)))
     )
-    rules = {Rule.ADVISORY: advisory, Rule.FLEET_SOURCE: fleet_source, Rule.PYTEST_RANDOM: pytest_random_result}
+    vitest_random_result = _attempt(
+        lambda: vitest_random.check_vitest_random(inputs.root, inputs.tracked, _package_json_contents(inputs.root, _required(inputs.modes)))
+    )
+    rules = {
+        Rule.ADVISORY: advisory, Rule.FLEET_SOURCE: fleet_source, Rule.PYTEST_RANDOM: pytest_random_result,
+        Rule.VITEST_RANDOM: vitest_random_result,
+    }
     return _area_verdict(Area.DEPENDENCIES, rules, runs)
 
 
