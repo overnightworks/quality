@@ -41,17 +41,32 @@ def options(arguments: Sequence[str]) -> Iterator[Option]:
         word = arguments[index]
         index += 1
         if word.startswith(SEPARATOR):
-            name, equals, glued = word.partition("=")
-            value, index = (glued, index) if equals or name not in LONG_VALUE_OPTIONS else _next_word(arguments, index)
-            yield Option(name, value, True)
+            found, index = _long_option(word, arguments, index)
         elif word.startswith("-"):
-            for position, letter in enumerate(word[1:], 1):
-                if letter in VALUE_LETTERS:
-                    glued = word[position + 1 :]
-                    value, index = (glued.removeprefix("="), index) if glued else _next_word(arguments, index)
-                    yield Option(f"-{letter}", value, position == 1)
-                    break
-                yield Option(f"-{letter}", "", position == 1)
+            found, index = _short_cluster(word, arguments, index)
+        else:
+            continue
+        yield from found
+
+
+def _long_option(word: str, arguments: Sequence[str], index: int) -> tuple[list[Option], int]:
+    """The option of a `--name[=value]` word and the index past its value."""
+    name, equals, glued = word.partition("=")
+    value, index = (glued, index) if equals or name not in LONG_VALUE_OPTIONS else _next_word(arguments, index)
+    return [Option(name, value, True)], index
+
+
+def _short_cluster(word: str, arguments: Sequence[str], index: int) -> tuple[list[Option], int]:
+    """The options of a `-abc` cluster, ended by the first letter that takes a value, and the index past that value."""
+    found = []
+    for position, letter in enumerate(word[1:], 1):
+        if letter in VALUE_LETTERS:
+            glued = word[position + 1 :]
+            value, index = (glued.removeprefix("="), index) if glued else _next_word(arguments, index)
+            found.append(Option(f"-{letter}", value, position == 1))
+            break
+        found.append(Option(f"-{letter}", "", position == 1))
+    return found, index
 
 
 def _next_word(arguments: Sequence[str], index: int) -> tuple[str, int]:
