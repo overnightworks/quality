@@ -177,10 +177,10 @@ list (FLEET-31)); the fleet is every public, non-archived, non-fork repository G
 `✓ <owner/name>  measured  <commit> · <time>` (FLEET-35), `✗ …  not measured <reason>` (FLEET-36), whose reason for a repository without a commit is `holds no commit` (FLEET-103), or
 `✗ …  partly read  cannot read <files>` (FLEET-37), or, for a repository whose runs could not be read, `✗ …  partly read  cannot read CI time` (FLEET-105); a failed read of the release tags adds
 `✗ release tags  not read <reason>` under the fleet line (FLEET-38). The subjects share one column (FLEET-39). On stdout
-it prints the three markdown tables and nothing else, so `quality report > fleet.md` writes only them (FLEET-40): the size
+it prints the four markdown tables and nothing else, so `quality report > fleet.md` writes only them (FLEET-40): the size
 of every repository under a heading with the date and the quality version (FLEET-41), then the same rows as a repo × rule matrix (FLEET-42), then under the heading
 `CI time, last 7 days · N API calls` one row per repository: `Repo`, `Commits`, `Median`, `p90`, `Red`, `Red on main`,
-`Re-runs`, `Green on re-run`, `Jobs sampled`, `Queue p90` and `Over 12 min` (FLEET-104). A commit is the unit, except in `Re-runs` and `Green on re-run`, which count runs. One commit fans out into several
+`Re-runs`, `Green on re-run`, `Jobs sampled`, `Queue p90` and `Over 12 min` (FLEET-104), then the pairs between repositories (FLEET-113). A commit is the unit, except in `Re-runs` and `Green on re-run`, which count runs. One commit fans out into several
 runs: the runs created in the 7 days before the report's day over the events `pull_request` and `push`, grouped by head
 commit; its wall is its latest `updated_at` minus its earliest `created_at`, so a re-run counts from its first attempt. A
 commit with a run still in progress and a commit whose runs are all `cancelled` are left out. `Commits`, `Median` and `p90`
@@ -278,6 +278,16 @@ repository a token can list is dropped without a trace (FLEET-72).
 - `Clone pairs prod / test` counts the `clone` rule's pairs (two near-identical functions in two files, at 40 tokens and
   90 %) (FLEET-87); a pair counts as test only when both sides are tests, so a test that copies production code counts
   as prod (FLEET-88).
+- Under `Clone pairs between repositories · N pairs`, after the CI-time table, stands one row per pair of near-identical
+  functions in two different measured repositories, found by the `clone` rule's detector and thresholds: `Repo`,
+  `Function`, `Repo`, `Function` and `Kind`, where `Function` reads `<path> <symbol>` as `clone` names a function; each
+  pair stands once, its sides in sorted order (FLEET-113). A pair inside one repository stands only in that
+  repository's `Clone pairs prod / test` cell, never in this table (FLEET-114). `Kind` is `test` when both sides are
+  test files under the `size` rule's file-name rule, else `prod`; `prod` rows come first, then rows by their sides
+  (FLEET-115). The table is computed each run from the measured default-branch tips, so a pair whose copy is gone or
+  drifted below the threshold leaves it, and a repository not measured adds no pair (FLEET-116). It raises no finding
+  and changes no exit (FLEET-117). Named limit: the detector reads Python, not workflow files, so the copied jobs of
+  `ci.yml` are outside it; the CI standard's shared building blocks own them.
 - A `.py` file Python cannot parse, or a TypeScript, JavaScript, Svelte or Vue file that is not UTF-8, still has its
   lines counted (FLEET-89); the row's note says how many such files there are, as `N files not valid Python` and
   `N files not UTF-8` (FLEET-90), never which (FLEET-91).

@@ -346,7 +346,7 @@ Ruled by the operator:
 - stdout carries rows and the verdict (STREAM-1). stderr carries the live line, the input prompt and `error:`/`next:`
   (STREAM-2). So `quality check | less` shows every finding and an error stays visible.
 - `report`: rows (FLEET-33) and verdict (FLEET-45) on stderr; the tables are an artifact on stdout, so
-  `quality report > fleet.md` writes only the three tables (FLEET-40).
+  `quality report > fleet.md` writes only the four tables (FLEET-40).
 
 Rows and the verdict go to stdout (STREAM-1); the live line, the input prompt and `error:`/`next:` go to stderr
 (STREAM-2). `quality report` has [its own split](commands.md#quality-report).
