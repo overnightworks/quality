@@ -2,7 +2,8 @@
 
 A short option letter that takes a value ends its cluster, and the rest of the word, else the next word, is its value; one
 leading `=` of a glued value is dropped. A long option is read by its full name only (`--opt=value` or `--opt value`),
-X, not read from pytest at run time: pytest and its plugins are the caller's, not quality's, and a
+because pytest's parser refuses abbreviations. The letters that take a value and the spellings of every option the rules
+read are declared here, not read from pytest at run time: pytest and its plugins are the caller's, not quality's, and a
 test holds the tables against the parsers installed with quality's own development dependencies. A `@file` argument and an
 option a repository's own plugin adds are not read."""
 
