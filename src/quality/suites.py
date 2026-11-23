@@ -184,16 +184,8 @@ def _script_call(tokens: list[Token], start: int, paired: dict[int, int]) -> _Sc
     return None
 
 
-def _script_test_marks(tokens: list[Token]) -> Iterator[Marks]:
-    """The marks that reach each test call: its own, those of every enclosing group, and a runtime skip or fixme call, which
-    marks the innermost test or group that holds it."""
-    paired = _paired_parentheses(tokens)
-    calls = [
-        call
-        for index, token in enumerate(tokens)
-        if token.kind is Kind.IDENTIFIER and token.value in {*SCRIPT_TEST_CALLS, SCRIPT_GROUP} and _value_at(tokens, index - 1) != "."
-        if (call := _script_call(tokens, index, paired))
-    ]
+def _call_nesting(calls: list[_ScriptCall]) -> tuple[dict[int, int | None], dict[int, set[Mark]]]:
+    """The enclosing call of each test or group call, and the marks of the runtime skip or fixme calls each one holds."""
     holders: list[int] = []
     parent: dict[int, int | None] = {}
     runtime: dict[int, set[Mark]] = {}
@@ -205,6 +197,20 @@ def _script_test_marks(tokens: list[Token]) -> Iterator[Marks]:
             holders.append(index)
         elif holders:
             runtime.setdefault(holders[-1], set()).update(call.marks)
+    return parent, runtime
+
+
+def _script_test_marks(tokens: list[Token]) -> Iterator[Marks]:
+    """The marks that reach each test call: its own, those of every enclosing group, and a runtime skip or fixme call, which
+    marks the innermost test or group that holds it."""
+    paired = _paired_parentheses(tokens)
+    calls = [
+        call
+        for index, token in enumerate(tokens)
+        if token.kind is Kind.IDENTIFIER and token.value in {*SCRIPT_TEST_CALLS, SCRIPT_GROUP} and _value_at(tokens, index - 1) != "."
+        if (call := _script_call(tokens, index, paired))
+    ]
+    parent, runtime = _call_nesting(calls)
     for index, call in enumerate(calls):
         if call.name == SCRIPT_TEST:
             marks, holder = call.marks | runtime.get(index, set()), parent[index]
