@@ -128,11 +128,14 @@ def parsed(path: str, source: bytes) -> ast.Module | None:
         return None
 
 
+def is_python_test(path: str) -> bool:
+    return language_of(path) is Language.PYTHON and Language.PYTHON.is_test_file(PurePosixPath(path))
+
+
 def python_test_trees(sources: dict[str, bytes]) -> Iterator[tuple[str, ast.Module]]:
     """The parsed Python test files among `sources`; a file Python cannot parse is left out."""
     for path, source in sources.items():
-        is_python_test = language_of(path) is Language.PYTHON and Language.PYTHON.is_test_file(PurePosixPath(path))
-        if is_python_test and (tree := parsed(path, source)) is not None:
+        if is_python_test(path) and (tree := parsed(path, source)) is not None:
             yield path, tree
 
 

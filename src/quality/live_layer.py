@@ -19,7 +19,6 @@ from quality.workflow_rules import PYTEST_RULE, Problem, ScriptRule, judge_scrip
 
 LIVE_MARKER = "live"
 MARK_OPTION = "-m"
-LIVE_FOLDER = PurePosixPath(layout.END_TO_END_DIRECTORY) / LIVE_MARKER
 CAN_SELECT_FACT = f"pytest can select tests marked {LIVE_MARKER}"
 UNREADABLE_EXPRESSION_FACT = "-m expression cannot be read"
 RUN_TIME_FACT = "command is built at run time, pytest -m cannot be read"
@@ -29,7 +28,7 @@ FIX = f'add -m "not {LIVE_MARKER}", or "and not {LIVE_MARKER}" to its -m express
 def has_live_layer(tracked: Sequence[str]) -> bool:
     """Whether a tracked path lies under `tests/e2e/live/` at the root or in a judged project."""
     tests = [PurePosixPath(layout.TESTS_DIRECTORY), *(project.tests_directory for project in layout.python_projects(tracked))]
-    folders = [directory / LIVE_FOLDER for directory in tests]
+    folders = [directory / layout.LIVE_FOLDER for directory in tests]
     return any(folder in PurePosixPath(path).parents for path in tracked for folder in folders)
 
 

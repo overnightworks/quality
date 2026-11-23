@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
-from quality import baseline_file, clones, repository
+from quality import baseline_file, clones, repository, suites
 from quality.config import (
     FOREIGN_PREFIX_HEADING,
     ID_PREFIX,
@@ -28,10 +28,8 @@ from quality.config import (
 from quality.config_entries import CONFIG_PATH
 from quality.markdown_fences import live_line_indexes
 from quality.output import SEPARATOR, counted
-from quality.ratchet import Language, language_of
 from quality.report import CannotJudge, Finding, FindingEvent, Note, NoteEvent, RuleResult
 from quality.rules import Rule
-from quality.typescript_tokens import Kind, ScriptSyntaxError, Token, tokenize
 
 NOTE_PATH = "."
 BYTE_ORDER_MARK = "\ufeff"
@@ -39,8 +37,6 @@ ID = rf"{ID_PREFIX}-(?a:\d+)"
 ID_PATTERN = re.compile(ID)
 DEFINING_ITEM = re.compile(rf"\s*(?:[-*+]|(?a:\d+)[.)])\s+(?P<id>{ID})(?::|(?P<retired> \(retired\)\.))")
 HEAD = re.compile(rf"\s*(?:Spec:\s*)?{ID}(?:\s*(?:,(?:\s*and\b)?|\band\b)\s*{ID})*")
-SCRIPT_TEST_CALLS = frozenset({"it", "test"})
-SCRIPT_LANGUAGES = frozenset({Language.TYPESCRIPT, Language.JAVASCRIPT})
 
 
 class Site(NamedTuple):
@@ -195,34 +191,11 @@ def _python_citations(sources: dict[str, bytes]) -> Iterator[tuple[str, Site]]:
                 yield from ((identifier, Site(path, node.lineno)) for identifier in _head_ids(ast.get_docstring(node) or ""))
 
 
-def _script_titles(tokens: list[Token]) -> Iterator[Token]:
-    """The title of each bare `it(` or `test(` call whose first argument is a string or a template without a hole."""
-    for before, name, opening, title in zip([None, *tokens], tokens, tokens[1:], tokens[2:], strict=False):
-        is_bare = before is None or before.value != "."
-        if is_bare and name.kind is Kind.IDENTIFIER and name.value in SCRIPT_TEST_CALLS and opening.value == "(" and title.kind is Kind.STRING:
-            yield title
-
-
-def _is_script_test(path: str) -> bool:
-    language = language_of(path)
-    return language in SCRIPT_LANGUAGES and language.is_test_file(PurePosixPath(path))
-
-
 def _script_citations(tracked: list[str], sources: dict[str, bytes]) -> tuple[list[tuple[str, Site]], list[str]]:
     """The citations of the tracked TypeScript and JavaScript test files, and the files that are absent from the tree,
     not UTF-8 or refused by the lexer."""
-    cited: list[tuple[str, Site]] = []
-    unread: list[str] = []
-    for path in (path for path in tracked if _is_script_test(path)):
-        if path not in sources:
-            unread.append(path)
-            continue
-        try:
-            tokens = tokenize(sources[path].decode("utf-8"))
-        except (UnicodeDecodeError, ScriptSyntaxError):
-            unread.append(path)
-        else:
-            cited.extend((identifier, Site(path, title.line)) for title in _script_titles(tokens) for identifier in _head_ids(title.value))
+    read, unread = suites.read_script_tests(tracked, sources)
+    cited = [(identifier, Site(path, title.line)) for path, tokens in read.items() for title in suites.script_titles(tokens) for identifier in _head_ids(title.value)]
     return cited, unread
 
 

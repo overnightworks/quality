@@ -183,7 +183,37 @@ def test_a_measured_fleet_prints_its_rows_on_stderr_and_only_the_tables_on_stdou
     assert lines[9].startswith("Every gate release enforces ")
     assert lines[11].startswith("| Repo | Gate |")
     assert lines[16].startswith("**CI time, last 7 days")
-    assert lines[23:] == ["**Clone pairs between repositories · 0 pairs**", "", "| Repo | Function | Repo | Function | Kind |", "|---|---|---|---|---|"]
+    assert lines[23:27] == ["**Clone pairs between repositories · 0 pairs**", "", "| Repo | Function | Repo | Function | Kind |", "|---|---|---|---|---|"]
+
+
+def test_the_tests_per_layer_table_stands_last_with_the_counts_of_each_cloned_tip(capsys, monkeypatch, tmp_path, public):
+    """FLEET-119: the table stands after the pairs between repositories, one row per repository, counted in its clone."""
+    alpha = public("alpha", {
+        "tests/test_a.py": "import pytest\n\n\n@pytest.mark.skip\ndef test_a():\n    pass\n\n\ndef test_b():\n    pass\n",
+        "tests/e2e/test_flow.py": "def test_flow():\n    pass\n",
+        "tests/e2e/live/test_live.py": "def test_live():\n    pass\n",
+        "web/package.json": "{}",
+        "web/src/a.test.ts": "test.fixme('a', () => {});\n",
+        "web/src/bad.test.ts": "/* never closed",
+    })
+    printed = report_in(write_fleet(tmp_path / "fleet", [alpha]), capsys, monkeypatch, ticks(0, 1, 2, 3))
+    assert (printed.code, printed.out.splitlines()[-5:]) == (0, [
+        "**Tests per layer**",
+        "",
+        "| Repo | Unit + integration | Flow | Live | Skipped | Fixme | Note |",
+        "|---|---|---|---|---|---|---|",
+        "| o/alpha | 3 | 1 | 1 | 1 | 1 | 1 file not read |",
+    ])
+
+
+def test_a_repository_that_cannot_be_cloned_says_so_in_the_tests_per_layer_table_and_the_exit_is_unchanged(capsys, monkeypatch, tmp_path, public, missing):
+    """FLEET-119, FLEET-124: an unmeasured repository reads cannot judge in the note, and the exit is the report's own."""
+    alpha = public("alpha", {"a.py": "a = 1\n"})
+    printed = report_in(write_fleet(tmp_path / "fleet", [alpha, missing]), capsys, monkeypatch, ticks(0, 1, 2, 3, 4))
+    assert (printed.code, printed.out.splitlines()[-2:]) == (
+        2,
+        ["| o/alpha | 0 | 0 | 0 | 0 | 0 |  |", "| o/gone | — | — | — | — | — | cannot judge: cannot clone (git exited 128) |"],
+    )
 
 
 def test_a_repository_that_cannot_be_cloned_is_its_row_and_the_pair_after_the_tables(capsys, monkeypatch, tmp_path, public, missing, remotes):
@@ -647,8 +677,8 @@ def test_a_private_repository_is_in_no_row_of_the_document(capsys, monkeypatch, 
 
 
 def clone_pair_table(printed: Printed) -> list[str]:
-    """The lines of the table under `Clone pairs between repositories`, from the rest of its heading."""
-    return printed.out.split("**Clone pairs between repositories")[1].splitlines()
+    """The lines of the table under `Clone pairs between repositories`, from the rest of its heading, up to the next table."""
+    return printed.out.split("**Clone pairs between repositories")[1].split("**Tests per layer**")[0].rstrip().splitlines()
 
 
 LOOPING = (

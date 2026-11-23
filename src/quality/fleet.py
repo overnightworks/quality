@@ -14,7 +14,7 @@ import json
 import re
 import subprocess
 import urllib.error
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -33,12 +33,14 @@ from quality import (
     config_entries,
     fleet_ci_time,
     fleet_clones,
+    fleet_suites,
     layout,
     output,
     process,
     ratchet,
     report,
     repository,
+    suites,
     web,
 )
 from quality.deadline import RunDeadline
@@ -207,6 +209,7 @@ class Measured:
     unparsable: dict[ratchet.FunctionSource, int]
     pairs: dict[ratchet.Area, int]
     units: list[clones.Unit]
+    suites: suites.Suites
     workflows: checkout.Workflows
     declared: Declared
 
@@ -421,9 +424,10 @@ def measure_repository(name: str, time_left: float) -> Row:
     tree = ratchet.measure(sources)
     units = clones.units_of(sources, name)
     pairs = clones.summarise_pairs(clones.file_pairs(units).pairs)
+    counted = suites.count_suites(tracked, sources)
     commit = head[:SHORT_COMMIT]
     languages, areas = ratchet.language_lines(tree), ratchet.summarise(tree)
-    return Measured(name, commit, languages, areas, {source: tree.unparsable_count(source) for source in ratchet.FunctionSource}, pairs, units, workflows, declared)
+    return Measured(name, commit, languages, areas, {source: tree.unparsable_count(source) for source in ratchet.FunctionSource}, pairs, units, counted, workflows, declared)
 
 
 def read_declared(clone: Path, tracked: list[str]) -> Declared:
@@ -477,27 +481,19 @@ def render(
     between: list[fleet_clones.RepositoryPair],
 ) -> tuple[str, ...]:
     heading = f"**Fleet report, {today.isoformat()}, quality {__version__}**"
-    table = [table_line(COLUMNS), "|---" * len(COLUMNS) + "|", *(table_line(cells(row)) for row in rows)]
+    table = table_lines(COLUMNS, (cells(row) for row in rows))
     pins = release_tags_or_none(tags)
     matrix_heading = f"**Repo × rule, {newest_release_words(tags)}**"
     every_release = f"Every gate release enforces {words_joined([rule.rule for rule in EVERY_RELEASE_ENFORCES])}."
-    matrix = [
-        table_line(MATRIX_COLUMNS),
-        "|---" * len(MATRIX_COLUMNS) + "|",
-        *(table_line(matrix_cells(row, pins)) for row in rows),
-    ]
+    matrix = table_lines(MATRIX_COLUMNS, (matrix_cells(row, pins) for row in rows))
     ci_heading = f"**CI time, last {fleet_ci_time.WINDOW_DAYS} days{output.SEPARATOR}{output.counted(ci_time.calls, 'API call')}**"
-    ci_table = [
-        table_line(fleet_ci_time.COLUMNS),
-        "|---" * len(fleet_ci_time.COLUMNS) + "|",
-        *(table_line(fleet_ci_time.table_cells(name, ci_time)) for name in ci_time.rows),
-    ]
-    between_table = [
-        table_line(fleet_clones.COLUMNS),
-        "|---" * len(fleet_clones.COLUMNS) + "|",
-        *(table_line(pair.cells) for pair in between),
-    ]
-    return (heading, "", *table, "", matrix_heading, "", every_release, "", *matrix, "", ci_heading, "", *ci_table, "", fleet_clones.heading(between), "", *between_table)
+    ci_table = table_lines(fleet_ci_time.COLUMNS, (fleet_ci_time.table_cells(name, ci_time) for name in ci_time.rows))
+    between_table = table_lines(fleet_clones.COLUMNS, (pair.cells for pair in between))
+    suites_table = table_lines(fleet_suites.COLUMNS, (suites_cells(row) for row in rows))
+    return (
+        heading, "", *table, "", matrix_heading, "", every_release, "", *matrix, "", ci_heading, "", *ci_table, "",
+        fleet_clones.heading(between), "", *between_table, "", fleet_suites.HEADING, "", *suites_table,
+    )
 
 
 def run_report(
@@ -745,6 +741,10 @@ def released_tag(commit: str, tags: checkout.ReleaseTags) -> str | None:
     return max((tag for tag, tagged in tags.items() if tagged == commit), key=checkout.release_order, default=None)
 
 
+def table_lines(columns: tuple[str, ...], rows: Iterable[tuple[Cell, ...]]) -> list[str]:
+    return [table_line(columns), "|---" * len(columns) + "|", *map(table_line, rows)]
+
+
 def table_line(values: tuple[Cell, ...]) -> str:
     return "| " + " | ".join(markdown_text(str(value)) for value in values) + " |"
 
@@ -759,6 +759,12 @@ def cells(row: Row) -> tuple[str, ...]:
     if isinstance(row, Measured):
         return measured_cells(row)
     return (row.name, DASH, status_label(row), *("",) * (len(COLUMNS) - 3))
+
+
+def suites_cells(row: Row) -> tuple[str, ...]:
+    if isinstance(row, Measured):
+        return fleet_suites.cells(row.name, row.suites)
+    return fleet_suites.unjudged_cells(row.name, status_label(row))
 
 
 def status_label(row: Unjudged) -> str:
