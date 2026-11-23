@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from quality import checkout, clones, repository
+from quality.markdown_fences import live_line_indexes
 from quality.output import counted
 from quality.ratchet import Language, language_of
 from quality.report import Note, NoteEvent, RuleResult
@@ -20,11 +21,11 @@ from quality.typescript_tokens import Kind, ScriptSyntaxError, Token, tokenize
 
 NOTE_PATH = "."
 MARKDOWN_SUFFIX = ".md"
+BYTE_ORDER_MARK = "\ufeff"
 ID = r"[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-[0-9]+"
 ID_PATTERN = re.compile(ID)
 DEFINING_ITEM = re.compile(rf"\s*(?:[-*+]|\d+[.)])\s+(?P<id>{ID})(?::|(?P<retired> \(retired\)\.))")
-HEAD = re.compile(rf"\s*(?:Spec:\s*)?{ID}(?:\s*(?:,|\band\b)\s*{ID})*")
-FENCES = ("```", "~~~")
+HEAD = re.compile(rf"\s*(?:Spec:\s*)?{ID}(?:\s*(?:,(?:\s*and\b)?|\band\b)\s*{ID})*")
 SCRIPT_TEST_CALLS = frozenset({"it", "test"})
 SCRIPT_LANGUAGES = frozenset({Language.TYPESCRIPT, Language.JAVASCRIPT})
 
@@ -43,15 +44,13 @@ def _first_cell(line: str) -> str:
 
 def _definitions_of(text: str) -> Iterator[tuple[str, bool]]:
     """Each (ID, live) a Markdown text defines: a list item as the rules say, a table row while a rule's table is open."""
-    fenced = False
     under_rule = False
-    for line in text.splitlines():
+    lines = text.removeprefix(BYTE_ORDER_MARK).splitlines()
+    for line in (lines[index] for index in live_line_indexes(lines)):
         stripped = line.strip()
-        if stripped.startswith(FENCES):
-            fenced = not fenced
-        elif fenced or not stripped:
+        if not stripped:
             continue
-        elif item := DEFINING_ITEM.match(line):
+        if item := DEFINING_ITEM.match(line):
             under_rule = True
             yield item["id"], item["retired"] is None
         elif stripped.startswith("|"):
@@ -81,7 +80,7 @@ def _head_ids(text: str) -> list[str]:
 def _python_citations(sources: dict[str, bytes]) -> Iterator[str]:
     for _, tree in clones.python_test_trees(sources):
         for node in ast.walk(tree):
-            if isinstance(node, clones.FUNCTION_NODES) and node.name.startswith(clones.TEST_NAME_PREFIX):
+            if clones.is_test_function(node):
                 yield from _head_ids(ast.get_docstring(node) or "")
 
 

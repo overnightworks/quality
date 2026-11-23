@@ -1465,7 +1465,7 @@ and reports three counts as one `open` [note](output.md#notes); it only reports 
   between them. A fenced code block, prose, `(ID)` and a list item without the colon define nothing. An ID is
   `[A-Z][A-Z0-9]*(-[A-Z][A-Z0-9]*)*-[0-9]+`, and IDs compare as exact tokens: `CSRF-01` is not `CSRF-1`.
 - **Python citations (CITE-2).** The docstring of a function whose name starts with `test` in a Python test file (TWIN-1)
-  cites. Its head is the run of IDs at the docstring's start, after an optional `Spec:`, joined by `,` or `and`, and every
+  cites. Its head is the run of IDs at the docstring's start, after an optional `Spec:`, joined by `,`, `and` or `, and`, and every
   ID-shaped token in the head counts, so a mistyped prefix is caught. A module or class docstring, a helper, a comment and a
   later mention do not cite.
 - **TypeScript and JavaScript citations (CITE-3).** In a file `Language.is_test_file` accepts, a bare `it(` or `test(` whose
@@ -1476,7 +1476,7 @@ and reports three counts as one `open` [note](output.md#notes); it only reports 
   citations, and a cited retired ID counts with them. A count of zero leaves its part out, and with all three at zero no note
   stands.
 - **What cannot be read (CITE-5).** Sources the `debt` area cannot read refuse the area as before, and no note stands. A
-  tracked `.md` file that is not UTF-8 and a TypeScript or JavaScript test file the lexer refuses are left out and named in
+  tracked `.md` file that is not UTF-8 and a TypeScript or JavaScript test file that is not UTF-8 or that the lexer refuses are left out and named in
   the note's last part (`· 1 file not read: docs/x.md`), so the rule changes no exit code; with only such files the note is
   that part alone. A Python test file that does not parse is skipped, since `size` and `clone` refuse it.
 - **Report only (CITE-6).** The rule changes no verdict and its extent is 0, never measured only. It names no first release

@@ -98,6 +98,7 @@ layers = [
     "naming",
     "agent_guidance | architecture | clones | compose | env_file | fleet_sources | layout | pip_requirements | python_floor | root_layout | scanners | workflow_rules",
     "makefile | pytest_options | workflow_document",
+    "markdown_fences",
     "run_script",
     "ratchet",
     "ratchet_scripts",

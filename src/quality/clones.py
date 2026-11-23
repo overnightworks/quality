@@ -12,6 +12,7 @@ from collections import Counter, defaultdict
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import PurePosixPath
+from typing import TypeGuard
 
 from quality import baseline_file, ratchet
 from quality.baseline_file import ClonePair, Place
@@ -77,6 +78,11 @@ def _emit(node: ast.AST, tokens: list[str], names_kept: bool, literals_kept: boo
     tokens.extend(_name_tokens(node, names_kept))
     for child in ast.iter_child_nodes(node):
         _emit(child, tokens, names_kept, literals_kept)
+
+
+def is_test_function(node: ast.AST) -> TypeGuard[FUNCTION_NODES]:
+    """Whether `node` is a function whose name starts a test, in a class or not."""
+    return isinstance(node, FUNCTION_NODES) and node.name.startswith(TEST_NAME_PREFIX)
 
 
 def _has_docstring(body: list[ast.stmt]) -> bool:

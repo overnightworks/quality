@@ -34,7 +34,7 @@ def count_twins(sources: dict[str, bytes]) -> TwinCounts:
     helper_files: defaultdict[tuple[str, ...], set[str]] = defaultdict(set)
     for path, tree in clones.python_test_trees(sources):
         for function in (node for node in ast.walk(tree) if isinstance(node, clones.FUNCTION_NODES)):
-            if function.name.startswith(clones.TEST_NAME_PREFIX):
+            if clones.is_test_function(function):
                 if len(stream := clones.tokens(function, names_kept=True, literals_kept=False)) >= MIN_TEST_TOKENS:
                     test_streams[path, tuple(stream)] += 1
             elif len(stream := clones.tokens(function, names_kept=True, literals_kept=True)) >= MIN_HELPER_TOKENS:

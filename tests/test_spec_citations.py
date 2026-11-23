@@ -39,8 +39,9 @@ def cited_by_script(title: str, call: str = "it", path: str = "web/a.test.ts") -
         ["1. X-1: a rule."],
         ["1) X-1: a rule."],
         ["- Parent:", "    - X-1: nested."],
+        ["\ufeff- X-1: a rule."],
     ],
-    ids=["dash", "star", "plus", "number and dot", "number and parenthesis", "nested item"],
+    ids=["dash", "star", "plus", "number and dot", "number and parenthesis", "nested item", "byte order mark"],
 )
 def test_a_list_item_that_opens_with_an_id_and_a_colon_defines_it(build_repo, spec):
     """CITE-1: every list marker and any indent define."""
@@ -55,11 +56,13 @@ def test_a_list_item_that_opens_with_an_id_and_a_colon_defines_it(build_repo, sp
         ["Prose names (X-1) in passing."],
         ["```", "- X-1: an example.", "```"],
         ["~~~", "- X-1: an example.", "~~~"],
+        ["```", "~~~", "- X-1: an example.", "```"],
+        ["````markdown", "```", "- X-1: an example.", "```", "- X-2: still an example.", "````"],
         ["# Rules", "", "| X-1 | row |"],
         ["- Rules:", "", "# Table", "", "| X-1 | row |"],
         ["- Rules:", "", "Prose.", "", "| X-1 | row |"],
     ],
-    ids=["retired", "no colon", "parenthesised prose", "backtick fence", "tilde fence", "table without rule", "table after heading", "table after prose"],
+    ids=["retired", "no colon", "parenthesised prose", "backtick fence", "tilde fence", "tilde line in a backtick fence", "short fence in a longer one", "table without rule", "table after heading", "table after prose"],
 )
 def test_nothing_else_defines_an_id(build_repo, spec):
     """CITE-1: retired IDs need no test; a colon-less item, a fence, prose and a table not under a rule define nothing."""
@@ -100,11 +103,12 @@ def test_an_id_defined_twice_is_one_duplicate(build_repo, files):
         ("Spec: X-1: it.", "2 spec IDs uncited"),
         ("X-1, X-2: it.", UNCITED),
         ("X-1 and X-2: it.", UNCITED),
+        ("X-1, and X-2: it.", UNCITED),
         ("X-1, X-2 and X-3: it.", None),
         ("Does it. X-1.", "3 spec IDs uncited"),
         ("Does it.\n\n    X-1: it.", "3 spec IDs uncited"),
     ],
-    ids=["head", "Spec label", "comma head", "and head", "mixed head", "later mention", "later line"],
+    ids=["head", "Spec label", "comma head", "and head", "comma and head", "mixed head", "later mention", "later line"],
 )
 def test_a_python_test_docstring_cites_the_ids_at_its_head(build_repo, docstring, note):
     """CITE-2: every ID of the head counts, a later mention does not."""
@@ -161,8 +165,10 @@ def test_a_script_test_cites_by_the_head_of_its_name(build_repo, files, note):
         cited_by_script('"X-1: it"', path="web/a.ts"),
         {"web/a.test.ts": "// X-1: a comment\nit('does it', () => {});\n"},
         {"web/a.test.ts": "it('does it, X-1', () => {});\n"},
+        {"web/a.test.ts": "expect(/x/.test('X-1: it')).toBe(true);\n"},
+        {"web/a.test.ts": "suite.it('X-1: it', () => {});\n"},
     ],
-    ids=["describe", "template with a hole", "a modifier", "non-test file", "comment", "later mention"],
+    ids=["describe", "template with a hole", "a modifier", "non-test file", "comment", "later mention", "method test", "method it"],
 )
 def test_nothing_else_cites_in_a_script(build_repo, files):
     """CITE-3: `describe`, a template with a hole, a modifier, a comment and a non-test file do not cite."""
@@ -219,6 +225,13 @@ def test_a_script_test_file_the_lexer_refuses_is_named(build_repo):
     """CITE-5."""
     files = {**spec_with("- X-1: a."), "web/a.test.ts": "it('does it, () => {});\n", "web/b.test.ts": "const a = `\n"}
     assert note_of(build_repo(files)) == f"{UNCITED} · 2 files not read: web/a.test.ts, web/b.test.ts"
+
+
+def test_a_script_test_file_that_is_not_utf_8_is_named(build_repo):
+    """CITE-5: the file is left out and named, so the rule changes no exit code."""
+    repo = build_repo({**spec_with("- X-1: a."), "web/c.test.ts": ""})
+    (repo / "web/c.test.ts").write_bytes(b"\xff")
+    assert note_of(repo) == f"{UNCITED} · 1 file not read: web/c.test.ts"
 
 
 def test_unreadable_files_alone_still_give_a_note(build_repo):
