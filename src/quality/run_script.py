@@ -96,10 +96,10 @@ class Segment:
 
 @dataclass(frozen=True)
 class Tool:
-    """A tool a rule looks for: its command words, and the module a Python interpreter runs with `-m`."""
+    """A tool a rule looks for: its command words, and the module a Python interpreter runs with `-m`, None for a tool no interpreter runs."""
 
     commands: frozenset[str]
-    module: str
+    module: str | None
 
 
 @dataclass
@@ -354,7 +354,7 @@ def tool_arguments(words: Sequence[str], tool: Tool) -> tuple[str, ...] | None:
     command = PurePosixPath(words[0]).name
     if command in tool.commands:
         return tuple(words[1:])
-    if any(interpreter.fullmatch(command) for interpreter in INTERPRETERS):
+    if tool.module is not None and any(interpreter.fullmatch(command) for interpreter in INTERPRETERS):
         return _module_arguments(words[1:], tool)
     for runner in ((command, *words[1:2]), (command,)):
         if runner in RUNNERS:
