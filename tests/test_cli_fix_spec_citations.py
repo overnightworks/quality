@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from quality.baseline_file import BASELINE_PATH, load_baseline
-from tests.support.baselines import holding_spec_ids, rendered
+from tests.support.baselines import CONFLICT_MARKERS, holding_spec_ids, rendered
 from tests.support.door import DRY_RUN_WORDS, FIX_WORDS, digest, fixed, restore_step, tree_of
 from tests.support.git_repositories import git, put
 from tests.support.source_code import long_function
@@ -181,3 +181,33 @@ def test_a_table_git_holds_is_not_asked_about_where_the_fix_would_not_record(bui
     """CITE-11: with no live ID defined nothing would be recorded, so the question to git is not asked."""
     repo = lost_by_hand(build_repo, spec_with("- X-1 (retired)."))
     assert fixed(capsys, repo, *FIX_WORDS)[0] == 0
+
+
+def unreadable_in_the_past(build_repo, content: bytes) -> Path:
+    """A repository whose last commit holds a readable baseline without the table, beneath one no parser reads."""
+    repo = build_repo(spec_with("- X-1: a."))
+    for text in (content, rendered(HELD)):
+        put(repo / BASELINE_PATH, text)
+        git(repo, "add", "-f", BASELINE_PATH)
+        git(repo, "commit", "-q", "-m", "write the ceiling")
+    return repo
+
+
+def test_an_unreadable_version_that_never_names_the_table_lets_the_fix_record_it(build_repo, capsys):
+    """CITE-11, FIX-46: a version of the baseline no parser reads, with conflict markers and no `spec_citations`, holds
+    no table, so the fix records it, the dry run alike."""
+    repo = unreadable_in_the_past(build_repo, CONFLICT_MARKERS)
+    planned, done = both(capsys, repo)
+    assert (planned[0], done[0], written(repo)) == (1, 0, frozenset({"X-1"})), (planned, done)
+
+
+@pytest.mark.parametrize("words", [FIX_WORDS, DRY_RUN_WORDS], ids=["the fix", "the dry run"])
+def test_an_unreadable_version_that_names_the_table_refuses_the_fix_and_writes_nothing(build_repo, capsys, words):
+    """CITE-11, FIX-13: a version no parser reads whose bytes name `spec_citations` refuses with the table's name, the
+    restore step and exit 2."""
+    repo = unreadable_in_the_past(build_repo, CONFLICT_MARKERS + b"\xff[spec_citations]\n")
+    index, tree = git(repo, "ls-files", "--stage").stdout, tree_of(repo)
+    code, out, err = fixed(capsys, repo, *words)
+    assert (code, "a version of quality/baseline.toml in git cannot be read and names spec_citations" in squashed(out)) == (2, True), out
+    assert err.endswith(f"next: {restore_step()}\n"), err
+    assert (tree_of(repo), git(repo, "ls-files", "--stage").stdout) == (tree, index)

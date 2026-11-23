@@ -245,7 +245,7 @@ def unreadable_in_the_past(build_repo, limit: str) -> Path:
 REFUSALS = {
     "lost by hand": (lost_by_hand, "quality/baseline.toml lost its [job_minutes] table, which git holds"),
     "lost in a commit": (lost_in_a_commit, "quality/baseline.toml lost its [job_minutes] table, which git holds"),
-    "unreadable in the past": (unreadable_in_the_past, "a version of quality/baseline.toml in git cannot be read"),
+    "unreadable in the past": (unreadable_in_the_past, "a version of quality/baseline.toml in git cannot be read and names job_minutes"),
 }
 
 

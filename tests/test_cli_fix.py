@@ -428,20 +428,30 @@ def a_version_in_the_index(build_repo) -> Path:
 
 @pytest.mark.parametrize(
     "arrange",
-    [a_version_in_history(b"[clones\n"), a_version_in_history(b"\xff\xfe"), a_version_in_the_index],
-    ids=["in history", "not UTF-8", "in the index"],
+    [a_version_in_history(b"[clones\n"), a_version_in_the_index],
+    ids=["in history", "in the index"],
 )
 def test_a_version_no_parser_reads_refuses_and_a_clones_table_by_hand_runs_the_fix(build_repo, capsys, arrange):
-    """FIX-13: a version of the ceiling in git that no parser reads refuses the fix with the restore step and writes
-    nothing; a hand-written `[clones]` table lets it run."""
+    """FIX-13: a version of the ceiling in git that no parser reads and whose bytes name `clones` refuses the fix with
+    the restore step and writes nothing; a hand-written `[clones]` table lets it run."""
     repo = arrange(build_repo)
     put(repo / BASELINE_PATH, held_ceiling(clones=False))
     before = digest(repo)
     code, out, err = fixed(capsys, repo, *FIX_WORDS)
-    assert (code, "a version of quality/baseline.toml in git cannot be read" in out, digest(repo)) == (2, True, before)
+    assert (code, "a version of quality/baseline.toml in git cannot be read and names clones" in out, digest(repo)) == (2, True, before)
     assert err.endswith(f"next: {restore_step()}\n")
     put(repo / BASELINE_PATH, held_ceiling())
     assert fixed(capsys, repo, *FIX_WORDS)[0] == 0
+
+
+@pytest.mark.integration
+def test_a_version_no_parser_reads_that_never_names_clones_lets_the_fix_record_the_table(build_repo, capsys):
+    """FIX-46: a committed version no parser reads whose bytes never name `clones` holds no table, so the fix records
+    `[clones]`."""
+    repo = a_version_in_history(b"\xff\xfe")(build_repo)
+    put(repo / BASELINE_PATH, held_ceiling(clones=False))
+    code, out, _ = fixed(capsys, repo, *FIX_WORDS)
+    assert (code, "recorded" in out, load_baseline((repo / BASELINE_PATH).read_text()).clones is not None) == (0, True, True), out
 
 
 def a_ceiling_with(content: bytes):
