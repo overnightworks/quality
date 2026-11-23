@@ -492,7 +492,7 @@ def check_test_import(
     findings = []
     for path, content in contents.items():
         if path not in declared:
-            findings += _import_findings(path, _parsed(path, content), targets)
+            findings += _import_findings(path, content, targets)
     findings += [stale_declaration(path, Rule.TEST_IMPORT) for path in declared - modes.keys()]
     return sorted(findings, key=lambda finding: (finding.path, finding.line or 0))
 
@@ -548,14 +548,11 @@ def _is_import_target(path: PurePosixPath) -> bool:
     return _is_test_module(path) or (path.name == CONFTEST_FILE and path.suffix == ".py")
 
 
-def _parsed(path: str, content: bytes) -> list[python_imports.Statement]:
+def _import_findings(path: str, content: bytes, targets: _ImportTargets) -> list[Finding]:
     try:
-        return python_imports.import_statements(path, content)
+        statements = python_imports.import_statements(path, content)
     except ratchet.PARSE_ERRORS as error:
         raise UnparsableTestModule(f"{path} is not valid Python ({error})") from error
-
-
-def _import_findings(path: str, statements: list[python_imports.Statement], targets: _ImportTargets) -> list[Finding]:
     folder = PurePosixPath(path).parent
     named = ((statement, _imported_targets(statement, folder, targets)) for statement in statements)
     return [_imports_a_test_module(path, statement.line, names) for statement, names in named if names]
