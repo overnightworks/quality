@@ -245,7 +245,7 @@ def test_a_line_that_is_no_pytest_call_is_clean(build_repo, line):
     ids=["on the line", "directly above", "on a continuation line", "above a plain comment"],
 )
 def test_a_marker_with_a_reason_clears_a_workflow_call(build_repo, lines):
-    """RANDOM-8: `# pytest-random: <reason>` on the call's line or directly above clears it."""
+    """RANDOM-8: `# pytest-random: <reason>` on the call's line or in the unbroken comment run directly above it clears it."""
     assert workflow_judged(build_repo, script(*lines)) == []
 
 
@@ -276,7 +276,7 @@ def test_a_listing_only_call_is_not_judged(build_repo, line, event):
     ids=["no reason", "reason of no letter", "another rule's marker", "two lines above", "above a command and a comment"],
 )
 def test_a_marker_without_a_reason_or_too_far_clears_nothing(build_repo, lines):
-    """RANDOM-8: the marker needs its own id, a reason with a letter and the line on or directly above."""
+    """RANDOM-8: the marker needs its own id, a reason with a letter and a place on the call's line or in the unbroken comment run above it."""
     assert [finding.event for finding in workflow_judged(build_repo, script(*lines))] == [UNSEEDED]
 
 

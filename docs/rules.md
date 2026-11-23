@@ -971,13 +971,13 @@ A comment `# pytest-workers: <reason>`, with a reason that holds a letter, clear
 stands on, or that stands on any line of the unbroken run of comment-only lines directly above the call's first line (a
 plain comment inside the run does not break it, so two markers stand on two lines); the first line that is not
 comment-only ends the run, and so does a block scalar's `run:` line that carries a comment; a marker that trails another
-command's line is not in the run and clears that command only, so the unmarked call of the next line is reported. The marker stands, for a plain or quoted
-value, as a YAML comment above `run:` or after its value; for a block
-scalar (`|`, `>`), a YAML comment above the `run:` key clears nothing, so the marker goes on the `run: |` line (it
-covers the script's first line) or on a block line directly above the line it clears; for a command joined by
-backslashes, above its first line or on any of its lines. Without the id, without a reason, with a reason of no letter,
-or above a line that is not comment-only, it clears nothing; a marker that clears no call is not reported (PYTEST-7). A pytest line in a
-heredoc body is read as a shell line, since the reader does not parse heredocs: without a readable flag it is `serial`,
+command's line is not in the run and clears that command only, so the unmarked call of the next line is reported. The
+marker stands, for a plain or quoted value, as a YAML comment above `run:` or after its value; for a block scalar (`|`,
+`>`), a YAML comment above the `run:` key clears nothing, so the marker goes on the `run: |` line (it covers the
+script's first line) or on a block line directly above the line it clears; for a command joined by backslashes, above
+its first line or on any of its lines. Without the id, without a reason, with a reason of no letter, or separated from
+the call by a line that is not comment-only, it clears nothing; a marker that clears no call is not reported (PYTEST-7).
+A pytest line in a heredoc body is read as a shell line, since the reader does not parse heredocs: without a readable flag it is `serial`,
 and a marker above it clears it (PYTEST-13). A finding is at the call's first line, `serial` with the fact `pytest runs
 without -n` or `pytest runs with -n 0`, or `invalid` with the fact `-n count is not a number above zero or auto`,
 `command cannot be read to its end` or `command is built at run time, pytest -n cannot be read`, its fix `pass -n auto,
