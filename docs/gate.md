@@ -247,7 +247,8 @@ reason = "the operator ruled the requirement shelf machinery out"
 - Ruled by the operator: removing, softening or bypassing an import-linter contract declares the same way, with one of these texts as `what`
   (the rule is in [rules](rules.md), "The import contracts only tighten"): `import contract "<name>" removed`,
   `import-linter config in <file> removed`, `import contract "<name>" ignores <expression>`,
-  `import contract "<name>" changes <field>` and `import-linter changes <option>`.
+  `import contract "<name>" changes <field>`, `import-linter changes <option>` and
+  `import contract id core-imports-no-adapter removed` or `moves "<name>" -> "<name>"`.
 
 Ruled by the operator:
 
