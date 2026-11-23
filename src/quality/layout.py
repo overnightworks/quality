@@ -316,7 +316,7 @@ class _ProjectMirror:
     def destination(self, folders: tuple[str, ...]) -> tuple[list[_Problem], _Destination | None]:
         if folders[:1] == (SCRIPTS_DIRECTORY,):
             folder = self.directory / SCRIPTS_DIRECTORY / PurePosixPath(*folders[1:])
-            return [], _Destination(str(folder), "script", "script", self.scripts.get(folder, frozenset()))
+            return [], _Destination(str(folder), "script", "script", self.scripts.get(folder, {}))
         if folders[:1] == (WORKFLOWS_TESTS_DIRECTORY,):
             return self._workflow_destination(folders)
         return self._package_destination(folders)
@@ -349,7 +349,7 @@ class _ProjectMirror:
                 "move it to the folder that mirrors its module's package",
             )], None
         own_name = {} if below else {_key(package): OWN_NAME}
-        return [], _Destination(str(folder), "module or package", "module", {**own_name, **self.sources[folder]})
+        return [], _Destination(str(folder), "module or package", "module", {**self.sources[folder], **own_name})
 
 
 def _folder_keys(files: Sequence[PurePosixPath], root: PurePosixPath) -> dict[PurePosixPath, dict[str, str]]:
@@ -525,7 +525,7 @@ def check_test_import(
     module and each imported name. A declaration exempts its importer; a declaration of an untracked path is a finding.
     `contents` holds the bytes of `test_import_candidates`. Findings are sorted by path and line."""
     declared = declared_paths(allowances, Rule.TEST_IMPORT)
-    targets = ImportTargets.among(file for file, _, _ in _judged_paths(modes) if _is_import_target(file))
+    targets = ImportTargets.among(file for file, _, _ in _judged_paths(modes, links=True) if _is_import_target(file))
     findings = []
     for path, content in contents.items():
         if path not in declared:
@@ -534,14 +534,14 @@ def check_test_import(
     return sorted(findings, key=lambda finding: (finding.path, finding.line or 0))
 
 
-def _judged_paths(modes: Mapping[str, str]) -> Iterator[tuple[PurePosixPath, PurePosixPath, tuple[str, ...]]]:
-    """Each tracked `.py` that is no link under a Python project's `tests/` outside `fixtures/`, with that `tests/` and
-    the folders between."""
+def _judged_paths(modes: Mapping[str, str], *, links: bool = False) -> Iterator[tuple[PurePosixPath, PurePosixPath, tuple[str, ...]]]:
+    """Each tracked `.py` under a Python project's `tests/` outside `fixtures/`, with that `tests/` and the folders
+    between; a link only with `links`, since an importer is read and a target is only named."""
     tests = [project.tests_directory for project in python_projects(modes)]
     for path, mode in modes.items():
         file = PurePosixPath(path)
         directory = next((directory for directory in tests if directory in file.parents), None)
-        if directory is not None and mode not in LINK_MODES and file.suffix == ".py":
+        if directory is not None and (links or mode not in LINK_MODES) and file.suffix == ".py":
             folders = file.relative_to(directory).parts[:-1]
             if not _in_fixtures(folders):
                 yield file, directory, folders
@@ -550,7 +550,7 @@ def _judged_paths(modes: Mapping[str, str]) -> Iterator[tuple[PurePosixPath, Pur
 @dataclass(frozen=True)
 class ImportTargets:
     """Tracked modules, by their paths and by every trailing run of components of a path without `.py`, which is how a
-    `pythonpath` entry names them."""
+    `pythonpath` entry names them; an `__init__.py` is also named by its package."""
 
     paths: frozenset[str]
     by_suffix: Mapping[tuple[str, ...], frozenset[str]]
@@ -561,6 +561,9 @@ class ImportTargets:
         suffixes: defaultdict[tuple[str, ...], set[str]] = defaultdict(set)
         for file in files:
             parts = file.with_suffix("").parts
+            names = parts[:-1] if parts[-1] == INIT_MODULE else parts
+            for start in range(len(names)):
+                suffixes[names[start:]].add(str(file))
             for start in range(len(parts)):
                 suffixes[parts[start:]].add(str(file))
         return cls(frozenset(str(file) for file in files), {suffix: frozenset(paths) for suffix, paths in suffixes.items()})
@@ -578,7 +581,8 @@ class ImportTargets:
         if up > len(folder.parts):
             return frozenset()
         base = folder.parts[: len(folder.parts) - up]
-        return frozenset({"/".join((*base, *name.split("."))) + ".py"}) & self.paths
+        module = "/".join((*base, *name.split(".")))
+        return frozenset({f"{module}.py", f"{module}/{INIT_FILE}"}) & self.paths
 
 
 def _is_test_module(path: PurePosixPath) -> bool:
