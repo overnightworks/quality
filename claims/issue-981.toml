@@ -1,0 +1,7 @@
+claim_id = "dfbb442881f14095a2d05d7012f8423c"
+agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
+role = "builder"
+base = "fed193fa07adc8253b0e15bbbb094cb87ecd6c04"
+branch = "claude/issue-981-release-publish-job"
+scope = ["docs/release.md"]
+opened_commit = "312bf9286cf74ed21a710d7dcc7fd8f33b4d28ab"
