@@ -10,8 +10,9 @@ Reference for the engineer or head who adds tests or a CI job in a covered repos
 | integration | one adapter against its real dependency | the worker, with its own database, schema or socket | xdist workers; it may share a job with the unit layer |
 | flow | what a person or an agent does at a surface, through the real entry point | the stack | shards, each with its own stack; workers inside one stack only where every test owns its data |
 | probe | deployed state: cluster cells, image and network proofs | the cluster or container | parts, each with its own cluster |
+| live | the deployed app through a real sign-in | the operator's PC | one run through platform's live-check command (overnightworks/platform#804), never in CI |
 
-Flow and probe tests that share one running app turn flaky when more workers hit it, so for them parallel means more copies of the stack. A job's name says its layers; flow and probe run in jobs of their own. Every flow test keeps running in every browser and viewport its app has set up; sharding brings the time down.
+Flow and probe tests that share one running app turn flaky when more workers hit it, so for them parallel means more copies of the stack. A live check is a probe in operation, not a test layer: outside the gate, coverage and the fake, determinism and parallel rules, and never the only proof of logic CI can reach. A job's name says its layers; flow and probe run in jobs of their own. Every flow test keeps running in every browser and viewport its app has set up; sharding brings the time down.
 
 ## The limits
 
@@ -29,6 +30,7 @@ Each is checked by quality's gate, either as a rule on the repository's files or
 | R4 | every workflow a pull request triggers is the gate's caller, CodeQL's, or declared with its reason | `pr-workflows` (PRWORKFLOW-1 and on) |
 | R5 | a sharded mandatory job keeps its name as an aggregator job that needs every shard | the verdict: a name the run holds only as shard legs is `missing  not in the run` (VERDICT-7), and dropping the name from the config is a loosening (VERDICT-13), both in `docs/gate.md`; whether the aggregator fails on a failed or skipped shard is not machine-read |
 | R6 | the unit and integration layers run in random order with the seed printed | `pytest-random` (RANDOM-1 and on) |
+| R7 | no workflow runs the live layer | `live-layer` (LIVE-1 and on): a pytest call that can select a test marked `live` is a finding. No coverage check stands beside it, since coverage is measured only inside CI runs and no workflow runs the live layer; a call behind a script is left to the live layer's own boundary (LIVE-8) |
 
 ## The rules only judgement sees
 
@@ -58,7 +60,7 @@ A breach reaches the operator only as a mail through the platform's alert route,
 
 ## Where the standard bends
 
-Only the operator rules a deviation. A job above 15 minutes is recorded debt in `quality/baseline.toml` that only falls (R1); a pytest call that cannot take `-n`, or a flow layer that cannot shuffle, carries its reason in the rule's marker line (R2, R6); a workflow outside the gate's caller is declared with its reason (R4).
+Only the operator rules a deviation. A job above 15 minutes is recorded debt in `quality/baseline.toml` that only falls (R1); a pytest call that cannot take `-n`, or a flow layer that cannot shuffle, carries its reason in the rule's marker line (R2, R6); the live layer has no marker, since no workflow may run it (R7); a workflow outside the gate's caller is declared with its reason (R4).
 
 ## Covered repositories
 

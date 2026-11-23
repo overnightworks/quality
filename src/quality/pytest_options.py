@@ -10,7 +10,7 @@ option a repository's own plugin adds are not read."""
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 
-from quality.run_script import Tool, tool_arguments
+from quality.run_script import Segment, Tool, command_words, tool_arguments
 
 PYTEST = Tool(commands=frozenset({"pytest", "py.test"}), module="pytest")
 WORKERS_NAMES = frozenset({"-n", "--numprocesses"})
@@ -81,6 +81,13 @@ def _short_cluster(word: str, arguments: Sequence[str], index: int) -> tuple[lis
 def _next_word(arguments: Sequence[str], index: int) -> tuple[str, int]:
     """The word at `index` and the index past it; empty at the end."""
     return (arguments[index], index + 1) if index < len(arguments) else ("", index)
+
+
+def running_options(segment: Segment) -> list[Option] | None:
+    """The options of the segment's pytest call, or None when it calls no pytest or only lists tests."""
+    arguments = pytest_arguments(command_words(segment))
+    called = None if arguments is None else list(options(arguments))
+    return None if called is None or lists_only(called) else called
 
 
 def lists_only(called: Sequence[Option]) -> bool:

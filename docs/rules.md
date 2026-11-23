@@ -1061,6 +1061,29 @@ runtime-install: <reason>` (RUNTIME-8). A workflow whose YAML or file cannot be 
 switches the rule off. It first ships in v0.12.0, so a dependent meets it at its first bump to that release.
 quality's own checkout needs no workflow edit.
 
+The `live-layer` rule keeps the live layer out of CI. A repository that tracks a path under a `tests/e2e/live/` folder, at
+its root or in a judged project's `tests/`, has a live layer; without one the rule is clean with extent `0` and reads no
+workflow (LIVE-1). With one, every pytest call in a `run:` of every tracked workflow is judged, whatever triggers the
+workflow (a push or a schedule is CI too), read as `pytest-workers` reads it (PYTEST-2, PYTEST-3) and with its options as
+`pytest-random` reads them (RANDOM-7); a call that only lists tests (PYTEST-5) is not judged, and the extent is the number
+of workflows read (LIVE-2). A call passes when its last `-m` before the first `--` is an expression in pytest's marker
+grammar (`and`, `or`, `not`, parentheses, names) that is false whenever `live` is true, whatever any other marker is.
+`addopts` and `PYTEST_ADDOPTS` are not read: pytest reads them before the call's own words, so the call's own last `-m`
+wins. A `live(...)` with arguments counts as another name, and an empty `-m ""` selects every test (LIVE-3). A call with no
+`-m`, or with one that can select a test marked `live`, is `runs live` at the call's first line; its fact is `pytest can
+select tests marked live`, its fix `add -m "not live", or "and not live" to its -m expression` (LIVE-4). An `-m` built at
+run time (`${{ }}`, `$VAR`, `$(...)`) or not readable in pytest's grammar is `invalid` with the fact `-m expression cannot
+be read`; an unreadable shell line is `invalid` as `pytest-workers` reports it, and a command built at run time in a run
+holding the word `pytest` is `invalid` with the fact `command is built at run time, pytest -m cannot be read` (LIVE-5). A
+workflow that cannot be read is exit `2` as for `pytest-workers` (LIVE-6). No marker comment, configuration or declaration
+switches the rule off; only the operator rules a deviation ([proof](proof.md)). It first ships in the release after
+v0.24.0, so a gate pinned below it shows `not in <tag>` in the fleet matrix's column (LIVE-7, FLEET-18). Named gaps: a call
+behind a repository script, `make`, nox, tox or a mise task is not seen, since the live layer's own boundary covers it (a
+journey without platform's storage-state file fails loud, and CI never has that file); `-k`, `--deselect` and `--ignore`
+are not read as an exclusion, so a call that relies on them alone is `runs live`; a Playwright live layer under
+`frontend/e2e/live` is not read (LIVE-8). The marker grammar is read by `marker_expression`, since pytest is no runtime
+dependency of quality; a test holds it against pytest's own parser.
+
 Named gaps, each reading as no call: `sudo` flags that combine and take a value (`sudo -nu ci apt-get install`) and a
 nested `env -S`; a download and its run in two steps (`curl -o f url && sh f`); `eval "$(curl url)"` and `source
 <(curl url)`; a pipe into `python` or `perl`; a pipe that ends a line, since the reader joins lines at a backslash
