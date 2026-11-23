@@ -27,7 +27,7 @@ from quality import checkout
 from quality.baseline_file import FIX_COMMAND, Baseline, JobKey, JobMinutes
 from quality.checkout import Document, PullRequestEvent
 from quality.output import SEPARATOR
-from quality.pytest_options import WORKERS_NAMES, Option, lists_only, options, pytest_arguments
+from quality.pytest_options import WORKERS_NAMES, Option, pytest_arguments, running_options
 from quality.ratchet import CeilingFix
 from quality.report import CannotJudge, Example, Finding, FindingEvent, Note, NoteEvent, RuleResult
 from quality.rules import Rule
@@ -207,9 +207,8 @@ class ScriptRule:
 
 
 def _pytest_problem(parts: Sequence[Segment], index: int) -> Problem | None:
-    arguments = pytest_arguments(command_words(parts[index]))
-    called = None if arguments is None else list(options(arguments))
-    return None if called is None or lists_only(called) else _workers_problem(called)
+    called = running_options(parts[index])
+    return None if called is None else _workers_problem(called)
 
 
 PYTEST_RULE = ScriptRule(

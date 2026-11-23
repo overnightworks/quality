@@ -59,7 +59,7 @@ class Area(StrEnum):
     DEBT = "debt", "size, near copies and job time limits against the debt ceiling (quality/baseline.toml), and spec IDs no test cites"
     IMPORTS = "imports", "the import contracts"
     SECRETS = "secrets", "secrets in the committed history"
-    WORKFLOWS = "workflows", "GitHub workflows: lint, security, concurrency, the workflows a pull request triggers, pytest -n, run-time installs, the languages standard's catalog-check and render-pass"
+    WORKFLOWS = "workflows", "GitHub workflows: lint, security, concurrency, the workflows a pull request triggers, pytest -n, pytest calls that can run the live layer, run-time installs, the languages standard's catalog-check and render-pass"
     DEPENDENCIES = "dependencies", "known advisories, fleet package sources, and the shuffling plugin in lockfiles, pytest's addopts and workflow calls"
     CODE = "code", "Python source: security findings and print calls"
 
@@ -109,6 +109,7 @@ class Rule(StrEnum):
     PR_WORKFLOWS = "pr-workflows", Area.WORKFLOWS, RELEASE_0_23, Switch.ALWAYS
     PYTEST_WORKERS = "pytest-workers", Area.WORKFLOWS, RELEASE_0_11, Switch.ALWAYS
     RUNTIME_INSTALL = "runtime-install", Area.WORKFLOWS, RELEASE_0_12, Switch.ALWAYS
+    LIVE_LAYER = "live-layer", Area.WORKFLOWS, None, Switch.ALWAYS
     CATALOG_CHECK = (
         "catalog-check", Area.WORKFLOWS, RELEASE_0_12, Switch.REPORT_ONLY, SwitchChange(RELEASE_0_13, Switch.CATALOG_DECLARATION)
     )

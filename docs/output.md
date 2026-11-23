@@ -94,7 +94,10 @@ rows, by area:
   ref; `no group` for a `concurrency` without one) or `cancels main` (`cancel-in-progress is not a listed form`), its
   fix the block to copy ([rules](rules.md)); a `pytest-workers` finding is `serial` (`pytest runs without -n`, `pytest
   runs with -n 0`) or `invalid` (`-n count is not a number above zero or auto`, `command cannot be read to its end`,
-  `command is built at run time, pytest -n cannot be read`), its fix naming the flag and the marker; a `runtime-install`
+  `command is built at run time, pytest -n cannot be read`), its fix naming the flag and the marker; a `live-layer` finding is
+  `runs live` (`pytest can select tests marked live`) or `invalid` (`-m expression cannot be read`,
+  `command is built at run time, pytest -m cannot be read`, `command cannot be read to its end`), its fix naming the `-m`
+  expression and no marker ([rules](rules.md)); a `runtime-install`
   finding is `installs` (the manager and the install word, as `apt-get install`, or `a download runs as a shell script`)
   or `invalid` (`command cannot be read to its end`, `command is built at run time, an install cannot be read`), its fix
   naming the routes (the lockfile, the runner image, an image pinned by digest) and the marker ([rules](rules.md)); an
