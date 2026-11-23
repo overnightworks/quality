@@ -1,8 +1,0 @@
-claim_id = "fd54893093e44a3cab33c1f44773a120"
-agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
-role = "builder"
-base = "fed193fa07adc8253b0e15bbbb094cb87ecd6c04"
-branch = "claude/issue-898-adapter-import"
-scope = ["docs/commands.md", "docs/gate.md", "docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/adapter_imports.py", "src/quality/architecture.py", "src/quality/check.py", "src/quality/contract_results.py", "src/quality/fleet.py", "src/quality/layout.py", "src/quality/report.py", "src/quality/rules.py", "src/quality/verdict.py", "tests/support/architecture.py", "tests/support/check.py", "tests/test_adapter_imports.py", "tests/test_architecture.py", "tests/test_check.py", "tests/test_cli_areas.py", "tests/test_cli_help.py", "tests/test_fleet_matrix.py", "tests/test_verdict_loosenings.py", "tests/test_verdict_reread.py"]
-opened_commit = "0e7053bfd605a18fb494c41bac939456d5af2f40"
-whole_reason = "one rule in the imports area, with its one shared graph read, its loosening line and its fleet-matrix cell, which no smaller cut leaves working"
