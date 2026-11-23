@@ -1,8 +1,0 @@
-claim_id = "7f2637d8327b4b9e98dbb3d388e7fc26"
-agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
-role = "builder"
-base = "95ceb40c3c9b547c41ef2080df446bfa61bf42f0"
-branch = "claude/issue-965-spec-citation-held-list"
-scope = ["docs/ARCHITECTURE.md", "docs/commands.md", "docs/gate.md", "docs/output.md", "docs/rules.md", "src/quality/baseline_file.py", "src/quality/baseline_fix.py", "src/quality/check.py", "src/quality/cli.py", "src/quality/fleet.py", "src/quality/output.py", "src/quality/report.py", "src/quality/rules.py", "src/quality/spec_citations.py", "src/quality/verdict.py", "tests/support/baselines.py", "tests/support/check.py", "tests/support/specs.py", "tests/test_baseline_file.py", "tests/test_cli_fix.py", "tests/test_cli_fix_spec_citations.py", "tests/test_fleet_matrix.py", "tests/test_output_shortening.py", "tests/test_spec_citations.py", "tests/test_twins.py", "tests/test_verdict.py", "tests/test_verdict_loosenings.py"]
-opened_commit = "b57aef3d4e0733db6d59aafffa6fb86e0ce716ee"
-whole_reason = "One held table for spec-citation: its reader and writer, the --fix recording, the verdict's loosening lines, the matrix cell, the finding words and the spec lines; it does not split, because the table, its recording and its loosening are one contract."
