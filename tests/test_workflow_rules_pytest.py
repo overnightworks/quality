@@ -530,11 +530,18 @@ def test_a_marker_with_a_reason_on_or_directly_above_a_line_clears_its_calls(bui
     assert judged(build_repo, block_run(*script)) == []
 
 
-@pytest.mark.parametrize("on_run_line", [True, False], ids=["after the value", "above the key"])
-def test_a_marker_clears_a_plain_scalar_call_beside_or_above_its_key(build_repo, on_run_line):
-    """PYTEST-7."""
-    step = f"      - run: pytest {MARKER}\n" if on_run_line else f"      {MARKER}\n      - run: pytest\n"
-    assert judged(build_repo, head() + step) == []
+@pytest.mark.parametrize(
+    ("step", "expected"),
+    [
+        (f"      - run: pytest {MARKER}\n", []),
+        (f"      {MARKER}\n      - run: pytest\n", []),
+        (f"      - run: pytest -n auto -m e2e {MARKER}\n      - run: pytest\n", [(SERIAL, QUOTED_LINE + 1, WITHOUT_N)]),
+    ],
+    ids=["after the value", "above the key", "trailing the previous step's line"],
+)
+def test_a_marker_clears_a_plain_scalar_call_only_beside_or_above_its_key(build_repo, step, expected):
+    """PYTEST-7: a marker on another command's line does not clear the call on the next line."""
+    assert shape(judged(build_repo, head() + step)) == expected
 
 
 @pytest.mark.parametrize(
@@ -671,7 +678,7 @@ def test_a_finding_prints_its_event_fact_and_the_flag_and_the_marker_as_its_fix(
 
 def test_a_conforming_repository_is_clean_under_every_rule(build_repo, capsys):
     """PYTEST-11."""
-    code, output = run(capsys, build_repo({WORKFLOW: block_run("uv run --locked pytest -q -n auto --cov")}))
+    code, output = run(capsys, build_repo({WORKFLOW: block_run("uv run --locked pytest -n auto --cov")}))
     assert (code, is_clean(output)) == (0, True), output
 
 

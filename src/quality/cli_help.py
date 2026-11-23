@@ -2,7 +2,7 @@
 
 import textwrap
 
-from quality import baseline_file, fleet, sonar
+from quality import baseline_file, fleet, fleet_ci_time, sonar
 from quality.rules import Area
 
 QUALITY_HELP = """\
@@ -85,15 +85,16 @@ Exit codes: 0 merged, 1 refused, 2 could not check or do, 130 interrupted.
 """
 
 REPORT_HELP = f"""\
-usage: quality report [-v]
+usage: quality report [--ci-time-json] [-v]
 
 Measure every fleet repository {fleet.FLEET_PATH} selects: size, debt, the gate
-release it pins. A row per repository goes to stderr, the two markdown tables
-to stdout and to the step summary.
+release it pins, the CI time of the last {fleet_ci_time.WINDOW_DAYS} days. A row per repository goes to
+stderr, the three markdown tables to stdout and to the step summary.
 
 Options:
-  -v          show the raw scanner output; the report runs no scanner
-  -h, --help  show this help
+  --ci-time-json  also write the weekly CI time to {fleet_ci_time.DOCUMENT_PATH}
+  -v              show the raw scanner output; the report runs no scanner
+  -h, --help      show this help
 
 Exit codes: 0 every repository measured, 2 could not answer, 130 interrupted.
 """
@@ -142,12 +143,14 @@ Run by the gate before the scan: refuse a sonar-project.properties, token,
 coverage report or tracked .scannerwork/ the scan must not start with, then
 hand the scan its arguments in the step output. With [gate] sonar = false in
 quality/config.toml it refuses a properties file or a passed token instead.
+On a run that is neither a pull request nor on the default branch it hands
+over sonar=off after those refusals: SonarCloud serves no other run.
 
 Options:
   -v          show the raw scanner output; the step runs no scanner
   -h, --help  show this help
 
-Exit codes: 0 clean, 2 could not judge, 130 interrupted.
+Exit codes: 0 clean, off or unserved, 2 could not judge, 130 interrupted.
 """
 
 SONAR_SCANNER_HELP = """\
@@ -173,12 +176,14 @@ usage: quality sonar findings [-v]
 Run by the gate after the scan: wait for this run's own analysis
 ({sonar.TASK_FILE}), then judge its open findings, the default
 branch's legacy count and, on a pull request, SonarCloud's quality gate. It
-needs quality/config.toml with [gate] mandatory_jobs.
+needs quality/config.toml with [gate] mandatory_jobs. On a run that is
+neither a pull request nor on the default branch it asks SonarCloud for
+nothing and prints the unserved note.
 
 Options:
   -v          show the raw scanner output; the step runs no scanner
   -h, --help  show this help
 
-Exit codes: 0 clean or report only, 1 findings, 2 could not judge,
+Exit codes: 0 clean or unserved, 1 findings, 2 could not judge,
 130 interrupted.
 """

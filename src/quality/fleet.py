@@ -16,8 +16,7 @@ import subprocess
 import urllib.error
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import date
-from email.message import Message
+from datetime import date, datetime
 from enum import Enum, StrEnum
 from functools import partial
 from pathlib import Path
@@ -30,6 +29,7 @@ from quality import (
     checkout,
     clones,
     config,
+    fleet_ci_time,
     layout,
     output,
     process,
@@ -121,7 +121,7 @@ class FleetEvent(StrEnum):
     NOT_READ = "not read"
 
 
-ListingFetch = Callable[[str, Mapping[str, str], Callable[[Exception], CannotJudge]], tuple[bytes, Message]]
+ListingFetch = fleet_ci_time.RunsFetch
 
 
 def fleet_refusal(fact: str, *, shape: bool = True, rerun: bool = False) -> CannotJudge:
@@ -284,8 +284,7 @@ def listing_failure(index: int, organization: str, error: Exception) -> ListingF
 def list_organization(index: int, organization: str, token: str, fetch_listing: ListingFetch) -> tuple[str, ...]:
     """The public, non-archived, non-fork repositories GitHub lists for the organization, as `owner/name`, from one
     page. The token goes to GitHub's API only, never to git; a local run lists anonymously."""
-    headers = {"Accept": "application/vnd.github+json", **({"Authorization": f"Bearer {token}"} if token else {})}
-    body, answer = fetch_listing(LISTING_URL.format(organization=organization), headers, partial(listing_failure, index, organization))
+    body, answer = fetch_listing(LISTING_URL.format(organization=organization), fleet_ci_time.api_headers(token), partial(listing_failure, index, organization))
     if NEXT_PAGE.search(answer.get("Link", "")):
         raise ListingFault(f"{organization} has more than 100 public repositories{output.SEPARATOR}quality reads one page")
     malformed = ListingFault(f"GitHub's listing of {organization} is not a list of repositories")
@@ -461,7 +460,7 @@ def git(
     return process.run([*ANONYMOUS_GIT, *arguments], cwd=scratch, env=environment, timeout=timeout)
 
 
-def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTagsError) -> tuple[str, ...]:
+def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTagsError, ci_time: fleet_ci_time.FleetCiTime) -> tuple[str, ...]:
     heading = f"**Fleet report, {today.isoformat()}, quality {__version__}**"
     table = [table_line(COLUMNS), "|---" * len(COLUMNS) + "|", *(table_line(cells(row)) for row in rows)]
     pins = release_tags_or_none(tags)
@@ -472,15 +471,24 @@ def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTag
         "|---" * len(MATRIX_COLUMNS) + "|",
         *(table_line(matrix_cells(row, pins)) for row in rows),
     ]
-    return (heading, "", *table, "", matrix_heading, "", every_release, "", *matrix)
+    ci_heading = f"**CI time, last {fleet_ci_time.WINDOW_DAYS} days{output.SEPARATOR}{output.counted(ci_time.calls, 'API call')}**"
+    ci_table = [
+        table_line(fleet_ci_time.COLUMNS),
+        "|---" * len(fleet_ci_time.COLUMNS) + "|",
+        *(table_line(fleet_ci_time.table_cells(name, ci_time)) for name in ci_time.rows),
+    ]
+    return (heading, "", *table, "", matrix_heading, "", every_release, "", *matrix, "", ci_heading, "", *ci_table)
 
 
 def run_report(
-    release_tags: TagReader, fetch_listing: ListingFetch, clock: Callable[[], float], today: date, channels: output.Channels, environment: Mapping[str, str]
+    release_tags: TagReader, fetch_listing: ListingFetch, clock: Callable[[], float], now: datetime, channels: output.Channels,
+    environment: Mapping[str, str], write_ci_time: bool = False,
 ) -> int:
     """Measures the fleet `quality/fleet.toml` selects where the door runs: the fleet line and a row on stderr as each
-    repository is measured, then the tables on stdout and in the step summary, then the closing line or the pair."""
+    repository is measured, then the tables on stdout and in the step summary, then the weekly CI time as JSON at
+    `fleet_ci_time.DOCUMENT_PATH` when asked, then the closing line or the pair."""
     started = clock()
+    today = now.date()
     try:
         fleet = read_fleet(Path("."))
         names = select_repositories(fleet, environment.get(LISTING_CREDENTIAL_VARIABLE, ""), fetch_listing)
@@ -499,13 +507,21 @@ def run_report(
         measured = measure_repository(name)
         show((report_row(measured, pins, clock() - began),))
         rows.append(measured)
-    tables = render(rows, today, tags)
+    ci_time = fleet_ci_time.read_fleet_ci_time(names, today, environment.get(LISTING_CREDENTIAL_VARIABLE, ""), fetch_listing, checkout.DEFAULT_BRANCH)
+    show(tuple(_unread_ci_time_row(name, reading) for name, reading in ci_time.rows.items() if reading == fleet_ci_time.PartlyRead(fleet_ci_time.UNREADABLE)))
+    tables = render(rows, today, tags, ci_time)
     output.write_lines(tables, channels.out)
     try:
         output.append_step_summary(tables, environment)
     except OSError as error:
         output.write_pair(f"{output.STEP_SUMMARY_VARIABLE} is not writable{output.SEPARATOR}{error}", (FIX_THEN_RERUN,), channels.err)
         return EXIT_NOT_MEASURED
+    if write_ci_time:
+        try:
+            fleet_ci_time.write_document(ci_time, now)
+        except OSError as error:
+            output.write_pair(f"{fleet_ci_time.DOCUMENT_PATH} is not writable{output.SEPARATOR}{error}", (FIX_THEN_RERUN,), channels.err)
+            return EXIT_NOT_MEASURED
     problems = report_problems(rows, pins, tags)
     if problems:
         output.write_pair(output.SEPARATOR.join((*problems, "the tables say so")), (Command(REPORT_COMMAND),), channels.err)
@@ -513,6 +529,10 @@ def run_report(
     whole = f"{len(rows)} of {output.counted(len(rows), 'repository', 'repositories')} measured"
     output.write_closing_line(output.Glyph.CLEAN, (whole, output.format_duration(clock() - started)), channels.err)
     return EXIT_MEASURED
+
+
+def _unread_ci_time_row(name: str, reading: fleet_ci_time.PartlyRead) -> output.Row:
+    return output.Row(output.Glyph.COULD_NOT_CHECK, name, FleetEvent.PARTLY_READ, reading.reason, descriptive=True)
 
 
 def _read_tags(release_tags: TagReader, show: Callable[[tuple[output.Row, ...]], None]) -> checkout.ReleaseTags | ReleaseTagsError:

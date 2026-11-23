@@ -6,7 +6,7 @@ import pytest
 from quality.report import FindingEvent
 from quality.rules import Rule
 from tests.support.check import check_output as run
-from tests.support.check import env_row_stands, is_clean, refusal_row, rule_findings
+from tests.support.check import env_row_stands, is_clean, refusal_row, refusals, rule_findings
 from tests.support.git_repositories import git
 from tests.support.github_remote import HTTPS, SCP, SSH_URL, with_github_remote
 
@@ -359,10 +359,11 @@ def test_a_missing_finding_prints_the_path_and_nothing_else_of_the_line(build_re
 
 
 def titled(build_repo, title: str, *remotes: str, form: str = HTTPS) -> Path:
-    """A repository tracking an AGENTS.md titled `title`, with one GitHub remote for each of `remotes`."""
+    """A repository tracking an AGENTS.md titled `title`, with one GitHub remote for each of `remotes`, the first of them
+    `origin`."""
     repo = build_repo({"AGENTS.md": f"# {title}\n"})
     for number, repository in enumerate(remotes):
-        with_github_remote(repo, repository, form, remote=f"remote{number}")
+        with_github_remote(repo, repository, form, remote="origin" if number == 0 else f"remote{number}")
     return repo
 
 
@@ -434,11 +435,10 @@ def test_a_dot_git_suffix_in_any_case_and_one_trailing_slash_are_no_part_of_the_
 def test_without_a_github_remote_the_whole_rule_cannot_judge_and_other_rules_still_judge(build_repo, capsys, remote):
     """AGENTS-13, CHECK-4: exit 2, no finding even for a bad shape, the other rules judge."""
     repo = build_repo({"AGENTS.md": "## guidance\n## Setup\n", ".env": "A=1\n"})
-    if remote:
-        git(repo, "remote", "add", "origin", remote)
+    git(repo, "remote", *(("set-url", "origin", remote) if remote else ("remove", "origin")))
     code, output = run(capsys, repo)
     assert code == 2, output
-    assert f"{refusal_row('files')}{NO_REMOTE}" in output
+    assert NO_REMOTE in refusals(repo)[Rule.AGENTS_MD]
     assert "add the repository's GitHub remote" in output
     assert (rule_findings(repo, Rule.AGENTS_MD), env_row_stands(output)) == ([], True)
 
@@ -453,10 +453,10 @@ def test_once_a_remote_counts_the_shape_findings_show(build_repo):
 def test_without_the_file_no_remote_is_clean(build_repo, capsys, gone):
     """AGENTS-13, AGENTS-5: the file is read before the remote is asked for."""
     repo = build_repo({"AGENTS.md": "text\n"} if gone else {})
+    git(repo, "remote", "remove", "origin")
     if gone:
         (repo / "AGENTS.md").unlink()
-    code, output = run(capsys, repo)
-    assert (code, is_clean(output)) == (0, True), output
+    assert (Rule.AGENTS_MD in refusals(repo), rule_findings(repo, Rule.AGENTS_MD)) == (False, [])
 
 
 TOKEN = "s3cret-token"
@@ -466,7 +466,7 @@ CREDENTIAL_URL = f"https://user:{TOKEN}@github.com/acme/guidance"
 def test_a_remote_with_credentials_counts_as_no_remote_and_is_never_printed(build_repo, capsys):
     """AGENTS-14."""
     repo = build_repo({"AGENTS.md": "# guidance\n"})
-    git(repo, "remote", "add", "origin", CREDENTIAL_URL)
+    git(repo, "remote", "set-url", "origin", CREDENTIAL_URL)
     code, output = run(capsys, repo)
     assert (code, TOKEN in output, NO_REMOTE in output) == (2, False, True), output
 
@@ -551,6 +551,7 @@ def test_placement_needs_no_read_and_no_root_file(build_repo, capsys, change, ro
 def test_a_root_agents_md_without_a_remote_refuses_the_whole_rule_nested_findings_included(build_repo, capsys):
     """AGENTS-19, AGENTS-13: the refusal is raised before any finding."""
     repo = build_repo({**ROOT, "docs/AGENTS.md": "x\n"})
+    git(repo, "remote", "remove", "origin")
     code, output = run(capsys, repo)
     assert (code, placed(repo), NO_REMOTE in output) == (2, [], True), output
 

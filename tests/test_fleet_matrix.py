@@ -170,7 +170,7 @@ def test_a_pipe_in_a_label_is_escaped_and_the_row_keeps_its_columns(fleet_report
     subprocess.run(["git", "-C", str(remotes / name), "add", "a|b.py"], check=True)
     subprocess.run(["git", "-C", str(remotes / name), *GIT_IDENTITY, "commit", "-q", "-m", "link"], check=True)
     _, output = fleet_report(name)
-    lines = [line for line in output.splitlines() if line.startswith("| o/pipe |")]
+    lines = [line for line in output.splitlines() if line.startswith("| o/pipe |")][:2]
     assert [r"a\|b.py" in line for line in lines] == [True, True]
     assert [len(re.split(r"(?<!\\)\|", line.strip("|"))) for line in lines] == [len(COLUMNS), len(MATRIX_COLUMNS)]
 
@@ -494,22 +494,36 @@ def test_locator_text_on_main_reads_whether_the_clone_declares_catalogs(declares
     assert rule_cell(LOCATOR_TEXT, Gate.MAIN, declared(declares_catalogs=declares_catalogs)) == words
 
 
-RULES_FIRST_RELEASED_IN_V0_21 = [Rule.LOCATOR_TEXT.release, Rule.FLEET_SOURCE.release]
+RULES_FIRST_RELEASED_IN_V0_21_OR_LATER = [
+    Rule.LOCATOR_TEXT.release, Rule.FLEET_SOURCE.release, Rule.NAMING.release, Rule.PR_WORKFLOWS.release,
+    Rule.PYTEST_RANDOM.release
+]
+REPORT_ONLY_RULES_FIRST_RELEASED_IN_V0_23 = [Rule.TEST_TWIN.release, Rule.LOGGING.release]
 
 
-@pytest.mark.parametrize("rule_release", RULES_FIRST_RELEASED_IN_V0_21, ids=lambda release: release.rule)
+@pytest.mark.parametrize(
+    "rule_release", [*RULES_FIRST_RELEASED_IN_V0_21_OR_LATER, *REPORT_ONLY_RULES_FIRST_RELEASED_IN_V0_23], ids=lambda release: release.rule
+)
 def test_a_rule_first_shipped_in_a_release_reads_not_in_the_tag_of_an_older_pin(rule_release):
     """FLEET-18: a gate pinned below the release that names the rule has no such rule."""
     release = gate_release((gate_call(NEWEST),), False, FIRST_RELEASES)
     assert rule_cell(rule_release, release, declared(declares_catalogs=True)) == "not in v0.3.1"
 
 
-@pytest.mark.parametrize("rule_release", RULES_FIRST_RELEASED_IN_V0_21, ids=lambda release: release.rule)
+@pytest.mark.parametrize("rule_release", RULES_FIRST_RELEASED_IN_V0_21_OR_LATER, ids=lambda release: release.rule)
 def test_a_rule_first_shipped_in_a_release_reads_its_switch_under_that_release(rule_release):
     """FLEET-18: a gate pinned at the release that names the rule reads the rule's switch."""
     tags = {**FIRST_RELEASES, rule_release.first_release: FIRST_RELEASE_COMMIT}
     release = gate_release((gate_call(FIRST_RELEASE_COMMIT),), False, tags)
     assert rule_cell(rule_release, release, declared(declares_catalogs=True)) == "enforced"
+
+
+@pytest.mark.parametrize("rule_release", REPORT_ONLY_RULES_FIRST_RELEASED_IN_V0_23, ids=lambda release: release.rule)
+def test_a_report_only_rule_first_shipped_in_a_release_reads_report_only_under_that_release(rule_release):
+    """FLEET-18: a gate pinned at the release that names a report-only rule reads `report-only`."""
+    tags = {**FIRST_RELEASES, rule_release.first_release: FIRST_RELEASE_COMMIT}
+    release = gate_release((gate_call(FIRST_RELEASE_COMMIT),), False, tags)
+    assert rule_cell(rule_release, release, declared(declares_catalogs=True)) == "report-only"
 
 
 LITERAL_SWITCH_PIN = "7" * 40
@@ -685,5 +699,5 @@ def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces
     assert MATRIX_COLUMNS[5:] == (
         "size", "clone", "job-timeout", "test-twin", "import-contract", "claude-md", "agents-md", "root-layout", "file-suffix",
         "script-name", "script-header", "test-layout", "test-import", "literal-text", "locator-text", "python-floor",
-        "python-security", "python-print", "logging", "pr-concurrency", "pytest-workers", "runtime-install", "catalog-check", "render-pass", "advisory", "fleet-source",
+        "naming", "python-security", "python-print", "logging", "pr-concurrency", "pr-workflows", "pytest-workers", "runtime-install", "catalog-check", "render-pass", "advisory", "fleet-source", "pytest-random",
     )

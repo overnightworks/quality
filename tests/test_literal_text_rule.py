@@ -17,9 +17,9 @@ from tests.support.check import (
 from tests.support.door import CHECK_WORD, door_in
 
 COVERED = {
-    "pyproject.toml": '[project]\nname = "app"\nversion = "0.1"\nrequires-python = ">=3.14"\ndependencies = ["overnightworks-design[catalogs]>=1"]\n'
+    "pyproject.toml": '[project]\nname = "overnightworks-app"\nversion = "0.1"\nrequires-python = ">=3.14"\ndependencies = ["overnightworks-design[catalogs]>=1"]\n'
 }
-UNCOVERED = {"pyproject.toml": '[project]\nname = "app"\nversion = "0.1"\nrequires-python = ">=3.14"\ndependencies = ["overnightworks-design>=1"]\n'}
+UNCOVERED = {"pyproject.toml": '[project]\nname = "overnightworks-app"\nversion = "0.1"\nrequires-python = ">=3.14"\ndependencies = ["overnightworks-design>=1"]\n'}
 RAW_TEXT_TAGS = ["script", "style", "textarea", "title", "iframe", "xmp", "noembed", "noframes"]
 PAGES = {
     "frontend/src/a.svelte": "<h1>Log in</h1>\n<button aria-label={'Close'}>{words.close}</button>\n",
@@ -29,6 +29,11 @@ PAGES = {
 TEXTS = [("frontend/src/a.svelte", 1, "'Log in'"), ("frontend/src/a.svelte", 2, "'Close'"), ("frontend/src/b.svelte", 1, "'Welcome back'")]
 FILES = (CHECK_WORD, Area.FILES.value)
 PYPROJECT_REASON = "pyproject.toml is not UTF-8 TOML that Python reads"
+
+
+@pytest.fixture
+def fixture_origin() -> str:
+    return "overnightworks/app"
 
 
 def files_run(capsys, repo):
@@ -68,7 +73,7 @@ def test_a_covered_repository_whose_pages_read_every_word_through_a_catalog_is_c
 @pytest.mark.parametrize(
     "files",
     [UNCOVERED, {}, {"app/pyproject.toml": COVERED["pyproject.toml"]},
-     {"pyproject.toml": '[project]\nname = "a"\nversion = "1"\n[tool.design-catalogs]\nx = 1\n'}],
+     {"pyproject.toml": '[project]\nname = "overnightworks-app"\nversion = "1"\n[tool.design-catalogs]\nx = 1\n'}],
     ids=["no extra", "no pyproject", "a nested project", "a catalogs table without the dependency"],
 )
 def test_a_repository_that_is_not_covered_sees_no_literal_row_and_its_debt_area_is_unchanged(build_repo, capsys, files):

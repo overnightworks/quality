@@ -45,6 +45,8 @@ RELEASE_0_16 = "v0.16.0"
 RELEASE_0_17 = "v0.17.0"
 RELEASE_0_20 = "v0.20.0"
 RELEASE_0_21 = "v0.21.0"
+RELEASE_0_23 = "v0.23.0"
+RELEASE_0_24 = "v0.24.0"
 
 
 class Area(StrEnum):
@@ -57,8 +59,8 @@ class Area(StrEnum):
     DEBT = "debt", "size, near copies and job time limits against the debt ceiling (quality/baseline.toml)"
     IMPORTS = "imports", "the import contracts"
     SECRETS = "secrets", "secrets in the committed history"
-    WORKFLOWS = "workflows", "GitHub workflows: lint, security, concurrency, pytest -n, run-time installs, the languages standard's catalog-check and render-pass"
-    DEPENDENCIES = "dependencies", "known advisories and fleet package sources in the lockfiles"
+    WORKFLOWS = "workflows", "GitHub workflows: lint, security, concurrency, the workflows a pull request triggers, pytest -n, run-time installs, the languages standard's catalog-check and render-pass"
+    DEPENDENCIES = "dependencies", "known advisories, fleet package sources, and the shuffling plugin in lockfiles, pytest's addopts and workflow calls"
     CODE = "code", "Python source: security findings and print calls"
 
     def __new__(cls, word: str, help_line: str) -> Self:
@@ -79,7 +81,7 @@ class Rule(StrEnum):
     SIZE = "size", Area.DEBT, RELEASE_0_3, Switch.SIZE_BASELINE
     CLONE = "clone", Area.DEBT, "v0.4.0", Switch.REPORT_ONLY, SwitchChange("v0.5.0", Switch.CLONE_TABLE)
     JOB_TIMEOUT = "job-timeout", Area.DEBT, RELEASE_0_12, Switch.ALWAYS
-    TEST_TWIN = "test-twin", Area.DEBT, None, Switch.REPORT_ONLY
+    TEST_TWIN = "test-twin", Area.DEBT, RELEASE_0_23, Switch.REPORT_ONLY
     IMPORT_CONTRACT = "import-contract", Area.IMPORTS, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
     CLAUDE_MD = "claude-md", Area.FILES, RELEASE_0_3, Switch.ALWAYS
     AGENTS_MD = "agents-md", Area.FILES, RELEASE_0_11, Switch.ALWAYS
@@ -95,13 +97,15 @@ class Rule(StrEnum):
     )
     LOCATOR_TEXT = "locator-text", Area.FILES, RELEASE_0_21, Switch.CATALOG_DECLARATION
     PYTHON_FLOOR = "python-floor", Area.FILES, "v0.8.0", Switch.ALWAYS
+    NAMING = "naming", Area.FILES, RELEASE_0_23, Switch.ALWAYS
     PYTHON_SECURITY = "python-security", Area.CODE, "v0.9.0", Switch.ALWAYS
     PYTHON_PRINT = "python-print", Area.CODE, "v0.9.0", Switch.ALWAYS
-    LOGGING = "logging", Area.CODE, None, Switch.REPORT_ONLY
+    LOGGING = "logging", Area.CODE, RELEASE_0_23, Switch.REPORT_ONLY
     LEAK = "secret", Area.SECRETS, RELEASE_0_1, Switch.ALWAYS
     WORKFLOW_LINT = "workflow-lint", Area.WORKFLOWS, RELEASE_0_1, Switch.ALWAYS
     WORKFLOW_SECURITY = "workflow-security", Area.WORKFLOWS, RELEASE_0_1, Switch.ALWAYS
     PR_CONCURRENCY = "pr-concurrency", Area.WORKFLOWS, RELEASE_0_11, Switch.ALWAYS
+    PR_WORKFLOWS = "pr-workflows", Area.WORKFLOWS, RELEASE_0_23, Switch.ALWAYS
     PYTEST_WORKERS = "pytest-workers", Area.WORKFLOWS, RELEASE_0_11, Switch.ALWAYS
     RUNTIME_INSTALL = "runtime-install", Area.WORKFLOWS, RELEASE_0_12, Switch.ALWAYS
     CATALOG_CHECK = (
@@ -110,6 +114,7 @@ class Rule(StrEnum):
     RENDER_PASS = "render-pass", Area.WORKFLOWS, RELEASE_0_17, Switch.CATALOG_DECLARATION
     ADVISORY = "advisory", Area.DEPENDENCIES, RELEASE_0_3, Switch.ALWAYS
     FLEET_SOURCE = "fleet-source", Area.DEPENDENCIES, RELEASE_0_21, Switch.ALWAYS
+    PYTEST_RANDOM = "pytest-random", Area.DEPENDENCIES, RELEASE_0_24, Switch.ALWAYS
 
     def __new__(
         cls, rule_id: str, area: Area, first_release: str | None, switch: Switch, *switched: SwitchChange

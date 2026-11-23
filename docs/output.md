@@ -105,7 +105,10 @@ rows, by area:
   run time, design-catalogs --check cannot be read`), its fix naming the step or the make target ([rules](rules.md)); a
   `render-pass` finding is `missing` at `quality/config.toml` with no line (`N catalogs and no render pass declared`,
   `render pass "x" is no job of a tracked workflow`, `render pass "x" is not a mandatory job`), its fix naming the
-  declaration, a job a workflow holds or the `[gate] mandatory_jobs` entry ([rules](rules.md)).
+  declaration, a job a workflow holds or the `[gate] mandatory_jobs` entry ([rules](rules.md)); a `pr-workflows` finding
+  is `unlisted` at a workflow a pull request triggers that is neither the gate's caller nor CodeQL's (`a pull request
+  triggers it, and it is neither the gate's caller nor CodeQL's`), its fix the `[[workflow.allow]]` block to copy, or
+  `unused` at a declaration that names no other such workflow, its fix deleting the entry ([rules](rules.md)).
 - `dependencies`: an advisory is an `affected` row, its fact the package and version, the group's id and where it
   lists them the versions that fix it, its fix per lock kind (O41); the id is the group's first, never an alias (O42);
   a nested lock's fix names its folder (O43); the fix of a pnpm or requirements lock is the same hint for every
@@ -114,6 +117,12 @@ rows, by area:
   `unused` finding there (O46).
   A fleet package a `uv.lock` resolves from an index is a `from index` finding at the lock, its fact the package, its
   version and the index ([rules](rules.md)).
+  A `pytest-random` finding is `missing` at a `uv.lock` that locks pytest without pytest-randomly (`pytest <version> is
+  locked without pytest-randomly`), `unshuffled` at the `addopts` of a `pyproject.toml`, a workflow pytest call or a
+  `PYTEST_ADDOPTS` or `PYTEST_DISABLE_PLUGIN_AUTOLOAD` value that switches the plugin off or fixes its order, and `unseeded`
+  where the same places hide its seed header; its fix names what to drop, and a workflow finding the
+  `# pytest-random: <reason>` marker ([rules](rules.md)). A pytest line `pytest-workers` reports as `invalid` carries no
+  `pytest-random` row, so it is red once.
 - `code`: a security finding is `insecure`, a `print` or `pprint` is a `print call`, and an owner that names no code
   found in its file is `unused` ([rules](rules.md)). A `logging` finding is no finding row but an `open` note at the
   file and line, its fact the logline rule it breaks (LOGGING-3).
@@ -176,7 +185,7 @@ that cannot check is `✗ <area>  not checked  <reason>` ([Refusals](#refusals))
 
 A note is a `·` row under its area, after the area's findings, aligned with them (ROW-15):
 `· <path[:line]>  <event>  <fact>`, with no `fix:` of its own (ROW-16). Its events are `allowed` (file rules,
-dependencies, secrets and python-print), `open` (logging, test-twin, sonar findings), `not measured` (a Python file the size rule cannot parse or a script file that is not UTF-8, without a ceiling
+dependencies, secrets and python-print), `open` (logging, test-twin), `not measured` (a Python file the size rule cannot parse or a script file that is not UTF-8, without a ceiling
 file; O22), `unused` and `warning` (import-contract) and `unused` (secret). An allowed advisory and an honoured output
 owner stand as notes, and the clean row counts them (O15, O49):
 
@@ -186,6 +195,8 @@ owner stand as notes, and the clean row counts them (O15, O49):
   ✓ code          clean          2 rules · 41 Python files · 1 allowed
     · src/shop/cli.py:3  allowed  output owner · the command line owns its output
 ```
+
+The verdict's `time` row is a note whose events are `measured` and `not measured` ([the gate](gate.md)).
 
 ## Glyphs
 
@@ -334,7 +345,7 @@ Ruled by the operator:
 - stdout carries rows and the verdict (STREAM-1). stderr carries the live line, the input prompt and `error:`/`next:`
   (STREAM-2). So `quality check | less` shows every finding and an error stays visible.
 - `report`: rows (FLEET-33) and verdict (FLEET-45) on stderr; the tables are an artifact on stdout, so
-  `quality report > fleet.md` writes only the tables (FLEET-40).
+  `quality report > fleet.md` writes only the three tables (FLEET-40).
 
 Rows and the verdict go to stdout (STREAM-1); the live line, the input prompt and `error:`/`next:` go to stderr
 (STREAM-2). `quality report` has [its own split](commands.md#quality-report).

@@ -71,7 +71,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: overnightworks/quality
-          ref: v0.22.1
+          ref: v0.24.0
           path: .gate-tool
           persist-credentials: false
 
@@ -126,7 +126,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: overnightworks/quality
-          ref: v0.22.1
+          ref: v0.24.0
           path: .gate-tool
           persist-credentials: false
 
@@ -140,6 +140,7 @@ jobs:
         id: preflight
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: uv run --locked --project "$TOOL_DIR" quality sonar properties
 
       - name: Install the pinned scanner
@@ -188,7 +189,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: overnightworks/quality
-          ref: v0.22.1
+          ref: v0.24.0
           path: .gate-tool
           persist-credentials: false
 

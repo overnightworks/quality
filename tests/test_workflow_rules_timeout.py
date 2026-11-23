@@ -26,6 +26,7 @@ CALLED = ".github/workflows/x.yml"
 SET_FIX = "set timeout-minutes to a number of at most 15"
 LOWER_FIX = "lower timeout-minutes to 15 or less"
 RECORD_FIX = f"{LOWER_FIX}, or run quality check --fix to record it"
+GATE_CALL = f"  gate:\n    uses: overnightworks/quality/.github/workflows/gate.yml@{'a' * 40}\n"
 CONCURRENCY = (
     "concurrency:\n  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}\n"
     "  cancel-in-progress: ${{ github.event.pull_request.number != null }}\n"
@@ -382,7 +383,7 @@ def test_the_three_kinds_of_finding_print_in_the_debt_area_with_their_facts_and_
 
 def test_a_conforming_repository_is_clean_under_every_rule(build_repo, capsys):
     """TIMEOUT-5: a limit of fifteen in a pull-request workflow is clean in the whole run."""
-    code, output = run(capsys, build_repo({WORKFLOW: workflow(top=CONCURRENCY, jobs=job(limit="15"))}))
+    code, output = run(capsys, build_repo({WORKFLOW: workflow(top=CONCURRENCY, jobs=job(limit="15") + GATE_CALL)}))
     assert (code, is_clean(output)) == (0, True), output
 
 

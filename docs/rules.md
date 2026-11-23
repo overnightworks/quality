@@ -12,11 +12,11 @@ once, however they are named; with none it judges all seven (CHECK-3). An area n
 row (CHECK-6); the verdict counts only the named areas (`✓ clean · 1 area`) (CHECK-7) and the exit is the worst of
 theirs (CHECK-8), so a named run says nothing of the rest. The gate runs all seven ([gate](gate.md#gateyml)).
 
-Three statements hold for each of four declaration tables of `quality/config.toml` and the rule that reads it:
-`[[compose.allow]]`, `[[root.allow]]`, `[[layout.allow]]` and `[[python.allow]]`. A malformed table other than the
-rule's own is forwarded with its validation error; the values of `[gate]` stay the verdict's to judge. A declaration is
-no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry. A config reader older than the rule refuses
-its table as an unknown key.
+Three statements hold for each of five declaration tables of `quality/config.toml` and the rule that reads it:
+`[[compose.allow]]`, `[[root.allow]]`, `[[layout.allow]]`, `[[python.allow]]` and `[[workflow.allow]]`. A malformed
+table other than the rule's own is forwarded with its validation error; the values of `[gate]` stay the verdict's to
+judge. A declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry. A config reader older
+than the rule refuses its table as an unknown key.
 
 It applies these rules:
 
@@ -253,23 +253,24 @@ It applies these rules:
   the exit stays `0`, and the [verdict line](output.md#the-closing-line) says `imports not enforced` before the
   duration, after debt's note. A config with contracts that are kept is
   [`✓ imports  clean  N contracts`](output.md#area-rows) (a config without a contract: `0 contracts`). import-linter
-  2.15 runs inside quality as a library, never its CLI, and writes nothing to the checkout (no `.import_linter_cache`)
+  2.16 runs inside quality as a library, never its CLI, and writes nothing to the checkout (no `.import_linter_cache`)
   (IMPORT-5). A broken contract is one finding `! <config>  broken  contract <name>`, with the lines import-linter
   renders for it (the chain, `shop.db -> shop.web (l.1)`, and the contract's guidance) under the [row](output.md#rows)
   behind `| `, fix `change the import or the contract`, exit `1`. An `ignore_imports` entry no import matches follows
   the contract's `unmatched_ignore_imports_alerting`: `error` (the default) is a finding
   `unused  contract <name> ignores a -> b`, fix `delete it from the contract's ignore_imports`, `warn` a
   [note row](output.md#notes) `· <config>  unused  contract <name> ignores a -> b`, `none` nothing (IMPORT-6). Each root
-  package is the one tracked `<dir>/<name>/__init__.py` outside the tests (IMPORT-7). The rule cannot judge (exit `2`,
+  package is the one tracked `<dir>/<name>/__init__.py` outside the tests (IMPORT-7), and grimp reads it from there
+  even when quality itself has imported a package of that name or an untracked copy comes first on `sys.path`
+  (IMPORT-7, IMPORT-26). The rule cannot judge (exit `2`,
   before any caller code runs or any file outside is read) (IMPORT-8) two configs that each hold a section (IMPORT-9),
   a `contract_types` option (plugins would be imported) (IMPORT-10), a type other than forbidden, layers, independence,
   protected and acyclic_siblings (IMPORT-11), invalid contract options (IMPORT-12), a config value of the wrong type or
   any other error of import-linter or grimp (`contract <name> in pyproject.toml cannot be judged: ...` or
   `the config pyproject.toml cannot be judged: ...`) (IMPORT-13), a dotted root
-  package (IMPORT-14), a root package with no or several such directories, one Python finds in another place (IMPORT-15)
-  (`root package yaml is src/yaml/__init__.py, but Python finds it outside the repository at
-  site-packages/yaml/__init__.py`, a place outside named from the `sys.path` entry it lies under; a place inside is
-  named repository-relative) (IMPORT-16), a symlink under a root package that leaves the repository, directly or through
+  package, because a root package is one tracked `<name>/__init__.py` and quality judges only top-level ones
+  (IMPORT-14), a root package with no or several such directories, or whose tracked `__init__.py` the checkout does
+  not hold (IMPORT-15), a symlink under a root package that leaves the repository, directly or through
   a link that stays inside (IMPORT-17), and a symlink loop (IMPORT-18), a dangling link (IMPORT-19), and a `.py` file
   that "cannot be examined" (no regular file (IMPORT-20), a name or content that is not valid UTF-8 (IMPORT-21), a
   coding cookie in any spelling but utf-8, utf8, ascii, us-ascii or ansi_x3.4-1968 (accepted in any letter case)
@@ -542,6 +543,43 @@ It applies these rules:
 
   Ruled by the operator: every tracked `pyproject.toml` that `test-layout` finds as a project is judged, the root and
   each member alike (FLOOR-1).
+- `naming` judges the names a repository writes itself against its stem, the repository name of the remote called
+  `origin`, as [naming.md](naming.md) rules (NAMING-1). Only `origin` gives the stem, while `agents-md` keeps reading
+  every remote; a remote counts as AGENTS-13 says (NAMING-2). Every finding's fact says `read from remote origin` after
+  the stem, so a clone that a rename left behind shows it; re-pointing `origin` is its fix (NAMING-3). A checkout with
+  no GitHub `origin`, whatever files it tracks, makes the `files` row [`✗ not checked`](output.md#refusals) ("no GitHub
+  remote called origin names this repository", next step "add the repository's GitHub remote as origin", exit `2`),
+  because the repository's own name is always judged (NAMING-4).
+  Every tracked `pyproject.toml` that `test-layout` finds as a project (the root or a member at any depth) and that
+  holds a `[project]` table is judged, a gitlink never entered; a file with `tests`, `fixtures` or `node_modules` among its
+  folders is no project's own and is not judged (NAMING-5). Its `name`, after PEP 503 normalisation, is
+  `overnightworks-<stem>` or `overnightworks-<stem>-<component>`; under `[tool.uv] package = false` the bare `<stem>` or
+  `<stem>-<component>` is also accepted (NAMING-6). Each import package under its `src/` is `<stem>` or
+  `<stem>_<component>`, each `-` of the stem written `_` (NAMING-7); each name in `[project.scripts]` is `<stem>` or
+  `<stem>-<component>` (NAMING-8). A component is one or more words of lower-case letters and digits, joined by `-` or,
+  for an import, `_` (NAMING-9); imports, commands and npm names compare exactly (NAMING-10). The `name` of each tracked
+  `package.json` outside those folders is
+  `overnightworks-<stem>[-<component>]`, `<stem>[-<component>]` or `slidev-addon-<stem>` (NAMING-11); a manifest with
+  no name has nothing to judge (NAMING-12). The repository's own name is red with a capital or with a role suffix
+  (`-runtime`, `-service`, `-client`, `-server`, `-lib`, `-sdk`, `-api`), at `.git/config`, whatever files it tracks
+  (NAMING-13). `sonar.projectKey` stays SONAR-59's.
+  One finding per name, `misnamed`, at its file, says the kind (`distribution`, `import`, `CLI`, `npm` or `repository`),
+  the name found and the stem, and its fix names the accepted forms (NAMING-14); they print sorted by path (NAMING-15).
+  A deviation is an entry of `src/quality/naming_deviations.toml` (repository, kind, name, the item holding the
+  operator's ruling) and covers exactly that name of that kind in that repository, a distribution compared after PEP 503
+  (NAMING-16). The file is quality's: no `quality/config.toml` table, `[[layout.allow]]` or `[[gate.loosened]]` declares
+  one, and a new entry takes effect with a quality release (NAMING-17); [naming.md](naming.md) lists the entries
+  (NAMING-18). A `pyproject.toml` that is not UTF-8 TOML, a `package.json` that is not UTF-8 JSON and a `name` that is no
+  string make the `files` row `✗ not checked` with the file and its reason (exit `2`) (NAMING-19). Not read, and waiting
+  for usage evidence: import clashes with a third party's package, plugin manifests, a Dockerfile's or a workflow's
+  names; forks and archived repositories are outside the coverage and the rule detects neither, so a fork that calls
+  the gate carries a deviation (NAMING-20). No configuration switches the rule off. It first ships in v0.23.0, so a gate pinned
+  below that release shows `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `enforced` (FLEET-18).
+
+  Ruled by the operator: coverage is every non-archived repository of the organisation except forks, private ones
+  included, and a new repository conforms from its first pull request. The rule ships as `Switch.ALWAYS` in its first
+  release with no report-only phase, and no deviation entry, held baseline table or `[[gate.loosened]]` entry covers a
+  name red when it ships (NAMING-21).
 - `python-security` judges every tracked regular `.py` file in any directory with the `S` codes of quality's own ruff
   (SECURITY-1) (an exact pin in quality's `pyproject.toml` that serves its own lint too): the ruff binary of quality's
   installation, never one on `PATH` (SECURITY-2), at [the pinned version](commands.md#scanners), runs `ruff check
@@ -847,6 +885,29 @@ quality's own checkout carries the block in `ci.yml` and `code-scanning.yml`. No
 switches the rule off.
 It first ships in v0.11.0, so a dependent meets it at its first bump to that release.
 
+The `pr-workflows` rule judges the same workflows as `pr-concurrency` (a `pull_request`, `pull_request_target` or
+`pull_request_review` trigger, read as CONCURRENCY-1 reads it): each is the gate's caller (a job whose `uses:` is the
+repository's own `gate.yml` or quality's pinned `gate.yml`), CodeQL's caller (the same for `codeql.yml`), or declared in
+`quality/config.toml` with its reason (PRWORKFLOW-1). A workflow that is none is `unlisted`, at the workflow with no
+line, and its fix names both ways out with the block to copy; the reason is the person's to write (PRWORKFLOW-2):
+
+```toml
+[[workflow.allow]]
+file = ".github/workflows/preview.yml"
+reason = "it deploys the pull request preview and no check belongs to it"
+```
+
+`file` is the exact tracked path of one workflow, no folder, pattern, `..` or absolute path; `reason` is one non-empty
+line; one entry per file (PRWORKFLOW-3). A workflow no pull request triggers (`push` alone, `schedule`,
+`workflow_dispatch`, `merge_group`, `workflow_call` alone) is outside, so a workflow reached only through a reusable call
+is judged as its caller (PRWORKFLOW-4). A declaration whose file is no such workflow, is absent, or is the gate's or
+CodeQL's caller is `unused` (PRWORKFLOW-5). A declaration is no loosening: moving a mandatory job out of the gate's
+caller into a declared workflow leaves that job missing from the run (VERDICT-7), and dropping it from `mandatory_jobs`
+is a loosening (VERDICT-13). A workflow whose YAML or file cannot be read, and an alias or a merge key where it can hide
+the top mapping or `on:`, are exit `2` naming the file (PRWORKFLOW-6). The clean row of `workflows` keeps its words, and
+the rule's extent is the number of pull-request workflows. No configuration switches the rule off. It first ships in v0.23.0, so a gate pinned below that release shows
+`not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `enforced` (FLEET-18).
+
 The `pytest-workers` rule judges every pytest call in a `run:` step of every tracked workflow, whether or not a pull
 request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a composite
 action is not (PYTEST-1). The script is never run. The value is read line by line, as the shell reads it: a literal
@@ -903,7 +964,9 @@ call, judged once (PYTEST-6). A second substitution on a command line (`cp $(a) 
 is no command word; the same `$(…)` after the `)` of a `case` pattern is read the same way, a named gap.
 
 A comment `# pytest-workers: <reason>`, with a reason that holds a letter, clears every call of the logical line it
-stands on or directly above: for a plain or quoted value, a YAML comment above `run:` or after its value; for a block
+stands on, or that directly follows a line holding only the comment; a marker that trails another command's line
+clears that command only, so the unmarked call of the next line is reported. The marker stands, for a plain or quoted
+value, as a YAML comment above `run:` or after its value; for a block
 scalar (`|`, `>`), a YAML comment above the `run:` key clears nothing, so the marker goes on the `run: |` line (it
 covers the script's first line) or on a block line directly above the line it clears; for a command joined by
 backslashes, above its first line or on any of its lines. Without the id, without a reason, with a reason of no letter,
@@ -963,8 +1026,8 @@ form: the marker stands on the line directly above a step's first line, the line
 column of that `-`, and clears every finding of the step's `run:`; a `#` in another column clears nothing, a comment
 in the `-` column that follows the previous step and stands directly above the next step clears the next step, and a
 step whose `-` stands alone on its line or that stands in a flow sequence (`steps: [{run: x}]`) has no step form. The
-per-line form is that of `pytest-workers`: the marker on a call's logical line or directly above its first line clears
-that call, for a block scalar on the `run: |` line (it covers the first line) or on a block line directly above the
+per-line form is that of `pytest-workers`: the marker on a call's logical line, or alone on the line directly above its first
+line, clears that call (a marker trailing another command's line clears that command only), for a block scalar on the `run: |` line (it covers the first line) or on a block line directly above the
 call; the line above a step whose `run:` stands on the step's own first line (`- run: x`, a flow step) belongs
 to the step form alone, so that step takes a marker on its own line only, while a marker on the `-` line of a step
 whose `run:` stands on the next line (`- # runtime-install: reason`) clears that call; a marker between a step's
@@ -1386,8 +1449,8 @@ The `test-twin` rule, in the `debt` area, counts two kinds of copying in the tra
 - **Refusals (TWIN-5).** The rule reads the sources the `debt` area read; when they cannot be read the area is refused as
   before and no note stands. It needs no baseline, so a baseline that cannot be read refuses `size` and `clone` (CLONE-9) and the
   note still stands. A file Python cannot parse is skipped without a refusal; `size` and `clone` refuse it.
-- **Report only (TWIN-6).** The rule is `report-only` in the fleet matrix and changes no verdict. It ships in no release yet
-  (`not released`, FLEET-19).
+- **Report only (TWIN-6).** The rule is `report-only` in the fleet matrix and changes no verdict. It first ships in v0.23.0, so a gate
+  pinned below that release shows `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `report-only` (FLEET-18).
 
 The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
 with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
@@ -1588,6 +1651,80 @@ the rest. It judges independently of `advisory`, so neither refuses the other (S
 
 It first ships in v0.21.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column (FLEET-18).
 
+`pytest-random`, in the `dependencies` area, holds the unit and integration layers to the fleet standard's "random order
+with the seed printed" (pytest-randomly). Three readers judge that one decision.
+
+- **The lock (RANDOM-1, RANDOM-2).** Every tracked `uv.lock`, found and read as `fleet-source` finds and reads it
+  (SOURCE-5, SOURCE-6): a lock that holds the package `pytest` and not `pytest-randomly`, names compared canonicalised, is
+  one `missing` finding at the lock (`pytest 9.2.0 is locked without pytest-randomly`), its fix adding the plugin to the dev
+  dependency group, then `uv lock`. A lock with neither package, or with the plugin alone, is clean. The row's extent is the
+  locks read, and a repository without a lock, a `pyproject.toml` or a workflow is clean at `0`. The rule reads the lock,
+  not a layer: R6 binds the unit and integration layers, and the marker (RANDOM-8) is the way out of a flow layer on the
+  workflow side only.
+- **The options (RANDOM-4 to RANDOM-7).** Three sources hold a list of pytest options: `addopts` in
+  `[tool.pytest.ini_options]` or in the native table `[tool.pytest]` (pytest refuses both in one file) of each
+  `pyproject.toml` the `python-floor` rule reads (a list, or a string split as shell words; so a gitlink and a fixture
+  project under another project's `tests/` stay out), a pytest call of a workflow `run:` script (the calls
+  `pytest-workers` finds, PYTEST-3) and `PYTEST_ADDOPTS` (RANDOM-11). Each source is judged alone, and a source is one
+  finding, the no-shuffle problem first. **Deliberate simplification:** pytest joins the verbosity of `addopts`, then
+  `PYTEST_ADDOPTS`, then the call, and the rule does not; it is stricter than R6 only where a `-q` in one source meets a
+  `-v` in another, or where the plugin is loaded again from another source than the one that switched autoload off, a
+  case no fleet repository has.
+  - *No random order, `unshuffled` (RANDOM-5):* `-p no:randomly` or `-pno:randomly`, `--randomly-dont-reorganize`, a
+    fixed seed (`--randomly-seed=<integer>` or `--randomly-seed=last`, the last of them counting) and
+    `--disable-plugin-autoload` unless the source also holds `-p randomly` or `-p pytest_randomly`, which loads the
+    plugin again. `--randomly-seed=default` draws a fresh seed and is clean. `last` is `unshuffled` although a runner
+    without a restored cache draws a new seed: it exists to reproduce a run, and it fixes the order as soon as a cache
+    persists.
+  - *No seed in the log, `unseeded` (RANDOM-6):* the plugin prints its seed only as a report-header line, and pytest
+    prints header lines only from verbosity 0 up. `-v` adds one to the level, `-q` and `--quiet` take one,
+    `--verbosity=<n>` and `--verbosity <n>` set it, read in order of appearance; a level below zero, or `--no-header`, is
+    `unseeded`. So `-q`, `-qq`, `-qn4` and `--verbosity=-1` hide the seed, `-q -v`, `-qv`, `-q --verbosity=0` and
+    `-n auto` show it, and `--verbosity=0 -q` hides it.
+  - *Reading (RANDOM-7):* only the words before the first `--` are options. In a short cluster (`-abc`) each letter is
+    read from the left, and a letter that takes a value (`-p`, `-o`, `-r`, `-k`, `-m`, `-c`, `-W`, `-n`, the set of
+    pytest 9.2.0 and pytest-xdist 3.8.0) ends the cluster with the rest of the word, or the next word, as its value:
+    `-kquick`, `-rfq` and `-n4 -k q` are clean, `-qn4` and `-qk quick` are `unseeded`. An option a plugin of the
+    repository adds is not known. A `--randomly-seed` value built with `${{ }}` is chosen at run time and is clean (a
+    named gap), and so is a value of `PYTEST_ADDOPTS` that holds `${{ }}`. `PYTEST_ADDOPTS` is split as shell words, as
+    pytest splits it, so `-p "no:randomly"` is read as `-p no:randomly`.
+  - An `addopts` finding stands at the key's line in the `pyproject.toml` (no line where the key is not a plain
+    `addopts =` line of its table), and nothing clears it, since `addopts` holds for every layer (RANDOM-8).
+- **The workflow (RANDOM-9, RANDOM-11).** A call is read with the reader of `pytest-workers` (PYTEST-2, PYTEST-3),
+  through `uv run`, `python -m pytest` and the other runners, at the call's first line. `PYTEST_ADDOPTS` and
+  `PYTEST_DISABLE_PLUGIN_AUTOLOAD` are read where a workflow, a job or a step sets them in `env:`, at the value's line,
+  and as an assignment word of a script, leading a command (`PYTEST_ADDOPTS=-q pytest`, `env PYTEST_ADDOPTS=-q pytest`)
+  or after `export`. Any value of `PYTEST_DISABLE_PLUGIN_AUTOLOAD` that is not empty (a blank one included) switches the
+  autoload off, as pytest reads it, so it is `unshuffled`, whatever else `env:` holds. A call behind a script, `make` or
+  a mise task, a `pytest.main([...])`, a flag in `pytest.ini`, `.pytest.ini`, `pytest.toml`, `.pytest.toml`, `tox.ini` or
+  `setup.cfg` and a plugin disabled in a `conftest.py` are not read. A call with `--collect-only` or `--co` before the
+  first `--` only lists tests, runs none and is not judged (`pytest --collect-only -q` is clean, `pytest -q -- --collect-only`
+  is `unseeded`).
+- **The marker (RANDOM-8).** A comment `# pytest-random: <reason>`, with a reason that holds a letter, on the line of a
+  workflow call, assignment or `env:` value, or alone on the line directly above it, clears the finding (the form of
+  `# pytest-workers:`, PYTEST-7); a marker that trails another command's line clears that command only. It is the way out of a flow layer (end-to-end, browser, image); it clears nothing in `addopts`, and it has
+  no other form.
+- **Facts and fixes (RANDOM-10).** `unshuffled`: `pytest-randomly is switched off or its order fixed by <source>`, its
+  fix naming what to drop (`-p no:randomly`, `--randomly-dont-reorganize`, `--randomly-seed=<integer or last>`,
+  `--disable-plugin-autoload` and `PYTEST_DISABLE_PLUGIN_AUTOLOAD`). `unseeded`:
+  `pytest-randomly's seed header is hidden by <source>`, its fix
+  `drop -q, --verbosity=-1 and --no-header so the log prints "Using --randomly-seed=N"`. The `<source>` is `addopts`,
+  `the call`, `PYTEST_ADDOPTS` or `PYTEST_DISABLE_PLUGIN_AUTOLOAD`; a workflow finding adds
+  `, or explain on the line above: # pytest-random: <reason>`.
+- **What cannot be read (RANDOM-3, RANDOM-12, RANDOM-13).** A lock or `pyproject.toml` that is no UTF-8 TOML, a lock
+  whose packages are no list of tables and an `addopts` that is neither a string of shell words nor a list of strings are
+  exit `2` naming the file. A workflow whose YAML cannot be read, and an alias or a merge key where it can hide `jobs`, a
+  job, `steps`, a step or an `env:`, are exit `2` naming the file, as for `pytest-workers` (PYTEST-9), and so is an
+  `env:` value of the two variables, or a script assignment of `PYTEST_ADDOPTS`, that is no shell words. A pytest line
+  the shared reading cannot read or finds built at run time is `invalid` for `pytest-workers` (PYTEST-6) and no finding
+  of this rule, so it is red once.
+- **No release, no switch (RANDOM-14).** No configuration switches the rule off and no declaration table exists. The rule
+  first ships in v0.24.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column (FLEET-18)
+  and a dependent meets it at its bump to it. quality's own tree holds no finding of
+  it. Not covered, named: pytest and pytest-randomly locked in different dependency groups where a job installs one group
+  only, a test environment installed from a requirements file instead of the lock, and an option or flag built with
+  `${{ }}`.
+
 The `logging` rule, in the `code` area, judges a repository against the machine rules of the fleet standard "Logging" with
 logline's own checker, `logline.check.check` of the logline release quality pins. quality holds no copy of the standard's
 values and runs no logging analysis of its own; a rule's wording and its gaps are logline's README's.
@@ -1612,9 +1749,9 @@ values and runs no logging analysis of its own; a rule's wording and its gaps ar
   [the fleet standard](release.md#depending-on-a-fleet-package) says for a tool installed without a lock. logline's own
   dependencies, structlog and opentelemetry-api, enter quality's lock with it, and an advisory against either turns
   quality's own gate red although quality never runs their code.
-- **Report only (LOGGING-6).** The rule is `report-only`: it changes no verdict. Until a release ships it only main has it
-  (`not released` in the fleet matrix, FLEET-19). The matrix has no coverage signal for it: every repository whose pin has
-  the rule reads `report-only`, covered or not.
+- **Report only (LOGGING-6).** The rule is `report-only`: it changes no verdict. It first ships in v0.23.0, so a gate
+  pinned below that release shows `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `report-only` (FLEET-18).
+  The matrix has no coverage signal for it: every repository whose pin has the rule reads `report-only`, covered or not.
 
 Not judged: the standard's "a released logline tag" (`fleet-source` tells no tag from a branch, SOURCE-2).
 

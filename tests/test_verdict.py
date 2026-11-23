@@ -777,3 +777,4 @@ def test_a_job_field_of_the_wrong_type_cannot_be_judged(capsys, run_env, job_ent
     captured = capsys.readouterr()
     assert captured.err.startswith("error: "), captured
     assert captured.err.count("\n") == 2, captured
+

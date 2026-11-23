@@ -110,9 +110,10 @@ A person installs quality with `uv tool install` from a tag ([README](../README.
 reusable `gate.yml` at the tag it pins; its caller contract stands in [gate](gate.md), and that workflow checks out
 quality and installs the three mise scanners from `src/quality/mise/`. `codeql.yml` is the reusable CodeQL workflow,
 with its caller contract in [codeql](codeql.md), and `code-scanning.yml` quality's own caller of it. quality's CI runs
-its suite with coverage and calls its local `gate.yml`. `report.yml` runs the fleet report weekly, lists the organizations' public repositories with the job's read-only token and
-writes to no repository. `release.yml`, dispatched with a version, calls the reusable `release-gate.yml`, then builds and runs
-`scripts/verify_release.py`; its tag job calls `release-tag.yml` and is the only job that writes
+its suite with coverage and calls its local `gate.yml`. `report.yml` runs the fleet report weekly and lists the organizations' public repositories with the job's read-only token. The
+report writes no repository and opens no issue: its measuring job holds `contents: read`, and a second job deploys the weekly
+CI-time file to the repository's GitHub Pages with `pages: write` and `id-token: write`, on the default branch only. `release.yml`, dispatched with a version, calls the reusable `release-gate.yml`, then builds and runs
+`scripts/verify_release.py`; its tag job calls `release-tag.yml` and is the only job that writes to the repository
 ([release](release.md)). `image.yml` is the reusable image build an app's release calls; it pushes to GHCR and attests
 ([release](release.md)). Locally, `check` runs at the repository's pinned release and `merge` at its target's pin, which uv prepares into its cache;
 quality then becomes that release's process. quality keeps one empty record per checked release under the user's cache
@@ -125,7 +126,9 @@ input: output masks them and stops workflow commands ([output](output.md#masking
 repository (`repository.py`): design's catalog functions get only text that `repository.py` has read, never a path, so no
 symlink is followed out of the repository and no untracked file is read. A scanner's stderr is shown only once gitleaks clears it. The GitHub transport follows no
 redirect. The fleet report's listing is public repositories only (a private one an operator's token can list is dropped
-before any line), and its token goes to `api.github.com` only, never to git. A workflow's pin selects which code runs
+before any line, so no file names one either), and its token goes to `api.github.com` only, never to git. The weekly CI-time file is
+public by design: repository names and numbers, no commit author and no run text; the deploy job runs no repository code and holds
+the Pages permissions in its job only, and the consumer needs no token. A workflow's pin selects which code runs
 locally. The gate's tool is its own uv workspace root, so a caller's checkout above it cannot take it in or configure
 it. quality builds or runs a pinned commit only after quality's remote showed the comment's release tag at that commit:
 asked before every fetch, and remembered per machine by a record that only a matched answer writes. The door reads that
@@ -164,7 +167,7 @@ cannot judge.
   SonarCloud backdates an issue raised on an unchanged line, so it cannot fail on one, and at the pinned scanner a
   properties file can still reach the token. Reopens when the hosted gate fails on such a finding and the pinned scanner
   no longer lets a properties file reach the token.
-- Skipping the `sonar` job, by a job `if:` or by repository visibility: a job `if:` cannot read the config, so every scan would wait for its check and the verdict and the door would need a second meaning of `skipped`; visibility is no scanning intent and bypasses the config comparison. Reopens when a job `if:` can read the caller's files.
+- Skipping the `sonar` job, by a job `if:` or by repository visibility: a job `if:` cannot read the config, so every scan would wait for its check and the verdict and the door would need a second meaning of `skipped`; visibility is no scanning intent and bypasses the config comparison. Reopens when a job `if:` can read the caller's files. A run SonarCloud serves nothing of (neither a pull request nor on the default branch) is no reason to skip the job either: the verdict reads a skipped job as red, and the properties step, which already judges the token and the properties, decides the run's kind and hands the job `sonar=off`.
 - Downloading the coverage artifact outside the checkout, or reading the config from git in the `sonar` job: the scanner
   reads each report at the checkout-relative path the properties file names, so quality would have to copy reports in, and
   reading the config from git guards one key but not a planted source or properties file. The properties check refuses a

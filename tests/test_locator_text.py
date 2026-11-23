@@ -18,6 +18,11 @@ from tests.support.check import (
 from tests.support.door import CHECK_WORD, door_in
 
 
+@pytest.fixture
+def fixture_origin() -> str:
+    return "overnightworks/app"
+
+
 @dataclass(frozen=True)
 class Scenario:
     """A covered app: a German source catalog, an English one and a test file, with the generator's declaration."""
@@ -29,7 +34,7 @@ class Scenario:
     def pyproject(self, *, covered: bool = True, table: str = "") -> str:
         extra = "[catalogs]" if covered else ""
         return (
-            '[project]\nname = "app"\nversion = "0.1"\nrequires-python = ">=3.14"\n'
+            '[project]\nname = "overnightworks-app"\nversion = "0.1"\nrequires-python = ">=3.14"\n'
             f'dependencies = ["overnightworks-design{extra}>=1"]\n{table}'
         )
 

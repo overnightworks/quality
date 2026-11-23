@@ -76,6 +76,9 @@ mandatory_jobs = ["checks"]
 
 - `mandatory_jobs` is a non-empty list of job names as the run lists them: the job's `name:`, else its id, and a matrix
   leg as `check (3.12)` (VERDICT-3). A missing file or key is exit `2` (VERDICT-4), and `next:` shows this example.
+  A job a workflow splits into shards keeps its name as an aggregator job that needs every shard: a name the run holds
+  only as legs (`checks (3.12)` for `checks`) is `missing  not in the run` (VERDICT-7), and dropping the name from the
+  config is a loosening (VERDICT-13). Whether the aggregator fails on a failed or skipped shard is not machine-read.
 - Each job must conclude `success` in its newest attempt up to the verdict's own (VERDICT-5). A job the run lists
   several times in that attempt is green only when every entry succeeded (VERDICT-6). A job that is missing from the run
   is the row `! x  missing  not in the run` (VERDICT-7); one that failed, was skipped or cancelled is red (VERDICT-8).
@@ -92,7 +95,9 @@ mandatory_jobs = ["checks"]
 - `[gate] sonar = false` turns SonarCloud off (VERDICT-15). The `sonar` job's properties step then hands it `sonar=off`,
   which [Coverage on new code](sonar.md#coverage-on-new-code) describes, with the refusals that make a later gate
   without the switch stop before its scan, and `gate.yml` skips the scanner install, the scan and the findings step only
-  on that output (CALLER-9), so the job is green and sends nothing. Absent or `true`, Sonar runs (VERDICT-16). Any other
+  on that output (CALLER-9), so the job is green and sends nothing. The same output ends a run that is neither a pull request
+  nor on the default branch, which SonarCloud serves nothing of ([Runs SonarCloud serves](sonar.md#runs-sonarcloud-serves)).
+  Absent or `true`, Sonar runs (VERDICT-16). Any other
   value is exit `2` (VERDICT-17). On a pull request, a head that turns Sonar off under a base that runs it is the
   loosening `sonar true → false` (VERDICT-18); an adoption (a base without `quality/config.toml`) may start with Sonar
   off (VERDICT-19).
@@ -114,6 +119,17 @@ on stdout, all sharing one subject column (VERDICT-22):
 - the jobs, as one `✓ jobs  success  N mandatory jobs · M gate jobs` row when all are green (VERDICT-27), else one row
   each, its event the job's conclusion in words (VERDICT-28), a conclusion GitHub adds later as `concluded <word>`
   (VERDICT-29);
+- the run's CI time, a note after the jobs, `· time  measured  6m12s wall · slowest quality / sonar 55s · longest wait 2s · longest chain 3 jobs 5m35s`
+  (VERDICT-74): the wall clock from the first attempt's first job to the last finished job (a re-run counts from its
+  first attempt), the slowest finished job of the newest attempt, and the longest a job waited between its creation and
+  its start (runner wait only, since a job behind `needs` is created when its needs finish), and the longest chain of
+  jobs waiting on each other: a job created within two seconds of another's completion waits on it (a skipped job ran
+  nothing and waits on none), and the chain runs in the newest attempt back from its last finished job, printed as its
+  job count and its time from the first job's creation to the last job's completion; where a job was created within two
+  seconds of several jobs' completions that lead to chains of different counts or starts, the timestamps do not tell
+  which it waited on and the chain reads `longest chain not measured`; a re-run's dependents are created at the re-run,
+  so it shows a shorter chain. A job lacking a timestamp
+  GitHub gives makes it `· time  not measured  GitHub gave no timestamps` (VERDICT-75); the exit is the jobs' either way;
 - on a pull request the loosenings, `✓ loosenings  none` or `! loosenings  N undeclared  M declared` (a count of none
   left out) with each loosening below it (VERDICT-30);
 - `! declarations  N unmatched` where a new entry (below) matches nothing (VERDICT-31).

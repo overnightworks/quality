@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import __version__, cli, web
+from quality import __version__, cli, fleet_ci_time, web
 from quality.fleet import ListingFetch, ReleaseTagsError, TagReader
 from quality.report import CannotJudge
 from tests.support.fleet import NEWEST, RELEASES, row, write_fleet
@@ -63,14 +63,34 @@ class Answer:
     failure: Exception | None = None
 
 
+JOB = {"name": "tests", "conclusion": "success", "created_at": "2026-11-05T10:00:00Z", "started_at": "2026-11-05T10:00:07Z", "completed_at": "2026-11-05T10:01:00Z"}
+NO_RUNS = b'{"total_count": 0, "workflow_runs": []}'
+
+
+def runs_of(*runs: tuple[str, str, str, str]) -> Answer:
+    """GitHub's answer for the runs listing; each run is `(head_sha, created_at, updated_at, conclusion)` of a pull request."""
+    entries = [
+        {"id": number, "head_branch": "feature", "head_sha": sha, "event": "pull_request", "status": "completed", "conclusion": conclusion, "created_at": created, "updated_at": updated}
+        for number, (sha, created, updated, conclusion) in enumerate(runs, 1)
+    ]
+    return Answer(json.dumps({"total_count": len(entries), "workflow_runs": entries}).encode())
+
+
 @dataclass
 class Listing:
     """A fake listing fetch: one answer per organization, and the url and headers of every request it got."""
 
     answers: dict[str, Answer]
+    runs: dict[str, Answer] = field(default_factory=dict)
     requests: list[tuple[str, dict[str, str]]] = field(default_factory=list)
+    runs_requests: list[tuple[str, dict[str, str]]] = field(default_factory=list)
 
     def __call__(self, url: str, headers: Mapping[str, str], unreadable: Callable[[Exception], CannotJudge]) -> tuple[bytes, Message]:
+        if "/jobs?" in url:
+            return json.dumps({"total_count": 1, "jobs": [JOB]}).encode(), Message()
+        if "/repos/" in url:
+            self.runs_requests.append((url, dict(headers)))
+            return self._runs_answer(url, unreadable)
         self.requests.append((url, dict(headers)))
         answer = self.answers[url.split("/orgs/")[1].split("/")[0]]
         if answer.failure is not None:
@@ -79,6 +99,12 @@ class Listing:
         if answer.link is not None:
             headers_answered["Link"] = answer.link
         return answer.body, headers_answered
+
+    def _runs_answer(self, url: str, unreadable: Callable[[Exception], CannotJudge]) -> tuple[bytes, Message]:
+        answer = self.runs.get(url.split("/repos/")[1].split("/actions")[0], Answer(NO_RUNS))
+        if answer.failure is not None:
+            raise unreadable(answer.failure)
+        return answer.body, Message()
 
 
 def listed(*entries: tuple[str, ...]) -> Answer:
@@ -146,7 +172,8 @@ def test_a_measured_fleet_prints_its_rows_on_stderr_and_only_the_tables_on_stdou
     ]
     assert lines[9].startswith("Every gate release enforces ")
     assert lines[11].startswith("| Repo | Gate |")
-    assert (len(lines), [line.split(" |")[0] for line in lines[-2:]]) == (15, ["| o/alpha", "| o/beta-repository"])
+    assert lines[16].startswith("**CI time, last 7 days")
+    assert (len(lines), [line.split(" |")[0] for line in lines[-2:]]) == (22, ["| o/alpha", "| o/beta-repository"])
 
 
 def test_a_repository_that_cannot_be_cloned_is_its_row_and_the_pair_after_the_tables(capsys, monkeypatch, tmp_path, public, missing, remotes):
@@ -313,6 +340,8 @@ def test_the_listing_carries_the_job_token_only_when_there_is_one(capsys, monkey
     ((url, headers),) = listing.requests
     assert (url, headers.get("Authorization")) == ("https://api.github.com/orgs/o/repos?type=public&per_page=100", authorization)
     assert "dummy-token" not in printed.err + printed.out
+    ((_, runs_headers),) = listing.runs_requests
+    assert runs_headers.get("Authorization") == authorization
 
 
 @pytest.mark.parametrize(
@@ -475,3 +504,125 @@ def test_an_exclude_entry_of_an_organization_github_did_not_list_waits_for_the_r
         '        organizations = ["overnightworks"]\n'
         "    fix what the error names, then run quality report again\n"
     )
+
+
+def test_the_weekly_ci_time_is_a_third_table_and_leaves_the_exit_as_it_is(capsys, monkeypatch, tmp_path, public):
+    """FLEET-40, FLEET-104: each repository's commits, median, p90 and red share of the last 7 days stand in a third table
+    after the two others, in the step summary too, and a red week raises no finding."""
+    public("alpha", {"a.py": "a = 1\n"})
+    public("beta", {"b.py": "b = 1\n"})
+    slow = [("x", "2026-11-05T10:00:00Z", "2026-11-05T10:03:00Z", "failure"), ("y", "2026-11-05T11:00:00Z", "2026-11-05T11:01:00Z", "success")]
+    listing = Listing({"o": listed(("o/alpha",), ("o/beta",))}, runs={"o/alpha": runs_of(*slow)})
+    summary = tmp_path / "summary.md"
+    printed = report_in(
+        write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(*range(8)),
+        environment={"GITHUB_STEP_SUMMARY": str(summary)}, fetch_listing=listing,
+    )
+    assert printed.code == 0, printed.err
+    third = printed.out.split("**CI time, last 7 days")[1].splitlines()
+    assert third[0] == " · 4 API calls**"
+    assert third[2:] == [
+        "| Repo | Commits | Median | p90 | Red | Red on main | Jobs sampled | Queue p90 | Over 12 min |",
+        "|---|---|---|---|---|---|---|---|---|",
+        "| o/alpha | 2 | 1m00s | 3m00s | 50 % (1 of 2) | — | 2 | 7s | none |",
+        "| o/beta | 0 | — | — | — | — | — | — | — |",
+    ]
+    assert "| o/alpha | 2 | 1m00s |" in summary.read_text()
+    assert "created=%3E%3D2026-10-30" in listing.runs_requests[0][0]
+
+
+def test_a_repository_whose_runs_cannot_be_read_is_a_partly_read_row_and_the_exit_stays(capsys, monkeypatch, tmp_path, public):
+    """FLEET-37, FLEET-105: unreadable runs are a stderr row and a partly read table row, the other repository keeps its
+    numbers, and the closing line and exit are those of a report without the table."""
+    public("alpha", {"a.py": "a = 1\n"})
+    public("beta", {"b.py": "b = 1\n"})
+    listing = Listing(
+        {"o": listed(("o/alpha",), ("o/beta",))},
+        runs={"o/alpha": Answer(failure=OSError("down")), "o/beta": runs_of(("x", "2026-11-05T10:00:00Z", "2026-11-05T10:00:30Z", "success"))},
+    )
+    printed = report_in(write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(*range(8)), fetch_listing=listing)
+    assert printed.code == 0, printed.err
+    assert "  ✗ o/alpha  " in printed.err
+    assert "partly read    cannot read CI time" in printed.err
+    assert printed.err.splitlines()[-1].startswith("✓ 2 of 2 repositories measured")
+    assert "| o/alpha | partly read · cannot read CI time | — | — | — | — | — | — | — |" in printed.out
+    assert "| o/beta | 1 | 30s | 30s | 0 % (0 of 1) | — | 1 | 7s | none |" in printed.out
+
+
+def slow_week() -> Answer:
+    return runs_of(("x", "2026-11-05T10:00:00Z", "2026-11-05T10:11:00Z", "success"))
+
+
+def fleet_of_two(tmp_path, public):
+    """A fleet of a repository with a week of 11-minute CI and one without runs, and the listing that serves it."""
+    public("alpha", {"a.py": "a = 1\n"})
+    public("beta", {"b.py": "b = 1\n"})
+    listing = Listing({"o": listed(("o/alpha",), ("o/beta",))}, runs={"o/alpha": slow_week()})
+    return write_organizations(tmp_path / "fleet", ["o"]), listing
+
+
+def test_the_switch_writes_the_weekly_document_and_leaves_stdout_and_stderr_as_they_are(capsys, monkeypatch, tmp_path, public):
+    """FLEET-106, FLEET-107, FLEET-40: `--ci-time-json` creates the missing folder, writes the document and prints nothing
+    of its own; without it the same report writes no file."""
+    folder, listing = fleet_of_two(tmp_path, public)
+    without = report_in(folder, capsys, monkeypatch, ticks(*range(8)), fetch_listing=listing)
+    assert sorted(path.name for path in folder.iterdir()) == ["quality"]
+    with_switch = report_in(folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json",), fetch_listing=listing)
+    assert with_switch == without
+    written = json.loads((folder / fleet_ci_time.DOCUMENT_PATH).read_text(encoding="utf-8"))
+    assert (written["generated_at"], written["window_start"], written["complete"]) == ("2026-11-06T12:00:00Z", "2026-10-30T00:00:00Z", True)
+    assert written["repositories"] == [
+        {"name": "o/alpha", "median_seconds": 660, "commits_sampled": 1, "measured": True, "breach": True},
+        {"name": "o/beta", "median_seconds": 0, "commits_sampled": 0, "measured": False, "breach": False},
+    ]
+
+
+@pytest.mark.parametrize("blocker", ["the folder is a file", "the file is a directory"])
+def test_a_document_that_cannot_be_written_is_the_pair_after_the_tables(capsys, monkeypatch, tmp_path, public, blocker):
+    """FLEET-109: a folder or a file in the way of the document is `error: <path> is not writable · <reason>` with the
+    rerun step, exit 2, after the tables."""
+    folder, listing = fleet_of_two(tmp_path, public)
+    if blocker == "the folder is a file":
+        (folder / fleet_ci_time.DOCUMENT_PATH.parent).write_text("")
+    else:
+        (folder / fleet_ci_time.DOCUMENT_PATH).mkdir(parents=True)
+    printed = report_in(folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json",), fetch_listing=listing)
+    assert printed.code == 2
+    assert "| o/alpha |" in printed.out
+    assert printed.err.endswith(RERUN_NEXT)
+    assert printed.err.splitlines()[-2].startswith(f"error: {fleet_ci_time.DOCUMENT_PATH} is not writable · [Errno ")
+
+
+def test_an_unwritable_step_summary_leaves_no_document(capsys, monkeypatch, tmp_path, public):
+    """FLEET-47, FLEET-110: an unwritable step summary ends the report before the document is written."""
+    folder, listing = fleet_of_two(tmp_path, public)
+    summary = tmp_path / "a-directory"
+    summary.mkdir()
+    printed = report_in(
+        folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json",),
+        environment={"GITHUB_STEP_SUMMARY": str(summary)}, fetch_listing=listing,
+    )
+    assert printed.code == 2
+    assert not (folder / fleet_ci_time.DOCUMENT_PATH).exists()
+
+
+def test_a_red_report_still_writes_the_document_and_a_repository_not_measured_by_size_keeps_its_ci_time(capsys, monkeypatch, tmp_path, public, missing):
+    """FLEET-110: a repository that cannot be cloned makes the report exit 2 yet the document is written, its row
+    following its CI-time reading."""
+    alpha = public("alpha", {"a.py": "a = 1\n"})
+    listing = Listing({}, runs={missing: slow_week()})
+    folder = write_fleet(tmp_path / "fleet", [alpha, missing])
+    printed = report_in(folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json",), fetch_listing=listing)
+    assert printed.code == 2
+    rows = json.loads((folder / fleet_ci_time.DOCUMENT_PATH).read_text(encoding="utf-8"))["repositories"]
+    assert [(entry["name"], entry["measured"], entry["breach"]) for entry in rows] == [(alpha, False, False), (missing, True, True)]
+
+
+def test_a_private_repository_is_in_no_row_of_the_document(capsys, monkeypatch, tmp_path, public):
+    """FLEET-110: the public document names no private repository."""
+    public("alpha", {"a.py": "a = 1\n"})
+    listing = Listing({"o": listed(("o/alpha",), ("o/hidden-name", "private"))})
+    folder = write_organizations(tmp_path / "fleet", ["o"])
+    printed = report_in(folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json",), fetch_listing=listing)
+    assert printed.code == 0, printed.err
+    assert [entry["name"] for entry in json.loads((folder / fleet_ci_time.DOCUMENT_PATH).read_text(encoding="utf-8"))["repositories"]] == ["o/alpha"]

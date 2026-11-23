@@ -1,6 +1,6 @@
 name: report
 
-# Report only: the run writes to no repository and opens no issue; its table stands in the run summary.
+# The run writes to no repository and opens no issue: its tables stand in the run summary, and the weekly CI-time file goes to the repository's GitHub Pages from the publish job alone, which holds the Pages permissions and deploys only from the default branch.
 on:
   workflow_dispatch:
   schedule:
@@ -41,4 +41,29 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           exec 2>&1
-          uv run --locked quality report
+          uv run --locked quality report --ci-time-json
+
+      # A red report still uploads the file it wrote; a run that wrote none uploads nothing.
+      - name: Upload the CI-time file
+        if: ${{ !cancelled() && hashFiles('site/fleet-ci-time.json') != '' }}
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  # The branch condition keeps a dispatch from another branch from deploying, whatever the environment's branch policy is.
+  publish:
+    name: publish the CI-time file
+    needs: report
+    if: ${{ !cancelled() && github.ref_name == github.event.repository.default_branch }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pages: write # deploys the Pages artifact
+      id-token: write # proves to Pages that this run made the artifact
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

@@ -145,8 +145,9 @@ def files(tracked: dict[str, str]):
          [f"{refusal_row('files')}quality/config.toml resolves outside the repository",
           f"{refusal_row('debt')}quality/config.toml resolves outside the repository",
           f"{refusal_row('secrets')}quality/config.toml resolves outside the repository",
+          f"{refusal_row('workflows')}quality/config.toml resolves outside the repository",
           f"{refusal_row('dependencies')}quality/config.toml resolves outside the repository",
-          "error: 4 of 7 areas could not check · 1 finding, 1 of them in those areas"], [".env"]),
+          "error: 5 of 7 areas could not check · 1 finding, 1 of them in those areas"], [".env"]),
         (files({**BASELINE, "compose.yaml": "services: [\n", "src/a.py": NEW_DEBT}), 2,
          [f"{refusal_row('files')}cannot read compose.yaml"], ["src/a.py:1"]),
         (files({".env": "A=1\n", **KEPT_CONTRACT, **compose('- "8080:80"')}), 1,
@@ -306,7 +307,7 @@ def test_an_index_record_quality_cannot_read_refuses_exactly_the_rules_that_read
     verdicts = check_result(repo, installed_ruff, never_located).verdicts
     refused = [(verdict.rule, str(verdict.refusal)) for verdict in verdicts if verdict.refusal is not None]
     assert [rule for rule, _ in refused] == [
-        "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "python-security", "python-print",
+        "file-suffix", "script-name", "script-header", "test-layout", "test-import", "python-floor", "naming", "pytest-random", "python-security", "python-print",
     ]
     assert all("git ls-files -s printed an index record quality cannot read" in reason for _, reason in refused)
 

@@ -28,8 +28,9 @@ PYTHON_PROJECT = {"pyproject.toml": "", "src/p/x.py": ""}
 
 
 def frontend(*paths: str, manifest: str = "package.json") -> dict[str, str]:
-    """A repository tracking `manifest` (default: a root `package.json`) and the given paths, all empty."""
-    return {**GUIDANCE, manifest: "{}\n", **empty_files(*paths)}
+    """A repository tracking `manifest` (default: a root `package.json`) and the given paths, all empty but each
+    `package.json`, which holds an empty object."""
+    return {**GUIDANCE, manifest: "{}\n", **{path: "{}\n" if path.endswith("package.json") else content for path, content in empty_files(*paths).items()}}
 
 
 @pytest.mark.parametrize(

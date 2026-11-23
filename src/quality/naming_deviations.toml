@@ -1,0 +1,14 @@
+# The names the operator ruled stay as they are: the only deviations from the naming rule (docs/naming.md).
+# A new entry takes effect with a quality release; no repository declares one.
+
+[[deviation]]
+repository = "overnightworks/hopin"
+kind = "distribution"
+name = "hopin"
+ruling = "edge#24"
+
+[[deviation]]
+repository = "overnightworks/songmaker"
+kind = "distribution"
+name = "songmaker"
+ruling = "edge#24"

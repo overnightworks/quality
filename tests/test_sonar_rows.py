@@ -8,8 +8,6 @@ from quality.report import printable
 from tests.support.config_refusals import all_refusals
 from tests.support.sonar import (
     CLEAN_PROPERTIES,
-    FEATURE_ENVIRONMENT,
-    FINISHED_FOR_FEATURE,
     FINISHED_FOR_MAIN,
     LEGACY_COUNT,
     PULL_REQUEST_ENVIRONMENT,
@@ -24,6 +22,7 @@ from tests.support.sonar import (
     legacy_config,
     legacy_config_absent,
     sonar_answering,
+    unserved_environment,
 )
 
 
@@ -388,21 +387,6 @@ def test_the_default_branch_prints_its_open_findings(capsys, findings_checkout, 
     assert result == (code, f"  · analysis      default branch main · overnightworks_quality\n{listing}{closing}", "")
 
 
-def test_another_branch_lists_its_findings_as_notes_and_exits_0(capsys, findings_checkout):
-    """SONAR-38, SONAR-108."""
-    findings_checkout()
-    fake = sonar_answering(task=FINISHED_FOR_FEATURE, issues=issues_page(2, 1, 2))
-    assert drive(capsys, ["findings"], FEATURE_ENVIRONMENT, fake) == (
-        0,
-        ("  · analysis      other branch   feat/a · overnightworks_quality\n"
-        "  · open          2 findings     report only\n"
-        "    · src/a1.py:1  open  python:S1: m\n"
-        "    · src/a2.py:2  open  python:S1: m\n"
-        "✓ report only · 2 open on feat/a · <1s\n"),
-        "",
-    )
-
-
 def abandoned_task() -> FakeSonar:
     return sonar_answering(task={"status": "FAILED"})
 
@@ -442,17 +426,18 @@ def test_a_finding_message_prints_as_one_escaped_row(capsys, findings_checkout):
     assert (code, rows, "\u202e" in out, "\x1b" in out, err) == (1, ["    ! src/a1.py:1  open  python:S1: a\\x0ab\\x1b[31m\\u202ec"], False, False, "")
 
 
-def test_a_branch_name_prints_escaped_in_its_analysis_row_and_closing_line(capsys, findings_checkout):
-    findings_checkout()
-    branch = "feat/\u202ea"
-    fake = sonar_answering(task={**FINISHED_FOR_FEATURE, "branch": branch}, issues=issues_page(1, 1))
-    code, out, err = drive(capsys, ["findings"], {**FEATURE_ENVIRONMENT, "GITHUB_REF_NAME": branch}, fake)
+@pytest.mark.parametrize("step", ["properties", "findings"])
+def test_an_unserved_run_prints_its_ref_escaped_in_the_note(capsys, properties_checkout, findings_checkout, step):
+    """SONAR-129."""
+    ref = "feat/\u202ea"
+    if step == "properties":
+        properties_checkout({"sonar-project.properties": CLEAN_PROPERTIES})
+    else:
+        findings_checkout()
+    code, out, err = drive(capsys, [step], unserved_environment("workflow_dispatch", ref))
     assert (code, out, err, "\u202e" in out) == (
         0,
-        ("  · analysis      other branch   feat/\\u202ea · overnightworks_quality\n"
-        "  · open          1 finding      report only\n"
-        "    · src/a1.py:1  open  python:S1: m\n"
-        "✓ report only · 1 open on feat/\\u202ea · <1s\n"),
+        "  · sonar         unserved       feat/\\u202ea · SonarCloud serves only pull requests and main\n✓ unserved · <1s\n",
         "",
         False,
     )

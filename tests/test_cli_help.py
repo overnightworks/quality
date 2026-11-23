@@ -120,15 +120,16 @@ def test_the_report_help_stands_in_its_frame(capsys):
     """HELP-4, HELP-11: the report help stands in a frame of its own, and -h prints the same."""
     help_text = help_of(capsys, ["report"])
     assert help_text == (
-        "usage: quality report [-v]\n"
+        "usage: quality report [--ci-time-json] [-v]\n"
         "\n"
         "Measure every fleet repository quality/fleet.toml selects: size, debt, the gate\n"
-        "release it pins. A row per repository goes to stderr, the two markdown tables\n"
-        "to stdout and to the step summary.\n"
+        "release it pins, the CI time of the last 7 days. A row per repository goes to\n"
+        "stderr, the three markdown tables to stdout and to the step summary.\n"
         "\n"
         "Options:\n"
-        "  -v          show the raw scanner output; the report runs no scanner\n"
-        "  -h, --help  show this help\n"
+        "  --ci-time-json  also write the weekly CI time to site/fleet-ci-time.json\n"
+        "  -v              show the raw scanner output; the report runs no scanner\n"
+        "  -h, --help      show this help\n"
         "\n"
         "Exit codes: 0 every repository measured, 2 could not answer, 130 interrupted.\n"
     )
@@ -169,10 +170,11 @@ def test_the_check_help_stands_in_its_frame(capsys):
         "                ceiling (quality/baseline.toml)\n"
         "  imports       the import contracts\n"
         "  secrets       secrets in the committed history\n"
-        "  workflows     GitHub workflows: lint, security, concurrency, pytest -n,\n"
-        "                run-time installs, the languages standard's catalog-check\n"
-        "                and render-pass\n"
-        "  dependencies  known advisories and fleet package sources in the lockfiles\n"
+        "  workflows     GitHub workflows: lint, security, concurrency, the workflows\n"
+        "                a pull request triggers, pytest -n, run-time installs, the\n"
+        "                languages standard's catalog-check and render-pass\n"
+        "  dependencies  known advisories, fleet package sources, and the shuffling\n"
+        "                plugin in lockfiles, pytest's addopts and workflow calls\n"
         "  code          Python source: security findings and print calls\n"
         "\n"
         "Options:\n"
@@ -252,12 +254,14 @@ def test_the_verdict_help_stands_in_its_frame(capsys):
             "coverage report or tracked .scannerwork/ the scan must not start with, then\n"
             "hand the scan its arguments in the step output. With [gate] sonar = false in\n"
             "quality/config.toml it refuses a properties file or a passed token instead.\n"
+            "On a run that is neither a pull request nor on the default branch it hands\n"
+            "over sonar=off after those refusals: SonarCloud serves no other run.\n"
             "\n"
             "Options:\n"
             "  -v          show the raw scanner output; the step runs no scanner\n"
             "  -h, --help  show this help\n"
             "\n"
-            "Exit codes: 0 clean, 2 could not judge, 130 interrupted.\n",
+            "Exit codes: 0 clean, off or unserved, 2 could not judge, 130 interrupted.\n",
             id="sonar properties",
         ),
         pytest.param(
@@ -285,13 +289,15 @@ def test_the_verdict_help_stands_in_its_frame(capsys):
             "Run by the gate after the scan: wait for this run's own analysis\n"
             "(.scannerwork/report-task.txt), then judge its open findings, the default\n"
             "branch's legacy count and, on a pull request, SonarCloud's quality gate. It\n"
-            "needs quality/config.toml with [gate] mandatory_jobs.\n"
+            "needs quality/config.toml with [gate] mandatory_jobs. On a run that is\n"
+            "neither a pull request nor on the default branch it asks SonarCloud for\n"
+            "nothing and prints the unserved note.\n"
             "\n"
             "Options:\n"
             "  -v          show the raw scanner output; the step runs no scanner\n"
             "  -h, --help  show this help\n"
             "\n"
-            "Exit codes: 0 clean or report only, 1 findings, 2 could not judge,\n"
+            "Exit codes: 0 clean or unserved, 1 findings, 2 could not judge,\n"
             "130 interrupted.\n",
             id="sonar findings",
         ),
@@ -555,7 +561,7 @@ def no_gate_call(build_repo, elsewhere: Path) -> Path:
 
 def quality_s_checkout(build_repo, elsewhere: Path) -> Path:
     repo = build_repo({".github/workflows/ci.yml": "on: push\njobs:\n  gate:\n    uses: ./.github/workflows/gate.yml\n"})
-    git(repo, "remote", "add", "origin", f"https://github.com/{checkout.GATE_REPOSITORY}.git")
+    git(repo, "remote", "set-url", "origin", f"https://github.com/{checkout.GATE_REPOSITORY}.git")
     return repo
 
 

@@ -175,10 +175,29 @@ list (FLEET-31)); the fleet is every public, non-archived, non-fork repository G
 `· fleet  N found  <organizations> · quality/fleet.toml` (without `<organizations> · ` when the file names none)
 (FLEET-33), then a row per repository as it is measured, sorted by name, case-insensitively (FLEET-34):
 `✓ <owner/name>  measured  <commit> · <time>` (FLEET-35), `✗ …  not measured <reason>` (FLEET-36), whose reason for a repository without a commit is `holds no commit` (FLEET-103), or
-`✗ …  partly read  cannot read <files>` (FLEET-37); a failed read of the release tags adds
+`✗ …  partly read  cannot read <files>` (FLEET-37), or, for a repository whose runs could not be read, `✗ …  partly read  cannot read CI time` (FLEET-105); a failed read of the release tags adds
 `✗ release tags  not read <reason>` under the fleet line (FLEET-38). The subjects share one column (FLEET-39). On stdout
-it prints the two markdown tables and nothing else, so `quality report > fleet.md` writes only them (FLEET-40): the size
-of every repository under a heading with the date and the quality version (FLEET-41), then the same rows as a repo × rule matrix (FLEET-42). With `GITHUB_STEP_SUMMARY` set, the
+it prints the three markdown tables and nothing else, so `quality report > fleet.md` writes only them (FLEET-40): the size
+of every repository under a heading with the date and the quality version (FLEET-41), then the same rows as a repo × rule matrix (FLEET-42), then under the heading
+`CI time, last 7 days · N API calls` one row per repository: `Repo`, `Commits`, `Median`, `p90`, `Red`, `Red on main`,
+`Jobs sampled`, `Queue p90` and `Over 12 min` (FLEET-104). A commit is the unit, because one commit fans out into several
+runs: the runs created in the 7 days before the report's day over the events `pull_request` and `push`, grouped by head
+commit; its wall is its latest `updated_at` minus its earliest `created_at`, so a re-run counts from its first attempt. A
+commit with a run still in progress and a commit whose runs are all `cancelled` are left out. `Commits`, `Median` and `p90`
+are over every counted commit, median and p90 nearest-rank over the walls. `Red` is the share of the counted commits
+with a `pull_request` run that have one concluded `failure` or `timed_out`, `Red on main` the same over the commits with a
+`push` run on the default branch; each cell reads `N % (K of M)` over its own population, a push run on another branch, or on none (a null `head_branch`), is in
+neither, and a commit red only through a verdict of declared loosenings counts as red. After every repository's runs are
+read, the jobs listing reads a sample of its runs spread evenly over the window (at most 20, an even share of the calls the
+report's cap of 600 leaves): `Jobs sampled` is the sample's size, `Queue p90` the nearest-rank 90th percentile of the time
+the sampled jobs waited between creation and start (a skipped or cancelled job is left out), counted apart from their
+running time, and `Over 12 min` each job name with at least 5 samples whose running time is above 12 minutes at its 90th
+percentile, the slowest first, or `none`; a repository whose jobs cannot be read shows `cannot read jobs`, and one whose runs were read but whose jobs the cap left no call for shows `not sampled · call cap` in all three cells. The report reads
+runs without a page cap per repository, within its 600 calls; a repository the cap stops shows `partly read` and the pages
+read, or `cannot read CI time` where its runs cannot be read, in place of its numbers, and the table raises no finding and
+changes no exit (FLEET-105). One large repository can use up the cap and leave those read after it `partly read`, in the
+listing's order. Private
+repositories are not read, and a commit whose runs begin before the window counts by its runs inside it. With `GITHUB_STEP_SUMMARY` set, the
 tables are appended there (FLEET-43). Every cell puts a backslash before `` \ ` * _ ~ [ ] < > & | ``, so repository text
 opens no HTML comment, link or new cell (FLEET-44); a bare URL still renders as a link to its own address. The run ends
 on stderr with `✓ N of N repositories measured · <time>` (`repository` for one, exit `0`) (FLEET-45) or with `error: `
@@ -188,8 +207,34 @@ tables say so`, and `next: quality report` (exit `2`) (FLEET-46); an unwritable 
 `fix what the error names, then run quality report again` under `next:`) (FLEET-47). `-v` adds nothing: the report runs
 no scanner (FLEET-48). The fleet's selection lives once, in `quality/fleet.toml` (FLEET-49);
 `.github/workflows/report.yml` runs it every Monday at 05:17 UTC and on dispatch; the tables stand in that run's
-summary. The run only reports: it writes to no repository and lists with its own read-only job token (`GITHUB_TOKEN`,
+summary. The report writes to no repository and lists with its own read-only job token (`GITHUB_TOKEN`,
 sent to `api.github.com` only, never to git); a local run lists anonymously (FLEET-50).
+
+`quality report --ci-time-json` also writes the CI time as one JSON document to the fixed relative path
+`site/fleet-ci-time.json`, creating `site/` when it is missing, after the step summary, in UTF-8 with a trailing newline,
+and prints nothing of its own; without the switch no file is written. The switch takes no path, so no caller chooses
+where the file lands. The top level holds, in this
+order, `schema` (`1`; a change of any key goes through it), `generated_at` and `window_start` and `window_end` (RFC 3339 UTC
+instants: `window_start` is midnight UTC seven days before the report's day, the bound of the runs query, and `window_end`
+equals `generated_at`), `limit_seconds` (`600`, the one limit the CI-time module owns), `complete` and `repositories`, a flat
+array with one row per repository of the report's selection in the table's order, each with `name`, `median_seconds`,
+`commits_sampled`, `measured` and `breach`: only the name, whole numbers and booleans, no commit author and no reason
+text (FLEET-106). A repository with a median over at least one counted commit is `measured` with that median in whole
+seconds and its count of commits, and `breach` is true when the median is strictly above `limit_seconds`; a repository whose
+runs the cap left `partly read`, whose runs `cannot read CI time`, or with no counted commit is not measured and carries
+`0`, `0` and `breach` false, so a thin week is judged by `commits_sampled` and never by a minimum the file applies
+(FLEET-107). `complete` is false when any repository's CI time is `partly read` or `cannot read CI time`, and true
+otherwise, zero counted commits included; the size rows do not touch it (FLEET-108). An unwritable path (`site` a file, no
+write permission) is `error: site/fleet-ci-time.json is not writable · <reason>` with `fix what the error names, then run quality report
+again` under `next:`, exit `2`, after the tables (FLEET-109). An unwritable step summary ends the report before the
+document is written, and a report that ends with a repository not measured still writes it. Private repositories are not
+read, so the public document names none; that is a named gap, not a list (FLEET-110).
+`report.yml` passes the bare switch, uploads `site/` as the Pages artifact whenever the file
+exists, and its `publish` job deploys it to the repository's GitHub Pages at `https://overnightworks.github.io/quality/fleet-ci-time.json`
+(`application/json`, no token): the workflow keeps `contents: read`, and the `publish` job alone adds `pages: write` and
+`id-token: write` and runs only on the repository's default branch, so a dispatch from another branch uploads the
+artifact and never deploys. A run that wrote no file deploys nothing and leaves the last file in place (FLEET-111). The
+Pages source (GitHub Actions) is a repository setting that no code owns.
 A missing (FLEET-51), unreadable (a directory, a dangling link, not UTF-8) (FLEET-52), malformed (FLEET-53), duplicating
 (also across case, and across `repositories` and `exclude`: `exclude[0] repeats repositories[1]`) (FLEET-54), empty
 (`selects no repository`) (FLEET-55) or badly named (FLEET-56) `quality/fleet.toml` is the pair, exit `2`, before any

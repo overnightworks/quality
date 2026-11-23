@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import pytest
+
 from quality import cli, sonar
 
 TASK_FIXTURE = Path(__file__).parents[1] / "fixtures" / "sonar" / "report-task.txt"
@@ -40,10 +42,17 @@ FINISHED_FOR_PR_7 = {
 FINISHED_FOR_MAIN = {**FINISHED_FOR_PR_7, "pullRequest": None, "branch": "main"}
 
 
-FINISHED_FOR_FEATURE = {**FINISHED_FOR_MAIN, "branch": "feat/a"}
+def unserved_environment(event: str, ref: str) -> dict[str, str]:
+    """A run SonarCloud serves nothing of: neither a pull request nor on the default branch."""
+    return {**PUSH_ENVIRONMENT, "GITHUB_EVENT_NAME": event, "GITHUB_REF_NAME": ref}
 
 
-FEATURE_ENVIRONMENT = {**PUSH_ENVIRONMENT, "GITHUB_REF_NAME": "feat/a"}
+UNSERVED_RUNS = [
+    pytest.param("workflow_dispatch", "claude/issue-805-lane", id="dispatch on a lane branch"),
+    pytest.param("push", "feat/a", id="push on a lane branch"),
+    pytest.param("merge_group", "gh-readonly-queue/main/pr-7-0a1b2c", id="merge queue ref"),
+    pytest.param("push", "v1.2.0", id="tag"),
+]
 
 
 LEGACY_COUNT = "issues/search (count only)"

@@ -3,12 +3,13 @@ import re
 import urllib.error
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 
-from quality import __version__, architecture, output, pin, web
+from quality import __version__, architecture, ci_time, output, pin, web
 from quality.architecture import PullTree
 from quality.baseline_file import BASELINE_PATH, Baseline
 from quality.checkout import COMMIT_SHA
@@ -55,7 +56,7 @@ MAX_REREADS = 12
 REREAD_INTERVAL_SECONDS = 10
 NEXT_LINK = re.compile(r'<([^>]+)>;\s*rel="next"')
 SUCCESS = "success"
-COMPLETED = "completed"
+COMPLETED = ci_time.COMPLETED
 PROGRESS_OF_STATUS = MappingProxyType({"in_progress": 1, COMPLETED: 2})
 FIRST_SERVER_ERROR = 500
 PERMISSION_REFUSALS = frozenset({403, 404})
@@ -116,6 +117,8 @@ class VerdictEvent(StrEnum):
     UNDECLARED = "undeclared"
     DECLARED = "declared"
     UNMATCHED = "unmatched"
+    MEASURED = "measured"
+    NOT_MEASURED = "not measured"
 
 
 @dataclass(frozen=True)
@@ -152,6 +155,9 @@ class Job:
     status: str
     conclusion: str | None
     id: int = 0
+    created_at: datetime | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
     @property
     def state(self) -> str:
@@ -187,6 +193,7 @@ class Verdict:
     stale: tuple[Declaration, ...]
     jobs: tuple[JobOutcome, ...]
     unsettled: tuple[Unsettled, ...]
+    time: ci_time.CiTime | None = None
 
     @property
     def declared(self) -> tuple[Declaration, ...]:
@@ -257,7 +264,7 @@ def judge(
             unsettled.append(unsettled_job)
         outcomes.append(outcome)
     outcomes += (_concluded(name, JobKind.GATE, result) for name, result in gate_results.items())
-    return Verdict(loosenings, stale, tuple(outcomes), tuple(unsettled))
+    return Verdict(loosenings, stale, tuple(outcomes), tuple(unsettled), ci_time.measure(jobs))
 
 
 def _loosenings(
@@ -414,7 +421,9 @@ def _job_of(entry: dict) -> Job:
     if not (completed_at is None or isinstance(completed_at, str)):
         raise TypeError(f"a job's completed_at has the wrong type: {entry!r}")
     # GitHub leaves some finished entries at in_progress; a conclusion with a completion time is the job's end.
-    return Job(name, run_attempt, COMPLETED if conclusion and completed_at else status, conclusion, job_id)
+    ended = COMPLETED if conclusion and completed_at else status
+    moments = (ci_time.parsed_moment(entry.get(key)) for key in ("created_at", "started_at", "completed_at"))
+    return Job(name, run_attempt, ended, conclusion, job_id, *moments)
 
 
 class GitHubServerError(CannotJudge):
@@ -654,7 +663,7 @@ def run_verdict(
 
 def verdict_rows(verdict: Verdict | None, run: GateRun, reads: int, first: str | None) -> tuple[Row, ...]:
     """The re-read after several reads; then, once a read is judged, the base, the jobs (one summing row when all are
-    green), with a base the loosenings, and the new declarations that match nothing."""
+    green), the time, with a base the loosenings, and the new declarations that match nothing."""
     rows = [Row(Glyph.NOTE, "run", VerdictEvent.READ, f"GitHub first {first}", count=reads)] if reads > 1 else []
     if verdict is None:
         return tuple(rows)
@@ -670,12 +679,23 @@ def verdict_rows(verdict: Verdict | None, run: GateRun, reads: int, first: str |
         rows.append(Row(Glyph.CLEAN, "jobs", JobEvent.SUCCESS, counts))
     else:
         rows += (Row(Glyph.CLEAN if job.green else Glyph.NEEDS_YOU, job.subject, job.event, job.fact) for job in verdict.jobs)
+    rows.append(_time_row(verdict.time))
     if pull is not None:
         rows.append(_loosenings_row(verdict))
     if verdict.stale:
         unmatched = tuple(map(declaration_line, verdict.stale))
         rows.append(Row(Glyph.NEEDS_YOU, "declarations", VerdictEvent.UNMATCHED, count=len(unmatched), sub_lines=unmatched, counts_plural=False))
     return tuple(rows)
+
+
+def _time_row(time: ci_time.CiTime | None) -> Row:
+    if time is None:
+        return Row(Glyph.NOTE, "time", VerdictEvent.NOT_MEASURED, "GitHub gave no timestamps")
+    slowest = f"slowest {time.slowest_job} {format_duration(time.slowest.total_seconds())}"
+    wait = f"longest wait {format_duration(time.longest_wait.total_seconds())}"
+    chain = "longest chain not measured" if time.chain is None else f"longest chain {counted(time.chain.jobs, 'job')} {format_duration(time.chain.time.total_seconds())}"
+    fact = SEPARATOR.join((f"{format_duration(time.wall.total_seconds())} wall", slowest, wait, chain))
+    return Row(Glyph.NOTE, "time", VerdictEvent.MEASURED, fact)
 
 
 def _loosenings_row(verdict: Verdict) -> Row:
