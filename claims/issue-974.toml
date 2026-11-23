@@ -1,8 +1,0 @@
-claim_id = "d5a03ae4f87547d998b12ce8b64617e8"
-agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
-role = "builder"
-base = "abefd6b66885d5aa150116ed7c70b973d8df9b79"
-branch = "claude/issue-974-spec-citation-declarations"
-scope = ["docs/gate.md", "docs/output.md", "docs/rules.md", "src/quality/baseline_fix.py", "src/quality/check.py", "src/quality/config.py", "src/quality/spec_citations.py", "src/quality/verdict.py", "tests/support/config_refusals.py", "tests/support/generated_files.py", "tests/support/specs.py", "tests/support/verdict.py", "tests/test_check.py", "tests/test_cli_fix_dry_run.py", "tests/test_cli_fix_spec_citations.py", "tests/test_config.py", "tests/test_repository.py", "tests/test_spec_citations.py", "tests/test_verdict_generated.py"]
-opened_commit = "997b36cebb6ea57593d562c789a79498c93b3a7f"
-whole_reason = "One configuration contract, D17: the two declarations, their findings, the --fix ceiling and the owner's loosening only prove D17 together, and a half would ship a config.toml key with no effect."
