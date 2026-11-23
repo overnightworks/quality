@@ -30,6 +30,7 @@ from quality import (
     clones,
     config,
     fleet_ci_time,
+    fleet_clones,
     layout,
     output,
     process,
@@ -200,6 +201,7 @@ class Measured:
     areas: dict[ratchet.Area, ratchet.AreaSummary]
     unparsable: dict[ratchet.FunctionSource, int]
     pairs: dict[ratchet.Area, int]
+    units: list[clones.Unit]
     workflows: checkout.Workflows
     declared: Declared
 
@@ -409,10 +411,11 @@ def measure_repository(name: str) -> Row:
         workflows = checkout.read_workflows(clone, tracked)
         declared = read_declared(clone, tracked)
     tree = ratchet.measure(sources)
-    pairs = clones.summarise_pairs(clones.find_pairs(sources).pairs)
+    units = clones.units_of(sources, name)
+    pairs = clones.summarise_pairs(clones.file_pairs(units).pairs)
     commit = head[:SHORT_COMMIT]
     languages, areas = ratchet.language_lines(tree), ratchet.summarise(tree)
-    return Measured(name, commit, languages, areas, {source: tree.unparsable_count(source) for source in ratchet.FunctionSource}, pairs, workflows, declared)
+    return Measured(name, commit, languages, areas, {source: tree.unparsable_count(source) for source in ratchet.FunctionSource}, pairs, units, workflows, declared)
 
 
 def read_declared(clone: Path, tracked: list[str]) -> Declared:
@@ -477,7 +480,13 @@ def render(rows: list[Row], today: date, tags: checkout.ReleaseTags | ReleaseTag
         "|---" * len(fleet_ci_time.COLUMNS) + "|",
         *(table_line(fleet_ci_time.table_cells(name, ci_time)) for name in ci_time.rows),
     ]
-    return (heading, "", *table, "", matrix_heading, "", every_release, "", *matrix, "", ci_heading, "", *ci_table)
+    between = fleet_clones.pairs_between([unit for row in rows if isinstance(row, Measured) for unit in row.units])
+    between_table = [
+        table_line(fleet_clones.COLUMNS),
+        "|---" * len(fleet_clones.COLUMNS) + "|",
+        *(table_line(pair.cells) for pair in between),
+    ]
+    return (heading, "", *table, "", matrix_heading, "", every_release, "", *matrix, "", ci_heading, "", *ci_table, "", fleet_clones.heading(between), "", *between_table)
 
 
 def run_report(

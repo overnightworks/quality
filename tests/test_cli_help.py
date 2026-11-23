@@ -124,7 +124,7 @@ def test_the_report_help_stands_in_its_frame(capsys):
         "\n"
         "Measure every fleet repository quality/fleet.toml selects: size, debt, the gate\n"
         "release it pins, the CI time of the last 7 days. A row per repository goes to\n"
-        "stderr, the three markdown tables to stdout and to the step summary.\n"
+        "stderr, the four markdown tables to stdout and to the step summary.\n"
         "\n"
         "Options:\n"
         "  --ci-time-json  also write the weekly CI time to site/fleet-ci-time.json\n"

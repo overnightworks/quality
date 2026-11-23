@@ -9,7 +9,7 @@ least 0.9; only each function's rarest shingles are indexed, since a pair at tha
 import ast
 import math
 from collections import Counter, defaultdict
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import TypeGuard
@@ -32,11 +32,13 @@ WRITTEN_NAME_FIELD = {ast.Name: "id", ast.Attribute: "attr", ast.arg: "arg", ast
 
 @dataclass(frozen=True)
 class Unit:
-    """A function long enough to be a copy, with the shingles of its token stream."""
+    """A function long enough to be a copy, with the shingles of its token stream; a caller that reads more than one
+    repository tags each unit with its `repository`."""
 
     place: Place
     line: int
     shingles: frozenset[int]
+    repository: str = ""
 
 
 @dataclass(frozen=True)
@@ -134,14 +136,16 @@ def python_test_trees(sources: dict[str, bytes]) -> Iterator[tuple[str, ast.Modu
             yield path, tree
 
 
-def _units(sources: dict[str, bytes]) -> list[Unit]:
+def units_of(sources: dict[str, bytes], repository: str = "") -> list[Unit]:
+    """The functions of the Python files among `sources` that are long enough to be a copy; a file Python cannot parse
+    has none."""
     units = []
     for path, source in sources.items():
-        if (tree := parsed(path, source)) is None:
+        if language_of(path) is not Language.PYTHON or (tree := parsed(path, source)) is None:
             continue
         for place, function in _functions(path, tree):
             if len(stream := tokens(function, names_kept=False, literals_kept=False)) >= MIN_TOKENS:
-                units.append(Unit(place, function.lineno, _shingles(stream)))
+                units.append(Unit(place, function.lineno, _shingles(stream), repository))
     return units
 
 
@@ -149,7 +153,13 @@ def _similarity(left: frozenset[int], right: frozenset[int]) -> float:
     return len(left & right) / len(left | right)
 
 
-def _pairs_of(units: list[Unit]) -> Iterator[tuple[Unit, Unit]]:
+def _file_of(unit: Unit) -> str:
+    return unit.place.path
+
+
+def pairs_of(units: list[Unit], apart: Callable[[Unit], str] = _file_of) -> Iterator[tuple[Unit, Unit]]:
+    """The pairs of near-identical units whose `apart` differs: by default the units of two different files, for units
+    of several repositories their repositories."""
     frequency: Counter[int] = Counter()
     for unit in units:
         frequency.update(unit.shingles)
@@ -162,22 +172,31 @@ def _pairs_of(units: list[Unit]) -> Iterator[tuple[Unit, Unit]]:
             candidates.update(index[shingle])
             index[shingle].append(unit)
         for other in candidates:
-            if other.place.path != unit.place.path and _similarity(unit.shingles, other.shingles) >= SIMILARITY_THRESHOLD:
+            if apart(other) != apart(unit) and _similarity(unit.shingles, other.shingles) >= SIMILARITY_THRESHOLD:
                 yield unit, other
 
 
 def find_pairs(sources: dict[str, bytes]) -> ClonePairs:
     """The cross-file pairs among the functions of the Python files among the given sources; a file Python cannot
     parse has none."""
-    python = {path: source for path, source in sources.items() if ratchet.language_of(path) is ratchet.Language.PYTHON}
-    found = list(_pairs_of(_units(python)))
+    return file_pairs(units_of(sources))
+
+
+def file_pairs(units: list[Unit]) -> ClonePairs:
+    """The pairs of units in two different files, with the line of every place in them."""
+    found = list(pairs_of(units))
     pairs = frozenset(ClonePair.of(unit.place, other.place) for unit, other in found)
     return ClonePairs(pairs, {unit.place: unit.line for pair in found for unit in pair})
 
 
+def both_tests(first_path: str, second_path: str) -> bool:
+    """Whether both files are tests: the one decision that makes a pair a test pair."""
+    return ratchet.area_of(first_path) is Area.TESTS and ratchet.area_of(second_path) is Area.TESTS
+
+
 def summarise_pairs(pairs: frozenset[ClonePair]) -> dict[Area, int]:
     """A pair counts as tests only when both of its files are; a test that copies production code is production."""
-    tests = sum(ratchet.area_of(pair.first.path) is Area.TESTS and ratchet.area_of(pair.second.path) is Area.TESTS for pair in pairs)
+    tests = sum(both_tests(pair.first.path, pair.second.path) for pair in pairs)
     return {Area.PRODUCTION: len(pairs) - tests, Area.TESTS: tests}
 
 

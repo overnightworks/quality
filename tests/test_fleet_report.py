@@ -15,6 +15,7 @@ import pytest
 from quality import __version__, cli, fleet_ci_time, web
 from quality.fleet import ListingFetch, ReleaseTagsError, TagReader
 from quality.report import CannotJudge
+from tests.support.clones import function
 from tests.support.fleet import NEWEST, RELEASES, row, write_fleet
 from tests.support.git_repositories import head_commit
 
@@ -142,7 +143,7 @@ def gate_caller(ref: str) -> dict[str, str]:
 
 def test_a_measured_fleet_prints_its_rows_on_stderr_and_only_the_tables_on_stdout(capsys, monkeypatch, tmp_path, public, remotes):
     """FLEET-1, FLEET-7, FLEET-33, FLEET-34, FLEET-35, FLEET-39, FLEET-40, FLEET-41, FLEET-42, FLEET-45: the rows stand
-    on stderr, the two tables alone on stdout, and the heading names the newest release by version."""
+    on stderr, the tables alone on stdout, and the heading names the newest release by version."""
     alpha = public("alpha", {"a.py": "a = 1\n"})
     beta = public("beta-repository", {"b.py": "b = 1\n"})
     folder = write_fleet(tmp_path / "fleet", [beta, alpha])
@@ -173,7 +174,7 @@ def test_a_measured_fleet_prints_its_rows_on_stderr_and_only_the_tables_on_stdou
     assert lines[9].startswith("Every gate release enforces ")
     assert lines[11].startswith("| Repo | Gate |")
     assert lines[16].startswith("**CI time, last 7 days")
-    assert (len(lines), [line.split(" |")[0] for line in lines[-2:]]) == (22, ["| o/alpha", "| o/beta-repository"])
+    assert lines[23:] == ["**Clone pairs between repositories · 0 pairs**", "", "| Repo | Function | Repo | Function | Kind |", "|---|---|---|---|---|"]
 
 
 def test_a_repository_that_cannot_be_cloned_is_its_row_and_the_pair_after_the_tables(capsys, monkeypatch, tmp_path, public, missing, remotes):
@@ -521,7 +522,7 @@ def test_the_weekly_ci_time_is_a_third_table_and_leaves_the_exit_as_it_is(capsys
     assert printed.code == 0, printed.err
     third = printed.out.split("**CI time, last 7 days")[1].splitlines()
     assert third[0] == " · 4 API calls**"
-    assert third[2:] == [
+    assert third[2:6] == [
         "| Repo | Commits | Median | p90 | Red | Red on main | Re-runs | Green on re-run | Jobs sampled | Queue p90 | Over 12 min |",
         "|---|---|---|---|---|---|---|---|---|---|---|",
         "| o/alpha | 2 | 1m00s | 3m00s | 50 % (1 of 2) | — | 0 | 0 | 2 | 7s | none |",
@@ -635,3 +636,72 @@ def test_a_private_repository_is_in_no_row_of_the_document(capsys, monkeypatch, 
     printed = report_in(folder, capsys, monkeypatch, ticks(*range(8)), words=("--ci-time-json",), fetch_listing=listing)
     assert printed.code == 0, printed.err
     assert [entry["name"] for entry in json.loads((folder / fleet_ci_time.DOCUMENT_PATH).read_text(encoding="utf-8"))["repositories"]] == ["o/alpha"]
+
+
+def clone_pair_table(printed: Printed) -> list[str]:
+    """The lines of the table under `Clone pairs between repositories`, from the rest of its heading."""
+    return printed.out.split("**Clone pairs between repositories")[1].splitlines()
+
+
+LOOPING = (
+    "def moved(items):\n    for item in items:\n        if item:\n            items.append(item)\n        else:\n"
+    "            items.remove(item)\n    while items:\n        items.pop()\n        items.sort()\n"
+    "    return [entry for entry in items if entry]\n"
+)
+COPIED = {
+    "same path": ("src/shared.py", "src/shared.py", "prod"),
+    "tests": ("tests/test_a.py", "tests/test_b.py", "test"),
+    "test copying production": ("src/shared.py", "tests/test_b.py", "prod"),
+}
+
+
+@pytest.mark.parametrize(("first", "second", "kind"), COPIED.values(), ids=COPIED.keys())
+def test_a_function_copied_between_two_repositories_is_one_row_naming_both_with_its_kind(
+    capsys, monkeypatch, tmp_path, public, first, second, kind
+):
+    """FLEET-113, FLEET-115, FLEET-117: one row names both repositories and paths, sides sorted; `Kind` is test only when both sides are tests."""
+    alpha = public("alpha", {first: function("copied", "value", "local")})
+    beta = public("beta", {second: function("copied", "other", "kept")})
+    printed = report_in(write_fleet(tmp_path / "fleet", [beta, alpha]), capsys, monkeypatch, ticks(*range(8)))
+    assert printed.code == 0, printed.err
+    assert clone_pair_table(printed) == [
+        " · 1 pair**",
+        "",
+        "| Repo | Function | Repo | Function | Kind |",
+        "|---|---|---|---|---|",
+        f"| {alpha} | {first.replace('_', chr(92) + '_')} copied | {beta} | {second.replace('_', chr(92) + '_')} copied | {kind} |",
+    ]
+
+
+def test_production_pairs_stand_before_test_pairs(capsys, monkeypatch, tmp_path, public):
+    """FLEET-115: `prod` rows first, then by sides."""
+    files = {"tests/test_a.py": function("copied", "value", "local"), "src/b.py": LOOPING}
+    alpha, beta = public("alpha", files), public("beta", files)
+    printed = report_in(write_fleet(tmp_path / "fleet", [alpha, beta]), capsys, monkeypatch, ticks(*range(8)))
+    assert [line.rsplit(" | ", 1)[1] for line in clone_pair_table(printed)[4:]] == ["prod |", "test |"]
+
+
+def test_a_copy_inside_one_repository_stays_out_of_the_table_and_in_its_own_cell(capsys, monkeypatch, tmp_path, public):
+    """FLEET-114: the pair of one repository counts in its `Clone pairs prod / test` cell only."""
+    alpha = public("alpha", {"a.py": function("copied", "value", "local"), "b.py": function("copied", "value", "local")})
+    printed = report_in(write_fleet(tmp_path / "fleet", [alpha]), capsys, monkeypatch, ticks(*range(8)))
+    assert row(printed.out, alpha)[-2] == "1 / 0"
+    assert clone_pair_table(printed)[0] == " · 0 pairs**"
+    assert len(clone_pair_table(printed)) == 4
+
+
+def test_a_repository_without_the_copy_or_not_measured_leaves_no_row(capsys, monkeypatch, tmp_path, public, missing):
+    """FLEET-116: a drifted copy and a repository that cannot be cloned add no pair; the heading reads `0 pairs`."""
+    alpha = public("alpha", {"a.py": function("copied", "value", "local")})
+    beta = public("beta", {"a.py": function("copied", "value", "local", assignments=1, passes=20)})
+    printed = report_in(write_fleet(tmp_path / "fleet", [alpha, beta, missing]), capsys, monkeypatch, ticks(*range(10)))
+    assert printed.code == 2
+    assert clone_pair_table(printed) == [" · 0 pairs**", "", "| Repo | Function | Repo | Function | Kind |", "|---|---|---|---|---|"]
+
+
+def test_markdown_in_a_path_of_a_pair_stays_text(capsys, monkeypatch, tmp_path, public):
+    """FLEET-44: a path with markdown syntax is escaped in the pair table."""
+    alpha = public("alpha", {"<!--x.py": function("copied", "value", "local")})
+    beta = public("beta", {"<!--x.py": function("copied", "value", "local")})
+    printed = report_in(write_fleet(tmp_path / "fleet", [alpha, beta]), capsys, monkeypatch, ticks(*range(8)))
+    assert clone_pair_table(printed)[4].startswith(f"| {alpha} | \\<!--x.py copied | {beta} |")

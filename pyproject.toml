@@ -85,6 +85,7 @@ layers = [
     "sides | gh",
     "sonar_properties | sonar_scanner",
     "sonar | fleet",
+    "fleet_clones",
     "check | staged",
     "baseline_fix",
     "pin",
