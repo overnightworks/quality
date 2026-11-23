@@ -3,6 +3,6 @@ agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
 role = "builder"
 base = "51c6ee642621af3cda867018f6b923f5609d005b"
 branch = "claude/issue-985-report-deadline"
-scope = ["docs/ARCHITECTURE.md", "docs/commands.md", "src/quality/deadline.py", "src/quality/fleet.py", "src/quality/fleet_ci_time.py", "src/quality/fleet_job_time.py", "tests/test_fleet.py", "tests/test_fleet_ci_time.py", "tests/test_fleet_job_time.py"]
+scope = ["docs/ARCHITECTURE.md", "docs/commands.md", "src/quality/deadline.py", "src/quality/fleet.py", "src/quality/fleet_ci_time.py", "src/quality/fleet_job_time.py", "tests/support/clock.py", "tests/test_deadline.py", "tests/test_fleet.py", "tests/test_fleet_ci_time.py", "tests/test_fleet_job_time.py", "tests/test_fleet_report.py"]
 opened_commit = "12fb50822c99f3f0881490ce5bc200820ece5b3d"
 whole_reason = "One bound on one job: the thread, the deadline and the smaller sample only together keep the report under 15 minutes, and the bound test adds them up."
