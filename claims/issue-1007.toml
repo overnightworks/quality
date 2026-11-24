@@ -1,0 +1,7 @@
+claim_id = "54313bf1e93341b0b696b7e6556d16e6"
+agent = "Claude eaac3b48-6964-423b-ac4c-dd8481e5f394"
+role = "builder"
+base = "96841dcff7c627beae4b0cce596c7362d8764348"
+branch = "claude/issue-1007-id-table-defines-rows"
+scope = ["docs/rules.md", "src/quality/spec_citations.py", "tests/test_spec_citations.py"]
+opened_commit = "3685e2b4a8d4e17af90352578a73bbb14962e570"
