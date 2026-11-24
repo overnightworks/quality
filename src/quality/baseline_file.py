@@ -124,6 +124,8 @@ def followed_adapter_counts(
     directory a move brings a count to takes the carried count, even where a hand edit lowered the held one: the carry
     is what the verdict allows, and the later lowering to the measured counts caps it, so no count is written above the
     carry. Any other directory keeps no more than the carry and no more than it holds, and one the carry lacks goes.
+    Size and job entries move the held value so a hand-lowered entry stays lowered; a brought directory differs on
+    purpose, since capping it at the held value would make the written counts depend on the order of the runs.
     The committed table and the moves alone say what a move brings, so a fix run again, or after one more staged move,
     ends at the same counts. A move is told when its target gained a count, once per count, with a source that lost one
     first; a count that fell and no told move explains is told as lowered or dropped."""

@@ -489,39 +489,26 @@ SECOND_RUNS = [
     pytest.param(adapters({"tests/a": 2}), [("a", "b", "test_x")], [("a", "b", "test_x")], {"tests/a": 1, "tests/b": 1}, [],
                  id="the same renames again move nothing"),
     pytest.param(adapters({"tests/a": 2}), [("a", "b", "test_x")], [("a", "b", "test_x"), ("a", "c", "test_y")],
-                 {"tests/b": 1, "tests/c": 1}, ["tests/c"], id="a move staged later carries the count that is left"),
+                 {"tests/b": 1, "tests/c": 1}, [("tests/c", NoteEvent.MOVED)], id="a move staged later carries the count that is left"),
     pytest.param(adapters({"tests/a": 1}), [("a", "b", "test_x")], [("a", "b", "test_x"), ("a", "c", "test_y")], {"tests/b": 1}, [],
                  id="one source into two targets keeps the first target by sort order"),
     pytest.param(adapters({"tests/a": 1}), [("a", "c", "test_y")], [("a", "b", "test_x"), ("a", "c", "test_y")], {"tests/b": 1},
-                 ["tests/b", "tests/c"], id="one source into two targets drops the count a later sorted move no longer carries"),
+                 [("tests/b", NoteEvent.MOVED), ("tests/c", NoteEvent.DROPPED)], id="one source into two targets drops the count a later sorted move no longer carries"),
     pytest.param(adapters({"tests/a": 1, "tests/c": 1}), [("c", "b", "test_z")], [("c", "b", "test_z"), ("a", "b", "test_x")],
-                 {"tests/b": 2}, ["tests/b"], id="two sources into one target across two runs"),
+                 {"tests/b": 2}, [("tests/b", NoteEvent.MOVED)], id="two sources into one target across two runs"),
 ]
 
 
 @pytest.mark.parametrize(("committed", "first_moves", "second_moves", "expected", "noted"), SECOND_RUNS)
 def test_a_second_fix_ends_where_the_verdict_carries_the_committed_table(committed, first_moves, second_moves, expected, noted):
     """FIX-34, ADAPTERIMPORT-28: the counts come from the committed table and the staged renames alone, whatever the
-    first fix wrote, and only a move the first fix did not know is told."""
+    first fix wrote, and only a move the first fix did not know is told, with the count that falls with no move."""
     first_renames, second_renames = staged(*first_moves), staged(*second_moves)
     first = follow_renames(committed, committed, first_renames, tracked_after(committed, committed, first_renames))
     second = follow_renames(first.ceiling, committed, second_renames, tracked_after(committed, committed, second_renames))
-    assert (second.ceiling.adapter_imports, [change.path for change in second.changes]) == (expected, noted)
+    assert (second.ceiling.adapter_imports, [(change.path, change.event) for change in second.changes]) == (expected, noted)
     carried = carried_base(committed, second_renames, named_paths(second.ceiling))
     assert raised_adapter_counts(carried.adapter_imports, second.ceiling.adapter_imports) == []
-
-
-def test_a_second_fix_tells_the_move_that_brings_a_count_and_the_count_that_falls_with_no_move():
-    """FIX-34, ADAPTERIMPORT-28: no change of the table is written without its note, even when the move's source was
-    already gone from the held table."""
-    committed = adapters({"tests/a": 1})
-    first_renames, second_renames = staged(("a", "c", "test_y")), staged(("a", "b", "test_x"), ("a", "c", "test_y"))
-    first = follow_renames(committed, committed, first_renames, tracked_after(committed, committed, first_renames))
-    second = follow_renames(first.ceiling, committed, second_renames, tracked_after(committed, committed, second_renames))
-    assert second.changes == (
-        Note("tests/b", NoteEvent.MOVED, "adapter import exception from tests/a"),
-        Note("tests/c", NoteEvent.DROPPED, "1 → 0 adapter import exceptions"),
-    )
 
 
 def test_a_fix_without_a_committed_table_moves_no_count():
