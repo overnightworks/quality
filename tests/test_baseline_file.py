@@ -28,7 +28,7 @@ SPELLINGS = [
 ]
 
 
-@pytest.mark.parametrize("name", ["clones", "job_minutes", "spec_citations"])
+@pytest.mark.parametrize("name", ["clones", "job_minutes", "spec_citations", "adapter_imports"])
 @pytest.mark.parametrize(("spelling", "held"), SPELLINGS)
 def test_a_version_holds_a_table_if_it_parses_so(name, spelling, held):
     """FIX-12, TIMEOUT-28: a version of the ceiling holds a table where it parses as one, in any spelling, and not
@@ -37,7 +37,8 @@ def test_a_version_holds_a_table_if_it_parses_so(name, spelling, held):
 
 
 @pytest.mark.parametrize(
-    ("held", "asked"), [("clones", "job_minutes"), ("job_minutes", "clones"), ("clones", "spec_citations"), ("spec_citations", "clones")]
+    ("held", "asked"),
+    [("clones", "job_minutes"), ("job_minutes", "clones"), ("clones", "spec_citations"), ("spec_citations", "clones"), ("clones", "adapter_imports"), ("adapter_imports", "clones")],
 )
 def test_a_version_holding_one_table_does_not_hold_the_other(held, asked):
     """TIMEOUT-28: the table asked about is the only one that counts."""
@@ -55,7 +56,7 @@ UNREAD_NOT_NAMING = [
 ]
 
 
-@pytest.mark.parametrize("name", ["clones", "job_minutes", "spec_citations"])
+@pytest.mark.parametrize("name", ["clones", "job_minutes", "spec_citations", "adapter_imports"])
 @pytest.mark.parametrize("text", UNREAD_NAMING)
 def test_a_version_no_parser_reads_that_names_the_table_raises(text, name):
     """FIX-13, TIMEOUT-28: a version of the ceiling in git that no parser reads and whose bytes name the table raises the
@@ -65,7 +66,7 @@ def test_a_version_no_parser_reads_that_names_the_table_raises(text, name):
         holds_table(version, name)
 
 
-@pytest.mark.parametrize("name", ["clones", "job_minutes", "spec_citations"])
+@pytest.mark.parametrize("name", ["clones", "job_minutes", "spec_citations", "adapter_imports"])
 @pytest.mark.parametrize("version", UNREAD_NOT_NAMING)
 def test_a_version_no_parser_reads_that_never_names_the_table_holds_nothing(version, name):
     """FIX-46: a version no TOML parser reads whose bytes never name the table does not hold it."""
@@ -73,10 +74,10 @@ def test_a_version_no_parser_reads_that_never_names_the_table_holds_nothing(vers
 
 
 def test_an_unknown_table_names_the_tool_version_and_every_known_table_with_the_held_lists():
-    """TIMEOUT-13, CEILING-3, CITE-13: an unknown table is named with the tool's version and every table it knows,
-    `clones`, `job_minutes` and `spec_citations` among them."""
+    """TIMEOUT-13, CEILING-3, CITE-13, ADAPTERIMPORT-30: an unknown table is named with the tool's version and every table it knows,
+    `clones`, `job_minutes`, `spec_citations` and `adapter_imports` among them."""
     with pytest.raises(
-        SizeError, match=rf"unknown table \[future\]; quality {re.escape(__version__)} knows ccn, .*, clones, job_minutes, spec_citations$"
+        SizeError, match=rf"unknown table \[future\]; quality {re.escape(__version__)} knows ccn, .*, clones, job_minutes, spec_citations, adapter_imports$"
     ):
         load_baseline("[future]\n")
 
@@ -213,5 +214,49 @@ def test_the_spec_citations_table_renders_last_with_the_ids_sorted_one_per_line(
 )
 def test_a_held_spec_table_renders_and_an_absent_one_does_not_and_the_rendering_reads_back_byte_for_byte(text, rendered_table):
     """CITE-7: an empty held table renders as its header alone, and a file that renders reads back to the same text."""
+    rendered = render_baseline(load_baseline(text))
+    assert (rendered.removeprefix(BASELINE_HEADER).strip(), render_baseline(load_baseline(rendered))) == (rendered_table.strip(), rendered)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        pytest.param("", None, id="no table"),
+        pytest.param("[adapter_imports]\n", {}, id="a held empty table"),
+        pytest.param('[adapter_imports]\n"tests/api" = 49\n"tests/app" = 1\n', {"tests/api": 49, "tests/app": 1}, id="two directories"),
+    ],
+)
+def test_the_adapter_imports_table_reads_to_the_count_of_each_directory(text, expected):
+    """ADAPTERIMPORT-26: the keys are test directories and the values are positive counts."""
+    assert load_baseline(text).adapter_imports == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "needs"),
+    [
+        pytest.param("adapter_imports = 3\n", "adapter_imports as a table", id="the table itself that is no table"),
+        pytest.param('[adapter_imports]\n"tests/api" = 0\n', "adapter_imports.tests/api as a positive count, not 0", id="zero"),
+        pytest.param('[adapter_imports]\n"tests/api" = "2"\n', "adapter_imports.tests/api as a positive count", id="a string"),
+        pytest.param('[adapter_imports."tests/api"]\nx = 1\n', "adapter_imports.tests/api as a positive count", id="a table per directory"),
+    ],
+)
+def test_an_adapter_imports_table_that_is_not_a_map_of_counts_is_the_malformed_file_error(text, needs):
+    with pytest.raises(SizeError, match=re.escape(f"needs {needs}")):
+        load_baseline(text)
+
+
+def test_the_adapter_imports_table_renders_after_the_spec_citations_with_the_directories_sorted():
+    text = '[adapter_imports]\n"tests/b" = 2\n"tests/a" = 1\n\n[spec_citations]\n\n[file_lines]\n"src/a.py" = 820\n'
+    assert render_baseline(load_baseline(text)) == (
+        f'{BASELINE_HEADER}\n[file_lines]\n"src/a.py" = 820\n\n[spec_citations]\n\n[adapter_imports]\n"tests/a" = 1\n"tests/b" = 2\n'
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "rendered_table"),
+    [("", ""), ("[adapter_imports]\n", "[adapter_imports]\n"), ('[adapter_imports]\n"tests/a" = 1\n', '[adapter_imports]\n"tests/a" = 1\n')],
+    ids=["no table", "a held empty table", "one directory"],
+)
+def test_a_held_adapter_table_renders_and_an_absent_one_does_not_and_the_rendering_reads_back_byte_for_byte(text, rendered_table):
     rendered = render_baseline(load_baseline(text))
     assert (rendered.removeprefix(BASELINE_HEADER).strip(), render_baseline(load_baseline(rendered))) == (rendered_table.strip(), rendered)

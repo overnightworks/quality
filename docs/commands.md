@@ -109,8 +109,13 @@ held pair the tree lost goes, and so does a held spec ID that is now cited, reti
 debt or its job is gone, and a workflow that cannot be read refuses the whole fix while such an entry is held
 ([rules](rules.md)). Where the file has no `[job_minutes]` table and git never held one, it records the jobs above 15 at
 their rounded-up limits, none where no job is above 15 and none where a workflow cannot be read ([rules](rules.md)), and
-without a `[spec_citations]` table, where git never held one and the tree defines a live ID with no undefined or retired citation, no
-duplicate and no unread file, it records the uncited IDs ([rules](rules.md)). A
+without a `[spec_citations]` table, where git never held one and the tree defines a live ID with no undefined or
+retired citation, no duplicate and no unread file, it records the uncited IDs ([rules](rules.md)), and without an
+`[adapter_imports]` table, where git never held one and a registered `imports_adapter` mark exempts an import, it
+records the marked modules per test directory. A held `[adapter_imports]` count falls to the measured one and goes at
+0, never rises, and a count follows a renamed marked module to its new directory; without the contract that carries the
+id the table is left as it is. For the counts `quality check debt --fix` reads the import contracts and builds the
+import graph, and a read that cannot be judged refuses the fix while the table is held ([rules](rules.md)). A
 `[literal_text]` table is read and ignored, and the rewrite leaves it out ([rules](rules.md)). A
 ceiling or `[clones]` table git holds and the tree lacks, or a `[job_minutes]` table where a job above 15 would be
 recorded or a `[spec_citations]` table where it would be recorded, refuses with the restore step, and a
@@ -314,31 +319,30 @@ repository a token can list is dropped without a trace (FLEET-72).
   `ci.yml` are outside it; the CI standard's shared building blocks own them.
 - Under `Tests per layer`, last, stands one row per repository: `Repo`, `Unit`, `Integration`, `Flow`, `Live`,
   `Skipped`, `Fixme` and `Note`, numbers with thousands separators as the size table. It is counted in the clone the
-  size table measures, with no further GitHub call or clone, runs no repository code, raises no finding, changes no
-  exit and is not in `site/fleet-ci-time.json` (FLEET-119). A Python test is a function named `test*` in a Python
-  test file, a parametrized one once; a script test is a call of `it` or `test` in a TypeScript or JavaScript test
-  file, bare or with a modifier (`skip`, `skipIf(…)`, `runIf(…)`, `only`, `fixme`, `concurrent`, `each(…)`), whose
-  first argument is a string or a template; `test.step(`, `test.describe(`, `test.use(`, hooks, a member `x.test(` and a runtime
+  size table measures, with no further GitHub call or clone, runs no repository code, raises no finding, changes no exit
+  and is not in `site/fleet-ci-time.json` (FLEET-119). A Python test is a function named `test*` in a Python test file,
+  a parametrized one once; a script test is a call of `it` or `test` in a TypeScript or JavaScript test file, bare or
+  with a modifier (`skip`, `skipIf(…)`, `runIf(…)`, `only`, `fixme`, `concurrent`, `each(…)`), whose first argument
+  is a string or a template; `test.step(`, `test.describe(`, `test.use(`, hooks, a member `x.test(` and a runtime
   `test.skip(<condition>, …)` are no test (FLEET-120). The layer comes from the path first: `Live` is a test under
   `tests/e2e/live/` of the root or of a judged project, or under a frontend project's `e2e/live/`; `Flow` is one under
   `tests/e2e/` or a frontend project's `e2e/` otherwise. Every other Python test is `Integration` when an `integration`
   mark reaches it, in the forms `Skipped` reads (on the test, on an enclosing class, in a class's or the module's
   `pytestmark`, or through a module-level name bound to the mark), and `Unit` otherwise; every other script test is
-  `Unit` (FLEET-121).
-  `Skipped` counts each test a skip mark reaches: Python `pytest.mark.skip` or `skipif`, bare or called, on the test,
-  an enclosing class, a module's `pytestmark` (one mark, a list or a tuple) or through a module-level name bound to
-  such a mark; script `skip` or `skipIf(…)` on the call, every test inside `describe.skip(`, `describe.skipIf(…)(` or
-  `test.describe.skip(`, and a runtime `test.skip(<condition>, …)`, which marks the innermost enclosing test or, in a
-  describe outside any test, every test of that describe, and outside any test or describe every test of the file; a
-  conditional mark counts even where CI runs the test (FLEET-122).
-  `Fixme` counts the same way for Playwright `test.fixme`, `describe.fixme`
-  and pytest `pytest.mark.xfail`;
-  a test with both marks counts in both columns (FLEET-123). A Python test file that does not parse and a script test
-  file that is not UTF-8 or that the lexer refuses count no test; `Note` reads `N files not read`, and an unmeasured
+  `Unit` (FLEET-121). `Skipped` counts each test a skip mark reaches: Python `pytest.mark.skip` or `skipif`, bare or
+  called, on the test, an enclosing class, a module's `pytestmark` (one mark, a list or a tuple) or through a
+  module-level name bound to such a mark; script `skip` or `skipIf(…)` on the call, every test inside `describe.skip(`,
+  `describe.skipIf(…)(` or `test.describe.skip(`, and a runtime `test.skip(<condition>, …)`, which marks the innermost
+  enclosing test or, in a describe outside any test, every test of that describe, and outside any test or describe every
+  test of the file; a conditional mark counts even where CI runs the test (FLEET-122). The forms of a Python test's
+  marks are read by `pytest_marks`, the one owner `adapter-import` shares, and `suites` maps its mark names to these
+  columns. `Fixme` counts the same way for Playwright `test.fixme`, `describe.fixme` and pytest `pytest.mark.xfail`; a
+  test with both marks counts in both columns (FLEET-123). A Python test file that does not parse and a script test file
+  that is not UTF-8 or that the lexer refuses count no test; `Note` reads `N files not read`, and an unmeasured
   repository reads `cannot judge: <reason>` there with `—` in every number (FLEET-124). Named limits: probe and
   `browser`-marked pytest tests outside `tests/e2e/` count by their `integration` mark; an `integration` mark that only
-  a conftest hook adds counts as `Unit`, as does an integration layer by folder (`tests/integration/`), and a script test
-  has no integration mark; not read are imperative `pytest.skip()` and `pytest.xfail()`, `pytest.param(marks=…)`,
+  a conftest hook adds counts as `Unit`, as does an integration layer by folder (`tests/integration/`), and a script
+  test has no integration mark; not read are imperative `pytest.skip()` and `pytest.xfail()`, `pytest.param(marks=…)`,
   `from pytest import mark`, marks added by conftest hooks, `-m` or `--deselect` in workflows, `unittest.skip`,
   Playwright `test.fail`, vitest `todo` and `fails` and `.only`; a test written in a loop counts once; the counts are
   static, not what a run skipped.

@@ -423,12 +423,15 @@ def _lowered_fact(ceiling: ratchet.CeilingFix | DryRun) -> str:
 
 
 def _recorded_extent(fix: ratchet.CeilingFix) -> str:
-    """What a first recording holds: its entries and clone pairs, and its job limits and uncited spec IDs when it holds them."""
+    """What a first recording holds: its entries and clone pairs, and its job limits, uncited spec IDs and adapter import
+    exceptions when it holds them."""
     parts = [counted(len(fix.ceiling.size), "entry", "entries"), counted(len(fix.ceiling.clones), CLONE_PAIR)]
     if fix.ceiling.job_minutes:
         parts.append(counted(len(fix.ceiling.job_minutes), baseline_file.JOB_LIMIT))
     if fix.ceiling.spec_citations:
         parts.append(counted(len(fix.ceiling.spec_citations), baseline_file.UNCITED_SPEC_ID))
+    if fix.ceiling.adapter_imports:
+        parts.append(counted(sum(fix.ceiling.adapter_imports.values()), baseline_file.ADAPTER_EXCEPTION))
     return ", ".join(parts)
 
 

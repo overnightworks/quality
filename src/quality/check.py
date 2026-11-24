@@ -147,14 +147,26 @@ def check_import_contract(read: architecture.ContractsRead | None) -> RuleResult
         return architecture.check_contracts(read)
 
 
-def check_adapter_imports(inputs: RunInputs, read: architecture.ContractsRead | None) -> Judged:
-    """Judges nothing without the contract that carries the adapter id, and then reads no file; measured only without a config."""
+def _measure_adapter_imports(inputs: RunInputs) -> adapter_imports.Measure | None:
+    """The adapter-import rule's reading of the tree, None where no contract carries the id (a config reads no file)."""
+    read = _required(inputs.import_contracts)
     with _refusing_contract_errors():
         split = adapter_imports.split_of(read)
     if read is None or split is None:
-        return RuleResult([], 0, read is None)
-    check = partial(adapter_imports.check_adapter_imports, split, read.graph)
-    return _content_findings(inputs.root, inputs.modes, inputs.allow_lists, layout.test_import_candidates, check)
+        return None
+    check = partial(adapter_imports.measure_adapter_imports, split, read.graph)
+    return _required(_content_findings(inputs.root, inputs.modes, inputs.allow_lists, adapter_imports.candidates, check))
+
+
+def check_adapter_imports(inputs: RunInputs, read: architecture.ContractsRead | None) -> Judged:
+    """Judges nothing without the contract that carries the adapter id, and then reads no file; measured only without a
+    config. The held counts are the baseline's, or the table `--fix` plans where it runs."""
+    measure = inputs.adapter_measure
+    if measure is None or isinstance(measure, CannotJudge):
+        return RuleResult([], 0, read is None) if measure is None else measure
+    plan = inputs.planned_ceiling
+    baseline = plan.ceiling if isinstance(plan, ratchet.CeilingFix) else _required(inputs.baseline)
+    return adapter_imports.judge_counts(measure, None if baseline is None else baseline.adapter_imports)
 
 
 def lint_python(
@@ -429,7 +441,7 @@ def _judge_baseline_rules(
     return size, _attempt(lambda: clones.check_clones(tree, sources, baseline))
 
 
-def _content_findings[T: list[Finding] | RuleResult](
+def _content_findings[T: list[Finding] | RuleResult | adapter_imports.Measure](
     root: Path,
     modes: dict[str, str] | CannotJudge,
     allow_lists: AllowLists | CannotJudge,
@@ -480,6 +492,33 @@ class RunInputs:
     def import_contracts(self) -> architecture.ContractsRead | None | CannotJudge:
         """The import contracts and the one import graph that both rules of the imports area judge."""
         return _attempt(lambda: read_import_contracts(self.root, self.tracked))
+
+    @cached_property
+    def sources(self) -> dict[str, bytes] | CannotJudge:
+        """The tracked files the debt rules measure, read once."""
+        return _attempt(lambda: ratchet.read_sources(self.root, self.tracked))
+
+    @cached_property
+    def baseline(self) -> baseline_file.Baseline | None | CannotJudge:
+        """The baseline on disk, which the debt rules and the adapter-import rule hold the tree to."""
+        return _attempt(lambda: judged_baseline(self.root))
+
+    @cached_property
+    def adapter_measure(self) -> adapter_imports.Measure | None | CannotJudge:
+        """The marked modules and findings of the adapter-import rule, which the imports area judges against the held
+        counts and `--fix` records."""
+        return _attempt(lambda: _measure_adapter_imports(self))
+
+    @cached_property
+    def planned_ceiling(self) -> ratchet.CeilingFix | CannotJudge | None:
+        """The ceiling `--fix` plans, None without it: the debt area writes it, the imports area judges against it."""
+        sources, baseline = self.sources, self.baseline
+        if self.fix is None or isinstance(sources, CannotJudge) or isinstance(baseline, CannotJudge):
+            return None
+        return _attempt(lambda: baseline_fix.fix_ceiling(
+            self.root, self.tracked, sources, baseline, lambda: _required(self.allow_lists), _adapter_counts(self),
+            dry_run=self.fix is Fix.DRY_RUN, rerun_command=FIX_RUN_COMMAND[self.fix],
+        ))
 
     @cached_property
     def logline_declared(self) -> bool | CannotJudge:
@@ -546,22 +585,29 @@ def _judge_files(inputs: RunInputs) -> AreaVerdict:
     )
 
 
-def _recorded(inputs: RunInputs, sources: dict[str, bytes], held: baseline_file.Baseline | None) -> ratchet.CeilingFix | DryRun:
-    """The ceiling `--fix` makes, written under a write fix, wrapped as a dry run under `--dry-run`."""
-    made = baseline_fix.fix_ceiling(
-        inputs.root, inputs.tracked, sources, held, lambda: _required(inputs.allow_lists),
-        dry_run=inputs.fix is Fix.DRY_RUN, rerun_command=FIX_RUN_COMMAND.get(inputs.fix, baseline_file.FIX_COMMAND),
-    )
+def _adapter_counts(inputs: RunInputs) -> Callable[[], Mapping[str, int] | None]:
+    """The measured counts of marked modules per directory, None without the contract; a read that cannot judge raises."""
+
+    def counts() -> Mapping[str, int] | None:
+        measure = _required(inputs.adapter_measure)
+        return None if measure is None else measure.counts
+
+    return counts
+
+
+def _written(inputs: RunInputs, made: ratchet.CeilingFix) -> ratchet.CeilingFix | DryRun:
+    """The ceiling `--fix` made, written under a write fix, wrapped as a dry run under `--dry-run`."""
     fix = baseline_fix.written(inputs.root, made, write=inputs.fix is Fix.WRITE)
     return DryRun(fix) if inputs.fix is Fix.DRY_RUN else fix
 
 
 def _judge_debt(inputs: RunInputs) -> AreaVerdict:
-    sources = _attempt(lambda: ratchet.read_sources(inputs.root, inputs.tracked))
-    baseline = sources if isinstance(sources, CannotJudge) else _attempt(lambda: judged_baseline(inputs.root))
+    sources = inputs.sources
+    baseline = sources if isinstance(sources, CannotJudge) else inputs.baseline
     ceiling = None
     if inputs.fix is not None and not isinstance(baseline, CannotJudge):
-        ceiling = _attempt(lambda: _recorded(inputs, sources, baseline))
+        planned = inputs.planned_ceiling
+        ceiling = _attempt(lambda: _written(inputs, planned)) if isinstance(planned, ratchet.CeilingFix) else planned
     made = ceiling.fix if isinstance(ceiling, DryRun) else ceiling
     fixed = isinstance(made, ratchet.CeilingFix)
     size, clone = _judge_baseline_rules(

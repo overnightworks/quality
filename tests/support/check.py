@@ -447,12 +447,13 @@ def refusal_row(area: str, event: str = "not checked") -> str:
 
 def check_result(
     repo: Path, locate_ruff: Callable[[], str] = installed_ruff, locate_zizmor: Callable[[], str] | None = None,
-    monotonic: Callable[[], float] = time.monotonic, named: Iterable[Area] = (),
+    monotonic: Callable[[], float] = time.monotonic, named: Iterable[Area] = (), fix: check.Fix | None = None,
 ) -> check.CheckResult:
-    """What the rule runner judged over `repo` (over the areas `named`, every one without), before the door prints it."""
+    """What the rule runner judged over `repo` (over the areas `named`, every one without, and under `fix` where one is
+    given), before the door prints it."""
     return check.judge_repository(
         repo, locate_ruff, locate_zizmor or cli.INSTALLED_ZIZMOR, lambda _verdict, _tracked_paths: None,
-        lambda _area, _scanner: nullcontext(), monotonic=monotonic, named=named,
+        lambda _area, _scanner: nullcontext(), monotonic=monotonic, named=named, fix=fix,
     )
 
 

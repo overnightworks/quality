@@ -21,15 +21,21 @@ def ceiling(
     clones: frozenset[ClonePair] | None = None,
     job_minutes: JobMinutes | None = None,
     spec_citations: frozenset[str] | None = None,
+    adapter_imports: dict[str, int] | None = None,
 ) -> Baseline:
     """The baseline a test holds, every table named by keyword so a table the test leaves out is absent."""
-    return Baseline(size, clones, job_minutes, spec_citations)
+    return Baseline(size, clones, job_minutes, spec_citations, adapter_imports)
 
 
 def spec_table(*identifiers: str) -> str:
     """The `[spec_citations]` table, as TOML text, that holds `identifiers` as uncited."""
     listed = "".join(f'"{identifier}", ' for identifier in identifiers)
     return f"[spec_citations]\nuncited = [{listed}]\n"
+
+
+def adapter_table(counts: dict[str, int]) -> str:
+    """The `[adapter_imports]` table, as TOML text, that holds `counts` of marked modules per directory."""
+    return "[adapter_imports]\n" + "".join(f'"{directory}" = {count}\n' for directory, count in counts.items())
 
 
 def holding_spec_ids(*identifiers: str) -> str:

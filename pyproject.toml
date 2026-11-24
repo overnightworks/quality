@@ -104,6 +104,7 @@ layers = [
     "twins",
     "naming",
     "adapter_imports",
+    "pytest_marks",
     "agent_guidance | architecture | clones | compose | env_file | fleet_sources | layout | pip_requirements | python_floor | root_layout | scanners | workflow_rules",
     "makefile | marker_expression | pytest_options | workflow_document",
     "markdown_fences",

@@ -60,7 +60,7 @@ def test_each_area_starts_after_the_rows_of_every_area_above_it(build_repo, serv
         monkeypatch.setattr(owner, function_name, observed)
 
     entering(ratchet, "read_sources", "debt")
-    entering(check, "check_import_contract", "imports")
+    entering(check, "read_import_contracts", "imports")
     stderr = io.StringIO()
     with open(rows, "w", buffering=1, encoding="utf-8") as stdout, contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
         code = check_door(repo, locate_ruff=lambda: locate_ruff, locate_zizmor=locate_zizmor, clock=lambda: 0.0, environment={})
