@@ -65,11 +65,11 @@ markers = [
 source_pkgs = ["quality"]
 source_dirs = ["scripts"]
 branch = true
-patch = ["subprocess"]
+patch = ["subprocess", "execv"]
 relative_files = true
 
 [tool.coverage.report]
-fail_under = 99.15
+fail_under = 99.22
 precision = 2
 
 [tool.importlinter]
