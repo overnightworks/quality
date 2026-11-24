@@ -44,6 +44,7 @@ the blocks, and `quality check` enforces it: a module imports only from the laye
 ```mermaid
 flowchart TB
     cli["cli.py: the one door; arguments, exit code"]
+    several["merge_run.py: the run over several names, each in a process of its own"]
     door["merge.py, base_branch.py: the operator's door and what GitHub says about its base branch"]
     verdict["verdict.py, sides.py: the pull request's verdict and the two sides it compares"]
     reports["sonar_properties.py, sonar.py, fleet.py: SonarCloud scan wiring and findings, fleet report"]
@@ -52,7 +53,9 @@ flowchart TB
     pin["pin.py: the release the gate pins"]
     rules["rule modules: one decision each"]
     shared["shared layers below the rules"]
+    cli --> several
     cli --> door
+    several --> door
     cli --> verdict
     cli --> reports
     cli --> check
@@ -64,6 +67,14 @@ flowchart TB
     pin --> rules
     rules --> shared
 ```
+
+A run over several names runs each pull request's door as a process of its own, `python -P -m quality.cli merge
+<name>`, one after the other: a pull request whose gate pins another release replaces its process with that release,
+so a loop in one process would end at the first such pull request, and each pull request is judged and restored by
+exactly the code a run for it alone runs. The run waits for each child through an interrupt and never kills it, since
+a killed child could leave `quality_gate` off. `-P` keeps the working directory off the child's module path: a pull
+request's checkout is untrusted and may hold a `quality` package that would otherwise run under the operator's admin
+login.
 
 Rules return findings and never print; `output.py` owns every printed line. `checkout.py` and `repository.py` are the
 only readers of the checked-out files (`architecture.py` opens the sources itself, for grimp), `web.py` the only HTTP transport that sends a credential, and `gh.py` runs every `gh` command the door sends. `python_imports.py` is the one reader of a module's import statements: from them `external_imports.py` keeps the submodules of an external package that a forbidden contract names (`agents.calling`), which grimp would squash, so nothing of the package is read or installed.

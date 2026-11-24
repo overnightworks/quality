@@ -6,6 +6,7 @@ import tempfile
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn, Protocol, overload
 
@@ -231,6 +232,31 @@ def _communicate(process: subprocess.Popen, timeout: float, every_second: Callab
             if left <= 1.0:
                 raise
             every_second(round(time.monotonic() - started))
+
+
+@dataclass(frozen=True)
+class Finished:
+    """How a child ended: its exit, negative where a signal killed it, and whether an interrupt reached the waiting
+    process while it ran."""
+
+    returncode: int
+    interrupted: bool
+
+
+def run_to_its_end(command: Sequence[str]) -> Finished:
+    """Runs `command` on this process's standard streams and waits for it to end, through any number of interrupts.
+
+    Ctrl-C reaches the child and this process together; the child ends as it does when run alone, so this process neither kills
+    it nor ignores the signal (an ignored SIGINT is inherited by the child). `subprocess.run` would kill the child on an
+    interrupt and cut its cleanup in half.
+    """
+    interrupted = False
+    with subprocess.Popen(command) as child:  # noqa: S603 - callers pass an argv list and never a shell
+        while True:
+            try:
+                return Finished(child.wait(), interrupted)
+            except KeyboardInterrupt:
+                interrupted = True
 
 
 def replace_process(executable: Path, arguments: Sequence[str], environment: Mapping[str, str]) -> NoReturn:

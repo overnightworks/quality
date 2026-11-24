@@ -1,4 +1,4 @@
-"""The operator's door, `quality merge`: switch a repository's gate off, merge one pull request, switch it on again."""
+"""The operator's door for one pull request, `quality merge`: switch a repository's gate off, merge it, switch it on again."""
 
 import json
 import shlex
@@ -119,6 +119,12 @@ class DoorEvent(StrEnum):
     STATE_UNKNOWN = "state unknown"
     POSTED = "posted"
     NOT_POSTED = "not posted"
+    JUDGING = "judging"
+    WOULD_MERGE = "would merge"
+    STOPPED = "stopped"
+    KILLED = "killed"
+    INTERRUPTED = "interrupted"
+    NOT_RUN = "not run"
 
 
 METHOD_EVENTS = {MergeMethod.MERGE: DoorEvent.MERGE_COMMIT, MergeMethod.SQUASH: DoorEvent.SQUASH}
@@ -691,6 +697,11 @@ def end_at(stop: Stopped, show: Show, channels: Channels) -> int:
     return stop.exit_code
 
 
+def refuse_without_terminal(channels: Channels) -> int:
+    write_pair(not_merged("the operator's merge needs a terminal on stdin"), (Instruction("the operator runs it in his own terminal"),), channels.err)
+    return EXIT_REFUSED
+
+
 def run_merge(
     repository: str,
     pull_request: int,
@@ -710,8 +721,7 @@ def run_merge(
     """Every line leaves through `channels`, escaped: rows and the closing line on stdout, the prompt and the pair on stderr;
     a release that cannot judge is its pair alone."""
     if not is_terminal:
-        write_pair(not_merged("the operator's merge needs a terminal on stdin"), (Instruction("the operator runs it in his own terminal"),), channels.err)
-        return EXIT_REFUSED
+        return refuse_without_terminal(channels)
     out = DoorStream(channels.out)
     show = partial(shown_before_asking, out=out)
     try:

@@ -149,6 +149,6 @@ def test_a_next_step_that_names_the_door_again_names_the_pull_request_asked_for(
     (step,) = [line for line in err.splitlines() if line.startswith("next: ")]
     command = shlex.split(re.fullmatch(pattern, step)[1])
     arguments = cli.read_invocation(command[1:])
-    assert (command[0], arguments.command, arguments.pull_request, arguments.dry_run) == (
-        "quality", "merge", cli.PullRequestName("acme/gadgets", 12), False,
+    assert (command[0], arguments.command, arguments.pull_requests, arguments.dry_run) == (
+        "quality", "merge", [cli.PullRequestName("acme/gadgets", 12)], False,
     )
