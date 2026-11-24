@@ -111,14 +111,18 @@ def moved_adapter_counts(
     return {directory: count for directory, count in counts.items() if count}, planned
 
 
-def followed_adapter_counts(
-    held: AdapterCounts, committed: AdapterCounts, moves: Mapping[str, str]
-) -> tuple[AdapterCounts, list[Note]]:
-    """The held counts as the verdict carries the committed ones, and the moves that changed them. A directory a move
-    brings a count to takes the carried count, any other no more than the carried count and no more than it holds, and
-    a directory the carry lacks goes; the committed table and the moves alone say what a move brings, so a fix run
-    again, or after one more staged move, ends at the same counts. A move is reported when its target gained a count
-    and its source lost one, once per count."""
+def lowered_adapter_note(directory: str, before: int, now: int) -> Note:
+    """The note of a directory whose count falls from `before` to `now`: dropped when none is left."""
+    event = NoteEvent.LOWERED if now else NoteEvent.DROPPED
+    return Note(directory, event, f"{before} → {now} {ADAPTER_EXCEPTION}s")
+
+
+def followed_adapter_counts(held: AdapterCounts, committed: AdapterCounts, moves: Mapping[str, str]) -> tuple[AdapterCounts, list[Note]]:
+    """The held counts as the verdict carries the committed ones, and a note for each change against the held table. A
+    directory a move brings a count to takes the carried count. Any other directory keeps no more than the carry and no more than it holds, and one the carry lacks goes. The
+    committed table and the moves alone say what a move brings, so a fix run again, or after one more staged move, ends
+    at the same counts. A move is told when its target gained a count, once per count, with a source that lost one
+    first; a count that fell and no told move explains is told as lowered or dropped."""
     carried, planned = moved_adapter_counts(committed, moves)
     brought = {target for _, target in planned}
     counts = {
@@ -127,12 +131,21 @@ def followed_adapter_counts(
     }
     counts = {directory: count for directory, count in counts.items() if count}
     change = Counter({directory: counts.get(directory, 0) - held.get(directory, 0) for directory in {*counts, *held}})
-    notes = []
-    for source, target in planned:
-        if change[target] > 0 > change[source]:
-            change[target] -= 1
-            change[source] += 1
-            notes.append(Note(target, NoteEvent.MOVED, f"{ADAPTER_EXCEPTION} from {source}"))
+    notes, untold = [], list(planned)
+    for source_lost in (True, False):
+        for move in [move for move in untold if (change[move[0]] < 0) == source_lost]:
+            source, target = move
+            if change[target] > 0:
+                untold.remove(move)
+                change[target] -= 1
+                if change[source] < 0:
+                    change[source] += 1
+                notes.append(Note(target, NoteEvent.MOVED, f"{ADAPTER_EXCEPTION} from {source}"))
+    notes += [
+        lowered_adapter_note(directory, held[directory], counts.get(directory, 0))
+        for directory in sorted(held)
+        if change[directory] < 0
+    ]
     return counts, notes
 
 

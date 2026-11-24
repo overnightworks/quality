@@ -176,8 +176,7 @@ def _with_adapter_imports(root: Path, tracked: list[str], adapter_counts: Adapte
         if now:
             kept[directory] = now
         if now < count:
-            event = NoteEvent.LOWERED if now else NoteEvent.DROPPED
-            changes.append(Note(directory, event, f"{count} → {now} {baseline_file.ADAPTER_EXCEPTION}s"))
+            changes.append(baseline_file.lowered_adapter_note(directory, count, now))
     return replace(made, ceiling=replace(made.ceiling, adapter_imports=kept), changes=(*made.changes, *changes))
 
 
