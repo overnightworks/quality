@@ -1,0 +1,7 @@
+claim_id = "80ba89dd8cfa4be7840f7b1c70e7bd04"
+agent = "Claude eaac3b48-6964-423b-ac4c-dd8481e5f394"
+role = "builder"
+base = "77b3fde2b4d300fb08ad5a48480fdb2df59931f7"
+branch = "claude/issue-1011-coverage-floor"
+scope = ["docs/proof.md", "pyproject.toml"]
+opened_commit = "aeaf63b1c723ba167bf0470458024202f7d79569"
