@@ -14,7 +14,7 @@ import grimp
 
 from quality import architecture, layout, pytest_marks
 from quality.baseline_file import BASELINE_PATH, FIX_COMMAND, adapter_directory
-from quality.config import LayoutAllowance
+from quality.config_allowances import LayoutAllowance
 from quality.output import SEPARATOR, counted
 from quality.ratchet import Renames
 from quality.report import Finding, FindingEvent, RuleResult

@@ -2,6 +2,7 @@
 runs, so a mark that only a run applies is not seen."""
 
 import ast
+from collections import Counter
 from collections.abc import Iterator
 
 from quality import clones, repository
@@ -33,42 +34,79 @@ def _dotted_name(node: ast.expr) -> str:
     return ".".join([node.id, *reversed(names)]) if isinstance(node, ast.Name) else ""
 
 
-def _bound_marks(body: list[ast.stmt], aliases: dict[str, frozenset[str]]) -> Iterator[tuple[str, frozenset[str], int]]:
-    """Each single-name assignment of the body, its name, the marks its value names and its line."""
+def _bound_names(node: ast.AST) -> Iterator[str]:
+    """The names a node binds, in any form: a target, walrus, `del`, import alias, `except` name, definition or match capture."""
+    if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+        yield node.id
+    elif isinstance(node, ast.alias):
+        yield (node.asname or node.name).partition(".")[0]
+    elif isinstance(node, ast.MatchMapping) and node.rest is not None:
+        yield node.rest
+    elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.ExceptHandler | ast.MatchAs | ast.MatchStar) and node.name is not None:
+        yield node.name
+
+
+def _scope_nodes(body: list[ast.stmt]) -> Iterator[ast.AST]:
+    """Every node of a body's own scope, not the bodies of the functions and classes it defines; walks without recursion."""
+    pending: list[ast.AST] = list(body)
+    while pending:
+        node = pending.pop()
+        yield node
+        is_definition = isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+        pending.extend(child for child in ast.iter_child_nodes(node) if not (is_definition and isinstance(child, ast.stmt)))
+
+
+def _single_assignments(body: list[ast.stmt]) -> dict[str, tuple[ast.expr, int]]:
+    """Each name the body binds exactly once, in a plain or annotated assignment standing directly in it: its value and line."""
+    bound = Counter(name for node in _scope_nodes(body) for name in _bound_names(node))
+    assigned: dict[str, tuple[ast.expr, int]] = {}
     for statement in body:
-        if isinstance(statement, ast.Assign) and len(statement.targets) == 1 and isinstance(statement.targets[0], ast.Name):
-            yield statement.targets[0].id, _marks_named(statement.value, aliases), statement.lineno
+        if isinstance(statement, ast.Assign):
+            targets = statement.targets
+        elif isinstance(statement, ast.AnnAssign) and statement.value is not None:
+            targets = [statement.target]
+        else:
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name) and bound[target.id] == 1:
+                assigned[target.id] = (statement.value, statement.lineno)
+    return assigned
 
 
 def _aliases(tree: ast.Module) -> dict[str, frozenset[str]]:
-    return {name: marks for name, marks, _ in _bound_marks(tree.body, {}) if marks and name != MODULE_MARKS}
+    held = {name: _marks_named(value, {}) for name, (value, _) in _single_assignments(tree.body).items() if name != MODULE_MARKS}
+    return {name: marks for name, marks in held.items() if marks}
+
+
+def _own_marks(body: list[ast.stmt], aliases: dict[str, frozenset[str]]) -> dict[str, int]:
+    """Each mark the body's one direct `pytestmark` binding names, with its line; any other shape names none."""
+    value, line = _single_assignments(body).get(MODULE_MARKS, (None, 0))
+    return {} if value is None else dict.fromkeys(sorted(_marks_named(value, aliases)), line)
 
 
 def module_marks(tree: ast.Module) -> dict[str, int]:
-    """Each mark the module's own `pytestmark` names, with the line of the first statement that names it."""
-    marks: dict[str, int] = {}
-    for name, named, line in _bound_marks(tree.body, _aliases(tree)):
-        if name == MODULE_MARKS:
-            for mark in sorted(named):
-                marks.setdefault(mark, line)
-    return marks
+    """Each mark the module's own `pytestmark` names, with the line of the binding."""
+    return _own_marks(tree.body, _aliases(tree))
 
 
 def marks_by_test(tree: ast.Module) -> Iterator[frozenset[str]]:
-    """The marks that reach each test function: its own, its enclosing classes' and the module's `pytestmark`."""
+    """The marks that reach each test function: its own, its enclosing classes' and the module's `pytestmark`.
+    A name a class body binds is no module alias inside that class."""
     aliases = _aliases(tree)
-    pending: list[tuple[ast.AST, frozenset[str]]] = [(tree, frozenset(module_marks(tree)))]
+    pending: list[tuple[ast.AST, frozenset[str], dict[str, frozenset[str]]]] = [(tree, frozenset(_own_marks(tree.body, aliases)), aliases)]
     while pending:
-        node, inherited = pending.pop()
+        node, inherited, visible = pending.pop()
         for child in ast.iter_child_nodes(node):
-            marks = inherited
+            marks, child_visible = inherited, visible
             if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-                marks = inherited.union(*(_marks_named(decorator, aliases) for decorator in child.decorator_list))
+                marks = inherited.union(*(_marks_named(decorator, visible) for decorator in child.decorator_list))
             if isinstance(child, ast.ClassDef):
-                marks = marks.union(*(named for name, named, _ in _bound_marks(child.body, aliases) if name == MODULE_MARKS))
+                rebound = {name for scoped in _scope_nodes(child.body) for name in _bound_names(scoped)}
+                child_visible = {name: held for name, held in visible.items() if name not in rebound}
+                marks = marks.union(_own_marks(child.body, child_visible))
             if clones.is_test_function(child):
                 yield marks
-            pending.append((child, marks))
+            pending.append((child, marks, child_visible))
 
 
 def registers(pyproject: str, mark: str) -> bool:

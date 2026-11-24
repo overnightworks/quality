@@ -342,7 +342,8 @@ It applies these rules:
   test directory in `[adapter_imports]` of `quality/baseline.toml`, a raise being a loosening.
 
   A core test whose module-level `pytestmark` holds `pytest.mark.imports_adapter` gets no `adapter import` finding: the
-  mark may be bare or called, alone, in a list or tuple, or reached through a module-level alias; a mark on a class or a
+  mark may be bare or called, alone, in a list or tuple, or reached through a module-level alias, read as the report's
+  suite columns read it (`docs/commands.md`, FLEET-122); a mark on a class or a
   test exempts nothing (ADAPTERIMPORT-22). It exempts only where the project's `pyproject.toml` registers it, as
   `imports_adapter` or `imports_adapter: <text>` in `[tool.pytest.ini_options] markers`; otherwise the finding stands and
   its fix is `register imports_adapter in [tool.pytest.ini_options] markers`. A registration only a `conftest.py` hook,

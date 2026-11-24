@@ -336,7 +336,13 @@ repository a token can list is dropped without a trace (FLEET-72).
   enclosing test or, in a describe outside any test, every test of that describe, and outside any test or describe every
   test of the file; a conditional mark counts even where CI runs the test (FLEET-122). The forms of a Python test's
   marks are read by `pytest_marks`, the one owner `adapter-import` shares, and `suites` maps its mark names to these
-  columns. `Fixme` counts the same way for Playwright `test.fixme`, `describe.fixme` and pytest `pytest.mark.xfail`; a
+  columns. A module's or class's `pytestmark` is read only where the name is bound once in that body, by a plain or
+  annotated assignment standing directly in it, to a mark or a list or tuple of marks, and a module-level alias only
+  where it is bound once directly in the module body; every other shape (a second binding in any form, a binding inside
+  an `if`, `try`, `with`, `for`, `while` or `match`, a value that is no mark) gives no marks, so the test counts as
+  unmarked and `adapter-import` exempts nothing. A write no statement shows (a star import, `globals()`, a conftest
+  hook) is not seen.
+  `Fixme` counts the same way for Playwright `test.fixme`, `describe.fixme` and pytest `pytest.mark.xfail`; a
   test with both marks counts in both columns (FLEET-123). A Python test file that does not parse and a script test file
   that is not UTF-8 or that the lexer refuses count no test; `Note` reads `N files not read`, and an unmeasured
   repository reads `cannot judge: <reason>` there with `—` in every number (FLEET-124). Named limits: probe and

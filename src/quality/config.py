@@ -1,29 +1,38 @@
 import datetime
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
 from quality import config_entries, repository
-from quality.rules import Rule
+from quality.config_allowances import (
+    COMPOSE_ALLOWANCE_EXAMPLE,
+    LAYOUT_ALLOWANCE_EXAMPLE,
+    PYTHON_ALLOWANCE_EXAMPLE,
+    ROOT_ALLOWANCE_EXAMPLE,
+    WORKFLOW_ALLOWANCE_EXAMPLE,
+    ComposeAllowance,
+    LayoutAllowance,
+    PythonAllowance,
+    RootAllowance,
+    WorkflowAllowance,
+    compose_allowances,
+    layout_allowances,
+    python_allowances,
+    root_allowances,
+    workflow_allowances,
+)
 
 SECRETS_KEYS = {"allow"}
 SECRETS_ALLOW = "[secrets] allow"
 ALLOWANCE_KEYS = {"rule", "file", "secret_sha256", "reason"}
 DECLARATION_KEYS = {"what", "item", "date", "reason"}
-ROOT_ALLOWANCE_KEYS = {"entry", "reason"}
-NOT_ROOT_ENTRY_NAMES = {".", "..", ".git"}
-LAYOUT_ALLOWANCE_KEYS = {"path", "rule", "reason"}
-PYTHON_ALLOWANCE_KEYS = {"path", "reason"}
-COMPOSE_ALLOWANCE_KEYS = {"file", "service", "reason"}
-WORKFLOW_ALLOWANCE_KEYS = {"file", "reason"}
 GENERATED_FILE_KEYS = {"path", "job", "item", "date", "reason"}
 FOREIGN_PREFIX_KEYS = {"prefix", "owner"}
 IMPLEMENTED_DOCUMENT_KEYS = {"path", "item", "date", "reason"}
 ITEM_REFERENCE_EXPECTED = "item as #<number> or <owner>/<repo>#<number>"
-PATH_PATTERN_CHARACTERS = "*?["
 ADVISORY_ALLOWANCE_KEYS = {"id", "lock", "until", "date", "item", "reason"}
 SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 # ASCII only, so a lookalike name (a Cyrillic letter in it) is no repository.
@@ -33,16 +42,10 @@ ITEM_REFERENCE = re.compile(rf"(?:{REPOSITORY_NAME.pattern})?#[1-9][0-9]*")
 ID_PREFIX = r"[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*"
 ID_PREFIX_PATTERN = re.compile(ID_PREFIX)
 MARKDOWN_SUFFIX = ".md"
-ONE_LINE_REASON = "a non-empty one-line reason"
 GATE_HEADING = "[gate]"
 LOOSENED_HEADING = "[[gate.loosened]]"
 SECRETS_ALLOWANCE_HEADING = "[[secrets.allow]]"
 ADVISORY_ALLOWANCE_HEADING = "[[advisories.allow]]"
-ROOT_ALLOWANCE_HEADING = "[[root.allow]]"
-LAYOUT_ALLOWANCE_HEADING = "[[layout.allow]]"
-PYTHON_ALLOWANCE_HEADING = "[[python.allow]]"
-COMPOSE_ALLOWANCE_HEADING = "[[compose.allow]]"
-WORKFLOW_ALLOWANCE_HEADING = "[[workflow.allow]]"
 GENERATED_FILE_HEADING = "[[size.generated]]"
 FOREIGN_PREFIX_HEADING = "[[spec_citations.foreign]]"
 IMPLEMENTED_DOCUMENT_HEADING = "[[spec_citations.implemented]]"
@@ -74,33 +77,6 @@ ADVISORY_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
     "date = 2026-10-21",
     'item = "overnightworks/agent-presentator#371"',
     'reason = "gradio caps pillow<13; no image input"',
-)
-ROOT_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
-    ROOT_ALLOWANCE_HEADING,
-    'entry = "frontend/"',
-    'reason = "the web client, built apart from the Python package"',
-)
-LAYOUT_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
-    LAYOUT_ALLOWANCE_HEADING,
-    'path = "deploy/EDGE_SHA"',
-    'rule = "file-suffix"',
-    'reason = "the deploy script reads it by this name"',
-)
-PYTHON_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
-    PYTHON_ALLOWANCE_HEADING,
-    'path = "speech/providers/qwen/pyproject.toml"',
-    'reason = "qwen-tts has no cp314 wheel"',
-)
-COMPOSE_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
-    COMPOSE_ALLOWANCE_HEADING,
-    'file = "compose.yaml"',
-    'service = "traefik"',
-    'reason = "it terminates TLS on the host\'s own interfaces"',
-)
-WORKFLOW_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
-    WORKFLOW_ALLOWANCE_HEADING,
-    'file = ".github/workflows/preview.yml"',
-    'reason = "it deploys the pull request preview and no check belongs to it"',
 )
 GENERATED_FILE_EXAMPLE: config_entries.ExampleLines = (
     GENERATED_FILE_HEADING,
@@ -198,58 +174,6 @@ class AdvisoryAllowance:
     def key(self) -> tuple[str, str]:
         """One allowance per advisory id and lock file."""
         return self.id, self.lock
-
-
-@dataclass(frozen=True)
-class RootAllowance:
-    """A root entry the repository declares beyond quality's base list: a file `Makefile` or a directory `frontend/`."""
-
-    entry: str
-    reason: str
-
-
-@dataclass(frozen=True)
-class PythonAllowance:
-    """A `pyproject.toml` the repository allows below the Python floor: its exact tracked path and why."""
-
-    path: str
-    reason: str
-
-
-LAYOUT_RULES = (
-    Rule.AGENTS_MD, Rule.FILE_SUFFIX, Rule.SCRIPT_NAME, Rule.SCRIPT_HEADER, Rule.TEST_LAYOUT, Rule.TEST_IMPORT
-)
-
-
-@dataclass(frozen=True)
-class LayoutAllowance:
-    """A tracked file, by its exact path, the repository declares against one layout rule."""
-
-    path: str
-    rule: Rule
-    reason: str
-
-
-def declared_paths(allowances: Sequence[LayoutAllowance], rule: Rule) -> set[str]:
-    return {allowance.path for allowance in allowances if allowance.rule is rule}
-
-
-@dataclass(frozen=True)
-class ComposeAllowance:
-    """A compose service, by its exact tracked file and name, the repository declares host-networked."""
-
-    file: str
-    service: str
-    reason: str
-
-
-@dataclass(frozen=True)
-class WorkflowAllowance:
-    """A workflow a pull request triggers that is neither the gate's caller nor CodeQL's, declared by its exact tracked
-    path with the reason it stands outside them."""
-
-    file: str
-    reason: str
 
 
 @dataclass(frozen=True)
@@ -359,11 +283,6 @@ def secret_allowance_entry(allowance: Allowance) -> config_entries.ExampleLines:
     )
 
 
-def workflow_allowance_entry(file: str) -> config_entries.ExampleLines:
-    """The entry that declares the workflow `file`, as the block the reader takes; the reason is the person's to write."""
-    return (WORKFLOW_ALLOWANCE_HEADING, f"file = {config_entries.toml_string(file)}")
-
-
 def _refuse_unknown_secrets_keys(secrets: dict) -> None:
     unknown = set(secrets) - SECRETS_KEYS
     if unknown:
@@ -396,11 +315,11 @@ def _validated_document(text: str) -> _Document:
         AllowLists(
             _parse_allowances(tables["secrets"]),
             _advisory_allowances(tables["advisories"]),
-            _root_allowances(tables["root"]),
-            _layout_allowances(tables["layout"]),
-            _python_allowances(tables["python"]),
-            _compose_allowances(tables["compose"]),
-            _workflow_allowances(tables["workflow"]),
+            root_allowances(tables["root"]),
+            layout_allowances(tables["layout"]),
+            python_allowances(tables["python"]),
+            compose_allowances(tables["compose"]),
+            workflow_allowances(tables["workflow"]),
             _generated_files(tables["size"], gate),
             _foreign_prefixes(tables["spec_citations"]),
             _implemented_documents(tables["spec_citations"]),
@@ -456,7 +375,7 @@ def _refuse_unless_ruled(refuse: Callable[[str], config_entries.ConfigError], it
     if not config_entries.is_date_without_time(date):
         raise refuse("date as a TOML date without a time")
     if not config_entries.is_one_line_text(reason):
-        raise refuse(ONE_LINE_REASON)
+        raise refuse(config_entries.ONE_LINE_REASON)
 
 
 def _read_declaration(entry: object, position: int) -> Declaration:
@@ -496,130 +415,6 @@ def _read_advisory_allowance(entry: object, position: int) -> AdvisoryAllowance:
     return AdvisoryAllowance(identifier, lock, until, date, item, reason)
 
 
-def _root_allowances(root: dict) -> tuple[RootAllowance, ...]:
-    return config_entries.unique_entries(
-        root, "allow", ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE, _read_root_allowance,
-        lambda allowance: allowance.entry,
-        lambda allowance: f"declares entry = {config_entries.toml_string(allowance.entry)} twice; one entry per root entry",
-    )
-
-
-def _is_root_entry(entry: object) -> bool:
-    """One name directly in the root, a directory with its trailing `/`; no path, no `.`, `..` or `.git`."""
-    if not isinstance(entry, str):
-        return False
-    name = entry.removesuffix("/")
-    return bool(name.strip()) and "/" not in name and name not in NOT_ROOT_ENTRY_NAMES
-
-
-def _read_root_allowance(entry: object, position: int) -> RootAllowance:
-    refuse = config_entries.entry_refusal(ROOT_ALLOWANCE_HEADING, position, ROOT_ALLOWANCE_EXAMPLE)
-    if not isinstance(entry, dict) or set(entry) != ROOT_ALLOWANCE_KEYS:
-        raise refuse("exactly an entry and a reason")
-    name, reason = entry["entry"], entry["reason"]
-    if not _is_root_entry(name):
-        raise refuse("entry as one name directly in the root, a directory with a trailing /, not a path")
-    if not config_entries.is_one_line_text(reason):
-        raise refuse(ONE_LINE_REASON)
-    return RootAllowance(name, reason)
-
-
-def _layout_allowances(layout: dict) -> tuple[LayoutAllowance, ...]:
-    return config_entries.unique_entries(
-        layout, "allow", LAYOUT_ALLOWANCE_HEADING, LAYOUT_ALLOWANCE_EXAMPLE, _read_layout_allowance,
-        lambda allowance: (allowance.rule, allowance.path),
-        lambda allowance: f"declares path = {config_entries.toml_string(allowance.path)} for rule = "
-        f"{config_entries.toml_string(allowance.rule.value)} twice; one declaration per rule and path",
-    )
-
-
-def _python_allowances(python: dict) -> tuple[PythonAllowance, ...]:
-    return config_entries.unique_entries(
-        python, "allow", PYTHON_ALLOWANCE_HEADING, PYTHON_ALLOWANCE_EXAMPLE, _read_python_allowance,
-        lambda allowance: allowance.path,
-        lambda allowance: f"declares path = {config_entries.toml_string(allowance.path)} twice; one entry per path",
-    )
-
-
-def _read_python_allowance(entry: object, position: int) -> PythonAllowance:
-    refuse = config_entries.entry_refusal(PYTHON_ALLOWANCE_HEADING, position, PYTHON_ALLOWANCE_EXAMPLE)
-    if not isinstance(entry, dict) or set(entry) != PYTHON_ALLOWANCE_KEYS:
-        raise refuse("exactly a path and a reason")
-    path, reason = entry["path"], entry["reason"]
-    if not _is_exact_file_path(path) or PurePosixPath(path).name != "pyproject.toml":
-        raise refuse("path as the exact tracked path of one pyproject.toml, no folder, pattern or ..")
-    if not config_entries.is_one_line_text(reason):
-        raise refuse(ONE_LINE_REASON)
-    return PythonAllowance(path, reason)
-
-
-def _is_exact_file_path(path: object) -> bool:
-    """A relative path to one file: no folder (trailing `/`), no pattern character, no empty, `.` or `..` component, not absolute."""
-    if not isinstance(path, str) or not path.strip() or path.startswith("/") or path.endswith("/"):
-        return False
-    components = path.split("/")
-    return not any(character in path for character in PATH_PATTERN_CHARACTERS) and all(
-        component not in ("", ".", "..") for component in components
-    )
-
-
-def _read_layout_allowance(entry: object, position: int) -> LayoutAllowance:
-    refuse = config_entries.entry_refusal(LAYOUT_ALLOWANCE_HEADING, position, LAYOUT_ALLOWANCE_EXAMPLE)
-    if not isinstance(entry, dict) or set(entry) != LAYOUT_ALLOWANCE_KEYS:
-        raise refuse("exactly a path, a rule and a reason")
-    path, rule, reason = entry["path"], entry["rule"], entry["reason"]
-    if not _is_exact_file_path(path):
-        raise refuse("path as the exact tracked path of one file: no folder, pattern, .. or absolute path")
-    if rule not in LAYOUT_RULES:
-        raise refuse(f"rule as one of {', '.join(sorted(str(known) for known in LAYOUT_RULES))}")
-    if not config_entries.is_one_line_text(reason):
-        raise refuse(ONE_LINE_REASON)
-    return LayoutAllowance(path, Rule(rule), reason)
-
-
-def _compose_allowances(compose: dict) -> tuple[ComposeAllowance, ...]:
-    return config_entries.unique_entries(
-        compose, "allow", COMPOSE_ALLOWANCE_HEADING, COMPOSE_ALLOWANCE_EXAMPLE, _read_compose_allowance,
-        lambda allowance: (allowance.file, allowance.service),
-        lambda allowance: f"declares service = {config_entries.toml_string(allowance.service)} of file = "
-        f"{config_entries.toml_string(allowance.file)} twice; one declaration per file and service",
-    )
-
-
-def _read_compose_allowance(entry: object, position: int) -> ComposeAllowance:
-    refuse = config_entries.entry_refusal(COMPOSE_ALLOWANCE_HEADING, position, COMPOSE_ALLOWANCE_EXAMPLE)
-    if not isinstance(entry, dict) or set(entry) != COMPOSE_ALLOWANCE_KEYS:
-        raise refuse("exactly a file, a service and a reason")
-    file, service, reason = entry["file"], entry["service"], entry["reason"]
-    if not _is_exact_file_path(file):
-        raise refuse("file as the exact tracked path of one compose file: no folder, pattern, .. or absolute path")
-    if not config_entries.is_one_line_text(service):
-        raise refuse("service as the one-line name of a service in that file")
-    if not config_entries.is_one_line_text(reason):
-        raise refuse(ONE_LINE_REASON)
-    return ComposeAllowance(file, service, reason)
-
-
-def _workflow_allowances(workflow: dict) -> tuple[WorkflowAllowance, ...]:
-    return config_entries.unique_entries(
-        workflow, "allow", WORKFLOW_ALLOWANCE_HEADING, WORKFLOW_ALLOWANCE_EXAMPLE, _read_workflow_allowance,
-        lambda allowance: allowance.file,
-        lambda allowance: f"declares file = {config_entries.toml_string(allowance.file)} twice; one entry per workflow",
-    )
-
-
-def _read_workflow_allowance(entry: object, position: int) -> WorkflowAllowance:
-    refuse = config_entries.entry_refusal(WORKFLOW_ALLOWANCE_HEADING, position, WORKFLOW_ALLOWANCE_EXAMPLE)
-    if not isinstance(entry, dict) or set(entry) != WORKFLOW_ALLOWANCE_KEYS:
-        raise refuse("exactly a file and a reason")
-    file, reason = entry["file"], entry["reason"]
-    if not _is_exact_file_path(file):
-        raise refuse("file as the exact tracked path of one workflow: no folder, pattern, .. or absolute path")
-    if not config_entries.is_one_line_text(reason):
-        raise refuse(ONE_LINE_REASON)
-    return WorkflowAllowance(file, reason)
-
-
 def _generated_files(size: dict, gate: dict) -> tuple[GeneratedFile, ...]:
     jobs = _job_names(gate)
     return config_entries.unique_entries(
@@ -634,7 +429,7 @@ def _read_generated_file(entry: object, position: int, mandatory_jobs: tuple[str
     if not isinstance(entry, dict) or set(entry) != GENERATED_FILE_KEYS:
         raise refuse("exactly a path, a job, an item, a date and a reason")
     path, job, item, date, reason = (entry[key] for key in ("path", "job", "item", "date", "reason"))
-    if not _is_exact_file_path(path):
+    if not config_entries.is_exact_file_path(path):
         raise refuse("path as the exact tracked path of one file: no folder, pattern, .. or absolute path")
     if job not in mandatory_jobs:
         raise refuse("job as one of [gate] mandatory_jobs, the job whose generator check proves the file")
@@ -674,7 +469,7 @@ def _read_implemented_document(entry: object, position: int) -> ImplementedDocum
     if not isinstance(entry, dict) or set(entry) != IMPLEMENTED_DOCUMENT_KEYS:
         raise refuse("exactly a path, an item, a date and a reason")
     path, item, date, reason = (entry[key] for key in ("path", "item", "date", "reason"))
-    if not _is_exact_file_path(path) or PurePosixPath(path).suffix != MARKDOWN_SUFFIX:
+    if not config_entries.is_exact_file_path(path) or PurePosixPath(path).suffix != MARKDOWN_SUFFIX:
         raise refuse(f"path as the exact tracked path of one {MARKDOWN_SUFFIX} file: no folder, pattern, .. or absolute path")
     _refuse_unless_ruled(refuse, item, date, reason)
     return ImplementedDocument(path, item, date, reason)

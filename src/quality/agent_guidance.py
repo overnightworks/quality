@@ -6,7 +6,7 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path, PurePosixPath
 
 from quality import checkout, repository
-from quality.config import LayoutAllowance, declared_paths
+from quality.config_allowances import LayoutAllowance, declared_paths
 from quality.markdown_fences import live_line_indexes
 from quality.report import CannotJudge, Finding, FindingEvent, Instruction, allowance_clause, stale_declaration
 from quality.rules import Rule
