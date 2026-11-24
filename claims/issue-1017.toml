@@ -1,7 +1,0 @@
-claim_id = "479c50ebb937405998c4f9595bc964d5"
-agent = "Claude eaac3b48-6964-423b-ac4c-dd8481e5f394"
-role = "builder"
-base = "96841dcff7c627beae4b0cce596c7362d8764348"
-branch = "claude/issue-1017-coverage-sees-reexecution"
-scope = ["pyproject.toml", "tests/test_pin_reexecution.py"]
-opened_commit = "263660c14ad9583c7fbb600d287c7bafd7de0b32"
