@@ -448,6 +448,8 @@ MOVED_MODULES = [
                  id="a directory moved whole carries every count"),
     pytest.param(adapters({"tests/a": 2, "tests/b": 1}), moved_marked({MODULE_A: MODULE_B}, [MODULE_B]), {"tests/a": 1, "tests/b": 2}, 1,
                  id="one module moved into a directory that holds an entry"),
+    pytest.param(adapters({"tests/a": 2}), moved_marked({MODULE_A: MODULE_B}, [MODULE_B]), {"tests/a": 1, "tests/b": 1}, 1,
+                 id="one of two modules moved into a new directory"),
     pytest.param(adapters({"tests/a": 1}), moved_marked({MODULE_A: MODULE_B, OTHER_A: OTHER_B}, [MODULE_B, OTHER_B]), {"tests/b": 1}, 1,
                  id="modules out of one directory share its held count"),
     pytest.param(adapters({"tests/a": 2}), moved_marked({MODULE_A: MODULE_B}, []), {"tests/a": 2}, 0, id="a module without the mark moves nothing"),
@@ -466,6 +468,23 @@ def test_a_renamed_marked_module_carries_one_count_to_its_new_directory_capped_a
     assert (followed.ceiling.adapter_imports, [change.event for change in followed.changes]) == (expected, [NoteEvent.MOVED] * moved)
     carried = carried_base(held, renames, named_paths(followed.ceiling))
     assert raised_adapter_counts(carried.adapter_imports, followed.ceiling.adapter_imports) == []
+
+
+@pytest.mark.parametrize(("held", "renames", "expected", "moved"), MOVED_MODULES)
+def test_a_second_fix_moves_no_count_the_first_one_moved(held, renames, expected, moved):
+    """FIX-34, ADAPTERIMPORT-28: the fix applies only the part of a move the held counts have not taken, so it holds on
+    its own result."""
+    tracked = tracked_after(held, held, renames)
+    first = follow_renames(held, held, renames, tracked)
+    second = follow_renames(first.ceiling, held, renames, tracked)
+    assert (second.ceiling.adapter_imports, second.changes) == (expected, ())
+
+
+def test_a_fix_without_a_committed_table_moves_no_count():
+    """ADAPTERIMPORT-28: counts the fix has just measured are already under their new directories."""
+    held = adapters({"tests/a": 1, "tests/b": 1})
+    followed = follow_renames(held, ceiling({}, None), moved_marked({MODULE_A: MODULE_B}, [MODULE_B]), frozenset({MODULE_B}))
+    assert (followed.ceiling.adapter_imports, followed.changes) == ({"tests/a": 1, "tests/b": 1}, ())
 
 
 def test_the_verdict_names_only_a_count_above_the_carried_one():

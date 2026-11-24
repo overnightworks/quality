@@ -493,6 +493,26 @@ def _raised[Entry: (Key, JobKey)](base: Mapping[Entry, int], head: Mapping[Entry
     return [RaisedEntry(key, base.get(key), head[key]) for key in order if key not in base or head[key] > base[key]]
 
 
+def followed_adapter_counts(
+    held: AdapterCounts, committed: AdapterCounts, renames: Renames
+) -> tuple[AdapterCounts, list[tuple[str, str]]]:
+    """`held` after the moves the committed counts carry, each as (old directory, new directory), apart from the part of
+    a move the held counts already took: a source directory holding no more than the committed table carries has given
+    its count away, so a second fix finds nothing left to move."""
+    carried, moves = moved_adapter_counts(committed, renames)
+    untaken = {source: max(0, held.get(source, 0) - carried.get(source, 0)) for source, _ in moves}
+    counts, applied = dict(held), []
+    for source, target in moves:
+        if untaken[source]:
+            untaken[source] -= 1
+            counts[source] -= 1
+            if not counts[source]:
+                del counts[source]
+            counts[target] = counts.get(target, 0) + 1
+            applied.append((source, target))
+    return counts, applied
+
+
 def raised_adapter_counts(base: AdapterCounts, head: AdapterCounts) -> list[RaisedEntry]:
     """The same for adapter import counts, in directory order; a directory the base lacks holds 0."""
     return [RaisedEntry(DirectoryKey(path), base.get(path), head[path]) for path in sorted(head) if head[path] > base.get(path, 0)]
@@ -701,8 +721,8 @@ def follow_renames(held: Baseline, committed: Baseline, renames: Renames, tracke
         )
         changes += limit_changes
     counts = held.adapter_imports
-    if counts is not None:
-        counts, moves = moved_adapter_counts(counts, renames)
+    if counts is not None and committed.adapter_imports is not None:
+        counts, moves = followed_adapter_counts(counts, committed.adapter_imports, renames)
         changes += [Note(target, NoteEvent.MOVED, f"{ADAPTER_EXCEPTION} from {source}") for source, target in moves]
     return CeilingFix(replace(held, size=size, clones=pairs, job_minutes=limits, adapter_imports=counts), tuple(changes))
 
