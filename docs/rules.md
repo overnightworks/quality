@@ -791,8 +791,8 @@ It applies these rules:
   directory together share it; only a count above the carried one is a line, and a directory moved whole moves every
   count. The mark and the project's registration are read from the head commit's files, never the working tree, so the
   verdict and the door agree (BASELINE-19). They read the marks only where the base holds the table, and a module they
-  cannot read carries no count, so its raise shows. `--fix` follows the same renames once, whatever its second run finds
-  (FIX-34). Each of these lines is declarable (ADAPTERIMPORT-29).
+  cannot read carries no count, so its raise shows. A second `--fix` before the commit moves no count the first one
+  already moved (FIX-34). Each of these lines is declarable (ADAPTERIMPORT-29).
   A malformed baseline on either side is exit `2`, naming the side (`quality/baseline.toml at the base commit <sha>:
   ...`, `quality/baseline.toml at the head: ...`) (BASELINE-20). So is a head baseline that links out of the repository
   (BASELINE-21), a base file that is not a regular file (`... : not a regular file`) (BASELINE-22), and a base that git

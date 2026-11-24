@@ -141,17 +141,16 @@ def with_marks(renames: Renames, read: Callable[[str], str | None]) -> Renames:
     """The renames with `marked`: the targets that moved to another directory and carry the registered mark. `read` gives
     the text of a path at the side the marks are read from, None where it holds nothing."""
     marked = set()
+    registered: dict[str, bool] = {}
     for old, new in renames.moves.items():
         project = project_file_of(new)
-        if project is not None and new.endswith(".py") and adapter_directory(old) != adapter_directory(new):
-            module, pyproject = read(new), read(project)
-            if (
-                module is not None
-                and pyproject is not None
-                and pytest_marks.registers(pyproject, pytest_marks.IMPORTS_ADAPTER)
-                and pytest_marks.imports_adapter_line(module) is not None
-            ):
-                marked.add(new)
+        if project is None or not new.endswith(".py") or adapter_directory(old) == adapter_directory(new):
+            continue
+        if project not in registered:
+            text = read(project)
+            registered[project] = text is not None and pytest_marks.registers(text, pytest_marks.IMPORTS_ADAPTER)
+        if registered[project] and (module := read(new)) is not None and pytest_marks.imports_adapter_line(module) is not None:
+            marked.add(new)
     return replace(renames, marked=frozenset(marked))
 
 
