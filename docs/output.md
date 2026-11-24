@@ -167,9 +167,8 @@ findings (ROW-10); the extent of a clean row is:
 
 - `files`: `N rules · M files`, M the distinct paths git tracks (O16).
 - `debt`: `ceiling held · N entries, M clone pairs`, what the ceiling file holds (ROW-18); a `[job_minutes]` table holding a job
-  adds `, K job limits` after the pairs (TIMEOUT-34), a `[spec_citations]` table holding an ID adds `, K uncited spec IDs`
-  after them (CITE-8), and an `[adapter_imports]` table holding a count adds `, K adapter import exceptions` after those
-  (ADAPTERIMPORT-28).
+  adds `, K job limits` after the pairs (TIMEOUT-34), and a `[spec_citations]` table holding an ID adds `, K uncited spec IDs`
+  after them (CITE-8).
 - `imports`: `N contracts` (ROW-11).
 - `secrets`: `N commits` (O30), because gitleaks reads committed history only; `staged change · N files` for a staged
   run.
