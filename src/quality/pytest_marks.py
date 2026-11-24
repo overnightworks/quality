@@ -121,14 +121,15 @@ def unseen_tests(tree: ast.Module) -> Iterator[frozenset[str]]:
     """The marks that can reach each test the module holds but its source does not show, beside `marks_by_test`: a class
     with a base other than `object`, whatever its name, in the module's scope or nested in classes, has its tests from
     the base, and only a mark reaching the class marks them; a name the module imports that starts with `test` or `Test`
-    or that a class of the module's scope names as a base, and each star import, may bring tests that only the module's
+    or that such a class names as a base, and each star import, may bring tests that only the module's
     `pytestmark` marks."""
-    class_scope = {id(node) for node in _class_scope_classes(tree.body)}
+    scope_classes = list(_class_scope_classes(tree.body))
+    class_scope = {id(node) for node in scope_classes}
     for definition, marks in _marked_definitions(tree):
         if id(definition) in class_scope and any(not _is_object(base) for base in definition.bases):
             yield marks
     module = frozenset(module_marks(tree))
-    bases = {base.id for node in _scope_nodes(tree.body) if isinstance(node, ast.ClassDef) for base in node.bases if isinstance(base, ast.Name)}
+    bases = {base.id for node in scope_classes for base in node.bases if isinstance(base, ast.Name)}
     for statement in _scope_nodes(tree.body):
         if isinstance(statement, ast.ImportFrom):
             for imported in statement.names:

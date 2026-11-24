@@ -392,7 +392,7 @@ It applies these rules:
   nested in a class, whatever its name, but not one a function encloses. A test or test class the module imports by name
   (`from x import test_y` or `TestY`, also under `as` when the bound name starts with `test` or `Test`) counts as one
   more test that only the module's `pytestmark` marks, since pytest collects it there, and so does each star import and
-  each imported name that a class of the module's scope names as its base. These counts stand beside the
+  each imported name that such a class names as its base. These counts stand beside the
   per-test reading and move no test count of the report (INTEGRATION-5, FLEET-120). A module in which no test is read or
   counted is clean only when its own `pytestmark` carries the mark; its fact reads `imports <forbidden modules> · no
   test read and the module is not marked integration` (INTEGRATION-6). The mark counts only where the project's

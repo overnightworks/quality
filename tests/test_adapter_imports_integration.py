@@ -192,6 +192,14 @@ UNSEEN = [
         "from shop.core.config import Base\n\n\n" + MARK + "class ShopCase(Base): ...\n", [],
         id="an imported base of an inherited suite marked by the module",
     ),
+    pytest.param(
+        "from shop.core.config import Base\n\n\n@pytest.mark.integration\nclass TestOuter:\n    class Inner(Base): ...\n", counted("1 of 2"),
+        id="an imported base of a nested inherited suite marked by the enclosing class",
+    ),
+    pytest.param(
+        "from shop.core.config import Base\n\n\n@pytest.mark.integration\nclass TestOuter:\n    def test_a(self): ...\n\n    class Inner(Base): ...\n",
+        counted("1 of 3"), id="an imported base of a nested inherited suite inside a marked class",
+    ),
     pytest.param("from shop.core.config import test_round\n\n\n" + MARKED_TEST, counted("1 of 2"), id="an imported test beside a marked test"),
     pytest.param("from shop.core.config import test_round\n\n\n" + MARK + TEST_A, [], id="an imported test marked by the module"),
     pytest.param("from shop.core.config import make as test_make\n", counted("1 of 1"), id="an import renamed to a test name"),
