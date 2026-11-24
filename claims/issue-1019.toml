@@ -3,6 +3,6 @@ agent = "Claude eaac3b48-6964-423b-ac4c-dd8481e5f394"
 role = "builder"
 base = "0f71110214b2f8c43c67c932290c0eacc94dd62f"
 branch = "claude/issue-1019-merge-several-pull-requests"
-scope = ["README.md", "docs/ARCHITECTURE.md", "docs/commands.md", "docs/output.md", "docs/runbooks/merge.md", "pyproject.toml", "src/quality/cli.py", "src/quality/cli_help.py", "src/quality/merge.py", "src/quality/merge_run.py", "src/quality/process.py", "tests/support", "tests/test_cli_help.py", "tests/test_merge_run.py"]
+scope = ["README.md", "docs/ARCHITECTURE.md", "docs/commands.md", "docs/output.md", "docs/runbooks/merge.md", "pyproject.toml", "src/quality/cli.py", "src/quality/cli_help.py", "src/quality/merge.py", "src/quality/merge_run.py", "src/quality/process.py", "tests/support", "tests/test_cli_help.py", "tests/test_merge_dry_run.py", "tests/test_merge_run.py", "tests/test_merge_run_process.py"]
 opened_commit = "6b4441cf78d7de4d95f2068f3acf6f6014893ebc"
 whole_reason = "The run over several names, its help, its printed rows and the documents that describe the door change together; splitting would land a door whose documents lie."
