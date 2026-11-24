@@ -325,9 +325,10 @@ It applies these rules:
   over the forbidden modules `m` the graph holds, as import-linter's own forbidden contract filters them; a forbidden module nothing imports is not in the graph and reaches nothing (ADAPTERIMPORT-14).
   A name neither forbidden nor in the graph is clean (ADAPTERIMPORT-15).
 
-  One finding per statement, at the core test's `path:line`, is an `adapter import` row whose fact names each imported
-  name with the forbidden module it is or reaches, and the support module that carried it (ADAPTERIMPORT-16), its fix to
-  name the test after an adapter or composition module or to import no adapter; all findings print sorted by path and line
+  One finding per statement, at the core test's `path:line`, is an `adapter import` row whose fact names each forbidden
+  module the statement's names are or reach once, with the support modules that carried it, as in
+  `imports shop.adapters (through tests/support/stores.py)` (ADAPTERIMPORT-16), its fix to name the test after an adapter
+  or composition module or to import no adapter; all findings print sorted by path and line
   (ADAPTERIMPORT-17). A test or support module that does not parse makes the `imports` row `✗ not checked` with the
   reason (exit `2`) (ADAPTERIMPORT-18). A `[[layout.allow]]` entry naming the rule is refused like any rule outside the
   layout rules (ADAPTERIMPORT-19). The imports area reads the config and builds the graph once per run; `import-contract`

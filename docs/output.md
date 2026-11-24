@@ -83,7 +83,7 @@ rows, by area:
   of at most 15`, of `new debt` `lower timeout-minutes to 15 or less` (`, or run quality check --fix to record it` where
   the ceiling has no `[job_minutes]` table), of `grew` `bring it back to <entry> or below` and
   of `can fall` `quality check --fix` ([rules](rules.md)).
-- `imports`: a core test that imports an adapter is an `adapter import` finding at `path:line`, a marked module that imports none is `unused` at its `pytestmark` line, and the held counts of marked modules are `grew`, `new debt` or `can fall` (ADAPTERIMPORT-25, ADAPTERIMPORT-26); a broken contract is a `broken` finding; an unmatched ignore is an `unused` finding at `error` and an
+- `imports`: a core test that imports an adapter is an `adapter import` finding at `path:line` that names each forbidden module once, as in `imports shop.adapters (through tests/support/stores.py)`, a marked module that imports none is `unused` at its `pytestmark` line, and the held counts of marked modules are `grew`, `new debt` or `can fall` (ADAPTERIMPORT-25, ADAPTERIMPORT-26); a broken contract is a `broken` finding; an unmatched ignore is an `unused` finding at `error` and an
   `unused` note at `warn`; a grimp or import-linter warning is a `warning` note (O23); a `broken` finding's detail
   lines are import-linter's own rendering of the contract ([Rows](#rows)).
 - `secrets`: a key is a `secret` finding whose fact names gitleaks' rule and, in history, the commit's first eight
