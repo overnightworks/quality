@@ -111,4 +111,3 @@ def is_exact_file_path(path: object) -> bool:
     return not any(character in path for character in PATH_PATTERN_CHARACTERS) and all(
         component not in ("", ".", "..") for component in components
     )
-
