@@ -67,16 +67,10 @@ def split_of(read: architecture.ContractsRead | None) -> Split | None:
 
 
 class _Red(NamedTuple):
-    """An imported name that is an adapter or reaches one, and the support module that carried the import."""
+    """The forbidden module an imported name is or reaches, and the support module that carried the import."""
 
-    name: str
     adapter: str
-    inside: bool
     through: str | None
-
-    def words(self) -> str:
-        reading = f"{self.name} ({'is' if self.inside else 'reaches'} {self.adapter})"
-        return reading if self.through is None else f"{reading} through {self.through}"
 
 
 def _reach(split: Split, graph: grimp.ImportGraph) -> dict[str, str]:
@@ -98,11 +92,11 @@ class _Judgement:
     def red(self, name: str, through: str | None) -> _Red | None:
         adapter = self.split.adapter_of(name)
         if adapter is not None:
-            return _Red(name, adapter, True, through)
+            return _Red(adapter, through)
         if any(module.startswith(f"{name}.") for module in self.split.adapters):
             return None  # an ancestor of an adapter is a namespace, and its own __init__ is not judged
         reached = self.reach.get(name)
-        return None if reached is None else _Red(name, reached, False, through)
+        return None if reached is None else _Red(reached, through)
 
     def reds(self, statement: layout.ModuleImport, imports_of: Callable[[str], list[layout.ModuleImport]]) -> set[_Red]:
         """What a statement imports that is red, and what the support modules it imports do."""
@@ -160,7 +154,19 @@ def _module_findings(path: str, mark_line: int | None, reds: list[tuple[layout.M
 
 
 def _words(reds: set[_Red]) -> str:
-    return ", ".join(red.words() for red in sorted(reds, key=lambda red: (red.name, red.through or "")))
+    """Each forbidden module once; with support carriers it also says `directly` where the statement is the module."""
+    carriers: dict[str, set[str | None]] = {}
+    for red in reds:
+        carriers.setdefault(red.adapter, set()).add(red.through)
+    return ", ".join(_carried(adapter, through) for adapter, through in sorted(carriers.items()))
+
+
+def _carried(adapter: str, through: set[str | None]) -> str:
+    support = sorted(path for path in through if path is not None)
+    if not support:
+        return adapter
+    ways = (["directly"] if None in through else []) + [f"through {', '.join(support)}"]
+    return f"{adapter} ({', '.join(ways)})"
 
 
 def measure_adapter_imports(

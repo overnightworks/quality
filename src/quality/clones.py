@@ -71,15 +71,18 @@ def _name_tokens(node: ast.AST, names_kept: bool) -> list[str]:
     return [node.name] if names_kept and isinstance(node, FUNCTION_NODES | ast.ClassDef) else []
 
 
-def _emit(node: ast.AST, tokens: list[str], names_kept: bool, literals_kept: bool) -> None:
-    if isinstance(node, ast.expr_context):
-        return
-    tokens.append(type(node).__name__)
-    if isinstance(node, ast.Constant):
-        tokens.append(repr(node.value) if literals_kept else _literal_class(node.value))
-    tokens.extend(_name_tokens(node, names_kept))
-    for child in ast.iter_child_nodes(node):
-        _emit(child, tokens, names_kept, literals_kept)
+def _emit(root: ast.AST, tokens: list[str], names_kept: bool, literals_kept: bool) -> None:
+    """Append the pre-order tokens of `root` with an explicit stack, so a tree deeper than the interpreter recurses is walked."""
+    pending = [root]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, ast.expr_context):
+            continue
+        tokens.append(type(node).__name__)
+        if isinstance(node, ast.Constant):
+            tokens.append(repr(node.value) if literals_kept else _literal_class(node.value))
+        tokens.extend(_name_tokens(node, names_kept))
+        pending.extend(reversed(list(ast.iter_child_nodes(node))))
 
 
 def is_test_function(node: ast.AST) -> TypeGuard[FUNCTION_NODES]:
