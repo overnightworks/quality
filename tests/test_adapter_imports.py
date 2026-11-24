@@ -339,6 +339,12 @@ def test_a_registered_module_mark_exempts_a_core_test(red):
     assert red({CORE_TEST: MARKED}, extra=FEW_HELD, markers=REGISTERED) == []
 
 
+def test_a_module_that_binds_pytestmark_twice_exempts_nothing(red):
+    """ADAPTERIMPORT-22: a module's `pytestmark` is read only where one binding holds it."""
+    module = "import pytest\n\n" + MARK + MARK + ADAPTER_IMPORT
+    assert red({CORE_TEST: module}, markers=REGISTERED) == [f"{CORE_TEST}:5"]
+
+
 def test_a_test_mark_exempts_nothing(red):
     """ADAPTERIMPORT-22: only the module's own `pytestmark` is the module marker; which other marks are not is
     `pytest_marks`' to judge."""
