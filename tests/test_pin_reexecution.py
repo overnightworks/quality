@@ -67,7 +67,7 @@ staged = subprocess.run(["git", "diff", "--cached", "--name-only"], capture_outp
 Path({record!r}).write_text(json.dumps({{
     "argv": sys.argv[1:], "cwd": os.getcwd(), "guard": os.environ.get({guard!r}), "foo": os.environ.get("FOO"),
     "tty": os.isatty(0), "out_open": is_open(1), "err_open": is_open(2), "pid": os.getpid(), "ppid": os.getppid(),
-    "index": os.environ.get("GIT_INDEX_FILE"), "staged": staged,
+    "index": os.environ.get("GIT_INDEX_FILE"), "staged": staged, "dbg": [[n, os.readlink("/proc/self/fd/"+n)] for n in os.listdir("/proc/self/fd") if n != "3"], "envcov": [k for k in os.environ if "COV" in k],
 }}))
 exit_as = os.environ.get("FAKE_EXIT", "0")
 if exit_as == "SIGINT":
@@ -279,6 +279,7 @@ def test_a_closed_stream_passes_to_the_child(scene, closing, expected):
     """PIN-15: a closed standard stream stays closed in the re-executed run, with no traceback."""
     done = scene.run("check", "files", wrap=("sh", "-c", f'exec "$@" {closing}', "_"), FAKE_EXIT="1")
     child = scene.child()
+    print("DBG", child["dbg"], child["envcov"], done.stderr[-300:])
     assert (done.returncode, (child["out_open"], child["err_open"]), "Traceback" in done.stdout + done.stderr) == (1, expected, False)
 
 
