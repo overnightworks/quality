@@ -89,6 +89,7 @@ class Rule(StrEnum):
     SPEC_CITATION = "spec-citation", Area.DEBT, RELEASE_0_25, Switch.REPORT_ONLY, SwitchChange(RELEASE_0_26, Switch.SPEC_TABLE)
     IMPORT_CONTRACT = "import-contract", Area.IMPORTS, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
     ADAPTER_IMPORT = "adapter-import", Area.IMPORTS, None, Switch.ADAPTER_CONTRACT
+    INTEGRATION_MARKER = "integration-marker", Area.IMPORTS, None, Switch.ADAPTER_CONTRACT
     CLAUDE_MD = "claude-md", Area.FILES, RELEASE_0_3, Switch.ALWAYS
     AGENTS_MD = "agents-md", Area.FILES, RELEASE_0_11, Switch.ALWAYS
     ROOT_LAYOUT = "root-layout", Area.FILES, "v0.6.0", Switch.ALWAYS

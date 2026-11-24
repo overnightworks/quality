@@ -304,12 +304,12 @@ def test_a_module_that_does_not_parse_makes_the_imports_row_not_checked(build_re
 
 
 def test_a_config_that_cannot_be_read_refuses_both_rules_of_the_area_with_one_row(build_repo, capsys):
-    """ADAPTERIMPORT-20: a read that cannot judge refuses both rules, and the area says it once."""
+    """ADAPTERIMPORT-20: a read that cannot judge refuses every rule of the area, and the area says it once."""
     contract = adapter_contract(type="custom")
     repo = build_repo(shop_with_adapters({CORE_TEST: ADAPTER_IMPORT}, contract))
     result = check_result(repo, named=[Area.IMPORTS])
     refusals = {verdict.rule: str(verdict.refusal) for verdict in result.verdicts if verdict.refusal is not None}
-    assert set(refusals) == {Rule.IMPORT_CONTRACT, Rule.ADAPTER_IMPORT}
+    assert set(refusals) == {Rule.IMPORT_CONTRACT, Rule.ADAPTER_IMPORT, Rule.INTEGRATION_MARKER}
     assert len(set(refusals.values())) == 1
     code, output = check_output(capsys, repo)
     assert (code, output.count(refusal_row("imports"))) == (2, 1)

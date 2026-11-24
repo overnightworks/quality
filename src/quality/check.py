@@ -158,15 +158,30 @@ def _measure_adapter_imports(inputs: RunInputs) -> adapter_imports.Measure | Non
     return _required(_content_findings(inputs.root, inputs.modes, inputs.allow_lists, adapter_imports.candidates, check))
 
 
-def check_adapter_imports(inputs: RunInputs, read: architecture.ContractsRead | None) -> Judged:
-    """Judges nothing without the contract that carries the adapter id, and then reads no file; measured only without a
-    config. The held counts are the baseline's, or the table `--fix` plans where it runs."""
+def _measured_rule(inputs: RunInputs, read: architecture.ContractsRead | None, rule: Rule) -> adapter_imports.Measure | Judged:
+    """The imports area's one measure, or the verdict that stands in its place: nothing without the contract that carries
+    the adapter id, and then no file is read (measured only without a config), or the refusal of `rule` that the measure
+    or its read holds."""
     measure = inputs.adapter_measure
-    if measure is None or isinstance(measure, CannotJudge):
-        return RuleResult([], 0, read is None) if measure is None else measure
+    if measure is None:
+        return RuleResult([], 0, read is None)
+    return measure if isinstance(measure, CannotJudge) else measure.refusals.get(rule, measure)
+
+
+def check_adapter_imports(inputs: RunInputs, read: architecture.ContractsRead | None) -> Judged:
+    """The held counts are the baseline's, or the table `--fix` plans where it runs."""
+    measure = _measured_rule(inputs, read, Rule.ADAPTER_IMPORT)
+    if not isinstance(measure, adapter_imports.Measure):
+        return measure
     plan = inputs.planned_ceiling
     baseline = plan.ceiling if isinstance(plan, ratchet.CeilingFix) else _required(inputs.baseline)
     return adapter_imports.judge_counts(measure, None if baseline is None else baseline.adapter_imports)
+
+
+def check_integration_marker(inputs: RunInputs, read: architecture.ContractsRead | None) -> Judged:
+    """The test modules outside the core that reach an adapter and lack the `integration` mark; no baseline holds them."""
+    measure = _measured_rule(inputs, read, Rule.INTEGRATION_MARKER)
+    return measure.integration if isinstance(measure, adapter_imports.Measure) else measure
 
 
 def lint_python(
@@ -590,7 +605,7 @@ def _adapter_counts(inputs: RunInputs) -> Callable[[], Mapping[str, int] | None]
 
     def counts() -> Mapping[str, int] | None:
         measure = _required(inputs.adapter_measure)
-        return None if measure is None else measure.counts
+        return None if measure is None else _required(measure.refusals.get(Rule.ADAPTER_IMPORT, measure)).counts
 
     return counts
 
@@ -633,7 +648,11 @@ def _judge_debt(inputs: RunInputs) -> AreaVerdict:
 
 def _judge_imports(inputs: RunInputs) -> AreaVerdict:
     read = inputs.import_contracts
-    judged = {Rule.IMPORT_CONTRACT: _judge_read(read, check_import_contract), Rule.ADAPTER_IMPORT: _judge_read(read, partial(check_adapter_imports, inputs))}
+    judged = {
+        Rule.IMPORT_CONTRACT: _judge_read(read, check_import_contract),
+        Rule.ADAPTER_IMPORT: _judge_read(read, partial(check_adapter_imports, inputs)),
+        Rule.INTEGRATION_MARKER: _judge_read(read, partial(check_integration_marker, inputs)),
+    }
     return _area_verdict(Area.IMPORTS, judged)
 
 
