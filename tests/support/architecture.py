@@ -60,15 +60,25 @@ def one(options: dict) -> dict[str, dict]:
 GUARDED_CHANGES = 'import contract "guarded" changes '
 
 
-CORE_MODULE = "src/skat/table/core.py"
-CALLING_AND_MEMBER = ["skat.table.** -> agents.calling", "skat.table.** -> agents.member"]
-CORE_KEEPS_TO_TWO_OF_AGENTS = {
-    "type": "forbidden", "source_modules": ["skat.table"], "forbidden_modules": ["agents"], "ignore_imports": CALLING_AND_MEMBER,
-}
-SKAT = {
-    "src/skat/__init__.py": "", "src/skat/table/__init__.py": "", CORE_MODULE: "", "src/skat/web.py": "",
-    "src/skat/helper.py": "",
-}
+def skat_core_path() -> str:
+    return "src/skat/table/core.py"
+
+
+def calling_and_member() -> list[str]:
+    return ["skat.table.** -> agents.calling", "skat.table.** -> agents.member"]
+
+
+def core_keeps_to_two_of_agents(**options) -> dict:
+    """A forbidden contract that keeps `skat.table` off `agents` but for `agents.calling` and `agents.member`, with `options` over it."""
+    contract = {"type": "forbidden", "source_modules": ["skat.table"], "forbidden_modules": ["agents"], "ignore_imports": calling_and_member()}
+    return {**contract, **options}
+
+
+def skat_files(core: str = "", *, web: str = "", helper: str = "") -> dict[str, str]:
+    """The `skat` package's files, with `skat.table.core`, `skat.web` and `skat.helper` holding the given source."""
+    return {
+        "src/skat/__init__.py": "", "src/skat/table/__init__.py": "", skat_core_path(): core, "src/skat/web.py": web, "src/skat/helper.py": helper,
+    }
 
 
 def judged_in(root: Path, files: dict[str, str], contracts: dict[str, dict], untracked: tuple[str, ...] = (), **session) -> RuleResult:
@@ -86,7 +96,7 @@ def judged_in(root: Path, files: dict[str, str], contracts: dict[str, dict], unt
 def judged_core(root: Path, core: str, contract: dict | None = None, **session) -> RuleResult:
     """The `skat` repository whose `skat.table.core` holds `core`, judged against `contract` (by default, the core
     keeps to `agents.calling` and `agents.member`)."""
-    return judged_in(root, {**SKAT, CORE_MODULE: core}, one(contract or CORE_KEEPS_TO_TWO_OF_AGENTS), **session)
+    return judged_in(root, skat_files(core), one(contract or core_keeps_to_two_of_agents()), **session)
 
 
 CORE_TEST = "tests/core/test_config.py"
@@ -103,14 +113,21 @@ def adapter_contract(**options) -> dict:
     return {"id": architecture.ADAPTER_CONTRACT_ID, **adapter_split(**options)}
 
 
-def shop_with_adapters(tests: dict[str, str], contract: dict | None = None, **session) -> dict[str, str]:
+def pytest_markers(*markers: str) -> str:
+    """The `[tool.pytest.ini_options]` table of a `pyproject.toml` that registers `markers`."""
+    return f"\n[tool.pytest.ini_options]\nmarkers = {json.dumps(list(markers))}\n"
+
+
+def shop_with_adapters(
+    tests: dict[str, str], contract: dict | None = None, *, markers: tuple[str, ...] = (), **session
+) -> dict[str, str]:
     """The tracked files of a `shop` repository: a core, adapters and a `shop.main` that composes them, `tests` beside
-    them and a `pyproject.toml` that holds `contract` (by default, the core never reaches the adapters)."""
+    them and a `pyproject.toml` that holds `contract` (by default, the core never reaches the adapters) and registers `markers`."""
     return {
         "src/shop/__init__.py": "", "src/shop/core/__init__.py": "", "src/shop/core/config.py": "",
         "src/shop/core/config_stores.py": "", "src/shop/adapters/__init__.py": "", "src/shop/adapters/db.py": "",
         "src/shop/main.py": ADAPTER_IMPORT,
-        "pyproject.toml": contracts_toml({"guard": contract or adapter_contract()}, **session),
+        "pyproject.toml": contracts_toml({"guard": contract or adapter_contract()}, **session) + (pytest_markers(*markers) if markers else ""),
         **tests,
     }
 
