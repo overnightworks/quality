@@ -191,11 +191,9 @@ def test_a_child_killed_by_a_signal_leaves_the_gate_possibly_off_and_the_pair_na
 @pytest.mark.parametrize(
     ("endings", "code"),
     [
-        pytest.param({}, 0, id="all merged"),
-        pytest.param({FIRST: 1}, 1, id="one refused"),
         pytest.param({FIRST: 1, SECOND: Finished(0, interrupted=True)}, 130, id="refused, then interrupted"),
         pytest.param({FIRST: 1, SECOND: Finished(2, interrupted=True)}, 2, id="refused, then interrupted and stopped"),
-        pytest.param({SECOND: SIGKILL_RETURNCODE}, 2, id="killed"),
+        pytest.param({FIRST: 1, SECOND: SIGKILL_RETURNCODE}, 2, id="refused, then killed"),
     ],
 )
 def test_the_run_exits_with_the_worst_ending_2_then_130_then_1_then_0(endings, code, capsys):

@@ -692,6 +692,8 @@ def run(
         exit_code = door()
     except KeyboardInterrupt:
         process.exit_as_interrupted(send_signal)
+    if exit_code == process.EXIT_INTERRUPTED:  # a run over several names ends its children's interrupt as a Ctrl-C does
+        process.exit_as_interrupted(send_signal)
     sys.exit(exit_code)
 
 

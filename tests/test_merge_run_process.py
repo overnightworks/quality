@@ -4,6 +4,7 @@ fake `gh`."""
 
 import json
 import os
+import signal
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -96,7 +97,7 @@ def lines_in_order(output: str, expected: list[str]) -> bool:
 
 def test_a_child_that_traps_ctrl_c_finishes_and_no_child_starts_after(scene):
     """MERGE-113: Ctrl-C reaches child and run together; the run waits for the child, which completes its work, never
-    kills it, starts no further child and ends 130."""
+    kills it, starts no further child and ends by SIGINT, which a shell reads as 130."""
     scene.plan(**{FIRST: "trap", SECOND: "exit:0"})
     with scene.door(FIRST, SECOND) as run:
         run.read_until(f"child {FIRST} ready")
@@ -104,7 +105,7 @@ def test_a_child_that_traps_ctrl_c_finishes_and_no_child_starts_after(scene):
         run.read_until(f"child {FIRST} trapped")
         scene.release()
         code, out = run.finish()
-    assert (code, scene.finished(FIRST), scene.started(SECOND)) == (130, True, False)
+    assert (code, scene.finished(FIRST), scene.started(SECOND)) == (-signal.SIGINT, True, False)
     assert lines_in_order(out, [row("✓", FIRST, "merged", width=14).rstrip("\n"), row("·", SECOND, "not run", width=14).rstrip("\n")])
 
 
