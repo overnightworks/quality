@@ -117,11 +117,15 @@ def lowered_adapter_note(directory: str, before: int, now: int) -> Note:
     return Note(directory, event, f"{before} → {now} {ADAPTER_EXCEPTION}s")
 
 
-def followed_adapter_counts(held: AdapterCounts, committed: AdapterCounts, moves: Mapping[str, str]) -> tuple[AdapterCounts, list[Note]]:
+def followed_adapter_counts(
+    held: AdapterCounts, committed: AdapterCounts, moves: Mapping[str, str]
+) -> tuple[AdapterCounts, list[Note]]:
     """The held counts as the verdict carries the committed ones, and a note for each change against the held table. A
-    directory a move brings a count to takes the carried count. Any other directory keeps no more than the carry and no more than it holds, and one the carry lacks goes. The
-    committed table and the moves alone say what a move brings, so a fix run again, or after one more staged move, ends
-    at the same counts. A move is told when its target gained a count, once per count, with a source that lost one
+    directory a move brings a count to takes the carried count, even where a hand edit lowered the held one: the carry
+    is what the verdict allows, and the later lowering to the measured counts caps it, so no count is written above the
+    carry. Any other directory keeps no more than the carry and no more than it holds, and one the carry lacks goes.
+    The committed table and the moves alone say what a move brings, so a fix run again, or after one more staged move,
+    ends at the same counts. A move is told when its target gained a count, once per count, with a source that lost one
     first; a count that fell and no told move explains is told as lowered or dropped."""
     carried, planned = moved_adapter_counts(committed, moves)
     brought = {target for _, target in planned}
