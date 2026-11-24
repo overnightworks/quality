@@ -54,7 +54,7 @@ if answer.get("print"):
 sys.exit(answer.get("exit", 0))
 """
 
-RECORDING_QUALITY = """#!{python}
+RECORDING_QUALITY = """#!{python} -S
 import json, os, signal, subprocess, sys
 from pathlib import Path
 def is_open(descriptor):

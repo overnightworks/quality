@@ -65,7 +65,7 @@ markers = [
 source_pkgs = ["quality"]
 source_dirs = ["scripts"]
 branch = true
-patch = ["subprocess"]
+patch = ["subprocess", "execv"]
 relative_files = true
 
 [tool.coverage.report]
