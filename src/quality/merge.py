@@ -1,4 +1,4 @@
-"""The operator's door, `quality merge`: switch a repository's gate off, merge one pull request, switch it on again."""
+"""The operator's door for one pull request, `quality merge`: switch a repository's gate off, merge it, switch it on again."""
 
 import json
 import shlex
@@ -119,6 +119,12 @@ class DoorEvent(StrEnum):
     STATE_UNKNOWN = "state unknown"
     POSTED = "posted"
     NOT_POSTED = "not posted"
+    JUDGING = "judging"
+    WOULD_MERGE = "would merge"
+    STOPPED = "stopped"
+    KILLED = "killed"
+    INTERRUPTED = "interrupted"
+    NOT_RUN = "not run"
 
 
 METHOD_EVENTS = {MergeMethod.MERGE: DoorEvent.MERGE_COMMIT, MergeMethod.SQUASH: DoorEvent.SQUASH}
@@ -326,6 +332,11 @@ def restore_command(repository: str) -> Command:
     """The request that switches the gate on, as the one line a person copies whole."""
     arguments, body = gate_request(repository, True)
     return Command(f"echo {shlex.quote(body)} | {shlex.join(['gh', *arguments])}", own_line=True)
+
+
+def gate_may_still_be_off(repository: str) -> str:
+    """The fact printed where switching the gate on again failed or was cut short; `restore_command` is its first step."""
+    return f"{GATE_PROPERTY} MAY STILL BE OFF on {repository}"
 
 
 def comment_request(repository: str, pull_request: int, comment: str) -> list[str]:
@@ -663,7 +674,7 @@ def post_log_comment(gh: GhRunner, door: Door, comment: str, out: DoorStream) ->
 def unfinished_pair(door: Door, attempt: Attempt, unposted: str | None) -> Pair:
     """What the run could not do, the gate first, and the steps that finish it in the order a person takes them."""
     number = door.pull_request
-    gate = f"{GATE_PROPERTY} on again" if attempt.restore_error is None else f"{GATE_PROPERTY} MAY STILL BE OFF on {door.repository}"
+    gate = f"{GATE_PROPERTY} on again" if attempt.restore_error is None else gate_may_still_be_off(door.repository)
     facts = [gate, f"#{number} {MERGE_FACTS.get(attempt.outcome, 'is not merged')}"]
     steps: list[Step] = [restore_command(door.repository)] if attempt.restore_error is not None else []
     if attempt.outcome is Outcome.UNKNOWN:
@@ -691,6 +702,11 @@ def end_at(stop: Stopped, show: Show, channels: Channels) -> int:
     return stop.exit_code
 
 
+def refuse_without_terminal(channels: Channels) -> int:
+    write_pair(not_merged("the operator's merge needs a terminal on stdin"), (Instruction("the operator runs it in his own terminal"),), channels.err)
+    return EXIT_REFUSED
+
+
 def run_merge(
     repository: str,
     pull_request: int,
@@ -710,8 +726,7 @@ def run_merge(
     """Every line leaves through `channels`, escaped: rows and the closing line on stdout, the prompt and the pair on stderr;
     a release that cannot judge is its pair alone."""
     if not is_terminal:
-        write_pair(not_merged("the operator's merge needs a terminal on stdin"), (Instruction("the operator runs it in his own terminal"),), channels.err)
-        return EXIT_REFUSED
+        return refuse_without_terminal(channels)
     out = DoorStream(channels.out)
     show = partial(shown_before_asking, out=out)
     try:
