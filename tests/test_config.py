@@ -6,7 +6,7 @@ import tomllib
 
 import pytest
 
-from quality import cli, config
+from quality import cli, config, config_allowances
 from quality.config import (
     AdvisoryAllowance,
     Allowance,
@@ -14,7 +14,6 @@ from quality.config import (
     ForeignPrefix,
     GeneratedFile,
     ImplementedDocument,
-    LayoutAllowance,
     LegacyMode,
     load_declarations,
     load_gate_settings,
@@ -22,6 +21,7 @@ from quality.config import (
     read_declarations,
     read_gate_settings,
 )
+from quality.config_allowances import LayoutAllowance
 from quality.config_entries import CONFIG_PATH, ConfigError
 from quality.report import printable
 from quality.rules import Rule
@@ -629,8 +629,8 @@ def test_the_refusals_use_every_example_and_every_refusal_without_one():
     assert {refusal.example for refusal in REFUSALS} == {
         None, config.EXAMPLE, config.LEGACY_EXAMPLE, config.SONAR_EXAMPLE, config.SONAR_OFF_EXAMPLE, config.ALLOWANCE_EXAMPLE,
         config.LOOSENED_EXAMPLE,
-        config.ADVISORY_ALLOWANCE_EXAMPLE, config.ROOT_ALLOWANCE_EXAMPLE, config.LAYOUT_ALLOWANCE_EXAMPLE,
-        config.PYTHON_ALLOWANCE_EXAMPLE, config.COMPOSE_ALLOWANCE_EXAMPLE, config.WORKFLOW_ALLOWANCE_EXAMPLE,
+        config.ADVISORY_ALLOWANCE_EXAMPLE, config_allowances.ROOT_ALLOWANCE_EXAMPLE, config_allowances.LAYOUT_ALLOWANCE_EXAMPLE,
+        config_allowances.PYTHON_ALLOWANCE_EXAMPLE, config_allowances.COMPOSE_ALLOWANCE_EXAMPLE, config_allowances.WORKFLOW_ALLOWANCE_EXAMPLE,
         config.GENERATED_FILE_EXAMPLE, config.FOREIGN_PREFIX_EXAMPLE, config.IMPLEMENTED_DOCUMENT_EXAMPLE,
     }
 

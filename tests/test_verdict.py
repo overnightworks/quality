@@ -11,12 +11,12 @@ import pytest
 
 from quality import __version__, cli, verdict
 from quality.baseline_file import BASELINE_PATH
-from quality.config import LOOSENED_EXAMPLE, LegacyMode
+from quality.config import LOOSENED_EXAMPLE, GateSettings, LegacyMode
 from quality.config_entries import CONFIG_PATH
 from quality.ratchet import NO_RENAMES
 from quality.report import CannotJudge, Instruction, printable
 from quality.sides import NO_BASE_SETTINGS, Side, read_base
-from quality.verdict import GateSettings, JobEvent, JobKind, JobOutcome, judge, read_jobs
+from quality.verdict import JobEvent, JobKind, JobOutcome, judge, read_jobs
 from tests.support.advisories import allowance_config
 from tests.support.check import assert_every_line_starts_with_the_door
 from tests.support.git_repositories import GIT_IDENTITY, head_commit, put
