@@ -6,12 +6,12 @@ import urllib.error
 import pytest
 
 from quality import architecture, cli, sides, verdict
-from quality.config import LegacyMode
+from quality.config import GateSettings, LegacyMode
 from quality.config_entries import CONFIG_PATH
 from quality.ratchet import NO_RENAMES
 from quality.report import CannotJudge, Instruction
 from quality.sides import Side
-from quality.verdict import GateSettings, judge
+from quality.verdict import judge
 from tests.support.architecture import FORBIDDEN, adapter_contract, contracts_ini, contracts_toml, ini_section
 from tests.support.git_repositories import put
 from tests.support.sonar import reply

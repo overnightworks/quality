@@ -86,6 +86,7 @@ layers = [
     "merge",
     "landing | base_branch",
     "verdict",
+    "loosenings",
     "sides | gh",
     "sonar_properties | sonar_scanner",
     "sonar | fleet",
