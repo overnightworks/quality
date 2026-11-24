@@ -12,6 +12,7 @@ from quality import cli
 from quality.baseline_file import BASELINE_PATH
 from quality.pin import JudgingRelease
 from quality.report import Release
+from tests.support.git_repositories import git
 
 CHECK_WORD = "check"
 ROOT = Path(__file__).parents[2]
@@ -87,6 +88,28 @@ def fixed(capsys, repo: Path, *words: str, judging=None, **keywords) -> tuple[in
     code = door_in(repo, *words, clock=lambda: 0.0, judging=judging or pinned, **keywords)
     printed = capsys.readouterr()
     return code, pinned.frame(printed.out), printed.err
+
+
+def squashed(text: str) -> str:
+    return " ".join(text.split())
+
+
+def both(capsys, repo: Path) -> tuple[tuple[int, str], tuple[int, str]]:
+    """The dry run, which leaves the tree as it was, then the fix: the exit and the squashed output of each."""
+    tree = tree_of(repo)
+    planned_code, planned, _ = fixed(capsys, repo, *DRY_RUN_WORDS)
+    assert tree_of(repo) == tree, planned
+    code, done, _ = fixed(capsys, repo, *FIX_WORDS)
+    return (planned_code, squashed(planned)), (code, squashed(done))
+
+
+def assert_refused_with_restore_step(capsys, repo: Path, words: tuple[str, ...], fact: str) -> None:
+    """`quality <words>` exits 2 with `fact` and the restore step, and leaves the tree and the index as they were."""
+    index, tree = git(repo, "ls-files", "--stage").stdout, tree_of(repo)
+    code, out, err = fixed(capsys, repo, *words)
+    assert (code, fact in squashed(out)) == (2, True), out
+    assert err.endswith(f"next: {restore_step()}\n"), err
+    assert (tree_of(repo), git(repo, "ls-files", "--stage").stdout) == (tree, index)
 
 
 def digest(repo: Path) -> str:

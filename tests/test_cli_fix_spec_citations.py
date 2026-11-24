@@ -7,7 +7,15 @@ import pytest
 
 from quality.baseline_file import BASELINE_PATH, load_baseline
 from tests.support.baselines import CONFLICT_MARKERS, holding_spec_ids, rendered
-from tests.support.door import DRY_RUN_WORDS, FIX_WORDS, digest, fixed, restore_step, tree_of
+from tests.support.door import (
+    DRY_RUN_WORDS,
+    FIX_WORDS,
+    assert_refused_with_restore_step,
+    both,
+    digest,
+    fixed,
+    tree_of,
+)
 from tests.support.git_repositories import git, put
 from tests.support.source_code import long_function
 from tests.support.specs import SPEC, declaring, foreign_entry, implemented_entry, spec_with
@@ -21,21 +29,8 @@ def citing(*identifiers: str) -> dict[str, str]:
     return {TEST_FILE: tests}
 
 
-def squashed(text: str) -> str:
-    return " ".join(text.split())
-
-
 def written(repo: Path) -> frozenset[str] | None:
     return load_baseline((repo / BASELINE_PATH).read_text()).spec_citations
-
-
-def both(capsys, repo: Path) -> tuple[tuple[int, str], tuple[int, str]]:
-    """The dry run, which leaves the tree as it was, then the fix: the exit and the squashed output of each."""
-    tree = tree_of(repo)
-    planned_code, planned, _ = fixed(capsys, repo, *DRY_RUN_WORDS)
-    assert tree_of(repo) == tree, planned
-    code, done, _ = fixed(capsys, repo, *FIX_WORDS)
-    return (planned_code, squashed(planned)), (code, squashed(done))
 
 
 RECORDINGS = {
@@ -170,11 +165,7 @@ def test_a_table_git_holds_is_not_recorded_again_where_the_fix_would_record_it(b
     """CITE-11: a ceiling that lost the table although a version of it in git held one refuses the whole fix with the
     restore step, exit 2, and nothing is written, as for `[job_minutes]`."""
     repo = lost_by_hand(build_repo, spec_with("- X-1: a."))
-    index, tree = git(repo, "ls-files", "--stage").stdout, tree_of(repo)
-    code, out, err = fixed(capsys, repo, *words)
-    assert (code, "quality/baseline.toml lost its [spec_citations] table, which git holds" in squashed(out)) == (2, True), out
-    assert err.endswith(f"next: {restore_step()}\n"), err
-    assert (tree_of(repo), git(repo, "ls-files", "--stage").stdout) == (tree, index)
+    assert_refused_with_restore_step(capsys, repo, words, "quality/baseline.toml lost its [spec_citations] table, which git holds")
 
 
 def test_a_table_git_holds_is_not_asked_about_where_the_fix_would_not_record(build_repo, capsys):
@@ -206,8 +197,4 @@ def test_an_unreadable_version_that_names_the_table_refuses_the_fix_and_writes_n
     """CITE-11, FIX-13: a version no parser reads whose bytes name `spec_citations` refuses with the table's name, the
     restore step and exit 2."""
     repo = unreadable_in_the_past(build_repo, CONFLICT_MARKERS + b"\xff[spec_citations]\n")
-    index, tree = git(repo, "ls-files", "--stage").stdout, tree_of(repo)
-    code, out, err = fixed(capsys, repo, *words)
-    assert (code, "a version of quality/baseline.toml in git cannot be read and names spec_citations" in squashed(out)) == (2, True), out
-    assert err.endswith(f"next: {restore_step()}\n"), err
-    assert (tree_of(repo), git(repo, "ls-files", "--stage").stdout) == (tree, index)
+    assert_refused_with_restore_step(capsys, repo, words, "a version of quality/baseline.toml in git cannot be read and names spec_citations")

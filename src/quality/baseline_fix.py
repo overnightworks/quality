@@ -1,11 +1,23 @@
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 
-from quality import baseline_file, checkout, clones, process, ratchet, repository, spec_citations, workflow_rules
+from quality import (
+    adapter_imports,
+    baseline_file,
+    checkout,
+    clones,
+    process,
+    ratchet,
+    repository,
+    spec_citations,
+    workflow_rules,
+)
 from quality.config import AllowLists
 from quality.output import SEPARATOR, counted
 from quality.report import CannotJudge, Instruction, Note, NoteEvent
+
+AdapterCounts = Callable[[], Mapping[str, int] | None]
 
 PLANNED_EVENT = {
     NoteEvent.LOWERED: NoteEvent.LOWER,
@@ -81,9 +93,19 @@ def _ceiling_lineage(root: Path, rerun_command: str) -> tuple[baseline_file.Base
     return committed, ratchet.renames_of(checkout.renamed_since(root, change.commit))
 
 
-def _followed(root: Path, tracked: list[str], rerun_command: str, held: baseline_file.Baseline) -> ratchet.CeilingFix:
+def _followed(
+    root: Path, tracked: list[str], sources: dict[str, bytes], rerun_command: str, held: baseline_file.Baseline
+) -> ratchet.CeilingFix:
     lineage = _ceiling_lineage(root, rerun_command)
-    return ratchet.CeilingFix(held, ()) if lineage is None else ratchet.follow_renames(held, *lineage, frozenset(tracked))
+    if lineage is None:
+        return ratchet.CeilingFix(held, ())
+    committed, renames = lineage
+
+    def read(path: str) -> str | None:
+        return sources[path].decode("utf-8", "replace") if path in sources else checkout.judged(repository.read_text, root, path)
+
+    marked = adapter_imports.with_marks(renames, read) if held.adapter_imports is not None else renames
+    return ratchet.follow_renames(held, committed, marked, frozenset(tracked))
 
 
 def _recording(
@@ -128,12 +150,44 @@ def _with_spec_citations(
     return _recording(root, tracked, made, baseline_file.SPEC_CITATIONS, fact, replace(made.ceiling, spec_citations=uncited))
 
 
+def _with_adapter_imports(root: Path, tracked: list[str], adapter_counts: AdapterCounts, made: ratchet.CeilingFix) -> ratchet.CeilingFix:
+    """The fix with the adapter import table made: a held table falls to the measured counts and never gains one, and a
+    contract read that cannot judge refuses; a ceiling without it records the counts where a marked module exempts an
+    import and git never held one, which a first recording carries in the ceiling alone, as its row counts. Without the
+    contract nothing is judged or changed, and without a table a read that cannot judge records none: the imports area
+    refuses on its own."""
+    held = made.ceiling.adapter_imports
+    try:
+        measured = adapter_counts()
+    except CannotJudge:
+        if held is not None:
+            raise
+        return made
+    if measured is None:
+        return made
+    if held is None:
+        if not measured:
+            return made
+        fact = counted(sum(measured.values()), baseline_file.ADAPTER_EXCEPTION)
+        return _recording(root, tracked, made, baseline_file.ADAPTER_IMPORTS, fact, replace(made.ceiling, adapter_imports=dict(measured)))
+    kept, changes = {}, []
+    for directory, count in sorted(held.items()):
+        now = min(count, measured.get(directory, 0))
+        if now:
+            kept[directory] = now
+        if now < count:
+            event = NoteEvent.LOWERED if now else NoteEvent.DROPPED
+            changes.append(Note(directory, event, f"{count} → {now} {baseline_file.ADAPTER_EXCEPTION}s"))
+    return replace(made, ceiling=replace(made.ceiling, adapter_imports=kept), changes=(*made.changes, *changes))
+
+
 def fix_ceiling(
     root: Path,
     tracked: list[str],
     sources: dict[str, bytes],
     held: baseline_file.Baseline | None,
     allow_lists: Callable[[], AllowLists],
+    adapter_counts: AdapterCounts,
     dry_run: bool,
     rerun_command: str,
 ) -> ratchet.CeilingFix:
@@ -147,10 +201,11 @@ def fix_ceiling(
     if held is None:
         _require_no_ceiling_in_git(root, tracked)
         first = ratchet.CeilingFix(baseline_file.Baseline(ratchet.debt(measurements), pairs), (), first=True)
-        return _with_spec_citations(root, tracked, sources, declared, _with_recorded_jobs(root, tracked, first))
+        recorded = _with_spec_citations(root, tracked, sources, declared, _with_recorded_jobs(root, tracked, first))
+        return _with_adapter_imports(root, tracked, adapter_counts, recorded)
     if held.clones is None:
         _require_no_table_in_git(root, tracked, baseline_file.CLONES)
-    followed = _followed(root, tracked, rerun_command, held)  # renames first, so a renamed file's entries move instead of falling as gone
+    followed = _followed(root, tracked, sources, rerun_command, held)  # renames first, so a renamed file's entries move instead of falling as gone
     gone = ratchet.gone_entries(followed.ceiling.size, measurements, frozenset(tracked), generated)
     if dry_run:
         gone = _with_what_they_held(gone, followed.ceiling.size)
@@ -158,7 +213,8 @@ def fix_ceiling(
     jobs = workflow_rules.lower_job_entries(root, tracked, lowered.ceiling)
     changes = (*followed.changes, *lowered.changes, *jobs.changes)
     recorded_jobs = _with_recorded_jobs(root, tracked, replace(jobs, changes=changes))
-    return _with_spec_citations(root, tracked, sources, declared, recorded_jobs)
+    cited = _with_spec_citations(root, tracked, sources, declared, recorded_jobs)
+    return _with_adapter_imports(root, tracked, adapter_counts, cited)
 
 
 def reported(fix: ratchet.CeilingFix, planned: bool) -> ratchet.CeilingFix:

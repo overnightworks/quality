@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
-from quality import architecture, checkout, process, repository
+from quality import adapter_imports, architecture, checkout, process, repository
 from quality.baseline_file import BASELINE_PATH, Baseline, SizeError, load_baseline, read_baseline
 from quality.config import GateSettings, LegacyMode, load_gate_settings, read_gate_settings
 from quality.config_entries import CONFIG_PATH, ConfigError
@@ -137,7 +137,19 @@ def read_renames(
         )
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
-    return renames_of(listed)
+    return _marked_at(renames_of(listed), repo, head, env)
+
+
+def _marked_at(renames: Renames, repo: Path, commit: str, env: dict[str, str] | None) -> Renames:
+    """The renames with the test modules that carry the registered mark in the commit's blobs, never the working tree."""
+
+    def read(path: str) -> str | None:
+        try:
+            return process.read_blob(repo, commit, path, f"cannot list {path} at {commit}", f"cannot read {path} at {commit}", env)
+        except process.ProcessError as error:
+            raise CannotJudge(str(error)) from error
+
+    return adapter_imports.with_marks(renames, read)
 
 
 @dataclass(frozen=True)
@@ -182,7 +194,7 @@ def read_pull_tree(
         renames = renames_of(listed.stdout)
     except CannotJudge:
         raise CannotJudge(words.unrenamed.format(**words_of)) from None
-    return architecture.PullTree(base_paths, head_paths, head_empty, renames)
+    return architecture.PullTree(base_paths, head_paths, head_empty, _marked_at(renames, repo, head, env))
 
 
 def _tracked_at(

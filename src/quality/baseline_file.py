@@ -1,5 +1,5 @@
 """The baseline file, `quality/baseline.toml`: the data model of what it holds (the size entries, the clone pairs, the
-job limits, the uncited spec IDs) and the text that renders and reads it. The `size` rule measures and compares, and owns what a value means; this
+job limits, the uncited spec IDs, the adapter import exceptions) and the text that renders and reads it. The `size` rule measures and compares, and owns what a value means; this
 module owns the key and the text.
 """
 
@@ -19,9 +19,11 @@ CLONES = "clones"
 JOB_MINUTES = "job_minutes"
 SPEC_CITATIONS = "spec_citations"
 UNCITED = "uncited"
+ADAPTER_IMPORTS = "adapter_imports"
 LITERAL_TEXT = "literal_text"
 JOB_LIMIT = "job limit"
 UNCITED_SPEC_ID = "uncited spec ID"
+ADAPTER_EXCEPTION = "adapter import exception"
 BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 BASELINE_HEADER = f"# Measured by `{FIX_COMMAND}`. Entries only ever go down.\n"
 
@@ -70,6 +72,19 @@ class JobKey(NamedTuple):
 JobMinutes = dict[JobKey, int]
 
 
+class DirectoryKey(NamedTuple):
+    """One adapter import entry: the test directory that holds the marked modules."""
+
+    path: str
+
+    @property
+    def label(self) -> str:
+        return self.path
+
+
+AdapterCounts = dict[str, int]
+
+
 @dataclass(frozen=True, order=True)
 class ClonePair:
     """Two near-identical functions in two files; `first` sorts before `second`, so a pair has one spelling."""
@@ -89,13 +104,15 @@ class ClonePair:
 
 @dataclass(frozen=True)
 class Baseline:
-    """What `quality/baseline.toml` holds; `clones`, `job_minutes` and `spec_citations` are None when the file has no such
-    table, so no pair, no job limit and no uncited spec ID is held. A `[literal_text]` table is read and ignored."""
+    """What `quality/baseline.toml` holds; `clones`, `job_minutes`, `spec_citations` and `adapter_imports` are None when the
+    file has no such table, so no pair, no job limit, no uncited spec ID and no adapter import exception is held. A
+    `[literal_text]` table is read and ignored."""
 
     size: SizeEntries
     clones: frozenset[ClonePair] | None
     job_minutes: JobMinutes | None = None
     spec_citations: frozenset[str] | None = None
+    adapter_imports: AdapterCounts | None = None
 
 
 class SizeError(Exception):
@@ -125,6 +142,8 @@ def render_baseline(baseline: Baseline) -> str:
         sections.update(_job_sections(baseline.job_minutes))
     if baseline.spec_citations is not None:
         sections.update(_spec_sections(baseline.spec_citations))
+    if baseline.adapter_imports is not None:
+        sections.update(_adapter_sections(baseline.adapter_imports))
     return BASELINE_HEADER + "".join(f"\n{header}\n" + "".join(f"{line}\n" for line in lines) for header, lines in sections.items())
 
 
@@ -160,6 +179,11 @@ def _spec_sections(uncited: frozenset[str]) -> dict[str, list[str]]:
     return {f"[{SPEC_CITATIONS}]": [f"{UNCITED} = [\n{listed}]"]}
 
 
+def _adapter_sections(counts: AdapterCounts) -> dict[str, list[str]]:
+    """A key per test directory, in plain string order; an empty table stands as its header alone."""
+    return {f"[{ADAPTER_IMPORTS}]": [f"{_toml_key(directory)} = {counts[directory]}" for directory in sorted(counts)]}
+
+
 def _toml_key(name: str) -> str:
     """A key as TOML allows it bare, else quoted."""
     return name if BARE_KEY.fullmatch(name) else _toml_string(name)
@@ -180,7 +204,7 @@ def load_baseline(text: str) -> Baseline:
     except repository.TomlError as error:
         raise SizeError(f"{BASELINE_PATH} is not valid TOML ({error})") from error
     size: SizeEntries = {}
-    clones = job_minutes = spec_citations = None
+    clones = job_minutes = spec_citations = adapter_imports = None
     for table_name, table in document.items():
         if table_name == CLONES:
             clones = _clone_pairs(table)
@@ -188,11 +212,13 @@ def load_baseline(text: str) -> Baseline:
             job_minutes = _job_minutes(table)
         elif table_name == SPEC_CITATIONS:
             spec_citations = _uncited_ids(table)
+        elif table_name == ADAPTER_IMPORTS:
+            adapter_imports = _adapter_counts(table)
         elif table_name == LITERAL_TEXT:
             continue  # read and ignored; `--fix` rewrites the file without it
         else:
             size.update(_size_entries(table_name, table))
-    return Baseline(size, clones, job_minutes, spec_citations)
+    return Baseline(size, clones, job_minutes, spec_citations, adapter_imports)
 
 
 def _size_entries(table_name: str, table: object) -> SizeEntries:
@@ -255,11 +281,15 @@ def _uncited_ids(table: object) -> frozenset[str]:
     return frozenset(listed)
 
 
+def _adapter_counts(table: object) -> AdapterCounts:
+    return {directory: _count(f"{ADAPTER_IMPORTS}.{directory}", count) for directory, count in _table(ADAPTER_IMPORTS, table).items()}
+
+
 def _metric_named(name: str) -> Metric:
     try:
         return Metric(name)
     except ValueError:
-        known = ", ".join([*(metric.value for metric in Metric), CLONES, JOB_MINUTES, SPEC_CITATIONS])
+        known = ", ".join([*(metric.value for metric in Metric), CLONES, JOB_MINUTES, SPEC_CITATIONS, ADAPTER_IMPORTS])
         raise UnknownTable(f"{BASELINE_PATH} has an unknown table [{name}]; quality {__version__} knows {known}") from None
 
 

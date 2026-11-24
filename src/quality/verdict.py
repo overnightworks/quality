@@ -27,6 +27,7 @@ from quality.ratchet import (
     added_pairs,
     carried_base,
     named_paths,
+    raised_adapter_counts,
     raised_entries,
     raised_job_limits,
 )
@@ -350,8 +351,9 @@ def _baseline_loosenings(base: Baseline | None, head: Baseline | None, renames: 
     A head entry in a file git renamed is held against the base entry under the old path; it is still named, and
     declared, under its head path.
 
-    A base `[clones]`, `[job_minutes]` or `[spec_citations]` table is held the same way: the head keeps it, and a base
-    without one lets the head introduce it. The tables are judged apart, so a base without one never skips another.
+    A base `[clones]`, `[job_minutes]`, `[spec_citations]` or `[adapter_imports]` table is held the same way: the head keeps
+    it, and a base without one lets the head introduce it. The tables are judged apart, so a base without one never skips
+    another. A renamed test module that carries the registered mark at the head moves one adapter import count with it.
     """
     if base is None:
         return []
@@ -396,6 +398,12 @@ _HELD_TABLES: tuple[Callable[[Baseline, Baseline], list[str]], ...] = (
         "spec citation baseline",
         lambda baseline: baseline.spec_citations,
         lambda base, head: [f"adds {identifier}" for identifier in sorted(head - base)],
+    ),
+    partial(
+        _table_loosenings,
+        "adapter import baseline",
+        lambda baseline: baseline.adapter_imports,
+        lambda base, head: [entry.describe() for entry in raised_adapter_counts(base, head)],
     ),
 )
 

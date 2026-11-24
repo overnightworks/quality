@@ -2,20 +2,31 @@
 
 The contract's `source_modules` are the core and its `forbidden_modules` the adapters. A test is a core test by the module
 its name mirrors, never by what it imports; its own import statements and those of the support modules it imports are
-judged against the one import graph the imports area builds."""
+judged against the one import graph the imports area builds. A module marked `imports_adapter` is the one exception, and
+the baseline's `[adapter_imports]` table holds how many such modules each test directory may keep."""
 
+import ast
+from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from pathlib import PurePosixPath
 from typing import NamedTuple
 
 import grimp
 
-from quality import architecture, layout
+from quality import architecture, layout, pytest_marks
+from quality.baseline_file import BASELINE_PATH, FIX_COMMAND
 from quality.config import LayoutAllowance
+from quality.output import SEPARATOR, counted
+from quality.ratchet import Renames
 from quality.report import Finding, FindingEvent, RuleResult
 from quality.rules import Rule
 
 FIX = "name the test after an adapter or composition module, or import no adapter in it"
+REGISTRATION_FIX = f"register {pytest_marks.IMPORTS_ADAPTER} in [tool.pytest.ini_options] markers"
+UNUSED_FACT = f"the {pytest_marks.IMPORTS_ADAPTER} mark exempts no adapter import"
+UNUSED_FIX = f"remove the {pytest_marks.IMPORTS_ADAPTER} mark"
+COUNT_FIX = "import no adapter in one of them, or move it into the integration suite"
 
 
 @dataclass(frozen=True)
@@ -103,13 +114,78 @@ class _Judgement:
         return reds
 
 
-def check_adapter_imports(
+@dataclass(frozen=True)
+class Measure:
+    """What the rule reads in the tree, before the held counts judge it: the red imports and the unused marks as findings,
+    the marked modules that import an adapter per test directory, and the core tests judged."""
+
+    findings: list[Finding]
+    counts: Mapping[str, int]
+    extent: int
+
+
+def project_file_of(test: str) -> str | None:
+    """The `pyproject.toml` beside the outermost `tests/` folder of a test module, None for a path outside any."""
+    parts = PurePosixPath(test).parts
+    if layout.TESTS_DIRECTORY not in parts[:-1]:
+        return None
+    return str(PurePosixPath(*parts[: parts.index(layout.TESTS_DIRECTORY)], layout.PROJECT_FILE))
+
+
+def candidates(modes: Mapping[str, str]) -> list[str]:
+    """The files the rule reads: the imports of each test and the `pyproject.toml` of each project that holds tests."""
+    tests = layout.test_import_candidates(modes)
+    return [*tests, *sorted({project for test in tests if (project := project_file_of(test)) in modes})]
+
+
+def with_marks(renames: Renames, read: Callable[[str], str | None]) -> Renames:
+    """The renames with `marked`: the targets that moved to another directory and carry the registered mark. `read` gives
+    the text of a path at the side the marks are read from, None where it holds nothing."""
+    marked = set()
+    for old, new in renames.moves.items():
+        project = project_file_of(new)
+        if project is not None and new.endswith(".py") and PurePosixPath(old).parent != PurePosixPath(new).parent:
+            module = read(new)
+            if module is not None and pytest_marks.carries_registered_mark(module, read(project)):
+                marked.add(new)
+    return replace(renames, marked=frozenset(marked))
+
+
+def _mark_line(content: bytes) -> int | None:
+    """The line of the module's `pytestmark` that names the `imports_adapter` mark; a module that does not parse has none."""
+    if pytest_marks.IMPORTS_ADAPTER.encode() not in content:
+        return None
+    try:
+        return pytest_marks.module_marks(ast.parse(content)).get(pytest_marks.IMPORTS_ADAPTER)
+    except (SyntaxError, ValueError):
+        return None
+
+
+def _module_findings(path: str, mark_line: int | None, reds: list[tuple[layout.ModuleImport, set[_Red]]]) -> list[Finding]:
+    """The findings of one module that no registered mark exempts: each red statement, or the unused mark where none is red."""
+    if not reds:
+        unused = Finding(Rule.ADAPTER_IMPORT, path, mark_line, UNUSED_FACT, UNUSED_FIX, event=FindingEvent.UNUSED)
+        return [] if mark_line is None else [unused]
+    fix = FIX if mark_line is None else REGISTRATION_FIX
+    return [
+        Finding(Rule.ADAPTER_IMPORT, path, statement.line, f"imports {_words(found)}", fix, event=FindingEvent.ADAPTER_IMPORT)
+        for statement, found in reds
+    ]
+
+
+def _words(reds: set[_Red]) -> str:
+    return ", ".join(red.words() for red in sorted(reds, key=lambda red: (red.name, red.through or "")))
+
+
+def measure_adapter_imports(
     split: Split, graph: grimp.ImportGraph, modes: Mapping[str, str], contents: Mapping[str, bytes],
     allowances: Sequence[LayoutAllowance],
-) -> RuleResult:
-    """One finding per import statement of a core test that is red, itself or through a support module it imports,
-    sorted by path and line, with the count of core tests judged as its extent. `contents` holds the bytes of
-    `layout.test_import_candidates`."""
+) -> Measure:
+    """One finding per import statement of a core test that is red, itself or through a support module it imports, unless
+    the module's `pytestmark` holds the `imports_adapter` mark its project registers; that exempts the module, which
+    counts toward its directory. A mark on a module the rule would not report is an `unused` finding at its `pytestmark`
+    line. Findings are sorted by path and line, the extent is the count of core tests judged. `contents` holds the bytes
+    of `candidates`."""
     judgement = _Judgement(split, _reach(split, graph))
     support = layout.ImportTargets.support(modes)
     parsed: dict[str, list[layout.ModuleImport]] = {}
@@ -119,16 +195,46 @@ def check_adapter_imports(
             parsed[path] = layout.module_imports(path, contents[path], support) if path in contents else []
         return parsed[path]
 
+    def registered(path: str) -> bool:
+        project = project_file_of(path)
+        return project in contents and pytest_marks.registers(contents[project].decode("utf-8", "replace"), pytest_marks.IMPORTS_ADAPTER)
+
     subjects = layout.test_subjects(modes, allowances)
-    findings = []
-    core_tests = sorted(path for path, subject in subjects.items() if split.is_core_test(subject) and path in contents)
-    for path in core_tests:
-        for statement in imports_of(path):
-            reds = judgement.reds(statement, imports_of)
-            if reds:
-                words = ", ".join(red.words() for red in sorted(reds, key=lambda red: (red.name, red.through or "")))
-                findings.append(Finding(Rule.ADAPTER_IMPORT, path, statement.line, f"imports {words}", FIX, event=FindingEvent.ADAPTER_IMPORT))
-    return RuleResult(sorted(findings, key=lambda finding: (finding.path, finding.line or 0)), len(core_tests), False)
+    core = {path for path, subject in subjects.items() if split.is_core_test(subject) and path in contents}
+    findings: list[Finding] = []
+    counts: Counter[str] = Counter()
+    for path in sorted(path for path in subjects if path in contents):
+        line = _mark_line(contents[path])
+        statements = imports_of(path) if path in core else []
+        reds = [(statement, found) for statement in statements if (found := judgement.reds(statement, imports_of))]
+        if reds and line is not None and registered(path):
+            counts[str(PurePosixPath(path).parent)] += 1
+        else:
+            findings.extend(_module_findings(path, line, reds))
+    return Measure(sorted(findings, key=lambda finding: (finding.path, finding.line or 0)), counts, len(core))
+
+
+def _count_fact(count: int) -> str:
+    return f"{counted(count, 'marked module')} {'imports' if count == 1 else 'import'} an adapter"
+
+
+def judge_counts(measure: Measure, held: Mapping[str, int] | None) -> RuleResult:
+    """The measure against the held counts, None where the baseline holds no table, which holds 0 for every directory: a
+    directory above its count is `grew`, one with no entry `new debt`, and an entry above its count `can fall`."""
+    findings = list(measure.findings)
+    entries = held or {}
+    for directory in sorted(measure.counts):
+        count, ceiling = measure.counts[directory], entries.get(directory, 0)
+        if count > ceiling:
+            event = FindingEvent.GREW if directory in entries else FindingEvent.NEW_DEBT
+            fix = FIX_COMMAND if held is None else COUNT_FIX
+            findings.append(Finding(Rule.ADAPTER_IMPORT, directory, None, SEPARATOR.join((_count_fact(count), f"ceiling {ceiling}")), fix, event=event))
+    for directory in sorted(entries):
+        count = measure.counts.get(directory, 0)
+        if count < entries[directory]:
+            fact = SEPARATOR.join((directory, _count_fact(count), f"ceiling {entries[directory]}"))
+            findings.append(Finding(Rule.ADAPTER_IMPORT, BASELINE_PATH, None, fact, FIX_COMMAND, event=FindingEvent.CAN_FALL))
+    return RuleResult(findings, measure.extent, False)
 
 
 def _support_modules(start: Iterable[str], imports_of: Callable[[str], list[layout.ModuleImport]]) -> list[str]:

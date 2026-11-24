@@ -22,10 +22,13 @@ import lizard
 
 from quality import checkout, ratchet_scripts, repository
 from quality.baseline_file import (
+    ADAPTER_EXCEPTION,
     BASELINE_PATH,
     FIX_COMMAND,
+    AdapterCounts,
     Baseline,
     ClonePair,
+    DirectoryKey,
     JobKey,
     JobMinutes,
     Key,
@@ -351,7 +354,7 @@ def compare(measurements: Measurements, baseline: SizeEntries, gone: Mapping[Key
 class RaisedEntry:
     """A baseline entry the head holds higher than the base; `base` is None when the head adds the entry."""
 
-    key: Key | JobKey
+    key: Key | JobKey | DirectoryKey
     base: int | None
     head: int
 
@@ -366,11 +369,13 @@ class RaisedEntry:
 class Renames:
     """What git renamed between two commits: `moves` maps a source path to its target, `targets` holds every target.
 
-    A target whose source no baseline key can name (not UTF-8) is a target without a move.
+    A target whose source no baseline key can name (not UTF-8) is a target without a move. `marked` holds the targets
+    that are test modules carrying the registered `imports_adapter` mark at the head.
     """
 
     moves: Mapping[str, str]
     targets: frozenset[str]
+    marked: frozenset[str] = frozenset()
 
 
 NO_RENAMES = Renames({}, frozenset())
@@ -452,7 +457,25 @@ def carried_base(base: Baseline, renames: Renames, kept: Collection[str]) -> Bas
         for pair in base.clones
         if (first := new_path(pair.first.path)) and (second := new_path(pair.second.path))
     }
-    return copy.replace(base, size=size, job_minutes=limits, clones=None if pairs is None else frozenset(pairs))
+    adapters = None if base.adapter_imports is None else moved_adapter_counts(base.adapter_imports, renames)[0]
+    return copy.replace(base, size=size, job_minutes=limits, clones=None if pairs is None else frozenset(pairs), adapter_imports=adapters)
+
+
+def moved_adapter_counts(counts: AdapterCounts, renames: Renames) -> tuple[AdapterCounts, list[tuple[str, str]]]:
+    """`counts` as the renames carry them, and each move as (old directory, new directory): a renamed module that carries
+    the registered mark at the head takes one count from its old directory to its new one, while the old directory
+    holds one; modules that leave one directory together share its count."""
+    carried = dict(counts)
+    moves = []
+    for old, new in sorted(renames.moves.items()):
+        source, target = str(PurePosixPath(old).parent), str(PurePosixPath(new).parent)
+        if new in renames.marked and source != target and carried.get(source, 0) > 0:
+            carried[source] -= 1
+            if not carried[source]:
+                del carried[source]
+            carried[target] = carried.get(target, 0) + 1
+            moves.append((source, target))
+    return carried, moves
 
 
 def raised_entries(base: SizeEntries, head: SizeEntries) -> list[RaisedEntry]:
@@ -467,6 +490,11 @@ def raised_job_limits(base: JobMinutes, head: JobMinutes) -> list[RaisedEntry]:
 
 def _raised[Entry: (Key, JobKey)](base: Mapping[Entry, int], head: Mapping[Entry, int], order: Iterable[Entry]) -> list[RaisedEntry]:
     return [RaisedEntry(key, base.get(key), head[key]) for key in order if key not in base or head[key] > base[key]]
+
+
+def raised_adapter_counts(base: AdapterCounts, head: AdapterCounts) -> list[RaisedEntry]:
+    """The same for adapter import counts, in directory order; a directory the base lacks holds 0."""
+    return [RaisedEntry(DirectoryKey(path), base.get(path), head[path]) for path in sorted(head) if head[path] > base.get(path, 0)]
 
 
 def added_pairs(base: frozenset[ClonePair], head: frozenset[ClonePair]) -> list[ClonePair]:
@@ -671,7 +699,11 @@ def follow_renames(held: Baseline, committed: Baseline, renames: Renames, tracke
             JOB_ENTRIES, held.job_minutes, committed.job_minutes, carried.job_minutes, renames, tracked
         )
         changes += limit_changes
-    return CeilingFix(replace(held, size=size, clones=pairs, job_minutes=limits), tuple(changes))
+    counts = held.adapter_imports
+    if counts is not None:
+        counts, moves = moved_adapter_counts(counts, renames)
+        changes += [Note(target, NoteEvent.MOVED, f"{ADAPTER_EXCEPTION} from {source}") for source, target in moves]
+    return CeilingFix(replace(held, size=size, clones=pairs, job_minutes=limits, adapter_imports=counts), tuple(changes))
 
 
 def _followed_pairs(

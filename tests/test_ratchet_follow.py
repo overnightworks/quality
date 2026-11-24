@@ -1,5 +1,7 @@
 """`follow_renames`: the held ceiling as the verdict will carry the committed one."""
 
+from dataclasses import replace
+
 import pytest
 
 from quality.baseline_file import ClonePair, JobKey, Key, Metric, Place
@@ -9,6 +11,7 @@ from quality.ratchet import (
     carried_base,
     follow_renames,
     named_paths,
+    raised_adapter_counts,
     raised_entries,
     raised_job_limits,
 )
@@ -426,3 +429,53 @@ def test_an_entry_without_lineage_refuses(held, committed, tracked, path):
         {path},
         (RESTORE_STEP,),
     )
+
+
+def adapters(counts):
+    """A ceiling that holds only an adapter import table."""
+    return ceiling({}, None, None, None, counts)
+
+
+def moved_marked(moves, marked):
+    """The renames of `moves`, of which `marked` carry the registered mark at the head."""
+    return replace(renamed(moves), marked=frozenset(marked))
+
+
+MODULE_A, MODULE_B, OTHER_A = "tests/a/test_x.py", "tests/b/test_x.py", "tests/a/test_y.py"
+OTHER_B = "tests/b/test_y.py"
+MOVED_MODULES = [
+    pytest.param(adapters({"tests/a": 2}), moved_marked({MODULE_A: MODULE_B, OTHER_A: OTHER_B}, [MODULE_B, OTHER_B]), {"tests/b": 2}, 2,
+                 id="a directory moved whole carries every count"),
+    pytest.param(adapters({"tests/a": 2, "tests/b": 1}), moved_marked({MODULE_A: MODULE_B}, [MODULE_B]), {"tests/a": 1, "tests/b": 2}, 1,
+                 id="one module moved into a directory that holds an entry"),
+    pytest.param(adapters({"tests/a": 1}), moved_marked({MODULE_A: MODULE_B, OTHER_A: OTHER_B}, [MODULE_B, OTHER_B]), {"tests/b": 1}, 1,
+                 id="modules out of one directory share its held count"),
+    pytest.param(adapters({"tests/a": 2}), moved_marked({MODULE_A: MODULE_B}, []), {"tests/a": 2}, 0, id="a module without the mark moves nothing"),
+    pytest.param(adapters({"tests/a": 2}), moved_marked({MODULE_A: "tests/a/test_z.py"}, ["tests/a/test_z.py"]), {"tests/a": 2}, 0,
+                 id="a rename inside its directory moves nothing"),
+    pytest.param(adapters({"tests/c": 2}), moved_marked({MODULE_A: MODULE_B}, [MODULE_B]), {"tests/c": 2}, 0,
+                 id="a directory with no held count moves nothing"),
+]
+
+
+@pytest.mark.parametrize(("held", "renames", "expected", "moved"), MOVED_MODULES)
+def test_a_renamed_marked_module_carries_one_count_to_its_new_directory_capped_at_the_old_held_count(held, renames, expected, moved):
+    """FIX-34, ADAPTERIMPORT-28: the fix moves the counts and names each move; the verdict, carrying the committed table
+    the same way, names nothing the fix moved."""
+    followed = follow_renames(held, held, renames, tracked_after(held, held, renames))
+    assert (followed.ceiling.adapter_imports, [change.event for change in followed.changes]) == (expected, [NoteEvent.MOVED] * moved)
+    carried = carried_base(held, renames, named_paths(followed.ceiling))
+    assert raised_adapter_counts(carried.adapter_imports, followed.ceiling.adapter_imports) == []
+
+
+def test_the_verdict_names_only_a_count_above_the_carried_one():
+    """BASELINE-12, ADAPTERIMPORT-29: a head entry above what the base carried is a raise, a new directory above 0 an add."""
+    carried = carried_base(adapters({"tests/a": 2}), moved_marked({MODULE_A: MODULE_B}, [MODULE_B]), frozenset())
+    head = {"tests/a": 2, "tests/b": 2, "tests/c": 1}
+    assert [entry.describe() for entry in raised_adapter_counts(carried.adapter_imports, head)] == [
+        "raises tests/a 1 -> 2", "raises tests/b 1 -> 2", "adds tests/c 1",
+    ]
+
+
+def test_a_base_without_the_table_carries_none():
+    assert carried_base(ceiling({}, None), moved_marked({MODULE_A: MODULE_B}, [MODULE_B]), frozenset()).adapter_imports is None
