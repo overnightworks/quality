@@ -1,0 +1,8 @@
+claim_id = "7adc354207914a449a6e8e31a2c30293"
+agent = "Claude eaac3b48-6964-423b-ac4c-dd8481e5f394"
+role = "builder"
+base = "ee91df7aa4d3c2f245337b1533722d9a33e17da8"
+branch = "claude/issue-1014-excluded-states"
+scope = ["pyproject.toml", "src/quality/advisories.py", "src/quality/check.py", "src/quality/layout.py", "src/quality/output.py", "src/quality/pin.py", "src/quality/python_lint.py", "src/quality/workflow_rules.py"]
+opened_commit = "83751524a31a1ad7cd9b661b7fd1793fece06d5d"
+whole_reason = "One refactor of one kind across seven modules: each removes a check of an excluded state, and the floor rises once for all of them."
