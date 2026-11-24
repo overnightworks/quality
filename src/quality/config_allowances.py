@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
@@ -103,14 +103,6 @@ def workflow_allowance_entry(file: str) -> config_entries.ExampleLines:
     return (WORKFLOW_ALLOWANCE_HEADING, f"file = {config_entries.toml_string(file)}")
 
 
-def root_allowances(root: dict) -> tuple[RootAllowance, ...]:
-    return config_entries.unique_entries(
-        root, "allow", ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE, _read_root_allowance,
-        lambda allowance: allowance.entry,
-        lambda allowance: f"declares entry = {config_entries.toml_string(allowance.entry)} twice; one entry per root entry",
-    )
-
-
 def _is_root_entry(entry: object) -> bool:
     """One name directly in the root, a directory with its trailing `/`; no path, no `.`, `..` or `.git`."""
     if not isinstance(entry, str):
@@ -137,14 +129,6 @@ def layout_allowances(layout: dict) -> tuple[LayoutAllowance, ...]:
         lambda allowance: (allowance.rule, allowance.path),
         lambda allowance: f"declares path = {config_entries.toml_string(allowance.path)} for rule = "
         f"{config_entries.toml_string(allowance.rule.value)} twice; one declaration per rule and path",
-    )
-
-
-def python_allowances(python: dict) -> tuple[PythonAllowance, ...]:
-    return config_entries.unique_entries(
-        python, "allow", PYTHON_ALLOWANCE_HEADING, PYTHON_ALLOWANCE_EXAMPLE, _read_python_allowance,
-        lambda allowance: allowance.path,
-        lambda allowance: f"declares path = {config_entries.toml_string(allowance.path)} twice; one entry per path",
     )
 
 
@@ -197,14 +181,6 @@ def _read_compose_allowance(entry: object, position: int) -> ComposeAllowance:
     return ComposeAllowance(file, service, reason)
 
 
-def workflow_allowances(workflow: dict) -> tuple[WorkflowAllowance, ...]:
-    return config_entries.unique_entries(
-        workflow, "allow", WORKFLOW_ALLOWANCE_HEADING, WORKFLOW_ALLOWANCE_EXAMPLE, _read_workflow_allowance,
-        lambda allowance: allowance.file,
-        lambda allowance: f"declares file = {config_entries.toml_string(allowance.file)} twice; one entry per workflow",
-    )
-
-
 def _read_workflow_allowance(entry: object, position: int) -> WorkflowAllowance:
     refuse = config_entries.entry_refusal(WORKFLOW_ALLOWANCE_HEADING, position, WORKFLOW_ALLOWANCE_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != WORKFLOW_ALLOWANCE_KEYS:
@@ -215,3 +191,18 @@ def _read_workflow_allowance(entry: object, position: int) -> WorkflowAllowance:
     if not config_entries.is_one_line_text(reason):
         raise refuse(ONE_LINE_REASON)
     return WorkflowAllowance(file, reason)
+
+
+def _one_per_field[Allowance](
+    heading: str, example: config_entries.ExampleLines, read: Callable[[object, int], Allowance], field: str, subject: str
+) -> Callable[[dict], tuple[Allowance, ...]]:
+    """The reader of one `allow` list whose entries are told apart by `field`, one entry per `subject`."""
+    return lambda table: config_entries.unique_entries(
+        table, "allow", heading, example, read, lambda allowance: getattr(allowance, field),
+        lambda allowance: f"declares {field} = {config_entries.toml_string(getattr(allowance, field))} twice; one entry per {subject}",
+    )
+
+
+root_allowances = _one_per_field(ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE, _read_root_allowance, "entry", "root entry")
+python_allowances = _one_per_field(PYTHON_ALLOWANCE_HEADING, PYTHON_ALLOWANCE_EXAMPLE, _read_python_allowance, "path", "path")
+workflow_allowances = _one_per_field(WORKFLOW_ALLOWANCE_HEADING, WORKFLOW_ALLOWANCE_EXAMPLE, _read_workflow_allowance, "file", "workflow")
