@@ -268,17 +268,18 @@ def nth(symbol: str, occurrence: int) -> str:
 
 
 def qualified_symbols(tree: ast.Module) -> dict[int, str]:
+    """Each function and class by its first line, named by its enclosing scopes; walked without recursion, since a tree can be
+    deeper than the interpreter recurses."""
     symbols: dict[int, str] = {}
-
-    def visit(node: ast.AST, prefix: str) -> None:
+    pending: list[tuple[ast.AST, str]] = [(tree, "")]
+    while pending:
+        node, prefix = pending.pop()
         for child in ast.iter_child_nodes(node):
             if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
                 symbols[child.lineno] = f"{prefix}{child.name}"
-                visit(child, f"{prefix}{child.name}.")
+                pending.append((child, f"{prefix}{child.name}."))
             else:
-                visit(child, prefix)
-
-    visit(tree, "")
+                pending.append((child, prefix))
     return symbols
 
 

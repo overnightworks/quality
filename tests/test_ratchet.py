@@ -785,3 +785,11 @@ def test_a_tree_with_typescript_holds_the_same_python_baseline(tmp_path):
         assert door_in(repo, *FIX_WORDS) == 0
         written.append((repo / BASELINE_PATH).read_text(encoding="utf-8"))
     assert written[0] == written[1]
+
+
+def test_a_file_holding_a_very_long_operator_chain_is_measured_without_a_traceback(build_repo, capsys):
+    """SIZE-9: a valid file whose tree is deeper than the interpreter recurses is measured like any other."""
+    chain = "X = " + " + ".join(['"a"'] * 4000)
+    repo = build_repo({"src/chain.py": f"{chain}\n\n\ndef short():\n    return 1\n", BASELINE_PATH: EMPTY_BASELINE})
+    code, output = run(capsys, repo)
+    assert (code, "Traceback" in output, "RecursionError" in output) == (0, False, False), output
