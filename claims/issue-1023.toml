@@ -1,8 +1,0 @@
-claim_id = "b9955ef92a264abcb700bf9505ae1f48"
-agent = "Claude eaac3b48-6964-423b-ac4c-dd8481e5f394"
-role = "builder"
-base = "520971b0b046bc486e0de9fc0ff4b9e201040ad2"
-branch = "claude/issue-1023-mark-reader-last-binding"
-scope = ["docs/commands.md", "docs/rules.md", "src/quality/pytest_marks.py", "src/quality/suites.py", "tests/test_adapter_imports.py", "tests/test_pytest_marks.py", "tests/test_suites.py"]
-opened_commit = "0da13ad0db3e1453e715a798c29218f07f4085ac"
-whole_reason = "One reader, its two callers' pins and the one sentence that describes it change together."
