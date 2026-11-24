@@ -1,5 +1,5 @@
 claim_id = "0a548f304fd148e6b69c35b23d4aa3ea"
-agent = "Claude 44cc4b10-82f0-460c-bdc8-03e847e52d36"
+agent = "Claude eaac3b48-6964-423b-ac4c-dd8481e5f394"
 role = "builder"
 base = "77b3fde2b4d300fb08ad5a48480fdb2df59931f7"
 branch = "claude/issue-998-a-registered-imports-adapter-marker-exem"
