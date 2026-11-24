@@ -54,7 +54,9 @@ if answer.get("print"):
 sys.exit(answer.get("exit", 0))
 """
 
-RECORDING_QUALITY = """#!{python} -S
+COVERAGE_CHILD_VARIABLES = ("COVERAGE_PROCESS_START", "COVERAGE_PROCESS_CONFIG")
+
+RECORDING_QUALITY = """#!{python}
 import json, os, signal, subprocess, sys
 from pathlib import Path
 def is_open(descriptor):
@@ -138,9 +140,14 @@ class Scene:
     def parent(self, *words: str, running: str | None = None) -> list[str]:
         return [sys.executable, "-c", LAUNCH_DRIVER, "--running", running or f"0.10.0:vcs:{'4d' * 20}", *words]
 
-    def run(self, *words: str, running: str | None = None, cwd: Path | None = None, wrap: tuple[str, ...] = (), **extra: str):
+    def run(
+        self, *words: str, running: str | None = None, cwd: Path | None = None, wrap: tuple[str, ...] = (), unmeasured: bool = False, **extra: str
+    ):
+        environment = self.environment(**extra)
+        if unmeasured:
+            environment = {key: value for key, value in environment.items() if key not in COVERAGE_CHILD_VARIABLES}
         return subprocess.run(
-            [*wrap, *self.parent(*words, running=running)], cwd=cwd or self.judged, env=self.environment(**extra), capture_output=True, text=True,
+            [*wrap, *self.parent(*words, running=running)], cwd=cwd or self.judged, env=environment, capture_output=True, text=True,
             check=False, timeout=120,
         )
 
@@ -277,7 +284,8 @@ def test_the_exit_is_the_childs(scene, exit_as, expected):
 )
 def test_a_closed_stream_passes_to_the_child(scene, closing, expected):
     """PIN-15: a closed standard stream stays closed in the re-executed run, with no traceback."""
-    done = scene.run("check", "files", wrap=("sh", "-c", f'exec "$@" {closing}', "_"), FAKE_EXIT="1")
+    # A measuring parent opens its data file on the closed descriptor.
+    done = scene.run("check", "files", wrap=("sh", "-c", f'exec "$@" {closing}', "_"), unmeasured=True, FAKE_EXIT="1")
     child = scene.child()
     assert (done.returncode, (child["out_open"], child["err_open"]), "Traceback" in done.stdout + done.stderr) == (1, expected, False)
 
