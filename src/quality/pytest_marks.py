@@ -67,15 +67,35 @@ def _unreadable_names(node: ast.AST) -> Iterator[str]:
         yield from _stored_names(node)
 
 
+def _walruses(node: ast.AST) -> list[ast.NamedExpr]:
+    """The walruses an expression runs in its own scope, in source order; a lambda binds only its own scope, so only its
+    defaults and annotations are entered."""
+    found: list[ast.NamedExpr] = []
+    pending = [node]
+    while pending:
+        part = pending.pop()
+        if isinstance(part, ast.NamedExpr):
+            found.append(part)
+        if isinstance(part, ast.Lambda):
+            pending.append(part.args)
+        else:
+            pending.extend(ast.iter_child_nodes(part))
+    return sorted(found, key=lambda walrus: (walrus.lineno, walrus.col_offset))
+
+
 def _bindings(scope: ast.AST) -> Iterator[tuple[str, ast.expr | None, int]]:
     """Each binding of a name in the scope's own statements, also inside compound statements, in source order: its name,
     its value (none where this reader cannot follow it: an augmented binding or a tuple, loop, import, definition or
-    other target) and its line. Functions and classes open their own scope."""
-    for child in ast.iter_child_nodes(scope):
+    other target) and its line. Functions and classes open their own scope; their decorators, defaults, annotations and bases
+    run in the enclosing one."""
+    for child in scope.body if isinstance(scope, ast.ClassDef) else ast.iter_child_nodes(scope):
         line = getattr(child, "lineno", getattr(scope, "lineno", 0))
         if isinstance(child, ast.expr):
-            yield from ((walrus.target.id, walrus.value, walrus.lineno) for walrus in ast.walk(child) if isinstance(walrus, ast.NamedExpr))
+            yield from ((walrus.target.id, walrus.value, walrus.lineno) for walrus in _walruses(child))
             continue
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            for header in (part for part in ast.iter_child_nodes(child) if not isinstance(part, ast.stmt)):
+                yield from ((walrus.target.id, walrus.value, walrus.lineno) for walrus in _walruses(header))
         if isinstance(child, ast.Assign):
             yield from ((target.id, child.value, line) for target in child.targets if isinstance(target, ast.Name))
         elif isinstance(child, ast.AnnAssign) and child.value is not None and isinstance(child.target, ast.Name):
