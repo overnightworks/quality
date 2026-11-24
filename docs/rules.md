@@ -1557,8 +1557,9 @@ no spec defines or one that is retired, and a duplicate definition are red, and 
 
 - **Definitions (CITE-1).** Every tracked `.md` file the tree holds is read. A list item (`-`, `*`, `+`, `1.`, `1)`, at any
   indent; a number is ASCII digits only) that opens with `ID:` defines a live ID, and `ID (retired).` a retired one, which needs
-  no test. A table row defines its first cell when that cell is exactly an ID and the table follows a rule's list item with no
-  heading or unindented prose between them. A fenced code block, prose, `(ID)` and a list item without the colon define nothing.
+  no test. A table row defines its first cell when that cell is exactly an ID and either the table's header row has `ID`
+  as its exact first cell, wherever the table stands, or the table follows a rule's list item with no heading or
+  unindented prose between them. A fenced code block, prose, `(ID)` and a list item without the colon define nothing.
   An ID is `[A-Z][A-Z0-9]*(-[A-Z][A-Z0-9]*)*-[0-9]+`, and IDs compare as exact tokens: `CSRF-01` is not `CSRF-1`.
 - **Python citations (CITE-2).** The docstring of a function whose name starts with `test` in a Python test file (TWIN-1)
   cites. Its head is the run of IDs at the docstring's start, after an optional `Spec:`, joined by `,`, `and` or `, and`, and every
