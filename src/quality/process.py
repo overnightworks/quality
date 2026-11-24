@@ -6,6 +6,7 @@ import tempfile
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn, Protocol, overload
 
@@ -14,6 +15,7 @@ from quality import DISTRIBUTION
 VERSION_TIMEOUT_SECONDS = 30
 STDERR_TAIL_LINES = 5
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+EXIT_INTERRUPTED = 128 + signal.SIGINT
 
 
 class ProcessError(Exception):
@@ -27,7 +29,7 @@ def exit_as_interrupted(send_signal: Callable[[int, int], None]) -> NoReturn:
     """
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     send_signal(os.getpid(), signal.SIGINT)
-    raise SystemExit(128 + signal.SIGINT)
+    raise SystemExit(EXIT_INTERRUPTED)
 
 
 @contextmanager
@@ -231,6 +233,51 @@ def _communicate(process: subprocess.Popen, timeout: float, every_second: Callab
             if left <= 1.0:
                 raise
             every_second(round(time.monotonic() - started))
+
+
+@dataclass(frozen=True)
+class Finished:
+    """How a child ended: its exit, negative where a signal killed it, and whether an interrupt reached the waiting
+    process while it ran."""
+
+    returncode: int
+    interrupted: bool
+
+
+@dataclass
+class NotedInterrupts:
+    """Whether a Ctrl-C arrived while `noting_interrupts` held it."""
+
+    arrived: bool = False
+
+    def note(self) -> None:
+        self.arrived = True
+
+
+@contextmanager
+def noting_interrupts() -> Iterator[NotedInterrupts]:
+    """Ctrl-C is noted instead of raised, so the code inside runs to its end and decides what the interrupt means.
+
+    A handler, not SIG_IGN: an ignored SIGINT is inherited by a child, a caught one is reset to the default by exec.
+    """
+    noted = NotedInterrupts()
+    previous = signal.signal(signal.SIGINT, lambda _number, _frame: noted.note())
+    try:
+        yield noted
+    finally:
+        signal.signal(signal.SIGINT, previous)
+
+
+def run_to_its_end(command: Sequence[str]) -> Finished:
+    """Runs `command` on this process's standard streams and waits for it to end, through any number of interrupts.
+
+    Ctrl-C reaches the child and this process together; the child ends as it does when run alone, so this process neither kills
+    it (`subprocess.run` would, and cut its cleanup in half) nor ignores the signal. The interrupt is noted from before the
+    child starts, so a started child is always waited for.
+    """
+    with noting_interrupts() as interrupts, subprocess.Popen(command) as child:  # noqa: S603 - callers pass an argv list and never a shell
+        returncode = child.wait()
+    return Finished(returncode, interrupts.arrived)
 
 
 def replace_process(executable: Path, arguments: Sequence[str], environment: Mapping[str, str]) -> NoReturn:

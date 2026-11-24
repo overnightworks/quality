@@ -10,7 +10,7 @@ repository and for the operator who merges past it.
     quality sonar findings [-v]
     quality verdict [-v]
     quality report
-    quality merge OWNER/REPO#N [--dry-run]
+    quality merge OWNER/REPO#N [OWNER/REPO#N ...] [--dry-run]
 
 [Exit codes](docs/output.md#exit-codes): `0` clean, `1` findings, `2` cannot judge (never clean), `130` interrupted
 (Ctrl-C).

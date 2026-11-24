@@ -452,10 +452,11 @@ door (SCANNER-5).
 
 ## `quality merge`
 
-`quality merge <owner/repo>#<pr> [--dry-run] [-v]` (MERGE-53) is the operator's door past a red gate: it merges a pull
-request that the gate keeps red only for legacy Sonar findings or for
-[declared loosenings](gate.md#declared-loosenings). The steps to take are in [the runbook](runbooks/merge.md); this is
-what the command does.
+`quality merge <owner/repo>#<pr> [<owner/repo>#<pr> ...] [--dry-run] [-v]` (MERGE-53) is the operator's door past a red
+gate: it merges the pull requests that the gate keeps red only for legacy Sonar findings or for
+[declared loosenings](gate.md#declared-loosenings), each on the operator's own `yes`. The steps to take are in
+[the runbook](runbooks/merge.md); this is what the command does, and [the lines on several names](#several-names)
+say what a run over more than one pull request adds.
 
 Ruled by the operator:
 
@@ -584,3 +585,60 @@ Ruled by the operator:
   `quality_gate not switched off → no merge → on` when switching off failed (MERGE-51)), also when the restore failed,
   the comment then ending `NOT restored, it may still be off` in place of `on` (MERGE-52). A comment not posted is its
   `✗` row, its command under `next:`.
+
+### Several names
+
+Ruled by the operator:
+
+- `quality merge` takes several pull requests in one run; each is judged, shown with its rows and refused exactly as a
+  run for it alone is, every MERGE line holds per pull request and the `quality_gate` property is switched off and
+  restored per repository, and each merges only on the operator's own `yes` to it (MERGE-108).
+
+`quality merge A#1 B#2 ...` judges and shows each named pull request one after the other and merges each on the
+operator's own `yes` to it (MERGE-108). It takes the names given and finds none: the door reads only the repositories
+it is named. Every line of this section above holds per pull request, because each pull request is a run for it alone.
+
+- **A process per pull request.** For each name the run starts `<python> -P -m quality.cli merge <name>` with
+  `--dry-run` and `-v` as given (MERGE-109), the interpreter being the one that runs the door, and waits until it has
+  exited before it starts the next, in the order named, two of one repository included (MERGE-108). The child judges
+  at its own pinned release, switches the repository's `quality_gate` off and on again itself and shares nothing with
+  the next (MERGE-109). `-P` keeps the working directory off the child's module path, so a `quality` package in a pull
+  request's checkout never loads under the operator's login (MERGE-109). A second pull request of a repository is
+  judged from scratch, and after a merge moved its base it is refused as behind (MERGE-108).
+- **Rows.** Before each child one `· <n> of <total>  judging  <name>` row names the pull request and its place
+  (MERGE-110). The run flushes its output and discards what the terminal holds typed ahead before each child, so a
+  line typed during one pull request never answers the next one's question; the run itself reads no line (MERGE-110).
+  Each child's own rows and closing line or pair stand as a run for it alone prints them (MERGE-111). At the end one
+  row per name says what that child came to, from its exit alone: `✓ merged` (exit `0`), `~ would merge` (exit `0` of
+  a dry run), `! not merged` (exit `1`), `! interrupted` (it ended by the interrupt), `✗ stopped` (exit `2`),
+  `✗ killed` with `signal <n>` (any other signal) and `· not run` (MERGE-111).
+- **Refused: the run goes on.** A child that exits `1` (a refusal, a `no`, a moved base) leaves nothing changed, and
+  the next name runs (MERGE-111).
+- **Stopped: the run ends.** A child that exits `2` ends the run, because the run cannot tell an unjudged read from a
+  gate that may still be off; the later names show as not run (MERGE-112). The pair says `stopped at <name>` and the
+  count, and under `next:` names first the step that child's own pair printed above, to be done at once, then
+  `quality merge` with the names not run (MERGE-112).
+- **Killed by a signal.** A child killed by a signal other than SIGINT printed no pair: the run says
+  `quality_gate MAY STILL BE OFF on <owner/repo>`, names the restore command first and then `quality merge` with the
+  names not run, ends `2` and starts no child (MERGE-114).
+- **Interrupted.** Ctrl-C reaches the child and the run together. The child ends as a run for it alone does; the run
+  waits for it, never kills it, starts no further child and ends interrupted (MERGE-113). A Ctrl-C that arrives
+  outside the wait (as a child starts, or while the run prints its rows, summary or pair) is noted, not raised: the run
+  still waits for a started child and prints the summary and the pair, a restore step included (MERGE-113). SIGTERM to the run alone
+  ends the run and leaves the child to finish and restore the property by itself (MERGE-113).
+- **The exit.** The run exits `2` if a child exited `2` or was killed, else `130` if it was interrupted, else `1` if
+  a child exited `1`, else `0` (MERGE-118): an interrupted run never exits `0` or `1`, whatever the interrupted
+  child's own exit was, so a gate that may be off is never hidden behind an interruption (MERGE-118).
+- **The last line.** All merged ends `✓ merged <n> of <n> · <duration>` on stdout (MERGE-111); a dry run ends
+  `~ dry run · would merge <n> of <n> · nothing changed` (MERGE-117). Exit `1` ends with the pair
+  `merged <m> of <n> · <k> not merged · nothing changed` and `next:` the command for the names not merged (MERGE-111);
+  exit `2` with the pair of the stopped child and the names not run (MERGE-112), `--dry-run` carried in the command
+  where the run had it (MERGE-117). An interrupted run ends with its rows and no pair (MERGE-113).
+- **No terminal.** Without a terminal on stdin the run is the pair of MERGE-21, exit `1`, and no child starts
+  (MERGE-115).
+- **A word that names no pull request,** among several, is refused naming that word, before any child starts (exit
+  `2`) (MERGE-116). With one name the door runs in the same process and prints as it does without this section
+  (MERGE-117).
+
+A terminal that hangs up between the switch-off and the restore leaves the property off without a word, as a run for
+one pull request does; a name given twice is judged twice.
