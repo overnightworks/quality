@@ -100,20 +100,21 @@ def test_a_table_row_under_a_rule_defines_its_first_cell(build_repo, header):
 
 
 @pytest.mark.parametrize(
-    "spec",
+    ("spec", "cited"),
     [
-        id_table("ID"),
-        ["# Rules", "", *id_table("ID")],
-        ["Prose.", "", *id_table("ID")],
-        ["- Rules:", "", "# Table", "", *id_table("ID")],
-        ["  " + line for line in id_table("ID")],
-        [*id_table("ID"), "", "| Name | Text |", "| --- | --- |", "| X-2 | a row |"],
+        pytest.param(id_table("ID"), {}, id="start of the document"),
+        pytest.param(["# Rules", "", *id_table("ID")], {}, id="under a heading"),
+        pytest.param(["Prose.", "", *id_table("ID")], {}, id="after prose"),
+        pytest.param(["- X-0: a rule.", "", "# Table", "", *id_table("ID")], cited_by_python("X-0: it."), id="after a rule and a heading"),
+        pytest.param(["  " + line for line in id_table("ID")], {}, id="indented"),
+        pytest.param(
+            [*id_table("ID"), "", "| Name | Text |", "| --- | --- |", "| X-2 | a row |"], {}, id="a later table with another header"
+        ),
     ],
-    ids=["start of the document", "under a heading", "after prose", "after a rule and a heading", "indented", "a later table with another header"],
 )
-def test_a_table_whose_header_opens_with_id_defines_its_rows_wherever_it_stands(build_repo, spec):
+def test_a_table_whose_header_opens_with_id_defines_its_rows_wherever_it_stands(build_repo, spec, cited):
     """CITE-1: a row whose first cell is no ID and a later table with another header define nothing."""
-    assert note_of(build_repo(spec_with(*spec))) == UNCITED
+    assert note_of(build_repo({**spec_with(*spec), **cited})) == UNCITED
 
 
 def test_only_tracked_markdown_files_that_the_tree_holds_define(build_repo):
