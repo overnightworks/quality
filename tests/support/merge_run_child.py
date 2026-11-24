@@ -5,6 +5,7 @@
 caught and named); `kill` (print ready, die by SIGKILL); `ask` (print the question, read one line from stdin and keep it).
 The child writes `started-<name>` first, so a test can tell a child that never started.
 """
+# ruff: noqa: T201 - this stand-in child prints its progress lines as its one output
 
 import json
 import os
