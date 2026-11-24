@@ -1,8 +1,0 @@
-claim_id = "56bc91501dcb433ab0c9d608da801706"
-agent = "Claude eaac3b48-6964-423b-ac4c-dd8481e5f394"
-role = "builder"
-base = "520971b0b046bc486e0de9fc0ff4b9e201040ad2"
-branch = "claude/issue-1006-adapter-import-row-once-per-module"
-scope = ["docs/output.md", "docs/rules.md", "src/quality/adapter_imports.py", "tests/test_adapter_imports.py"]
-opened_commit = "a10c106656fda801c4be56273c110db08abac6ab"
-whole_reason = "The finding's wording, its spec line, its output document and its pinning test change together."
