@@ -15,6 +15,7 @@ MODULE = "".join(f"value_{number} = {number}\n" for number in range(30))
 REGISTERED = pytest_markers("imports_adapter: reads a real service")
 UNREGISTERED = pytest_markers("unit: fast")
 
+
 def moved(counts: dict[str, int], pyproject: str) -> tuple[str, str, dict[str, str]]:
     """The base table, the head table and the head's registration, of a module that moves out of `tests/core`."""
     return adapter_table({"tests/core": 1}), adapter_table(counts), {"pyproject.toml": pyproject}
