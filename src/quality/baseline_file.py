@@ -5,6 +5,7 @@ module owns the key and the text.
 
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path, PurePosixPath
@@ -88,6 +89,32 @@ AdapterCounts = dict[str, int]
 def adapter_directory(test: str) -> str:
     """The key of `[adapter_imports]` that a test module counts toward: its direct parent directory."""
     return str(PurePosixPath(test).parent)
+
+
+def moved_adapter_counts(
+    held: AdapterCounts, committed: AdapterCounts, moves: Mapping[str, str]
+) -> tuple[AdapterCounts, list[tuple[str, str]]]:
+    """`held` after the moves `committed` carries, and each move as (old directory, new directory): a module in `moves`
+    (old path to new path) takes one count from its old directory to its new one, while the old directory holds one;
+    modules that leave one directory together share its count. A move the held counts have already made is not made
+    again: each target holds the moves it gained over `committed` once, and an old directory holds no more than
+    `committed` leaves it."""
+    left, planned = dict(committed), []
+    for old, new in sorted(moves.items()):
+        source, target = adapter_directory(old), adapter_directory(new)
+        if source != target and left.get(source, 0) > 0:
+            left[source] -= 1
+            planned.append((source, target))
+    made = {target: held.get(target, 0) - committed.get(target, 0) for _, target in planned}
+    counts, taken = dict(held), []
+    for source, target in planned:
+        if made[target] > 0:
+            made[target] -= 1
+        elif counts.get(source, 0) > left[source]:
+            counts[source] -= 1
+            counts[target] = counts.get(target, 0) + 1
+            taken.append((source, target))
+    return {directory: count for directory, count in counts.items() if count}, taken
 
 
 @dataclass(frozen=True, order=True)

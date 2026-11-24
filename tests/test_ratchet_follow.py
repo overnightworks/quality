@@ -480,6 +480,19 @@ def test_a_second_fix_moves_no_count_the_first_one_moved(held, renames, expected
     assert (second.ceiling.adapter_imports, second.changes) == (expected, ())
 
 
+def test_a_second_fix_carries_only_the_move_the_first_one_did_not_know():
+    """FIX-34, ADAPTERIMPORT-28: a move out of a directory the first fix already left is carried once, the earlier move
+    never again."""
+    held = adapters({"tests/a": 2})
+    first_moves = moved_marked({MODULE_A: MODULE_B}, [MODULE_B])
+    both_moves = moved_marked({MODULE_A: MODULE_B, OTHER_A: "tests/c/test_y.py"}, [MODULE_B, "tests/c/test_y.py"])
+    first = follow_renames(held, held, first_moves, tracked_after(held, held, first_moves))
+    second = follow_renames(first.ceiling, held, both_moves, tracked_after(held, held, both_moves))
+    assert (second.ceiling.adapter_imports, [change.path for change in second.changes]) == (
+        {"tests/b": 1, "tests/c": 1}, ["tests/c"],
+    )
+
+
 def test_a_fix_without_a_committed_table_moves_no_count():
     """ADAPTERIMPORT-28: counts the fix has just measured are already under their new directories."""
     held = adapters({"tests/a": 1, "tests/b": 1})

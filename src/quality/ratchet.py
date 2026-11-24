@@ -36,8 +36,8 @@ from quality.baseline_file import (
     SizeEntries,
     SizeError,
     UnknownTable,
-    adapter_directory,
     key_order,
+    moved_adapter_counts,
 )
 from quality.config import GENERATED_FILE_HEADING, GeneratedFile
 from quality.config_entries import CONFIG_PATH
@@ -378,6 +378,10 @@ class Renames:
     targets: frozenset[str]
     marked: frozenset[str] = frozenset()
 
+    def marked_moves(self) -> dict[str, str]:
+        """The moves whose target carries the registered mark."""
+        return {old: new for old, new in self.moves.items() if new in self.marked}
+
 
 NO_RENAMES = Renames({}, frozenset())
 
@@ -458,30 +462,8 @@ def carried_base(base: Baseline, renames: Renames, kept: Collection[str]) -> Bas
         for pair in base.clones
         if (first := new_path(pair.first.path)) and (second := new_path(pair.second.path))
     }
-    adapters = None if base.adapter_imports is None else moved_adapter_counts(base.adapter_imports, base.adapter_imports, renames)[0]
+    adapters = None if base.adapter_imports is None else moved_adapter_counts(base.adapter_imports, base.adapter_imports, renames.marked_moves())[0]
     return copy.replace(base, size=size, job_minutes=limits, clones=None if pairs is None else frozenset(pairs), adapter_imports=adapters)
-
-
-def moved_adapter_counts(
-    held: AdapterCounts, committed: AdapterCounts, renames: Renames
-) -> tuple[AdapterCounts, list[tuple[str, str]]]:
-    """`held` after the moves `committed` carries, and each move as (old directory, new directory): a renamed module that
-    carries the registered mark at the head takes one count from its old directory to its new one, while the old
-    directory holds one; modules that leave one directory together share its count. A move the held counts have already
-    taken (the old directory holds no more than the committed table leaves it) is not made again."""
-    left, planned = dict(committed), []
-    for old, new in sorted(renames.moves.items()):
-        source, target = adapter_directory(old), adapter_directory(new)
-        if new in renames.marked and source != target and left.get(source, 0) > 0:
-            left[source] -= 1
-            planned.append((source, target))
-    counts, moves = dict(held), []
-    for source, target in planned:
-        if counts.get(source, 0) > left[source]:
-            counts[source] -= 1
-            counts[target] = counts.get(target, 0) + 1
-            moves.append((source, target))
-    return {directory: count for directory, count in counts.items() if count}, moves
 
 
 def raised_entries(base: SizeEntries, head: SizeEntries) -> list[RaisedEntry]:
@@ -707,7 +689,7 @@ def follow_renames(held: Baseline, committed: Baseline, renames: Renames, tracke
         changes += limit_changes
     counts = held.adapter_imports
     if counts is not None and committed.adapter_imports is not None:
-        counts, moves = moved_adapter_counts(counts, committed.adapter_imports, renames)
+        counts, moves = moved_adapter_counts(counts, committed.adapter_imports, renames.marked_moves())
         changes += [Note(target, NoteEvent.MOVED, f"{ADAPTER_EXCEPTION} from {source}") for source, target in moves]
     return CeilingFix(replace(held, size=size, clones=pairs, job_minutes=limits, adapter_imports=counts), tuple(changes))
 
