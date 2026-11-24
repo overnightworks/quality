@@ -68,6 +68,10 @@ branch = true
 patch = ["subprocess"]
 relative_files = true
 
+[tool.coverage.report]
+fail_under = 99.08
+precision = 2
+
 [tool.importlinter]
 root_packages = ["quality"]
 
