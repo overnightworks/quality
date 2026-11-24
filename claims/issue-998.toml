@@ -3,6 +3,6 @@ agent = "Claude eaac3b48-6964-423b-ac4c-dd8481e5f394"
 role = "builder"
 base = "77b3fde2b4d300fb08ad5a48480fdb2df59931f7"
 branch = "claude/issue-998-a-registered-imports-adapter-marker-exem"
-scope = ["docs/ARCHITECTURE.md", "docs/commands.md", "docs/gate.md", "docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/adapter_imports.py", "src/quality/baseline_file.py", "src/quality/baseline_fix.py", "src/quality/check.py", "src/quality/cli.py", "src/quality/pytest_marks.py", "src/quality/ratchet.py", "src/quality/sides.py", "src/quality/suites.py", "src/quality/verdict.py", "tests"]
+scope = ["docs/ARCHITECTURE.md", "docs/commands.md", "docs/gate.md", "docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/adapter_imports.py", "src/quality/baseline_file.py", "src/quality/baseline_fix.py", "src/quality/check.py", "src/quality/cli.py", "src/quality/merge.py", "src/quality/pytest_marks.py", "src/quality/ratchet.py", "src/quality/sides.py", "src/quality/suites.py", "src/quality/verdict.py", "tests"]
 opened_commit = "e3cbd1fcc4c7fab22f2c5592142aca2a68d0fedf"
 whole_reason = "One held table and its exemption: the mark reader's one owner, the rule, the recording path, the verdict's lines and the move carry change together, as the plan review approved."
