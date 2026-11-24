@@ -31,7 +31,8 @@ def main() -> int:
     if mode.startswith("exit:"):
         return int(mode.removeprefix("exit:"))
     if mode == "trap":
-        signal.signal(signal.SIGINT, lambda *_: print(f"child {name} trapped", flush=True))
+        # os.write, not print: SIGINT can land while the main thread is inside print("ready"), and the buffered stdout is not reentrant
+        signal.signal(signal.SIGINT, lambda *_: os.write(sys.stdout.fileno(), f"child {name} trapped\n".encode()))
     if mode in ("wait", "trap"):
         print(f"child {name} ready", flush=True)
         block_until_released(directory)
