@@ -82,9 +82,10 @@ def test_a_list_item_that_opens_with_an_id_and_a_colon_defines_it(build_repo, sp
         ["# Rules", "", *id_table("IDs")],
         ["# Rules", "", *id_table("ID number")],
         ["# Rules", "", *id_table("Name", "ID")],
+        ["# Rules", "", *id_table("**ID**")],
         ["```", *id_table("ID"), "```"],
     ],
-    ids=["retired", "no colon", "parenthesised prose", "backtick fence", "tilde fence", "tilde line in a backtick fence", "short fence in a longer one", "table without rule", "table after heading", "table after prose", "arabic-indic marker", "fullwidth marker", "arabic-indic digits", "fullwidth digits", "header Id", "header IDs", "header with other text", "ID in the second column", "ID table in a fence"],
+    ids=["retired", "no colon", "parenthesised prose", "backtick fence", "tilde fence", "tilde line in a backtick fence", "short fence in a longer one", "table without rule", "table after heading", "table after prose", "arabic-indic marker", "fullwidth marker", "arabic-indic digits", "fullwidth digits", "header Id", "header IDs", "header with other text", "ID in the second column", "header ID in emphasis", "ID table in a fence"],
 )
 def test_nothing_else_defines_an_id(build_repo, spec):
     """CITE-1: retired IDs need no test; a colon-less item, a fence, prose, a table not under a rule whose header's first
@@ -313,17 +314,17 @@ def found(repo: Path) -> list[tuple[str, str, int | None]]:
     return sorted(((finding.event.value, finding.path, finding.line) for finding in findings), key=lambda each: (each[1], each[2] or 0, each[0]))
 
 
-def test_a_new_uncited_id_is_a_finding_at_its_definition_and_a_held_one_is_not(build_repo, capsys):
-    """CITE-8: with the table, an ID no test cites and the table lacks is `uncited` at its path and line, and the run is red."""
-    repo = build_repo({**spec_with("- X-1: a.", "- X-2: b.", "- X-3: c."), **held("X-1")})
-    assert found(repo) == [("uncited", SPEC, 2), ("uncited", SPEC, 3)]
-    assert check_output(capsys, repo)[0] == 1
-
-
-def test_a_row_of_an_id_table_that_no_test_cites_is_uncited_at_its_line(build_repo, capsys):
-    """CITE-1, CITE-8: a defined row is the finding an uncited ID gets, and a held one is not."""
-    repo = build_repo({**spec_with("# Rules", "", *id_table("ID")[:3], "| X-2 | a row |"), **held("X-1")})
-    assert found(repo) == [("uncited", SPEC, 6)]
+@pytest.mark.parametrize(
+    ("spec", "expected"),
+    [
+        pytest.param(["- X-1: a.", "- X-2: b.", "- X-3: c."], [("uncited", SPEC, 2), ("uncited", SPEC, 3)], id="list items"),
+        pytest.param(["# Rules", "", *id_table("ID")[:3], "| X-2 | a row |"], [("uncited", SPEC, 6)], id="rows of an ID table"),
+    ],
+)
+def test_a_new_uncited_id_is_a_finding_at_its_definition_and_a_held_one_is_not(build_repo, capsys, spec, expected):
+    """CITE-1, CITE-8: with the table, an ID no test cites and the table lacks is `uncited` at its path and line, and the run is red."""
+    repo = build_repo({**spec_with(*spec), **held("X-1")})
+    assert found(repo) == expected
     assert check_output(capsys, repo)[0] == 1
 
 
