@@ -299,32 +299,15 @@ MARKED = "import pytest\n\n" + MARK + ADAPTER_IMPORT
 FEW_HELD = {BASELINE_PATH: adapter_table({"tests/core": 1})}
 
 
-@pytest.mark.parametrize(
-    "marks",
-    [
-        pytest.param("pytestmark = pytest.mark.imports_adapter\n", id="bare"),
-        pytest.param("pytestmark = pytest.mark.imports_adapter()\n", id="called"),
-        pytest.param("pytestmark = [pytest.mark.anyio, pytest.mark.imports_adapter]\n", id="in a list"),
-        pytest.param("pytestmark = (pytest.mark.imports_adapter,)\n", id="in a tuple"),
-        pytest.param("adapter = pytest.mark.imports_adapter\npytestmark = adapter\n", id="through an alias"),
-    ],
-)
-def test_a_registered_module_mark_exempts_a_core_test_in_each_of_its_forms(red, marks):
-    """ADAPTERIMPORT-22: the module's `pytestmark` exempts, bare or called, alone, in a list or tuple, or through an alias."""
-    assert red({CORE_TEST: f"import pytest\n\n{marks}{ADAPTER_IMPORT}"}, extra=FEW_HELD, markers=REGISTERED) == []
+def test_a_registered_module_mark_exempts_a_core_test(red):
+    """ADAPTERIMPORT-22: the module's `pytestmark` exempts; the forms it can take are `pytest_marks`' to judge."""
+    assert red({CORE_TEST: MARKED}, extra=FEW_HELD, markers=REGISTERED) == []
 
 
-@pytest.mark.parametrize(
-    "content",
-    [
-        pytest.param(ADAPTER_IMPORT + "\n\n@pytest.mark.imports_adapter\ndef test_a(): ...\n", id="a test mark"),
-        pytest.param(ADAPTER_IMPORT + "\n\n@pytest.mark.imports_adapter\nclass TestA:\n    def test_a(self): ...\n", id="a class decorator"),
-        pytest.param(ADAPTER_IMPORT + "\n\nclass TestA:\n    pytestmark = pytest.mark.imports_adapter\n", id="a class pytestmark"),
-    ],
-)
-def test_a_class_or_test_mark_exempts_nothing(red, content):
-    """ADAPTERIMPORT-22: only the module's own `pytestmark` is the module marker."""
-    assert red({CORE_TEST: content}, markers=REGISTERED) == [f"{CORE_TEST}:1"]
+def test_a_test_mark_exempts_nothing(red):
+    """ADAPTERIMPORT-22: only the module's own `pytestmark` is the module marker; which other marks are not is
+    `pytest_marks`' to judge."""
+    assert red({CORE_TEST: ADAPTER_IMPORT + "\n\n@pytest.mark.imports_adapter\ndef test_a(): ...\n"}, markers=REGISTERED) == [f"{CORE_TEST}:1"]
 
 
 def test_an_unregistered_mark_exempts_nothing_and_the_fix_names_the_registration(build_repo):
