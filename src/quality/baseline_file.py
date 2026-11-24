@@ -143,7 +143,8 @@ def fixed_adapter_counts(
 
 def _adapter_notes(held: AdapterCounts, counts: AdapterCounts, planned: list[tuple[str, str]]) -> list[Note]:
     """The notes of the change from `held` to `counts`: each planned move whose target gained a count, a source that lost
-    one first, then a count the target gained beyond its moves, then each count that fell and no move explains."""
+    one first, then a count the target gained beyond its moves, told as restored from the committed table, then each count
+    that fell and no move explains."""
     change = Counter({directory: counts.get(directory, 0) - held.get(directory, 0) for directory in {*counts, *held}})
     notes, untold = [], list(planned)
     for source_lost in (True, False):
@@ -155,10 +156,9 @@ def _adapter_notes(held: AdapterCounts, counts: AdapterCounts, planned: list[tup
                 if change[source] < 0:
                     change[source] += 1
                 notes.append(Note(target, NoteEvent.MOVED, f"{ADAPTER_EXCEPTION} from {source}"))
-    origin = {target: source for source, target in planned}
     notes += [
-        Note(directory, NoteEvent.MOVED, f"{ADAPTER_EXCEPTION} from {origin[directory]}")
-        for directory in sorted(origin)
+        Note(directory, NoteEvent.MOVED, f"{ADAPTER_EXCEPTION} restored from the committed table")
+        for directory in sorted({target for _, target in planned})
         for _ in range(max(change[directory], 0))
     ]
     notes += [

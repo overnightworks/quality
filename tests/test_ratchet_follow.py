@@ -538,10 +538,12 @@ def test_the_notes_tell_the_change_from_the_held_table_to_the_written_one(held, 
 
 
 def test_a_hand_lowered_directory_a_move_brings_back_is_told_once_per_count():
-    """ADAPTERIMPORT-28: the carry brings the committed count back with the moved one, and each is a note."""
+    """ADAPTERIMPORT-28: the carry brings the committed count back with the moved one; the move is told from its source
+    and the count that was only restored is told as restored, not as a second move."""
     held, committed = adapters({"tests/a": 1}), adapters({"tests/a": 1, "tests/b": 1})
     counts, notes = fixed(held, committed, MOVE_A_TO_B)
-    assert (counts, notes) == ({"tests/b": 2}, [MOVED_NOTE, MOVED_NOTE])
+    assert (counts, notes) == ({"tests/b": 2}, [
+        MOVED_NOTE, Note("tests/b", NoteEvent.MOVED, "adapter import exception restored from the committed table")])
 
 
 def test_a_fix_without_a_committed_table_moves_no_count():
