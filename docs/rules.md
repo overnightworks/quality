@@ -330,10 +330,11 @@ It applies these rules:
   where the statement is the module too), as in `imports shop.adapters (through tests/support/stores.py)`
   (ADAPTERIMPORT-16), its fix to name the test after an adapter or composition module or to import no adapter; all
   findings print sorted by path and line
-  (ADAPTERIMPORT-17). A test or support module that does not parse makes the `imports` row `✗ not checked` with the
-  reason (exit `2`) (ADAPTERIMPORT-18). A `[[layout.allow]]` entry naming the rule is refused like any rule outside the
-  layout rules (ADAPTERIMPORT-19). The imports area reads the config and builds the graph once per run; `import-contract`
-  and `adapter-import` judge that one read. A read that cannot judge refuses both, a rule's own refusal only that rule,
+  (ADAPTERIMPORT-17). A core test, or a support module one imports, that does not parse makes the `imports` row
+  `✗ not checked` with the reason (exit `2`) (ADAPTERIMPORT-18). A `[[layout.allow]]` entry naming the rule is refused
+  like any rule outside the layout rules (ADAPTERIMPORT-19). The imports area reads the config and builds the graph once
+  per run; `import-contract`, `adapter-import` and `integration-marker` judge that one read. A read that cannot judge
+  refuses all three, a rule's own refusal only that rule,
   and grimp's warnings print once, as `import-contract`'s note rows (IMPORT-25) (ADAPTERIMPORT-20). The
   [fleet matrix](commands.md#quality-report) cell reads `enforced` when the repository's config holds the contract with
   the id, `no adapter contract` otherwise (ADAPTERIMPORT-21).
@@ -375,6 +376,45 @@ It applies these rules:
   of a forbidden module, the `ignore_imports` of the contract (the raw graph is asked), `allow_indirect_imports = true`
   (a core module that reaches an adapter is in the reach set, so its own test is red for importing its subject), and a
   test-side fake, which is caught only through a forbidden module it imports.
+- `integration-marker`: a test module outside the core that reaches an adapter carries the `integration` mark. It judges
+  where `adapter-import` judges, from the same contract read, and without the contract that carries the id it judges
+  nothing and reads no file (INTEGRATION-1). It judges the test modules of ADAPTERIMPORT-4 and 8 that are no core test
+  (ADAPTERIMPORT-5 to 7); a core test belongs to `adapter-import` alone (INTEGRATION-2). A module is adapter-bound when
+  one of its own imports, or one in a support module it imports, is red as ADAPTERIMPORT-9 to 15 say, through the one
+  reach, so a support module that imports an adapter binds every non-core test that uses it (INTEGRATION-3).
+
+  An adapter-bound module is clean when every test in it carries `integration` in a form the report's suite columns read
+  (`docs/commands.md`, FLEET-121): on the test, on an enclosing class, in a class's or the module's `pytestmark`, or
+  through a module-level alias. A mark that only a `conftest.py` hook, `pytest.param(marks=…)` or `-m` sets counts for
+  no test (INTEGRATION-4). A test class named `Test…` that has a base other than `object` counts as one more test that
+  only a mark reaching the class (its decorator, its own `pytestmark` or the module's) marks, since its inherited tests
+  are not in the module's source. A test or test class the module imports by name (`from x import test_y` or `TestY`,
+  also under `as` when the bound name starts with `test` or `Test`) counts as one more test that only the module's
+  `pytestmark` marks, since pytest collects it there, and so does each star import. These counts stand beside the
+  per-test reading and move no test count of the report (INTEGRATION-5, FLEET-120). A module in which no test is read or
+  counted is clean only when its own `pytestmark` carries the mark; its fact reads `imports <forbidden modules> · no
+  test read and the module is not marked integration` (INTEGRATION-6). The mark counts only where the project's
+  `pyproject.toml` registers it, as ADAPTERIMPORT-23 reads `imports_adapter`; without the registration no mark reaches
+  any test, so the fact counts every test and the fix is `register integration in [tool.pytest.ini_options] markers`
+  (INTEGRATION-7).
+
+  One finding per unclean module, at the line of its first red statement, is an `unmarked` row whose fact names each
+  forbidden module the module's red statements are or reach as ADAPTERIMPORT-16 words them, then `K of N tests not
+  marked integration`, as in `imports shop.adapters · 2 of 3 tests not marked integration`; its fix is `put
+  pytest.mark.integration in the module's one direct pytestmark binding`, which also tells the author of a module that
+  binds its marks twice or under a condition what the reader reads (INTEGRATION-8). An `integration` mark on a module
+  that is not adapter-bound is no finding (INTEGRATION-9). A module that does not parse refuses the rules that judge it
+  or are carried by it, and only those: a non-core test refuses `integration-marker`, a core test `adapter-import`, and
+  a support module both rules reach both. The one read serves both rules and carries each rule's refusal, so one rule's
+  refusal never silences the other (INTEGRATION-10). The rule holds no baseline table and knows no exception mark, and a
+  `[[layout.allow]]` entry naming it is refused (INTEGRATION-11). The `integration` mark exempts nothing from
+  `adapter-import`, and `imports_adapter` exempts nothing here (INTEGRATION-12).
+  The [fleet matrix](commands.md#quality-report) cell reads `enforced` when the repository's config holds the contract
+  with the id, `no adapter contract` otherwise (INTEGRATION-13).
+
+  Named gaps, waiting for usage evidence: fixtures a `conftest.py` injects, string imports, `allow_indirect_imports`, a
+  write to the marks that no second binding shows, and a test bound into the module's namespace by anything but an
+  import statement (an assignment, `globals()`); each is red here or outside what a static read sees.
 - `claude-md`: a tracked `CLAUDE.md`, in any case (`claude.md` is named as it is) (CLAUDE-1), holds exactly `@AGENTS.md`
   with or without a final line feed (CLAUDE-2), so Claude, Codex and Grok read the same guidance, and the repository
   tracks an `AGENTS.md` beside it (CLAUDE-3). No `CLAUDE.md` is clean, with or without an `AGENTS.md` (CLAUDE-4). A
