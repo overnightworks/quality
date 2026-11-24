@@ -2,7 +2,7 @@
 runs, so a mark that only a run applies is not seen."""
 
 import ast
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 
 from quality import clones, repository
 
@@ -84,27 +84,41 @@ def _walruses(node: ast.AST) -> list[ast.NamedExpr]:
 
 
 def _bindings(scope: ast.AST) -> Iterator[tuple[str, ast.expr | None, int]]:
-    """Each binding of a name in the scope's own statements, also inside compound statements, in source order: its name,
-    its value (none where this reader cannot follow it: an augmented binding or a tuple, loop, import, definition or
-    other target) and its line. Functions and classes open their own scope; their decorators, defaults, annotations and bases
-    run in the enclosing one."""
-    for child in scope.body if isinstance(scope, ast.ClassDef) else ast.iter_child_nodes(scope):
-        line = getattr(child, "lineno", getattr(scope, "lineno", 0))
+    """Each binding of a name in the scope's own statements, also inside compound statements, in the order Python runs them:
+    its name, its value (none where this reader cannot follow it: an augmented binding or a tuple, loop, import, definition
+    or other target) and its line. A statement binds after the walruses of its own expressions and before its body.
+    Functions and classes open their own scope; their decorators, defaults, annotations and bases run in the enclosing one."""
+    yield from _bindings_among(scope.body if isinstance(scope, ast.ClassDef) else ast.iter_child_nodes(scope), getattr(scope, "lineno", 0))
+
+
+def _bindings_among(children: Iterable[ast.AST], scope_line: int) -> Iterator[tuple[str, ast.expr | None, int]]:
+    for child in children:
+        line = getattr(child, "lineno", scope_line)
         if isinstance(child, ast.expr):
             yield from ((walrus.target.id, walrus.value, walrus.lineno) for walrus in _walruses(child))
             continue
+        own = list(_own_bindings(child, line))
         if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
             for header in (part for part in ast.iter_child_nodes(child) if not isinstance(part, ast.stmt)):
                 yield from ((walrus.target.id, walrus.value, walrus.lineno) for walrus in _walruses(header))
-        if isinstance(child, ast.Assign):
-            yield from ((target.id, child.value, line) for target in child.targets if isinstance(target, ast.Name))
-        elif isinstance(child, ast.AnnAssign) and child.value is not None and isinstance(child.target, ast.Name):
-            yield child.target.id, child.value, line
-        elif isinstance(child, ast.AugAssign) and isinstance(child.target, ast.Name):
-            yield child.target.id, None, line
-        yield from ((name, None, line) for name in _unreadable_names(child))
-        if not isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-            yield from _bindings(child)
+            yield from own
+            continue
+        parts = list(ast.iter_child_nodes(child))
+        body_start = next((index for index, part in enumerate(parts) if isinstance(part, ast.stmt | ast.excepthandler)), len(parts))
+        yield from _bindings_among(parts[:body_start], line)
+        yield from own
+        yield from _bindings_among(parts[body_start:], line)
+
+
+def _own_bindings(node: ast.AST, line: int) -> Iterator[tuple[str, ast.expr | None, int]]:
+    """The bindings a statement itself makes, apart from the walruses in its expressions."""
+    if isinstance(node, ast.Assign):
+        yield from ((target.id, node.value, line) for target in node.targets if isinstance(target, ast.Name))
+    elif isinstance(node, ast.AnnAssign) and node.value is not None and isinstance(node.target, ast.Name):
+        yield node.target.id, node.value, line
+    elif isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name):
+        yield node.target.id, None, line
+    yield from ((name, None, line) for name in _unreadable_names(node))
 
 
 def _aliases(tree: ast.Module) -> dict[str, frozenset[str]]:
