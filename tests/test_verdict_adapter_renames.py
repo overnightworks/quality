@@ -6,7 +6,7 @@ import subprocess
 import pytest
 
 from quality.baseline_file import render_baseline
-from tests.support.architecture import pytest_markers
+from tests.support.architecture import contracts_ini, pytest_markers
 from tests.support.baselines import adapter_table, ceiling
 from tests.support.git_repositories import put
 from tests.support.merge import GATE_CONFIG, drive
@@ -18,6 +18,12 @@ MARK = "pytestmark = pytest.mark.imports_adapter\n"
 MODULE = "".join(f"value_{number} = {number}\n" for number in range(30))
 REGISTERED = pytest_markers("imports_adapter: reads a real service")
 UNREGISTERED = pytest_markers("unit: fast")
+IMPORT_CONTRACT = {"type": "forbidden", "source_modules": ["shop.db", "shop.dead"], "forbidden_modules": ["shop.web"]}
+DEAD_MODULE = "src/shop/dead.py"
+STRIKES_A_MODULE = {
+    ".importlinter": contracts_ini({"guarded": IMPORT_CONTRACT}), "src/shop/__init__.py": "", "src/shop/db.py": "", DEAD_MODULE: "",
+}
+STRUCK = {".importlinter": contracts_ini({"guarded": {**IMPORT_CONTRACT, "source_modules": ["shop.db"]}}), DEAD_MODULE: None}
 
 
 def moved(counts: dict[str, int], pyproject: str) -> tuple[str, str, dict[str, str]]:
@@ -25,16 +31,20 @@ def moved(counts: dict[str, int], pyproject: str) -> tuple[str, str, dict[str, s
     return adapter_table({"tests/core": 1}), adapter_table(counts), {"pyproject.toml": pyproject}
 
 
+@pytest.mark.parametrize("contracts", [{}, STRIKES_A_MODULE], ids=["the baselines are compared", "a contract module is struck too"])
 @pytest.mark.parametrize(("counts", "pyproject", "code", "line"), [
     pytest.param({"tests": 1}, REGISTERED, 0, None, id="the count moves with the module"),
     pytest.param({"tests": 2}, REGISTERED, 1, "adapter import baseline raises tests 1 -> 2", id="a raise beyond the carried count"),
     pytest.param({"tests": 1}, UNREGISTERED, 1, "adapter import baseline adds tests 1", id="the head does not register the mark"),
 ])
-def test_the_verdict_carries_a_count_with_a_renamed_module_that_holds_the_registered_mark_at_the_head(capsys, pull_request, counts, pyproject, code, line):
+def test_the_verdict_carries_a_count_with_a_renamed_module_that_holds_the_registered_mark_at_the_head(
+    capsys, pull_request, counts, pyproject, code, line, contracts
+):
     """BASELINE-12, ADAPTERIMPORT-29: the carried count is no loosening, a count above it is a raise, an add where the
-    head does not register the mark."""
+    head does not register the mark, whether the head's tree is read for a struck contract module or only its renames."""
     base, head, files = moved(counts, pyproject)
-    moved_in_head(pull_request, base, head, MODULE + MARK, old=OLD, new=NEW, base_files={OLD: MODULE}, head_files=files)
+    moved_in_head(pull_request, base, head, MODULE + MARK, old=OLD, new=NEW, base_files={OLD: MODULE, **contracts},
+                  head_files={**files, **(STRUCK if contracts else {})})
     actual, output = verdict_of(pull_request[0], capsys)
     assert (actual, line is None or line in output) == (code, True)
     assert (line is None) == ("adapter import baseline" not in output)
