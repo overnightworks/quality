@@ -1,7 +1,6 @@
 """`quality merge` with several names, driven in this process against a fake child port and a fake terminal."""
 
 import dataclasses
-import sys
 
 import pytest
 
@@ -16,6 +15,7 @@ from tests.support.merge_run import (
     command_of,
     judging,
     merge_names,
+    merge_names_interrupted,
     row,
 )
 
@@ -27,25 +27,22 @@ def summary(glyph: str, name: str, event: str, fact: str = "") -> str:
     return row(glyph, name, event, fact, width=WIDTH)
 
 
-def test_each_name_runs_one_child_in_the_order_named_with_its_flags(capsys):
-    """MERGE-108, MERGE-109: a child per name, in the order named, each with its own name alone, `--dry-run` and `-v` as given."""
-    code, _, _, children = merge_names(capsys, THIRD, FIRST, SECOND, "--dry-run", "-v")
-    assert (code, children.commands) == (
-        0,
-        [command_of(name, "--dry-run", "-v") for name in (THIRD, FIRST, SECOND)],
-    )
-
-
-def test_no_flag_is_passed_that_was_not_given(capsys):
-    """MERGE-109: a child gets `--dry-run` and `-v` only where the run was given them."""
-    _, _, _, children = merge_names(capsys, FIRST, SECOND)
-    assert children.commands == [command_of(FIRST), command_of(SECOND)]
-
-
-def test_the_child_runs_the_interpreter_that_runs_the_door_without_the_working_directory_on_its_path(capsys):
-    """MERGE-109: the child is the running interpreter with `-P`, so no module of the working directory loads."""
-    _, _, _, children = merge_names(capsys, FIRST, SECOND)
-    assert [command[:2] for command in children.commands] == [[sys.executable, "-P"]] * 2
+@pytest.mark.parametrize(
+    ("words", "expected"),
+    [
+        pytest.param(
+            (THIRD, FIRST, SECOND, "--dry-run", "-v"),
+            [command_of(name, "--dry-run", "-v") for name in (THIRD, FIRST, SECOND)],
+            id="a child per name in the order named, each with the flags given and the working directory off its path",
+        ),
+        pytest.param((FIRST, SECOND), [command_of(FIRST), command_of(SECOND)], id="no flag where none was given"),
+    ],
+)
+def test_each_name_runs_one_child_in_the_order_named_with_its_flags(words, expected, capsys):
+    """MERGE-108, MERGE-109: a child per name, in the order named, each the running interpreter with `-P` and its own
+    name alone, `--dry-run` and `-v` only where the run was given them."""
+    code, _, _, children = merge_names(capsys, *words)
+    assert (code, children.commands) == (0, expected)
 
 
 def test_a_row_names_each_pull_request_and_its_place_before_its_child(capsys):
@@ -198,10 +195,42 @@ def test_a_child_killed_by_a_signal_leaves_the_gate_possibly_off_and_the_pair_na
         pytest.param({FIRST: 1}, 1, id="one refused"),
         pytest.param({FIRST: 1, SECOND: Finished(0, interrupted=True)}, 130, id="refused, then interrupted"),
         pytest.param({FIRST: 1, SECOND: Finished(2, interrupted=True)}, 2, id="refused, then interrupted and stopped"),
-        pytest.param({FIRST: Finished(0, interrupted=True)}, 130, id="interrupted after a merge"),
         pytest.param({SECOND: SIGKILL_RETURNCODE}, 2, id="killed"),
     ],
 )
 def test_the_run_exits_with_the_worst_ending_2_then_130_then_1_then_0(endings, code, capsys):
     """MERGE-118: the run's exit is 2, else 130, else 1, else 0."""
     assert merge_names(capsys, FIRST, SECOND, endings=endings)[0] == code
+
+
+STOPPED_PAIR = (
+    f"error: stopped at {FIRST} · merged 0 of 2 · 1 not run\n"
+    f"next:\n    do the step named above for {FIRST} at once\n    quality merge {SECOND}\n"
+)
+KILLED_PAIR = (
+    f"error: quality_gate MAY STILL BE OFF on acme/widgets · {FIRST} was killed by signal 9 · merged 0 of 2 · 1 not run\n"
+    f"next:\n{restore_line()}    quality merge {SECOND}\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("markers", "endings", "code", "started", "err"),
+    [
+        pytest.param({"out_marker": "2 of 2"}, {}, 130, [FIRST], "", id="while the row of the next pull request is printed, no child starts"),
+        pytest.param({"out_marker": "merged"}, {}, 130, [FIRST, SECOND], "", id="while the summary of merged pull requests is printed, the run ends 130 and not 0"),
+        pytest.param({"out_marker": "stopped"}, {FIRST: 2}, 2, [FIRST], STOPPED_PAIR, id="while the summary of a stop is printed, the pair follows whole"),
+        pytest.param({"err_marker": "error:"}, {FIRST: 2}, 2, [FIRST], STOPPED_PAIR, id="while the pair of a stop is printed, it ends whole"),
+        pytest.param({"err_marker": "error:"}, {FIRST: SIGKILL_RETURNCODE}, 2, [FIRST], KILLED_PAIR, id="while the pair of a killed child is printed, its restore step is printed"),
+        pytest.param(
+            {"err_marker": "error:"}, {FIRST: 1}, 130, [FIRST, SECOND],
+            f"error: merged 1 of 2 · 1 not merged · nothing changed\nnext: quality merge {FIRST}\n",
+            id="while the pair of a refusal is printed, it ends whole and the run ends 130 and not 1",
+        ),
+    ],
+)
+def test_an_interrupt_while_the_run_prints_loses_nothing_and_the_exit_follows_the_precedence(markers, endings, code, started, err):
+    """MERGE-113, MERGE-118: a Ctrl-C that arrives outside the wait, while the run prints a row, the summary or the pair,
+    starts no further child, still prints the summary and the pair, and ends with the exit by the precedence."""
+    result, out, printed, children = merge_names_interrupted(FIRST, SECOND, endings=endings, **markers)
+    assert (result, children.names, printed) == (code, started, err)
+    assert len([line for line in out.splitlines() if "judging" not in line]) == 2

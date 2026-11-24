@@ -622,7 +622,9 @@ it is named. Every line of this section above holds per pull request, because ea
   `quality_gate MAY STILL BE OFF on <owner/repo>`, names the restore command first and then `quality merge` with the
   names not run, ends `2` and starts no child (MERGE-114).
 - **Interrupted.** Ctrl-C reaches the child and the run together. The child ends as a run for it alone does; the run
-  waits for it, never kills it, starts no further child and ends interrupted (MERGE-113). SIGTERM to the run alone
+  waits for it, never kills it, starts no further child and ends interrupted (MERGE-113). A Ctrl-C that arrives
+  outside the wait (as a child starts, or while the run prints its rows, summary or pair) is noted, not raised: the run
+  still waits for a started child and prints the summary and the pair, a restore step included (MERGE-113). SIGTERM to the run alone
   ends the run and leaves the child to finish and restore the property by itself (MERGE-113).
 - **The exit.** The run exits `2` if a child exited `2` or was killed, else `130` if it was interrupted, else `1` if
   a child exited `1`, else `0` (MERGE-118): an interrupted run never exits `0` or `1`, whatever the interrupted

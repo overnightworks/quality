@@ -15,6 +15,7 @@ from tests.support.merge import restore_line
 from tests.support.merge_run import FIRST, SECOND, judging, row
 from tests.support.merge_run_child import file_name
 from tests.support.pty_session import PtySession
+from tests.support.workflow_steps import write_executable
 
 pytestmark = pytest.mark.integration
 
@@ -79,9 +80,7 @@ def scene(tmp_path) -> Scene:
     built.work.mkdir()
     os.mkfifo(tmp_path / "release")
     (tmp_path / "bin").mkdir()
-    gh = tmp_path / "bin" / "gh"
-    gh.write_text(FAKE_GH.format(python=sys.executable))
-    gh.chmod(0o755)
+    write_executable(tmp_path / "bin" / "gh", FAKE_GH.format(python=sys.executable))
     return built
 
 

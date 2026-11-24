@@ -30,11 +30,10 @@ from quality.output import (
     write_pair,
     write_rows,
 )
-from quality.process import Finished
+from quality.process import EXIT_INTERRUPTED, Finished, NotedInterrupts, noting_interrupts
 from quality.report import Command, Instruction, Step
 from quality.verdict import MERGE_COMMAND
 
-EXIT_INTERRUPTED = 128 + signal.SIGINT
 # Ordered by what the operator must hear first: a later exit beats an earlier one, so 2 beats 130 beats 1 beats 0.
 EXIT_PRECEDENCE = (EXIT_YES, EXIT_REFUSED, EXIT_INTERRUPTED, EXIT_COULD_NOT_DO)
 EXIT_OF_EVENT = {
@@ -114,19 +113,19 @@ def rerun(names: Sequence[PullRequestName], dry_run: bool) -> Command:
 
 def merged_count(results: Sequence[Result], total: int, dry_run: bool) -> str:
     merged = sum(result.event in MERGED_EVENTS for result in results)
-    return f"{'would merge' if dry_run else 'merged'} {merged} of {total}"
+    return f"{DoorEvent.WOULD_MERGE if dry_run else DoorEvent.MERGED} {merged} of {total}"
 
 
 def stopped_pair(last: Result, count: str, rest: Sequence[PullRequestName], dry_run: bool) -> tuple[str, tuple[Step, ...]]:
     """The child that stopped the run, then the names not run: its own step first, to be done at once."""
     if last.event is DoorEvent.KILLED:
-        facts = [f"{GATE_PROPERTY} MAY STILL BE OFF on {last.name.repository}", f"{last.name} was killed by {last.fact}"]
+        facts = [f"{GATE_PROPERTY} MAY STILL BE OFF on {last.name.repository}", f"{last.name} was {DoorEvent.KILLED} by {last.fact}"]
         steps: list[Step] = [restore_command(last.name.repository)]
     else:
-        facts = [f"stopped at {last.name}"]
+        facts = [f"{DoorEvent.STOPPED} at {last.name}"]
         steps = [Instruction(f"do the step named above for {last.name} at once")]
     if rest:
-        facts.extend([count, f"{len(rest)} not run"])
+        facts.extend([count, f"{len(rest)} {DoorEvent.NOT_RUN}"])
         steps.append(rerun(rest, dry_run))
     else:
         facts.append(count)
@@ -142,9 +141,36 @@ def close_run(code: int, results: Sequence[Result], names: Sequence[PullRequestN
         write_closing_line(Glyph.CLEAN, (count, format_duration(seconds)), channels.out)
     elif code == EXIT_REFUSED:
         refused = [result.name for result in results if result.event is DoorEvent.NOT_MERGED]
-        write_pair(SEPARATOR.join((count, f"{len(refused)} not merged", NOTHING_CHANGED)), (rerun(refused, dry_run),), channels.err)
+        write_pair(SEPARATOR.join((count, f"{len(refused)} {DoorEvent.NOT_MERGED}", NOTHING_CHANGED)), (rerun(refused, dry_run),), channels.err)
     elif code == EXIT_COULD_NOT_DO:
         write_pair(*stopped_pair(results[-1], count, names[len(results) :], dry_run), channels.err)
+
+
+def run_children(
+    names: Sequence[PullRequestName],
+    *,
+    dry_run: bool,
+    verbose: bool,
+    channels: Channels,
+    start_child: StartChild,
+    discard_input: Callable[[], None],
+    interrupts: NotedInterrupts,
+) -> list[Result]:
+    """Each name's child after the one before exited, up to the name where the run stops."""
+    results: list[Result] = []
+    for position, name in enumerate(names, start=1):
+        write_rows((Row(Glyph.NOTE, f"{position} of {len(names)}", DoorEvent.JUDGING, str(name)),), channels.out)
+        flush_streams()
+        discard_input()
+        if interrupts.arrived:
+            break
+        finished = start_child(child_command(name, dry_run=dry_run, verbose=verbose))
+        results.append(result_of(name, finished.returncode, dry_run))
+        if finished.interrupted:
+            interrupts.note()
+        if interrupts.arrived or results[-1].event in STOPPING_EVENTS:
+            break
+    return results
 
 
 def run_merge_names(
@@ -159,23 +185,19 @@ def run_merge_names(
     discard_input: Callable[[], None],
 ) -> int:
     """Each name's door in its own process, in the order named; the next starts after the previous one exited. The run
-    stops where a child's exit cannot be read as nothing changed or is an interruption, and never ends 0 or 1 after one."""
+    stops where a child's exit cannot be read as nothing changed or is an interruption, and never ends 0 or 1 after one.
+
+    A Ctrl-C is noted from the first row to the last line, so the summary and the pair, a restore step included, are
+    printed whole before the run ends with its exit."""
     if not is_terminal:
         return refuse_without_terminal(channels)
     started = clock()
-    results: list[Result] = []
-    interrupted = False
-    for position, name in enumerate(names, start=1):
-        write_rows((Row(Glyph.NOTE, f"{position} of {len(names)}", DoorEvent.JUDGING, str(name)),), channels.out)
-        flush_streams()
-        discard_input()
-        finished = start_child(child_command(name, dry_run=dry_run, verbose=verbose))
-        results.append(result_of(name, finished.returncode, dry_run))
-        interrupted = finished.interrupted
-        if interrupted or results[-1].event in STOPPING_EVENTS:
-            break
-    rows = tuple(summary_row(result) for result in [*results, *(Result(name, DoorEvent.NOT_RUN) for name in names[len(results) :])])
-    write_rows(rows, channels.out, subject_width(rows))
-    code = run_exit(results, interrupted)
-    close_run(code, results, names, dry_run, clock() - started, channels)
-    return code
+    with noting_interrupts() as interrupts:
+        results = run_children(
+            names, dry_run=dry_run, verbose=verbose, channels=channels, start_child=start_child, discard_input=discard_input,
+            interrupts=interrupts,
+        )
+        rows = tuple(summary_row(result) for result in [*results, *(Result(name, DoorEvent.NOT_RUN) for name in names[len(results) :])])
+        write_rows(rows, channels.out, subject_width(rows))
+        close_run(run_exit(results, interrupts.arrived), results, names, dry_run, clock() - started, channels)
+    return run_exit(results, interrupts.arrived)

@@ -1,6 +1,7 @@
 """A process that runs with a pseudo-terminal as its stdin, stdout and stderr, so its terminal checks pass, a typed
 line reaches it and Ctrl-C reaches every process of its group, as at a person's terminal."""
 
+import codecs
 import contextlib
 import os
 import select
@@ -23,6 +24,7 @@ class PtySession:
     def __init__(self, arguments: Sequence[str], environment: Mapping[str, str], cwd: Path) -> None:
         self.master, slave = os.openpty()
         self.output = ""
+        self._decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         self.process = subprocess.Popen(
             [sys.executable, "-c", TAKE_THE_TERMINAL, *arguments], stdin=slave, stdout=slave, stderr=slave, env=dict(environment), cwd=cwd,
             start_new_session=True,
@@ -65,5 +67,5 @@ class PtySession:
             chunk = os.read(self.master, 4096)
         except OSError:  # the other end closed: the pseudo-terminal's end of file
             return False
-        self.output += chunk.decode()
+        self.output += self._decoder.decode(chunk)
         return bool(chunk)

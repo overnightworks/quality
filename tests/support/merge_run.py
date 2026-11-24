@@ -1,10 +1,14 @@
 """How a test drives `quality merge` with several names: in this process against a fake child port and a fake terminal,
 with the rows and pairs the run prints named once here."""
 
+import io
+import signal
 import sys
 from collections.abc import Mapping, Sequence
 
 from quality import cli
+from quality.merge_run import run_merge_names
+from quality.output import Channel, Channels
 from quality.process import Finished
 from tests.support.merge import frozen_now
 
@@ -44,6 +48,35 @@ def merge_names(capsys, *words: str, endings: Mapping[str, Finished | int] | Non
     code = cli.main(["merge", *words], terminal=standard_input, ports=cli.DoorPorts(start_child=children), clock=lambda: 0.0, now=frozen_now)
     streams = capsys.readouterr()
     return code, streams.out, streams.err, children
+
+
+class InterruptingStream(io.StringIO):
+    """An output stream that takes a Ctrl-C the first time `marker` is written to it, as one that arrives while that text
+    is printed."""
+
+    def __init__(self, marker: str | None = None) -> None:
+        super().__init__()
+        self.marker = marker
+
+    def write(self, text: str) -> int:
+        written = super().write(text)
+        if self.marker is not None and self.marker in text:
+            self.marker = None
+            signal.raise_signal(signal.SIGINT)
+        return written
+
+
+def merge_names_interrupted(*words: str, out_marker: str | None = None, err_marker: str | None = None, endings: Mapping[str, Finished | int] | None = None):
+    """The exit, stdout and stderr of `quality merge <words>` on the fake child port, with a Ctrl-C arriving while the run
+    prints `out_marker` to stdout or `err_marker` to stderr."""
+    children = FakeChildren(endings)
+    out, err = InterruptingStream(out_marker), InterruptingStream(err_marker)
+    code = run_merge_names(
+        [cli.named_pull_request(word) for word in words], dry_run=False, verbose=False, is_terminal=True,
+        channels=Channels(Channel(out, False, None), Channel(err, False, None)), clock=lambda: 0.0, start_child=children,
+        discard_input=children.discard_input,
+    )
+    return code, out.getvalue(), err.getvalue(), children
 
 
 def row(glyph: str, subject: str, event: str, fact: str = "", width: int = 12) -> str:
