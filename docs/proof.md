@@ -54,6 +54,8 @@ The weekly report prints them in the run summary of `report.yml`, for the heads 
 | M5 | re-runs and failures before a job's first test step | the `Re-runs` column (FLEET-104); failures before a job's first test step: open on quality#720 |
 | M6 | skipped and fixme-marked tests | the `Skipped` and `Fixme` columns of the `Tests per layer` table (FLEET-122, FLEET-123) |
 
+quality's own coverage floor stands in `pyproject.toml` as `fail_under`; it only rises, and the lane that raises coverage raises it.
+
 ## The alert route
 
 A breach reaches the operator only as a mail through the platform's alert route, never as a list. quality publishes the weekly median per repository as a file the platform reads without a credential (`site/fleet-ci-time.json`, FLEET-106 to FLEET-111); the platform's own alert route mails the operator (platform#359). The breach knows no recorded debt: every repository whose weekly median exceeds 10 minutes fires the alert each week. Until that check stands, the table in the weekly summary is the only place a breach shows.
