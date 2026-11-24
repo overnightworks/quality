@@ -203,7 +203,7 @@ def _judge_read[T](read: T | CannotJudge, judge: Callable[[T], Judged]) -> Judge
 
 
 def _judge_lint(lint: python_lint.Lint | CannotJudge, judge: Callable[[python_lint.Lint], RuleResult]) -> RuleResult | CannotJudge:
-    """One rule's verdict on the shared run; a run that cannot judge refuses both rules, a judge's own refusal only its rule."""
+    """One rule's verdict on the shared run; a run that cannot judge refuses every rule, a judge's own refusal only its rule."""
     if isinstance(lint, CannotJudge):
         return lint
     try:
@@ -505,7 +505,7 @@ class RunInputs:
 
     @cached_property
     def import_contracts(self) -> architecture.ContractsRead | None | CannotJudge:
-        """The import contracts and the one import graph that both rules of the imports area judge."""
+        """The import contracts and the one import graph that every rule of the imports area judges."""
         return _attempt(lambda: read_import_contracts(self.root, self.tracked))
 
     @cached_property

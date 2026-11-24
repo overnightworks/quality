@@ -14,7 +14,7 @@ MODULE_MARKS = "pytestmark"
 STAR = "*"
 NO_MARKS: frozenset[str] = frozenset()
 TEST_CLASS_PREFIX = "Test"
-TEST_NAME_PREFIXES = ("test", TEST_CLASS_PREFIX)
+TEST_NAME_PREFIXES = (clones.TEST_NAME_PREFIX, TEST_CLASS_PREFIX)
 
 
 def _marks_named(node: ast.expr, aliases: dict[str, frozenset[str]]) -> frozenset[str]:
@@ -118,12 +118,17 @@ def marks_by_test(tree: ast.Module) -> Iterator[frozenset[str]]:
 
 
 def unseen_tests(tree: ast.Module) -> Iterator[frozenset[str]]:
-    """The marks that can reach each test the module holds but its source does not show, beside `marks_by_test`: a test
-    class with a base other than `object` has its tests from the base, and only a mark reaching the class marks them; a
-    name the module imports that starts with `test` or `Test`, and each star import, may bring tests that only the
-    module's `pytestmark` marks."""
+    """The marks that can reach each test the module holds but its source does not show, beside `marks_by_test`: a class
+    of the module's own scope with a base other than `object`, whatever its name, and a nested class named `Test…` with
+    one, have their tests from the base, and only a mark reaching the class marks them; a name the module imports that
+    starts with `test` or `Test`, and each star import, may bring tests that only the module's `pytestmark` marks."""
+    module_scope = {id(node) for node in _scope_nodes(tree.body)}
     for definition, marks in _marked_definitions(tree):
-        if isinstance(definition, ast.ClassDef) and definition.name.startswith(TEST_CLASS_PREFIX) and any(not _is_object(base) for base in definition.bases):
+        if (
+            isinstance(definition, ast.ClassDef)
+            and (id(definition) in module_scope or definition.name.startswith(TEST_CLASS_PREFIX))
+            and any(not _is_object(base) for base in definition.bases)
+        ):
             yield marks
     module = frozenset(module_marks(tree))
     for statement in _scope_nodes(tree.body):

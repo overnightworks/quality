@@ -386,9 +386,10 @@ It applies these rules:
   An adapter-bound module is clean when every test in it carries `integration` in a form the report's suite columns read
   (`docs/commands.md`, FLEET-121): on the test, on an enclosing class, in a class's or the module's `pytestmark`, or
   through a module-level alias. A mark that only a `conftest.py` hook, `pytest.param(marks=…)` or `-m` sets counts for
-  no test (INTEGRATION-4). A test class named `Test…` that has a base other than `object` counts as one more test that
-  only a mark reaching the class (its decorator, its own `pytestmark` or the module's) marks, since its inherited tests
-  are not in the module's source. A test or test class the module imports by name (`from x import test_y` or `TestY`,
+  no test (INTEGRATION-4). A class of the module's own scope that names a base other than
+  `object`, whatever its name, counts as one more test that only a mark reaching the class (its decorator, its own
+  `pytestmark` or the module's) marks, since its inherited tests are not in the module's source; so does a nested class
+  named `Test…` with such a base. A test or test class the module imports by name (`from x import test_y` or `TestY`,
   also under `as` when the bound name starts with `test` or `Test`) counts as one more test that only the module's
   `pytestmark` marks, since pytest collects it there, and so does each star import. These counts stand beside the
   per-test reading and move no test count of the report (INTEGRATION-5, FLEET-120). A module in which no test is read or
@@ -414,7 +415,9 @@ It applies these rules:
 
   Named gaps, waiting for usage evidence: fixtures a `conftest.py` injects, string imports, `allow_indirect_imports`, a
   write to the marks that no second binding shows, and a test bound into the module's namespace by anything but an
-  import statement (an assignment, `globals()`); each is red here or outside what a static read sees.
+  import statement (an assignment, `globals()`), an imported `TestCase` class whose bound name does not start with
+  `Test` and that the module does not subclass, and tests that pytest collects only through `python_functions`,
+  `python_classes` or `__test__`; each is red here or outside what a static read sees.
 - `claude-md`: a tracked `CLAUDE.md`, in any case (`claude.md` is named as it is) (CLAUDE-1), holds exactly `@AGENTS.md`
   with or without a final line feed (CLAUDE-2), so Claude, Codex and Grok read the same guidance, and the repository
   tracks an `AGENTS.md` beside it (CLAUDE-3). No `CLAUDE.md` is clean, with or without an `AGENTS.md` (CLAUDE-4). A
@@ -870,7 +873,7 @@ It applies these rules:
     has it and git does not read it as renamed, or git reads it as renamed to a module the same list names (below));
   - `root_packages` (as a set of names), `include_external_packages` or `exclude_type_checking_imports` changed:
     `import-linter changes root_packages` (LOOSE-12);
-  - the contract that carries the id `core-imports-no-adapter` (`adapter-import`'s contract) stays at
+  - the contract that carries the id `core-imports-no-adapter` (the contract of both `adapter-import` and `integration-marker`) stays at
     the head under the same name without the id: `import contract id core-imports-no-adapter removed`, or
     `import contract id core-imports-no-adapter moves "a" -> "b"` when contract `b` carries it at the head (LOOSE-36).
     A carrier that is gone at the head, renamed (LOOSE-5) or removed, gives LOOSE-7's line only, and a removed config
