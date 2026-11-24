@@ -1,0 +1,8 @@
+claim_id = "b75b95c250ca468b9208bcb01ebd27ae"
+agent = "Claude eaac3b48-6964-423b-ac4c-dd8481e5f394"
+role = "builder"
+base = "0f71110214b2f8c43c67c932290c0eacc94dd62f"
+branch = "claude/issue-1025-make-room-loosenings-allowances"
+scope = ["docs/ARCHITECTURE.md", "pyproject.toml", "src/quality/config.py", "src/quality/config_allowances.py", "src/quality/loosenings.py", "src/quality/verdict.py", "tests"]
+opened_commit = "f74d30aea1ee90db8dfbec640b7375d8be1de480"
+whole_reason = "Two pure moves that make room for the same next slice; each is proven by the same unchanged tests."
