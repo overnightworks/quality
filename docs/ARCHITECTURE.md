@@ -45,7 +45,7 @@ the blocks, and `quality check` enforces it: a module imports only from the laye
 flowchart TB
     cli["cli.py: the one door; arguments, exit code"]
     door["merge.py, base_branch.py: the operator's door and what GitHub says about its base branch"]
-    verdict["verdict.py, sides.py: the pull request's verdict and the two sides it compares"]
+    verdict["verdict.py, loosenings.py, sides.py: the pull request's verdict, what counts as a loosening, and the two sides it compares"]
     reports["sonar_properties.py, sonar.py, fleet.py: SonarCloud scan wiring and findings, fleet report"]
     check["check.py, staged.py: areas in order, the commit hook"]
     fix["baseline_fix.py: the --fix recording of the baseline"]
@@ -67,6 +67,8 @@ flowchart TB
 
 Rules return findings and never print; `output.py` owns every printed line. `checkout.py` and `repository.py` are the
 only readers of the checked-out files (`architecture.py` opens the sources itself, for grimp), `web.py` the only HTTP transport that sends a credential, and `gh.py` runs every `gh` command the door sends. `python_imports.py` is the one reader of a module's import statements: from them `external_imports.py` keeps the submodules of an external package that a forbidden contract names (`agents.calling`), which grimp would squash, so nothing of the package is read or installed.
+
+`config.py` reads `quality/config.toml` into the settings record and the allow lists; `config_allowances.py` owns the readers of the root, layout, python, compose and workflow allow tables, and `config_entries.py` the entry reading they share.
 
 ## 3. Runtime View
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from quality.config import COMPOSE_ALLOWANCE_EXAMPLE
+from quality.config_allowances import COMPOSE_ALLOWANCE_EXAMPLE
 from quality.config_entries import CONFIG_PATH
 from quality.report import Finding, FindingEvent
 from quality.rules import Rule

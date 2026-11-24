@@ -4,7 +4,7 @@ import tomllib
 from dataclasses import dataclass
 from typing import Literal
 
-from quality import config, config_entries
+from quality import config, config_allowances, config_entries
 
 CONFIG = "quality/config.toml"
 GATE = '[gate]\nmandatory_jobs = ["checks"]\n'
@@ -95,14 +95,14 @@ ARRAY_TABLES = (
         duplicate_example=False,
     ),
     ArrayTable(
-        "root.allow", config.ROOT_ALLOWANCE_EXAMPLE, {"entry": "plans/", "reason": "ruled"},
+        "root.allow", config_allowances.ROOT_ALLOWANCE_EXAMPLE, {"entry": "plans/", "reason": "ruled"},
         "exactly an entry and a reason",
         (({"entry": "a/b"}, "entry as one name directly in the root, a directory with a trailing /, not a path"),
          ({"reason": ""}, ONE_LINE_NEED)),
         'declares entry = "plans/" twice; one entry per root entry',
     ),
     ArrayTable(
-        "layout.allow", config.LAYOUT_ALLOWANCE_EXAMPLE, {"path": "NOTES", "rule": "file-suffix", "reason": "ruled"},
+        "layout.allow", config_allowances.LAYOUT_ALLOWANCE_EXAMPLE, {"path": "NOTES", "rule": "file-suffix", "reason": "ruled"},
         "exactly a path, a rule and a reason",
         (({"path": "dir/"}, FILE_PATH_NEED),
          ({"rule": "size"}, LAYOUT_RULE_NEED),
@@ -111,21 +111,21 @@ ARRAY_TABLES = (
         'declares path = "NOTES" for rule = "file-suffix" twice; one declaration per rule and path',
     ),
     ArrayTable(
-        "python.allow", config.PYTHON_ALLOWANCE_EXAMPLE, {"path": "speech/pyproject.toml", "reason": "ruled"},
+        "python.allow", config_allowances.PYTHON_ALLOWANCE_EXAMPLE, {"path": "speech/pyproject.toml", "reason": "ruled"},
         "exactly a path and a reason",
         (({"path": "speech/"}, "path as the exact tracked path of one pyproject.toml, no folder, pattern or .."),
          ({"reason": ""}, ONE_LINE_NEED)),
         'declares path = "speech/pyproject.toml" twice; one entry per path',
     ),
     ArrayTable(
-        "compose.allow", config.COMPOSE_ALLOWANCE_EXAMPLE, {"file": "compose.yaml", "service": "web", "reason": "ruled"},
+        "compose.allow", config_allowances.COMPOSE_ALLOWANCE_EXAMPLE, {"file": "compose.yaml", "service": "web", "reason": "ruled"},
         "exactly a file, a service and a reason",
         (({"file": "dir/"}, "file as the exact tracked path of one compose file: no folder, pattern, .. or absolute path"),
          ({"service": ""}, "service as the one-line name of a service in that file"), ({"reason": ""}, ONE_LINE_NEED)),
         'declares service = "web" of file = "compose.yaml" twice; one declaration per file and service',
     ),
     ArrayTable(
-        "workflow.allow", config.WORKFLOW_ALLOWANCE_EXAMPLE, {"file": ".github/workflows/preview.yml", "reason": "ruled"},
+        "workflow.allow", config_allowances.WORKFLOW_ALLOWANCE_EXAMPLE, {"file": ".github/workflows/preview.yml", "reason": "ruled"},
         "exactly a file and a reason",
         (({"file": ".github/workflows/"}, WORKFLOW_FILE_NEED), ({"file": ".github/workflows/*.yml"}, WORKFLOW_FILE_NEED),
          ({"reason": "two\nlines"}, ONE_LINE_NEED)),
@@ -184,9 +184,9 @@ SECRET_NEEDS = (
     ({"reason": "two\nlines"}, "a one-line reason", None),
 )
 TABLE_VALUES = (("gate", config.EXAMPLE), ("secrets", config.ALLOWANCE_EXAMPLE), ("advisories", config.ADVISORY_ALLOWANCE_EXAMPLE),
-                       ("root", config.ROOT_ALLOWANCE_EXAMPLE), ("layout", config.LAYOUT_ALLOWANCE_EXAMPLE),
-                       ("python", config.PYTHON_ALLOWANCE_EXAMPLE), ("compose", config.COMPOSE_ALLOWANCE_EXAMPLE),
-                       ("workflow", config.WORKFLOW_ALLOWANCE_EXAMPLE), ("size", config.GENERATED_FILE_EXAMPLE),
+                       ("root", config_allowances.ROOT_ALLOWANCE_EXAMPLE), ("layout", config_allowances.LAYOUT_ALLOWANCE_EXAMPLE),
+                       ("python", config_allowances.PYTHON_ALLOWANCE_EXAMPLE), ("compose", config_allowances.COMPOSE_ALLOWANCE_EXAMPLE),
+                       ("workflow", config_allowances.WORKFLOW_ALLOWANCE_EXAMPLE), ("size", config.GENERATED_FILE_EXAMPLE),
                        ("spec_citations", config.FOREIGN_PREFIX_EXAMPLE))
 
 
@@ -244,11 +244,11 @@ def _unknown_key_refusals() -> list[Refusal]:
         Refusal("gate unknown key", "[gate]\nwhatever = 1\n", f"{where} whatever - {KNOWN_KEYS}", None),
         Refusal("advisories unknown key", "[advisories]\nignore = []\n", f"{where} ignore - {KNOWN_KEYS}", None),
         Refusal("two unknown keys", '[root]\nextra = 1\n[size]\nignore = []\n', f"{where}s extra, ignore - {KNOWN_KEYS}", config.GENERATED_FILE_EXAMPLE),
-        Refusal("odd unknown key", '[root]\n"a b" = 1\nc = 2\n', f'{where}s "a b", c - {KNOWN_KEYS}', config.ROOT_ALLOWANCE_EXAMPLE),
+        Refusal("odd unknown key", '[root]\n"a b" = 1\nc = 2\n', f'{where}s "a b", c - {KNOWN_KEYS}', config_allowances.ROOT_ALLOWANCE_EXAMPLE),
     ]
-    for table, example in (("root", config.ROOT_ALLOWANCE_EXAMPLE), ("layout", config.LAYOUT_ALLOWANCE_EXAMPLE),
-                           ("python", config.PYTHON_ALLOWANCE_EXAMPLE), ("compose", config.COMPOSE_ALLOWANCE_EXAMPLE),
-                           ("workflow", config.WORKFLOW_ALLOWANCE_EXAMPLE), ("size", config.GENERATED_FILE_EXAMPLE),
+    for table, example in (("root", config_allowances.ROOT_ALLOWANCE_EXAMPLE), ("layout", config_allowances.LAYOUT_ALLOWANCE_EXAMPLE),
+                           ("python", config_allowances.PYTHON_ALLOWANCE_EXAMPLE), ("compose", config_allowances.COMPOSE_ALLOWANCE_EXAMPLE),
+                           ("workflow", config_allowances.WORKFLOW_ALLOWANCE_EXAMPLE), ("size", config.GENERATED_FILE_EXAMPLE),
                            ("spec_citations", config.FOREIGN_PREFIX_EXAMPLE)):
         refusals.append(Refusal(f"{table} unknown key", f"[{table}]\nignore = []\n", f"{where} ignore - {KNOWN_KEYS}", example))
     return refusals
