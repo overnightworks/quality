@@ -340,7 +340,7 @@ repository a token can list is dropped without a trace (FLEET-72).
   body, by a plain or annotated assignment standing directly in it, to a mark or a list or tuple of marks, and a
   module-level alias only where it is bound once directly in the module body; every other shape (a second binding in
   any form, a binding inside an `if`, `try`, `with`, `for`, `while` or `match`, a value that is no mark) gives no marks,
-  so the test counts as unmarked, `adapter-import` exempts nothing and `integration-marker` finds no mark. A write no
+  so the test counts as unmarked, `adapter-import` exempts nothing and `integration-marker` leaves the module red. A write no
   statement shows (a star import, `globals()`, a conftest hook) is not seen.
   `Fixme` counts the same way for Playwright `test.fixme`, `describe.fixme` and pytest `pytest.mark.xfail`; a
   test with both marks counts in both columns (FLEET-123). A Python test file that does not parse and a script test file
@@ -373,7 +373,7 @@ repository a token can list is dropped without a trace (FLEET-72).
   repository passes it: `enforced`, `report-only` (`size` without `quality/baseline.toml` (FLEET-15), `import-contract`
   without an import-linter config (FLEET-16), `clone` on v0.4.0 and, from v0.5.0 on, without a `[clones]` table in
   `quality/baseline.toml` (FLEET-17), `catalog-check` under a tag, which only reports it (FLEET-98), `logging` and `test-twin` on every release that has them, which report notes only (LOGGING-6, TWIN-6), `spec-citation` without a `[spec_citations]` table in `quality/baseline.toml` (CITE-6, FLEET-118), `literal-text` under a tag below v0.16.0, which only measures, and from v0.16.0 until the release that names the catalogs declaration without a `[literal_text]` table (FLEET-101, FLEET-102; `SwitchChange` in `src/quality/rules.py`)),
-  `no adapter contract` (`adapter-import` and `integration-marker`, when the clone's import-linter config holds no `forbidden` contract with the id `core-imports-no-adapter`) (ADAPTERIMPORT-21, INTEGRATION-13),
+  `no adapter contract` (`adapter-import` and `integration-marker`, when the clone's import-linter config holds no `forbidden` contract with the id `core-imports-no-adapter`) (ADAPTERIMPORT-21, INTEGRATION-11),
   `not in <tag>` when the pinned release predates the rule (FLEET-18),
   `not released` when only main has the rule (FLEET-19), `no catalogs declaration` (`catalog-check` on main, `literal-text` on main and from the release that names the catalogs declaration as its switch, `locator-text` on main and from v0.21.0 on, `render-pass` on main and from v0.17.0 on, in the gate's own
   repository, when the clone's `pyproject.toml` does not declare `overnightworks-design[catalogs]`; `enforced` when it does)
