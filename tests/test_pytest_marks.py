@@ -1,6 +1,7 @@
 """The pytest marks a test module names, read from its syntax, and the marks a project registers."""
 
 import ast
+import textwrap
 
 import pytest
 
@@ -69,6 +70,44 @@ def test_a_test_carries_its_own_marks_its_classes_and_the_modules():
 def test_the_last_pytestmark_binding_of_a_class_body_decides(body, expected):
     tree = ast.parse(f"class TestA:\n    {body}    def test_a(self): ...\n")
     assert list(marks_by_test(tree)) == [expected]
+
+
+REBINDING_FORMS = [
+    pytest.param("pytestmark = other = pytest.mark.anyio", {"anyio"}, id="a chained assignment decides"),
+    pytest.param("other = pytestmark = [pytest.mark.anyio]", {"anyio"}, id="a chained assignment decides with the name last"),
+    pytest.param("(pytestmark := pytest.mark.anyio)", {"anyio"}, id="a walrus decides by its value"),
+    pytest.param("(pytestmark := make())", set(), id="a walrus of no mark gives no marks"),
+    pytest.param("pytestmark, other = make(), 1", set(), id="a tuple target gives no marks"),
+    pytest.param("*pytestmark, other = make()", set(), id="a star target gives no marks"),
+    pytest.param("for pytestmark in marks:\n    pass", set(), id="a for target gives no marks"),
+    pytest.param("with ctx() as pytestmark:\n    pass", set(), id="a with target gives no marks"),
+    pytest.param("import foo as pytestmark", set(), id="an import alias gives no marks"),
+    pytest.param("from foo import bar as pytestmark", set(), id="an import-from alias gives no marks"),
+    pytest.param("def pytestmark(): ...", set(), id="a function definition gives no marks"),
+    pytest.param("class pytestmark: ...", set(), id="a class definition gives no marks"),
+    pytest.param("del pytestmark", set(), id="a deletion gives no marks"),
+    pytest.param("try:\n    pass\nexcept E as pytestmark:\n    pass", set(), id="an except name gives no marks"),
+    pytest.param("match x:\n    case pytestmark:\n        pass", set(), id="a match capture gives no marks"),
+    pytest.param("other = 1\nother.pytestmark = 2\nx = [pytestmark for pytestmark in y]", {"imports_adapter"}, id="no binding of the name in this scope leaves the mark"),
+]
+
+
+@pytest.mark.parametrize(("rebinding", "expected"), REBINDING_FORMS)
+def test_any_later_binding_of_a_module_pytestmark_decides_as_in_pytest(rebinding, expected):
+    tree = ast.parse(f"pytestmark = pytest.mark.imports_adapter\n{rebinding}\n")
+    assert set(module_marks(tree)) == expected
+
+
+@pytest.mark.parametrize(("rebinding", "expected"), REBINDING_FORMS)
+def test_any_later_binding_of_a_class_pytestmark_decides_as_in_pytest(rebinding, expected):
+    indented = textwrap.indent(rebinding, "    ")
+    tree = ast.parse(f"class TestA:\n    pytestmark = pytest.mark.imports_adapter\n{indented}\n    def test_a(self): ...\n")
+    assert list(marks_by_test(tree)) == [expected]
+
+
+def test_an_alias_rebound_to_no_mark_gives_no_marks():
+    tree = ast.parse("a = pytest.mark.imports_adapter\na = 1\npytestmark = a\n")
+    assert module_marks(tree) == {}
 
 
 REGISTRATIONS = [
