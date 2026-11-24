@@ -22,7 +22,6 @@ import lizard
 
 from quality import checkout, ratchet_scripts, repository
 from quality.baseline_file import (
-    ADAPTER_EXCEPTION,
     BASELINE_PATH,
     FIX_COMMAND,
     AdapterCounts,
@@ -36,6 +35,7 @@ from quality.baseline_file import (
     SizeEntries,
     SizeError,
     UnknownTable,
+    followed_adapter_counts,
     key_order,
     moved_adapter_counts,
 )
@@ -689,34 +689,9 @@ def follow_renames(held: Baseline, committed: Baseline, renames: Renames, tracke
         changes += limit_changes
     counts = held.adapter_imports
     if counts is not None and committed.adapter_imports is not None:
-        counts, moves = _followed_adapter_counts(counts, committed.adapter_imports, renames.marked_moves())
-        changes += [Note(target, NoteEvent.MOVED, f"{ADAPTER_EXCEPTION} from {source}") for source, target in moves]
+        counts, adapter_changes = followed_adapter_counts(counts, committed.adapter_imports, renames.marked_moves())
+        changes += adapter_changes
     return CeilingFix(replace(held, size=size, clones=pairs, job_minutes=limits, adapter_imports=counts), tuple(changes))
-
-
-def _followed_adapter_counts(
-    held: AdapterCounts, committed: AdapterCounts, moves: Mapping[str, str]
-) -> tuple[AdapterCounts, list[tuple[str, str]]]:
-    """The held counts as the verdict carries the committed ones, and the moves that changed them. A directory a move
-    brings a count to takes the carried count, any other no more than the carried count and no more than it holds, and
-    a directory the carry lacks goes; the committed table and the moves alone say what a move brings, so a fix run
-    again, or after one more staged move, ends at the same counts. A move is reported when its target gained a count
-    and its source lost one, once per count."""
-    carried, planned = moved_adapter_counts(committed, moves)
-    brought = {target for _, target in planned}
-    counts = {
-        directory: carried[directory] if directory in brought else min(held.get(directory, 0), carried[directory])
-        for directory in carried
-    }
-    counts = {directory: count for directory, count in counts.items() if count}
-    change = Counter({directory: counts.get(directory, 0) - held.get(directory, 0) for directory in {*counts, *held}})
-    taken = []
-    for source, target in planned:
-        if change[target] > 0 > change[source]:
-            change[target] -= 1
-            change[source] += 1
-            taken.append((source, target))
-    return counts, taken
 
 
 def _followed_pairs(

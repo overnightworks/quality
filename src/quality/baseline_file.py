@@ -6,6 +6,7 @@ measures and compares, and owns what a value means; this module owns the key and
 
 import json
 import re
+from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
@@ -13,6 +14,7 @@ from pathlib import Path, PurePosixPath
 from typing import NamedTuple, Self
 
 from quality import __version__, checkout, repository
+from quality.report import Note, NoteEvent
 
 BASELINE_PATH = "quality/baseline.toml"
 FIX_COMMAND = "quality check --fix"
@@ -107,6 +109,31 @@ def moved_adapter_counts(
             counts[target] = counts.get(target, 0) + 1
             planned.append((source, target))
     return {directory: count for directory, count in counts.items() if count}, planned
+
+
+def followed_adapter_counts(
+    held: AdapterCounts, committed: AdapterCounts, moves: Mapping[str, str]
+) -> tuple[AdapterCounts, list[Note]]:
+    """The held counts as the verdict carries the committed ones, and the moves that changed them. A directory a move
+    brings a count to takes the carried count, any other no more than the carried count and no more than it holds, and
+    a directory the carry lacks goes; the committed table and the moves alone say what a move brings, so a fix run
+    again, or after one more staged move, ends at the same counts. A move is reported when its target gained a count
+    and its source lost one, once per count."""
+    carried, planned = moved_adapter_counts(committed, moves)
+    brought = {target for _, target in planned}
+    counts = {
+        directory: carried[directory] if directory in brought else min(held.get(directory, 0), carried[directory])
+        for directory in carried
+    }
+    counts = {directory: count for directory, count in counts.items() if count}
+    change = Counter({directory: counts.get(directory, 0) - held.get(directory, 0) for directory in {*counts, *held}})
+    notes = []
+    for source, target in planned:
+        if change[target] > 0 > change[source]:
+            change[target] -= 1
+            change[source] += 1
+            notes.append(Note(target, NoteEvent.MOVED, f"{ADAPTER_EXCEPTION} from {source}"))
+    return counts, notes
 
 
 @dataclass(frozen=True, order=True)
