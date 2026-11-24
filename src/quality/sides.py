@@ -122,46 +122,6 @@ def compares_baselines(base: Side | None, head: Side) -> bool:
     return base is not None and base.baseline is not None and head.baseline is not None
 
 
-def read_renames(
-    repo: Path, base: str, head: str, env: dict[str, str] | None = None, bound: float | None = None, marks: bool = False
-) -> Renames:
-    """The files git renamed between two commits, with the test modules that carry the registered mark at the head when
-    `marks`; the verdict and the door read the same pair.
-
-    A `bound` in seconds runs git in its own process group, for the door inside its scratch directory."""
-    _require_safe_ref(base, "base")
-    _require_safe_ref(head, "head")
-    try:
-        listed = process.git(
-            ["-C", str(repo.resolve()), "diff", *checkout.RENAME_LISTING, "--end-of-options", base, head, "--"],
-            f"cannot list the files renamed between {base} and {head}",
-            env,
-            bound,
-            encoding=None,
-        )
-    except process.ProcessError as error:
-        raise CannotJudge(str(error)) from error
-    renames = renames_of(listed)
-    if not marks:
-        return renames
-    head_paths, _ = _tracked_at(["git", "-C", str(repo.resolve())], head, env, bound, CHECKOUT_WORDS)
-    return _marked_at(renames, repo, head, env, head_paths)
-
-
-def _marked_at(renames: Renames, repo: Path, commit: str, env: dict[str, str] | None, tracked: Iterable[str]) -> Renames:
-    """The renames with the test modules that carry the registered mark in the commit's blobs, never the working tree;
-    `tracked` is the commit's paths, which say each module's project. A blob that cannot be read has no mark, so its
-    module carries no count and the verdict shows the raise."""
-
-    def read(path: str) -> str | None:
-        try:
-            return process.read_blob(repo, commit, path, f"cannot list {path} at {commit}", f"cannot read {path} at {commit}", env)
-        except process.ProcessError:
-            return None
-
-    return adapter_imports.with_marks(renames, read, layout.test_project_files(tracked))
-
-
 @dataclass(frozen=True)
 class TreeWords:
     """How a refusal to read the pull request's tree is worded; `{commit}`, `{base}` and `{head}` fill in."""
@@ -181,6 +141,47 @@ DOOR_WORDS = TreeWords(
     "cannot list the files git renamed between the pull request's commits",
     "git's list of renamed files between the pull request's commits came with a warning, so it may miss renames",
 )
+
+
+def read_renames(
+    repo: Path, base: str, head: str, env: dict[str, str] | None = None, bound: float | None = None, marks: bool = False,
+    words: TreeWords = CHECKOUT_WORDS,
+) -> Renames:
+    """The files git renamed between two commits, with the test modules that carry the registered mark at the head when
+    `marks`; the verdict and the door read the same pair.
+
+    A `bound` in seconds runs git in its own process group, for the door inside its scratch directory."""
+    _require_safe_ref(base, "base")
+    _require_safe_ref(head, "head")
+    try:
+        listed = process.git(
+            ["-C", str(repo.resolve()), "diff", *checkout.RENAME_LISTING, "--end-of-options", base, head, "--"],
+            words.unrenamed.format(base=base, head=head),
+            env,
+            bound,
+            encoding=None,
+        )
+    except process.ProcessError as error:
+        raise CannotJudge(str(error)) from error
+    renames = renames_of(listed)
+    if not marks:
+        return renames
+    head_paths, _ = _tracked_at(["git", "-C", str(repo.resolve())], head, env, bound, words)
+    return _marked_at(renames, repo, head, env, head_paths)
+
+
+def _marked_at(renames: Renames, repo: Path, commit: str, env: dict[str, str] | None, tracked: Iterable[str]) -> Renames:
+    """The renames with the test modules that carry the registered mark in the commit's blobs, never the working tree;
+    `tracked` is the commit's paths, which say each module's project. A blob that cannot be read has no mark, so its
+    module carries no count and the verdict shows the raise."""
+
+    def read(path: str) -> str | None:
+        try:
+            return process.read_blob(repo, commit, path, f"cannot list {path} at {commit}", f"cannot read {path} at {commit}", env)
+        except process.ProcessError:
+            return None
+
+    return adapter_imports.with_marks(renames, read, layout.test_project_files(tracked))
 
 
 def read_pull_tree(
@@ -288,7 +289,7 @@ def read_renames_of_pull(
     """The renames the verdict reads at the checkout, from the pull request's two commits fetched into a bare repository."""
     with _fetched_pull(remote, base_sha, merge_sha, environment) as (repository, isolated):
         try:
-            return read_renames(repository, base_sha, merge_sha, isolated, bound=FETCH_TIMEOUT_SECONDS, marks=marks)
+            return read_renames(repository, base_sha, merge_sha, isolated, bound=FETCH_TIMEOUT_SECONDS, marks=marks, words=DOOR_WORDS)
         except CannotJudge:
             raise CannotJudge(DOOR_WORDS.unrenamed) from None
 
