@@ -67,7 +67,7 @@ staged = subprocess.run(["git", "diff", "--cached", "--name-only"], capture_outp
 Path({record!r}).write_text(json.dumps({{
     "argv": sys.argv[1:], "cwd": os.getcwd(), "guard": os.environ.get({guard!r}), "foo": os.environ.get("FOO"),
     "tty": os.isatty(0), "out_open": is_open(1), "err_open": is_open(2), "pid": os.getpid(), "ppid": os.getppid(),
-    "index": os.environ.get("GIT_INDEX_FILE"), "staged": staged, "dbg": [[n, os.readlink("/proc/self/fd/"+n)] for n in os.listdir("/proc/self/fd") if n != "3"], "envcov": [k for k in os.environ if "COV" in k],
+    "index": os.environ.get("GIT_INDEX_FILE"), "staged": staged, "dbg": [sys.orig_argv, "coverage" in sys.modules, sys.flags.no_site, sys.version, [os.path.exists("/proc/self/fd/%d" % n) and os.readlink("/proc/self/fd/%d" % n) for n in range(6)]], "envcov": [k for k in os.environ if "COV" in k],
 }}))
 exit_as = os.environ.get("FAKE_EXIT", "0")
 if exit_as == "SIGINT":
