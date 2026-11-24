@@ -38,6 +38,11 @@ def cited_by_script(title: str, call: str = "it", path: str = "web/a.test.ts") -
     return {path: f"{call}({title}, () => {{}});\n"}
 
 
+def id_table(header: str, second: str = "Text") -> list[str]:
+    """A table with the header `header` and `second` that holds one row with an ID and one without."""
+    return [f"| {header} | {second} |", "| --- | --- |", "| X-1 | a row |", "| not an id | a row |"]
+
+
 @pytest.mark.parametrize(
     "spec",
     [
@@ -73,19 +78,44 @@ def test_a_list_item_that_opens_with_an_id_and_a_colon_defines_it(build_repo, sp
         ["\uff12) X-1: a fullwidth list marker."],
         ["- X-\u0662\u0666: Arabic-Indic digits."],
         ["- X-\uff12\uff16: fullwidth digits."],
+        ["# Rules", "", *id_table("Id")],
+        ["# Rules", "", *id_table("IDs")],
+        ["# Rules", "", *id_table("ID number")],
+        ["# Rules", "", *id_table("Name", "ID")],
+        ["# Rules", "", *id_table("**ID**")],
+        ["```", *id_table("ID"), "```"],
     ],
-    ids=["retired", "no colon", "parenthesised prose", "backtick fence", "tilde fence", "tilde line in a backtick fence", "short fence in a longer one", "table without rule", "table after heading", "table after prose", "arabic-indic marker", "fullwidth marker", "arabic-indic digits", "fullwidth digits"],
+    ids=["retired", "no colon", "parenthesised prose", "backtick fence", "tilde fence", "tilde line in a backtick fence", "short fence in a longer one", "table without rule", "table after heading", "table after prose", "arabic-indic marker", "fullwidth marker", "arabic-indic digits", "fullwidth digits", "header Id", "header IDs", "header with other text", "ID in the second column", "header ID in emphasis", "ID table in a fence"],
 )
 def test_nothing_else_defines_an_id(build_repo, spec):
-    """CITE-1: retired IDs need no test; a colon-less item, a fence, prose, a table not under a rule and a list marker
-    that is no ASCII digit define nothing."""
+    """CITE-1: retired IDs need no test; a colon-less item, a fence, prose, a table not under a rule whose header's first
+    cell is not exactly `ID` and a list marker that is no ASCII digit define nothing."""
     assert note_of(build_repo(spec_with(*spec))) is None
 
 
-def test_a_table_row_under_a_rule_defines_its_first_cell(build_repo):
-    """CITE-1."""
-    spec = ["- X-1: a rule:", "", "  | ID | Text |", "  | --- | --- |", "  | X-2 | a row |", "  | not an id | a row |"]
+@pytest.mark.parametrize("header", ["ID", "Name", "Id"])
+def test_a_table_row_under_a_rule_defines_its_first_cell(build_repo, header):
+    """CITE-1: whatever the table's header says."""
+    spec = ["- X-1: a rule:", "", f"  | {header} | Text |", "  | --- | --- |", "  | X-2 | a row |", "  | not an id | a row |"]
     assert note_of(build_repo(spec_with(*spec))) == "2 spec IDs uncited"
+
+
+@pytest.mark.parametrize(
+    ("spec", "cited"),
+    [
+        pytest.param(id_table("ID"), {}, id="start of the document"),
+        pytest.param(["# Rules", "", *id_table("ID")], {}, id="under a heading"),
+        pytest.param(["Prose.", "", *id_table("ID")], {}, id="after prose"),
+        pytest.param(["- X-0: a rule.", "", "# Table", "", *id_table("ID")], cited_by_python("X-0: it."), id="after a rule and a heading"),
+        pytest.param(["  " + line for line in id_table("ID")], {}, id="indented"),
+        pytest.param(
+            [*id_table("ID"), "", "| Name | Text |", "| --- | --- |", "| X-2 | a row |"], {}, id="a later table with another header"
+        ),
+    ],
+)
+def test_a_table_whose_header_opens_with_id_defines_its_rows_wherever_it_stands(build_repo, spec, cited):
+    """CITE-1: a row whose first cell is no ID and a later table with another header define nothing."""
+    assert note_of(build_repo({**spec_with(*spec), **cited})) == UNCITED
 
 
 def test_only_tracked_markdown_files_that_the_tree_holds_define(build_repo):
@@ -101,8 +131,9 @@ def test_only_tracked_markdown_files_that_the_tree_holds_define(build_repo):
     [
         {"a.md": "- X-1: a rule.\n", "b.md": "- X-1: a rule.\n"},
         {"a.md": "- X-1: a rule.\n\n  | X-1 | row |\n"},
+        {"a.md": "- X-1: a rule.\n\n# Table\n\n| ID | Text |\n| --- | --- |\n| X-1 | row |\n"},
     ],
-    ids=["two files", "an item and a row"],
+    ids=["two files", "an item and a row", "an item and a row of an ID table"],
 )
 def test_an_id_defined_twice_is_one_duplicate(build_repo, files):
     """CITE-1, CITE-4."""
@@ -283,10 +314,17 @@ def found(repo: Path) -> list[tuple[str, str, int | None]]:
     return sorted(((finding.event.value, finding.path, finding.line) for finding in findings), key=lambda each: (each[1], each[2] or 0, each[0]))
 
 
-def test_a_new_uncited_id_is_a_finding_at_its_definition_and_a_held_one_is_not(build_repo, capsys):
-    """CITE-8: with the table, an ID no test cites and the table lacks is `uncited` at its path and line, and the run is red."""
-    repo = build_repo({**spec_with("- X-1: a.", "- X-2: b.", "- X-3: c."), **held("X-1")})
-    assert found(repo) == [("uncited", SPEC, 2), ("uncited", SPEC, 3)]
+@pytest.mark.parametrize(
+    ("spec", "expected"),
+    [
+        pytest.param(["- X-1: a.", "- X-2: b.", "- X-3: c."], [("uncited", SPEC, 2), ("uncited", SPEC, 3)], id="list items"),
+        pytest.param(["# Rules", "", *id_table("ID")[:3], "| X-2 | a row |"], [("uncited", SPEC, 6)], id="rows of an ID table"),
+    ],
+)
+def test_a_new_uncited_id_is_a_finding_at_its_definition_and_a_held_one_is_not(build_repo, capsys, spec, expected):
+    """CITE-1, CITE-8: with the table, an ID no test cites and the table lacks is `uncited` at its path and line, and the run is red."""
+    repo = build_repo({**spec_with(*spec), **held("X-1")})
+    assert found(repo) == expected
     assert check_output(capsys, repo)[0] == 1
 
 

@@ -4,7 +4,8 @@ ID, an undefined or retired citation and a duplicate definition are findings, an
 it was recorded.
 
 A Markdown list item that opens with `ID:` defines a live ID and `ID (retired).` a retired one; the first cell of a table row
-under such an item defines one too. A test cites the IDs at the head of its Python docstring or of its `it(` and `test(` title.
+under such an item, or of a table whose header's first cell is `ID`, defines one too. A test cites the IDs at the head of its
+Python docstring or of its `it(` and `test(` title.
 
 Two declarations of `quality/config.toml` leave IDs to another repository's judgement: a foreign prefix exempts the citations of
 IDs the tree defines nowhere, and an implemented document exempts its own IDs from needing a citation here.
@@ -35,6 +36,7 @@ NOTE_PATH = "."
 BYTE_ORDER_MARK = "\ufeff"
 ID = rf"{ID_PREFIX}-(?a:\d+)"
 ID_PATTERN = re.compile(ID)
+ID_HEADER = "ID"
 DEFINING_ITEM = re.compile(rf"\s*(?:[-*+]|(?a:\d+)[.)])\s+(?P<id>{ID})(?::|(?P<retired> \(retired\)\.))")
 HEAD = re.compile(rf"\s*(?:Spec:\s*)?{ID}(?:\s*(?:,(?:\s*and\b)?|\band\b)\s*{ID})*")
 
@@ -152,8 +154,11 @@ def _first_cell(line: str) -> str:
 
 
 def _definitions_of(text: str) -> Iterator[tuple[str, int, bool]]:
-    """Each (ID, line, live) a Markdown text defines: a list item as the rules say, a table row while a rule's table is open."""
+    """Each (ID, line, live) a Markdown text defines: a list item as the rules say, a table row while a rule's table is open
+    and in every table whose header's first cell is exactly `ID`."""
     under_rule = False
+    id_table = False
+    last_row = -2
     lines = text.removeprefix(BYTE_ORDER_MARK).splitlines()
     for index in live_line_indexes(lines):
         line = lines[index]
@@ -164,7 +169,11 @@ def _definitions_of(text: str) -> Iterator[tuple[str, int, bool]]:
             under_rule = True
             yield item["id"], index + 1, item["retired"] is None
         elif stripped.startswith("|"):
-            if under_rule and ID_PATTERN.fullmatch(cell := _first_cell(line)):
+            cell = _first_cell(line)
+            if index != last_row + 1:
+                id_table = cell == ID_HEADER
+            last_row = index
+            if (under_rule or id_table) and ID_PATTERN.fullmatch(cell):
                 yield cell, index + 1, True
         elif not line[0].isspace():
             under_rule = False
