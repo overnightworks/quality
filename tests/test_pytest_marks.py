@@ -51,6 +51,17 @@ def test_a_test_carries_its_own_marks_its_classes_and_the_modules():
     assert list(marks_by_test(tree)) == [{"slow", "skip", IMPORTS_ADAPTER, "xfail"}]
 
 
+CLASS_ALIAS_SOURCES = [
+    pytest.param("m = pytest.mark.skip\nclass TestA:\n    m = pytest.mark.slow\n    pytestmark = m\n    def test_a(self): ...\n", id="a class pytestmark"),
+    pytest.param("m = pytest.mark.skip\nclass TestA:\n    m = pytest.mark.slow\n    @m\n    def test_a(self): ...\n", id="a method decorator"),
+]
+
+
+@pytest.mark.parametrize("source", CLASS_ALIAS_SOURCES)
+def test_a_name_a_class_rebinds_is_no_module_alias_inside_that_class(source):
+    assert list(marks_by_test(ast.parse(source))) == [set()]
+
+
 MARK_SLOW = "pytestmark = pytest.mark.slow"
 BODY_MARKS = [
     pytest.param(MARK_SLOW, {"slow"}, id="one plain binding reads"),

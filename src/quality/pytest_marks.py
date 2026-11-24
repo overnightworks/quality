@@ -90,20 +90,23 @@ def module_marks(tree: ast.Module) -> dict[str, int]:
 
 
 def marks_by_test(tree: ast.Module) -> Iterator[frozenset[str]]:
-    """The marks that reach each test function: its own, its enclosing classes' and the module's `pytestmark`."""
+    """The marks that reach each test function: its own, its enclosing classes' and the module's `pytestmark`.
+    A name a class body binds is no module alias inside that class."""
     aliases = _aliases(tree)
-    pending: list[tuple[ast.AST, frozenset[str]]] = [(tree, frozenset(_own_marks(tree.body, aliases)))]
+    pending: list[tuple[ast.AST, frozenset[str], dict[str, frozenset[str]]]] = [(tree, frozenset(_own_marks(tree.body, aliases)), aliases)]
     while pending:
-        node, inherited = pending.pop()
+        node, inherited, visible = pending.pop()
         for child in ast.iter_child_nodes(node):
-            marks = inherited
+            marks, child_visible = inherited, visible
             if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-                marks = inherited.union(*(_marks_named(decorator, aliases) for decorator in child.decorator_list))
+                marks = inherited.union(*(_marks_named(decorator, visible) for decorator in child.decorator_list))
             if isinstance(child, ast.ClassDef):
-                marks = marks.union(_own_marks(child.body, aliases))
+                rebound = {name for scoped in _scope_nodes(child.body) for name in _bound_names(scoped)}
+                child_visible = {name: held for name, held in visible.items() if name not in rebound}
+                marks = marks.union(_own_marks(child.body, child_visible))
             if clones.is_test_function(child):
                 yield marks
-            pending.append((child, marks))
+            pending.append((child, marks, child_visible))
 
 
 def registers(pyproject: str, mark: str) -> bool:
