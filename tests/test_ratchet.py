@@ -787,9 +787,14 @@ def test_a_tree_with_typescript_holds_the_same_python_baseline(tmp_path):
     assert written[0] == written[1]
 
 
-def test_a_file_holding_a_very_long_operator_chain_is_measured_without_a_traceback(build_repo, capsys):
+@pytest.mark.parametrize(
+    "template",
+    ["X = {chain}\n\n\ndef short():\n    return 1\n", "def short():\n    return {chain}\n"],
+    ids=["at module level", "inside a function"],
+)
+def test_a_file_holding_a_very_long_operator_chain_is_measured_without_a_traceback(build_repo, capsys, template):
     """SIZE-9: a valid file whose tree is deeper than the interpreter recurses is measured like any other."""
-    chain = "X = " + " + ".join(['"a"'] * 4000)
-    repo = build_repo({"src/chain.py": f"{chain}\n\n\ndef short():\n    return 1\n", BASELINE_PATH: EMPTY_BASELINE})
+    source = template.format(chain=" + ".join(['"a"'] * 4000))
+    repo = build_repo({"src/chain.py": source, BASELINE_PATH: EMPTY_BASELINE})
     code, output = run(capsys, repo)
     assert (code, "Traceback" in output, "RecursionError" in output) == (0, False, False), output
