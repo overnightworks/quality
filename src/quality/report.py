@@ -19,6 +19,10 @@ class Command:
     def __str__(self) -> str:
         return self.text if self.label is None else f"{self.label}: {self.text}"
 
+    def step_lines(self) -> list[tuple[int, str]]:
+        """The step as lines, each at a level: the command alone, or below its label."""
+        return [(0, self.text)] if self.label is None else [(0, f"{self.label}:"), (1, self.text)]
+
 
 @dataclass(frozen=True)
 class Instruction:
@@ -28,6 +32,9 @@ class Instruction:
 
     def __str__(self) -> str:
         return self.text
+
+    def step_lines(self) -> list[tuple[int, str]]:
+        return [(0, self.text)]
 
 
 @dataclass(frozen=True)
@@ -39,6 +46,9 @@ class Choice:
 
     def __str__(self) -> str:
         return f"{self.label}: {self.text}"
+
+    def step_lines(self) -> list[tuple[int, str]]:
+        return [(1, f"{self.label}:"), (2, self.text)]
 
 
 @dataclass(frozen=True)
@@ -52,6 +62,9 @@ class OneOf:
     def __str__(self) -> str:
         return f"{self.label}, one of: " + " or ".join(str(choice) for choice in self.choices)
 
+    def step_lines(self) -> list[tuple[int, str]]:
+        return [(0, f"{self.label}, one of:"), *(line for choice in self.choices for line in choice.step_lines())]
+
 
 @dataclass(frozen=True)
 class Example:
@@ -60,6 +73,9 @@ class Example:
 
     label: str
     lines: tuple[str, *tuple[str, ...]]
+
+    def step_lines(self) -> list[tuple[int, str]]:
+        return [(0, f"{self.label}:"), *((1, line) for line in self.lines)]
 
 
 type Step = Command | Instruction | OneOf | Example

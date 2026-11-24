@@ -108,22 +108,19 @@ class Handover:
     expected: tuple[Requirement, ...] | None = None
 
 
-def _find_kind(name: str) -> LockKind | None:
-    file_name = PurePosixPath(name).name
-    if file_name.startswith("requirements") and file_name.endswith(".txt"):
-        return REQUIREMENTS_KIND
-    return LOCK_KINDS.get(file_name)
+def _is_requirements(file_name: str) -> bool:
+    return file_name.startswith("requirements") and file_name.endswith(".txt")
 
 
 def is_lock(name: str) -> bool:
-    return _find_kind(name) is not None
+    file_name = PurePosixPath(name).name
+    return _is_requirements(file_name) or file_name in LOCK_KINDS
 
 
 def lock_kind(name: str) -> LockKind:
-    kind = _find_kind(name)
-    if kind is None:
-        raise ValueError(f"{name} is not a lock file the advisory rule judges")
-    return kind
+    """The kind of a name `is_lock` accepts."""
+    file_name = PurePosixPath(name).name
+    return REQUIREMENTS_KIND if _is_requirements(file_name) else LOCK_KINDS[file_name]
 
 
 def scan(

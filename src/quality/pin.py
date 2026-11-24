@@ -73,12 +73,18 @@ class ReleaseAtPin:
     release: Release
     commit: str
 
+    def preparation(self, *flags: str) -> list[str]:
+        return ["uv", "tool", "run", *flags, "--from", _release_source(self.commit), *SCRIPTS_QUESTION]
+
 
 @dataclass(frozen=True)
 class ThisCheckout:
     """quality's own checkout at `top`, to be prepared from its code."""
 
     top: Path
+
+    def preparation(self, *flags: str) -> list[str]:
+        return ["uv", "run", *flags, "--locked", "--project", str(self.top), *SCRIPTS_QUESTION]
 
 
 Reexecution = ReleaseAtPin | ThisCheckout
@@ -186,7 +192,8 @@ def judging_release(
     the guard in `environment` marks as re-executed never re-executes again."""
     fetch = _run_at_pin(environment, command)
     top = checkout.work_tree_top(root)
-    match checkout.gate_pin(top):
+    pin = checkout.gate_pin(top)
+    match pin:
         case NoGatePin() if staged:
             return _installed_release(running)
         case NoGatePin():
@@ -200,8 +207,7 @@ def judging_release(
             return ThisCheckout(top.absolute())
         case OwnGate():
             raise CannotJudge(f"this is quality {running.version}, not this checkout's code", (Command(f"uv run {command}"),))
-        case GatePin() as pin:
-            return _at_the_pin(pin, running, command, fetch, "quality check")
+    return _at_the_pin(pin, running, command, fetch, "quality check")
 
 
 def judging_of(
@@ -223,11 +229,10 @@ def judging_of(
         case OwnGate():
             fact = f"the gate of {repository} pins no release, but this is quality {running.version} prepared by uv"
             raise CannotJudge(fact, (Instruction(f"run {command} again"),))
-        case GatePin() as pin:
-            release = _at_the_pin(pin, running, command, fetch, door)
-            if isinstance(release, ReleaseAtPin):
-                reexecute(release, command)
-            return release
+    release = _at_the_pin(state, running, command, fetch, door)
+    if isinstance(release, ReleaseAtPin):
+        reexecute(release, command)
+    return release
 
 
 def gate_run_release(version: str) -> JudgingRelease:
@@ -268,11 +273,7 @@ def _release_source(commit: str) -> str:
 
 def preparation_command(reexecution: Reexecution, *flags: str) -> list[str]:
     """uv's command that prepares `reexecution` and asks the prepared environment for its scripts directory."""
-    match reexecution:
-        case ReleaseAtPin(_, commit):
-            return ["uv", "tool", "run", *flags, "--from", _release_source(commit), *SCRIPTS_QUESTION]
-        case ThisCheckout(top):
-            return ["uv", "run", *flags, "--locked", "--project", str(top), *SCRIPTS_QUESTION]
+    return reexecution.preparation(*flags)
 
 
 def prepared_quality(stdout: str) -> Path | None:

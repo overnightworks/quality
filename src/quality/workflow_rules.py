@@ -409,6 +409,9 @@ class Fall(Enum):
     JOB_IS_GONE = auto()
 
 
+UNMEASURED_FALL_REASONS = {Fall.ENTRY_IS_NO_DEBT: "has no debt", Fall.JOB_IS_GONE: "is gone"}
+
+
 def _fall_of(entry: int, limit: int | Unmeasured) -> Fall:
     """The one decision whether a held entry can fall, for the rule's findings and the fix alike; a job whose limit
     cannot be read leaves its entry standing."""
@@ -472,18 +475,16 @@ def recordable_job_limits(root: Path, tracked: list[str]) -> JobMinutes:
 
 def _entry_fall(key: JobKey, entry: int, limit: int | Unmeasured) -> tuple[Note, int | None] | None:
     """The note of an entry that falls and the value it falls to, None where it goes; None where it stands."""
-    match _fall_of(entry, limit):
+    fall = _fall_of(entry, limit)
+    match fall:
         case Fall.STANDS:
             return None
         case Fall.LOWERS:
             return Note(key.path, NoteEvent.LOWERED, f"job {key.job} {entry} → {limit} minutes"), limit
         case Fall.LIMIT_IS_NO_DEBT:
-            fall = f"job {key.job} {entry} → {limit} minutes"
-            return Note(key.path, NoteEvent.DROPPED, SEPARATOR.join((fall, f"debt from {MAXIMUM_MINUTES + 1} minutes"))), None
-        case Fall.ENTRY_IS_NO_DEBT:
-            return Note(key.path, NoteEvent.DROPPED, f"job {key.job} has no debt · was {entry} minutes"), None
-        case Fall.JOB_IS_GONE:
-            return Note(key.path, NoteEvent.DROPPED, f"job {key.job} is gone · was {entry} minutes"), None
+            lowered = f"job {key.job} {entry} → {limit} minutes"
+            return Note(key.path, NoteEvent.DROPPED, SEPARATOR.join((lowered, f"debt from {MAXIMUM_MINUTES + 1} minutes"))), None
+    return Note(key.path, NoteEvent.DROPPED, f"job {key.job} {UNMEASURED_FALL_REASONS[fall]} · was {entry} minutes"), None
 
 
 def _limits(judged: list[tuple[str, Document, Job]]) -> Limits:
@@ -506,9 +507,8 @@ def _judged_jobs(root: Path, tracked: list[str]) -> list[tuple[str, Document, Jo
 def _unmeasured_entries(held: JobMinutes, limits: Limits) -> Iterator[Finding]:
     """Each entry that can fall with no limit to measure: an entry that is no debt, unless its job is there with a limit
     that cannot be read, and a debt entry whose job is gone."""
-    reasons = {Fall.ENTRY_IS_NO_DEBT: "has no debt", Fall.JOB_IS_GONE: "is gone"}
     for key in sorted(held):
-        reason = reasons.get(_fall_of(held[key], limits.get(key, Unmeasured.ABSENT)))
+        reason = UNMEASURED_FALL_REASONS.get(_fall_of(held[key], limits.get(key, Unmeasured.ABSENT)))
         if reason is not None:
             fact = f"job {key.job} {reason} · ceiling {held[key]}"
             yield Finding(Rule.JOB_TIMEOUT, key.path, None, fact, FIX_COMMAND, event=FindingEvent.CAN_FALL)
