@@ -334,6 +334,11 @@ def restore_command(repository: str) -> Command:
     return Command(f"echo {shlex.quote(body)} | {shlex.join(['gh', *arguments])}", own_line=True)
 
 
+def gate_may_still_be_off(repository: str) -> str:
+    """The fact printed where switching the gate on again failed or was cut short; `restore_command` is its first step."""
+    return f"{GATE_PROPERTY} MAY STILL BE OFF on {repository}"
+
+
 def comment_request(repository: str, pull_request: int, comment: str) -> list[str]:
     return ["api", "-X", "POST", f"repos/{repository}/issues/{pull_request}/comments", "-f", f"body={comment}"]
 
@@ -669,7 +674,7 @@ def post_log_comment(gh: GhRunner, door: Door, comment: str, out: DoorStream) ->
 def unfinished_pair(door: Door, attempt: Attempt, unposted: str | None) -> Pair:
     """What the run could not do, the gate first, and the steps that finish it in the order a person takes them."""
     number = door.pull_request
-    gate = f"{GATE_PROPERTY} on again" if attempt.restore_error is None else f"{GATE_PROPERTY} MAY STILL BE OFF on {door.repository}"
+    gate = f"{GATE_PROPERTY} on again" if attempt.restore_error is None else gate_may_still_be_off(door.repository)
     facts = [gate, f"#{number} {MERGE_FACTS.get(attempt.outcome, 'is not merged')}"]
     steps: list[Step] = [restore_command(door.repository)] if attempt.restore_error is not None else []
     if attempt.outcome is Outcome.UNKNOWN:

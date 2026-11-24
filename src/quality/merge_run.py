@@ -11,9 +11,9 @@ from quality.merge import (
     EXIT_COULD_NOT_DO,
     EXIT_REFUSED,
     EXIT_YES,
-    GATE_PROPERTY,
     NOTHING_CHANGED,
     DoorEvent,
+    gate_may_still_be_off,
     refuse_without_terminal,
     restore_command,
 )
@@ -119,7 +119,7 @@ def merged_count(results: Sequence[Result], total: int, dry_run: bool) -> str:
 def stopped_pair(last: Result, count: str, rest: Sequence[PullRequestName], dry_run: bool) -> tuple[str, tuple[Step, ...]]:
     """The child that stopped the run, then the names not run: its own step first, to be done at once."""
     if last.event is DoorEvent.KILLED:
-        facts = [f"{GATE_PROPERTY} MAY STILL BE OFF on {last.name.repository}", f"{last.name} was {DoorEvent.KILLED} by {last.fact}"]
+        facts = [gate_may_still_be_off(last.name.repository), f"{last.name} was {DoorEvent.KILLED} by {last.fact}"]
         steps: list[Step] = [restore_command(last.name.repository)]
     else:
         facts = [f"{DoorEvent.STOPPED} at {last.name}"]
