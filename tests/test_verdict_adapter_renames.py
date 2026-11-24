@@ -67,7 +67,8 @@ def test_the_door_reads_the_mark_from_the_merge_commit_as_the_verdict_does(capsy
 
 
 def moved_unreadable(pull_request, base, head, unreadable):
-    """The base commit holds `OLD` as a symlink or as bytes no UTF-8 text is; the head commit moves it, registers the mark."""
+    """The base commit holds `OLD` as a symlink or as bytes no UTF-8 text is, the mark among them; the head commit moves it
+    and registers the mark."""
     repo, commit_base = pull_request
     put(repo / OLD, None)
     (repo / OLD).parent.mkdir(parents=True, exist_ok=True)
@@ -75,7 +76,7 @@ def moved_unreadable(pull_request, base, head, unreadable):
         put(repo / "tests/data.py", MODULE)
         (repo / OLD).symlink_to("../data.py")
     else:
-        put(repo / OLD, MODULE.encode() + b"\xff\n")
+        put(repo / OLD, MODULE.encode() + b"\xff\n" + MARK.encode())
     commit_base(base)
     subprocess.run(["git", "-C", str(repo), "mv", OLD, NEW], check=True)
     put(repo / "quality/baseline.toml", head)
