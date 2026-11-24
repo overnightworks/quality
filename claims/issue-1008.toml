@@ -1,0 +1,8 @@
+claim_id = "eafdfcf5c9db4fceb5101acf19ddcc5a"
+agent = "Claude eaac3b48-6964-423b-ac4c-dd8481e5f394"
+role = "builder"
+base = "3c642fc992d7687db03629aedc7c3f4a4fa8d71c"
+branch = "claude/issue-1008-integration-marker"
+scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "src/quality/adapter_imports.py", "src/quality/check.py", "src/quality/pytest_marks.py", "src/quality/report.py", "src/quality/rules.py", "src/quality/suites.py", "tests"]
+opened_commit = "fcbceb96c1adbf2c5f043c988ff3f523d998df85"
+whole_reason = "One rule with its check, event, spec lines, output text and pins changes together."
