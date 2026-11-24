@@ -80,6 +80,31 @@ REBINDING_FORMS = [
     pytest.param("@(pytestmark := pytest.mark.anyio)\ndef f(): ...", {"anyio"}, id="a decorator walrus decides"),
     pytest.param("def f(a=(pytestmark := pytest.mark.anyio)): ...", {"anyio"}, id="a default walrus decides"),
     pytest.param("class C((pytestmark := pytest.mark.anyio)): ...", {"anyio"}, id="a base walrus decides"),
+    pytest.param(
+        "(pytestmark := pytest.mark.anyio) if (pytestmark := pytest.mark.imports_adapter) else None",
+        set(),
+        id="two walruses of a conditional run out of source order and give no marks",
+    ),
+    pytest.param(
+        "@(pytestmark := pytest.mark.imports_adapter)\ndef f(a=(pytestmark := pytest.mark.anyio)): ...",
+        set(),
+        id="a decorator walrus beside a default walrus gives no marks",
+    ),
+    pytest.param(
+        "@(pytestmark := pytest.mark.imports_adapter)\nclass C((pytestmark := pytest.mark.anyio)): ...",
+        set(),
+        id="a decorator walrus beside a base walrus gives no marks",
+    ),
+    pytest.param(
+        "[(pytestmark := pytest.mark.anyio) for _ in (pytestmark := pytest.mark.imports_adapter)]",
+        set(),
+        id="a comprehension element walrus beside its iterable walrus gives no marks",
+    ),
+    pytest.param(
+        "other[(pytestmark := pytest.mark.imports_adapter)] = (pytestmark := pytest.mark.anyio)",
+        set(),
+        id="a target walrus beside a value walrus gives no marks",
+    ),
     pytest.param("(pytestmark := make())", set(), id="a walrus of no mark gives no marks"),
     pytest.param("pytestmark = print((pytestmark := pytest.mark.anyio))", set(), id="an assignment binds after the walrus in its call value"),
     pytest.param("pytestmark = [(pytestmark := pytest.mark.anyio)]", set(), id="an assignment binds after the walrus in its list value and reads the list"),

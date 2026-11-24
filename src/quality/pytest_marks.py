@@ -67,11 +67,13 @@ def _unreadable_names(node: ast.AST) -> Iterator[str]:
         yield from _stored_names(node)
 
 
-def _walruses(node: ast.AST) -> list[ast.NamedExpr]:
-    """The walruses an expression runs in its own scope, in source order; a lambda binds only its own scope, so only its
-    defaults and annotations are entered."""
+def _walrus_bindings(parts: Iterable[ast.AST]) -> Iterator[tuple[str, ast.expr | None, int]]:
+    """The walrus bindings of one statement's own expressions, which run in the enclosing scope (a lambda binds only its own
+    scope, so only its defaults and annotations are entered). A name that two walruses of one statement bind has no value:
+    Python runs a conditional's test before its body, a decorator before the defaults and bases, and a comprehension's
+    iterable before its element, so source order would name the wrong one as last."""
     found: list[ast.NamedExpr] = []
-    pending = [node]
+    pending = list(parts)
     while pending:
         part = pending.pop()
         if isinstance(part, ast.NamedExpr):
@@ -80,14 +82,17 @@ def _walruses(node: ast.AST) -> list[ast.NamedExpr]:
             pending.append(part.args)
         else:
             pending.extend(ast.iter_child_nodes(part))
-    return sorted(found, key=lambda walrus: (walrus.lineno, walrus.col_offset))
+    names = [walrus.target.id for walrus in found]
+    for walrus in found:
+        yield walrus.target.id, (walrus.value if names.count(walrus.target.id) == 1 else None), walrus.lineno
 
 
 def _bindings(scope: ast.AST) -> Iterator[tuple[str, ast.expr | None, int]]:
     """Each binding of a name in the scope's own statements, also inside compound statements, in the order Python runs them:
-    its name, its value (none where this reader cannot follow it: an augmented binding or a tuple, loop, import, definition
-    or other target) and its line. A statement binds after the walruses of its own expressions and before its body.
-    Functions and classes open their own scope; their decorators, defaults, annotations and bases run in the enclosing one."""
+    its name, its value (none where this reader cannot follow it: an augmented binding, a name two walruses of one statement
+    bind, or a tuple, loop, import, definition or other target) and its line. A statement binds after the walruses of its own
+    expressions and before its body. Functions and classes open their own scope; their decorators, defaults, annotations and
+    bases run in the enclosing one."""
     yield from _bindings_among(scope.body if isinstance(scope, ast.ClassDef) else ast.iter_child_nodes(scope), getattr(scope, "lineno", 0))
 
 
@@ -95,17 +100,18 @@ def _bindings_among(children: Iterable[ast.AST], scope_line: int) -> Iterator[tu
     for child in children:
         line = getattr(child, "lineno", scope_line)
         if isinstance(child, ast.expr):
-            yield from ((walrus.target.id, walrus.value, walrus.lineno) for walrus in _walruses(child))
+            yield from _walrus_bindings([child])
             continue
         own = list(_own_bindings(child, line))
+        parts = list(ast.iter_child_nodes(child))
         if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-            for header in (part for part in ast.iter_child_nodes(child) if not isinstance(part, ast.stmt)):
-                yield from ((walrus.target.id, walrus.value, walrus.lineno) for walrus in _walruses(header))
+            yield from _walrus_bindings(part for part in parts if not isinstance(part, ast.stmt))
             yield from own
             continue
-        parts = list(ast.iter_child_nodes(child))
         body_start = next((index for index, part in enumerate(parts) if isinstance(part, ast.stmt | ast.excepthandler)), len(parts))
-        yield from _bindings_among(parts[:body_start], line)
+        header = parts[:body_start]
+        yield from _walrus_bindings(part for part in header if isinstance(part, ast.expr))
+        yield from _bindings_among((part for part in header if not isinstance(part, ast.expr)), line)
         yield from own
         yield from _bindings_among(parts[body_start:], line)
 

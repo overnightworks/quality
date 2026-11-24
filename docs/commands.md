@@ -339,7 +339,7 @@ repository a token can list is dropped without a trace (FLEET-72).
   columns. Of the `pytestmark` bindings of a module or class body, in any form (plain, chained, annotated, augmented,
   walrus, tuple, `for`, `with`, `except`, import, definition, match capture or `del`), also inside a top-level `if`,
   `try`, `with`, `for`, `while` or `match`, the last decides, as in pytest; a last binding that is no assignment or
-  walrus of marks, or whose value is no mark or list or tuple of marks, gives no marks. A rebinding with no statement to
+  walrus of marks, or whose value is no mark or list or tuple of marks, or that one statement's walruses bind twice, gives no marks. A rebinding with no statement to
   read (a star import, a `type` alias or a write through `globals()`) is not seen. A module-level name that holds a
   mark holds the marks of its last binding, also for a decorator or `pytestmark` that used it before a rebind. `Fixme`
   counts the same way for Playwright
