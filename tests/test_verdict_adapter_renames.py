@@ -1,13 +1,17 @@
 """A renamed test module that carries the registered mark at the head moves one adapter import count with it: the verdict
 and the door read the mark and the registration from the head commit."""
 
+import subprocess
+
 import pytest
 
+from quality.baseline_file import render_baseline
 from tests.support.architecture import pytest_markers
-from tests.support.baselines import adapter_table
+from tests.support.baselines import adapter_table, ceiling
+from tests.support.git_repositories import put
 from tests.support.merge import GATE_CONFIG, drive
 from tests.support.verdict import verdict_of
-from tests.support.verdict_renames import moved_in_head, pulled
+from tests.support.verdict_renames import commit_all, moved_in_head, pulled
 
 OLD, NEW = "tests/core/test_config.py", "tests/test_config.py"
 MARK = "pytestmark = pytest.mark.imports_adapter\n"
@@ -50,3 +54,33 @@ def test_the_door_reads_the_mark_from_the_merge_commit_as_the_verdict_does(capsy
     )
     assert drive(gh)[0] == code
     assert (line is None or line in capsys.readouterr().out) is True
+
+
+def moved_unreadable(pull_request, base, head, unreadable):
+    """The base commit holds `OLD` as a symlink or as bytes no UTF-8 text is; the head commit moves it, registers the mark."""
+    repo, commit_base = pull_request
+    put(repo / OLD, None)
+    (repo / OLD).parent.mkdir(parents=True, exist_ok=True)
+    if unreadable == "a symlink":
+        put(repo / "tests/data.py", MODULE)
+        (repo / OLD).symlink_to("../data.py")
+    else:
+        put(repo / OLD, MODULE.encode() + b"\xff\n")
+    commit_base(base)
+    subprocess.run(["git", "-C", str(repo), "mv", OLD, NEW], check=True)
+    put(repo / "quality/baseline.toml", head)
+    put(repo / "pyproject.toml", REGISTERED)
+    commit_all(repo, "head moves the module")
+
+
+@pytest.mark.parametrize("unreadable", ["a symlink", "bytes that are no UTF-8 text"])
+@pytest.mark.parametrize(("base", "code", "line"), [
+    pytest.param(render_baseline(ceiling({}, None)), 0, None, id="a base without the table judges as it did before the contract"),
+    pytest.param(adapter_table({"tests/core": 1}), 1, "adapter import baseline adds tests 1", id="a base with the table shows the raise"),
+])
+def test_a_moved_module_the_verdict_cannot_read_is_never_refused_for_it(capsys, pull_request, unreadable, base, code, line):
+    """ADAPTERIMPORT-27, ADAPTERIMPORT-29: the marks are read only where the base holds the table, and a module that
+    cannot be read carries no count, so the pull request is judged and the raise shows."""
+    moved_unreadable(pull_request, base, adapter_table({"tests": 1}), unreadable)
+    actual, output = verdict_of(pull_request[0], capsys)
+    assert (actual, line is None or line in output, "cannot read" in output) == (code, True, False)

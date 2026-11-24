@@ -533,8 +533,8 @@ def read_pull_files(
     """`sides.pull_files` with the readers that fetch the pull request's two commits from its repository's remote."""
     return pull_files(
         base, head,
-        lambda: read_pull_tree_of_pull(remote_for(repository), *commits, environment),
-        lambda: read_renames_of_pull(remote_for(repository), *commits, environment),
+        lambda marks: read_pull_tree_of_pull(remote_for(repository), *commits, environment, marks),
+        lambda marks: read_renames_of_pull(remote_for(repository), *commits, environment, marks),
     )
 
 

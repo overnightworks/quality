@@ -672,8 +672,8 @@ def run_verdict(
         base, head = read_sides(run)
         pull_tree, renames = pull_files(
             base, head,
-            lambda: read_pull_tree(Path("."), run.pull_request.base_sha, "HEAD"),
-            lambda: read_renames(Path("."), run.pull_request.base_sha, "HEAD"),
+            lambda marks: read_pull_tree(Path("."), run.pull_request.base_sha, "HEAD", marks=marks),
+            lambda marks: read_renames(Path("."), run.pull_request.base_sha, "HEAD", marks=marks),
         )
         fetch = fetcher_for(run.token)
         settled = read_settled(
