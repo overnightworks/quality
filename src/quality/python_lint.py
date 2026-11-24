@@ -297,8 +297,7 @@ def _batches(names: Sequence[str], limit: int) -> Iterator[list[str]]:
             batch, size = [], 0
         batch.append(name)
         size += length
-    if batch:
-        yield batch
+    yield batch
 
 
 def _ruff_report(

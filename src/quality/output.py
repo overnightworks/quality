@@ -11,18 +11,16 @@ from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import partial
+from itertools import accumulate, takewhile
 from typing import BinaryIO, TextIO
 
 from quality.report import (
-    Choice,
     Command,
     Example,
     Finding,
     FindingEvent,
-    Instruction,
     Note,
     NoteEvent,
-    OneOf,
     Release,
     ScannerRun,
     Step,
@@ -274,14 +272,9 @@ def _fitted(fact: str, prefix: str, width: int | None) -> str:
     room = width - _display_width(prefix)
     if _display_width(escaped) <= room:
         return escaped
-    kept, used = [], 0
-    for character in fact:
-        rendered = printable(character)
-        used += _display_width(rendered)
-        if used >= room:
-            break
-        kept.append(rendered)
-    return f"{''.join(kept)}{ELLIPSIS}"
+    rendered = [printable(character) for character in fact]
+    kept = sum(1 for _ in takewhile(lambda used: used < room, accumulate(map(_display_width, rendered))))
+    return f"{''.join(rendered[:kept])}{ELLIPSIS}"
 
 
 def _event_word(row: Row | Finding | Note) -> str:
@@ -544,27 +537,9 @@ def write_verdict(verdict: Verdict, channel: Channel) -> None:
 INDENT = "    "
 
 
-def _step_lines(step: Step) -> list[tuple[int, str]]:
-    """A step as lines, each at a level: a command alone on its line, a label above the commands or the lines to copy it applies to."""
-    match step:
-        case Command(text, None) | Instruction(text):
-            return [(0, text)]
-        case Command(text, label):
-            return [(0, f"{label}:"), (1, text)]
-        case OneOf(label, choices):
-            return [(0, f"{label}, one of:"), *(line for choice in choices for line in _choice_lines(choice))]
-        case Example(label, lines):
-            return [(0, f"{label}:"), *((1, line) for line in lines)]
-
-
-def _choice_lines(choice: Choice) -> list[tuple[int, str]]:
-    """A choice below its `one of:` line: its label above its command."""
-    return [(1, f"{choice.label}:"), (2, choice.text)]
-
-
 def _next_lines(next_steps: tuple[Step, ...], label: str) -> list[str]:
     """One step begins on the `next:` line; several stand below a bare `next:`, four spaces per level."""
-    lines = [_step_lines(step) for step in next_steps]
+    lines = [step.step_lines() for step in next_steps]
     if len(lines) == 1 and not any(isinstance(step, Command) and step.own_line for step in next_steps):
         (_, first), *rest = lines[0]
         return [f"{label} {printable(first)}", *(f"{INDENT * level}{printable(text)}" for level, text in rest)]

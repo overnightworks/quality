@@ -125,8 +125,6 @@ def _under_tests(path: str) -> bool:
 
 
 def _is_script(path: str, mode: str, content: bytes) -> bool:
-    if mode in LINK_MODES or _under_tests(path):
-        return False
     pure = PurePosixPath(path)
     in_scripts_folder = SCRIPTS_DIRECTORY in pure.parent.parts and pure.suffix in SCRIPT_SUFFIXES
     return mode == EXECUTABLE_MODE or content.startswith(SHEBANG) or in_scripts_folder
