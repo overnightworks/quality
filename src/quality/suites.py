@@ -1,6 +1,6 @@
 """A repository's tests: how many there are in each layer, how many carry a skip or a fixme mark, and the script test call
-that `spec-citation` reads. The layer comes from the path and the `integration` mark, the marks from the syntax; no
-repository code runs, so a mark that only a run applies is not seen."""
+that `spec-citation` reads. The layer comes from the path and the `integration` mark, the marks from the syntax (a Python
+test's from `pytest_marks`); no repository code runs, so a mark that only a run applies is not seen."""
 
 import ast
 from collections.abc import Iterator
@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import PurePosixPath
 
-from quality import clones, layout
+from quality import clones, layout, pytest_marks
 from quality.ratchet import language_of
 from quality.typescript_tokens import Kind, ScriptSyntaxError, Token, tokenize
 
@@ -18,8 +18,6 @@ SCRIPT_GROUP = "describe"
 SCRIPT_MODIFIERS = frozenset({"skip", "skipIf", "runIf", "only", "fixme", "concurrent", "each"})
 SCRIPT_CALLED_MODIFIERS = frozenset({"skipIf", "runIf", "each"})
 SCRIPT_RUNTIME_MARKS = frozenset({"skip", "fixme"})
-PYTEST_MARK_PREFIX = "pytest.mark."
-PYTEST_MARK_NAME = "pytestmark"
 
 
 class Layer(Enum):
@@ -81,51 +79,9 @@ def read_script_tests(tracked: list[str], sources: dict[str, bytes]) -> tuple[di
     return read, unread
 
 
-def _python_marks(node: ast.expr, aliases: dict[str, Marks]) -> Marks:
-    """The marks an expression names: a pytest mark bare or called, a module name bound to one, or a list or tuple of them."""
-    while isinstance(node, ast.Call):
-        node = node.func
-    if isinstance(node, ast.List | ast.Tuple):
-        return NO_MARKS.union(*(_python_marks(element, aliases) for element in node.elts))
-    if isinstance(node, ast.Name):
-        return aliases.get(node.id, NO_MARKS)
-    written = _dotted_name(node)
-    mark = PYTEST_MARKS.get(written.removeprefix(PYTEST_MARK_PREFIX)) if written.startswith(PYTEST_MARK_PREFIX) else None
-    return frozenset({mark}) if mark else NO_MARKS
-
-
-def _dotted_name(node: ast.expr) -> str:
-    """`a.b.c` for a chain of attributes on a name, else an empty string; walks the chain, so its depth costs no recursion."""
-    names: list[str] = []
-    while isinstance(node, ast.Attribute):
-        names.append(node.attr)
-        node = node.value
-    return ".".join([node.id, *reversed(names)]) if isinstance(node, ast.Name) else ""
-
-
-def _bound_marks(body: list[ast.stmt], aliases: dict[str, Marks]) -> Iterator[tuple[str, Marks]]:
-    for statement in body:
-        if isinstance(statement, ast.Assign) and len(statement.targets) == 1 and isinstance(statement.targets[0], ast.Name):
-            yield statement.targets[0].id, _python_marks(statement.value, aliases)
-
-
 def _python_test_marks(tree: ast.Module) -> Iterator[Marks]:
-    """The marks that reach each test function: its own, its enclosing classes' and the module's `pytestmark`."""
-    aliases = {name: marks for name, marks in _bound_marks(tree.body, {}) if marks and name != PYTEST_MARK_NAME}
-    scope = NO_MARKS.union(*(marks for name, marks in _bound_marks(tree.body, aliases) if name == PYTEST_MARK_NAME))
-
-    pending: list[tuple[ast.AST, Marks]] = [(tree, scope)]
-    while pending:
-        node, inherited = pending.pop()
-        for child in ast.iter_child_nodes(node):
-            marks = inherited
-            if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-                marks = inherited.union(*(_python_marks(decorator, aliases) for decorator in child.decorator_list))
-            if isinstance(child, ast.ClassDef):
-                marks = marks.union(*(each for name, each in _bound_marks(child.body, aliases) if name == PYTEST_MARK_NAME))
-            if clones.is_test_function(child):
-                yield marks
-            pending.append((child, marks))
+    """The marks that reach each test function, among those that count."""
+    return (frozenset(PYTEST_MARKS[name] for name in names if name in PYTEST_MARKS) for names in pytest_marks.marks_by_test(tree))
 
 
 @dataclass(frozen=True)

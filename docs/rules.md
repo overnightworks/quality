@@ -187,7 +187,7 @@ It applies these rules:
   parser reads refuses likewise where its bytes name the table, `a version of quality/baseline.toml in git cannot be read and
   names clones`) (FIX-13), a version no TOML parser reads whose bytes never name the table holds no table (FIX-46; named limit: an escaped or non-UTF-8 spelling of the name in such a version passes), and a shallow clone that cannot prove it names
   `git fetch --unshallow` (FIX-14). A file without `[clones]` that git never held it in records the pairs and keeps its
-  entries (FIX-15); a file without `[job_minutes]` records the jobs above 15 under the same condition (TIMEOUT-27). It also rewrites a file whose text is not what it would render (an older header, other blank lines
+  entries (FIX-15); a file without `[job_minutes]` records the jobs above 15 under the same condition (TIMEOUT-27), and a file without `[adapter_imports]` records the counts of marked modules under it. It also rewrites a file whose text is not what it would render (an older header, other blank lines
   or order, a comment), though no entry changes: `rewritten`, `quality/baseline.toml` (FIX-16), or beside a finding
   `rewritten · quality/baseline.toml` (FIX-17). The verdict line adds `ceiling lowered by N entries`,
   `ceiling recorded`, `ceiling rewritten` or `nothing to lower` (FIX-18). Under `--dry-run` the same ceiling is made,
@@ -334,7 +334,40 @@ It applies these rules:
   and `adapter-import` judge that one read. A read that cannot judge refuses both, a rule's own refusal only that rule,
   and grimp's warnings print once, as `import-contract`'s note rows (IMPORT-25) (ADAPTERIMPORT-20). The
   [fleet matrix](commands.md#quality-report) cell reads `enforced` when the repository's config holds the contract with
-  the id, `no adapter contract` otherwise (ADAPTERIMPORT-21). Named gaps, waiting for usage evidence: fixtures a
+  the id, `no adapter contract` otherwise (ADAPTERIMPORT-21).
+
+  Ruled by the operator: a core test is exempt only through the registered module marker `imports_adapter`, counted per
+  test directory in `[adapter_imports]` of `quality/baseline.toml`, a raise being a loosening.
+
+  A core test whose module-level `pytestmark` holds `pytest.mark.imports_adapter` gets no `adapter import` finding: the
+  mark may be bare or called, alone, in a list or tuple, or reached through a module-level alias; a mark on a class or a
+  test exempts nothing (ADAPTERIMPORT-22). It exempts only where the project's `pyproject.toml` registers it, as
+  `imports_adapter` or `imports_adapter: <text>` in `[tool.pytest.ini_options] markers`; otherwise the finding stands and
+  its fix is `register imports_adapter in [tool.pytest.ini_options] markers`. A registration only a `conftest.py` hook,
+  pytest's native `[tool.pytest]` table, `pytest.ini`, `tox.ini` or `setup.cfg` makes is not read, so the test stays red
+  (ADAPTERIMPORT-23). Each exempted module counts once toward its direct parent directory, and parents are never summed
+  (ADAPTERIMPORT-24). A marked test module the rule would not report, a clean core test or a test that is no core test,
+  registered or not, is `unused` at its `pytestmark` line with the fix `remove the imports_adapter mark`, so a stale mark
+  cannot let a later adapter import in silently (ADAPTERIMPORT-25).
+
+  `[adapter_imports]` of `quality/baseline.toml` holds a positive count per test directory; a missing table or entry holds
+  0. The rule judges the count: above the held one is `grew` at the directory (`3 marked modules import an adapter ·
+  ceiling 2`), a directory with no entry is `new debt` (`… · ceiling 0`) with the fix `quality check --fix` while the file
+  has no table and `import no adapter in one of them, or move it into the integration suite` otherwise, and below it is
+  `can fall` at `quality/baseline.toml` with the fix `quality check --fix` (ADAPTERIMPORT-26). Without the contract that
+  carries the id the table is neither judged nor changed (ADAPTERIMPORT-27); with it, a baseline that cannot be read
+  refuses the rule. Under `--fix --dry-run` the rule judges the table the fix would write.
+  `quality check debt --fix` lowers or drops entries and never raises or adds one, except a carried move, which it
+  writes under the new directory and reports as `moved` as it does for `[job_minutes]` (FIX-34); each report is a change
+  of the written table against the held one, so a fix run again before the commit tells none. It records the measured
+  counts (`recorded  K adapter import exceptions · quality/baseline.toml`, `to record` in a dry run) where the file has no
+  table, a marked module exempts an import and git never held the table, as FIX-12, FIX-13 and FIX-46 say for every
+  held table; a table git holds and the tree lost refuses with the restore step. The fix reads the import contracts and
+  builds the graph for the counts, and a read that cannot judge refuses it while the table is held (ADAPTERIMPORT-28).
+  The verdict and the door hold the head's table against the base's as "The baseline only falls" says, and a quality older
+  than the release that knows the table is exit `2` on it, as for every unknown table (ADAPTERIMPORT-30).
+
+  Named gaps, waiting for usage evidence: fixtures a
   `conftest.py` injects, string imports (`importlib.import_module`, `pytest.importorskip`), the `__init__` of an ancestor
   of a forbidden module, the `ignore_imports` of the contract (the raw graph is asked), `allow_indirect_imports = true`
   (a core module that reaches an adapter is in the reach set, so its own test is red for importing its subject), and a
@@ -725,6 +758,9 @@ It applies these rules:
   - a held spec ID the base's `[spec_citations]` table lacks, when the base has the table, one line per ID in sorted
     order: `spec citation baseline adds ST-02`; the base's table gone from a head that still has the file:
     `spec citation baseline removed` (CITE-12);
+  - a directory count the base's `[adapter_imports]` table holds lower, or lacks, when the base has the table:
+    `adapter import baseline raises tests/api 2 -> 3`, `adapter import baseline adds tests/app 1`; the base's table gone
+    from a head that still has the file: `adapter import baseline removed`;
   - the base's file deleted: `quality/baseline.toml removed` (BASELINE-6);
   - a `[[size.generated]]` or `[[spec_citations.implemented]]` declaration is judged as in [gate](gate.md), "Declared loosenings".
 
@@ -750,7 +786,15 @@ It applies these rules:
   compared (BASELINE-9), while the size entries are still held against the base's (BASELINE-10). A `[job_minutes]` table
   the base lacks is an adoption in the same way, whatever the base's `[clones]` table is, and the job lines stand after the
   size and clone lines in the file's order (TIMEOUT-18), and the spec citation lines stand last. A `[spec_citations]` table the base
-  lacks is an adoption in the same way (CITE-12).
+  lacks is an adoption in the same way (CITE-12), and so is an `[adapter_imports]` table, whose lines stand last.
+  A test module git renames from one directory to another that carries the registered `imports_adapter` mark at the head
+  moves one count of the old directory's base entry to the new one, capped at the old held count, so modules that leave a
+  directory together share it; only a count above the carried one is a line, and a directory moved whole moves every
+  count. The mark and the project's registration are read from the head commit's files, never the working tree, so the
+  verdict and the door agree (BASELINE-19). They read the marks only where the base holds the table, and a module they
+  cannot read carries no count, so its raise shows. A `--fix` takes its counts from the committed table and the staged renames
+  alone, so a second one before the commit moves no count the first one already moved while it still carries a newly
+  staged move (FIX-34). Each of these lines is declarable (ADAPTERIMPORT-29).
   A malformed baseline on either side is exit `2`, naming the side (`quality/baseline.toml at the base commit <sha>:
   ...`, `quality/baseline.toml at the head: ...`) (BASELINE-20). So is a head baseline that links out of the repository
   (BASELINE-21), a base file that is not a regular file (`... : not a regular file`) (BASELINE-22), and a base that git

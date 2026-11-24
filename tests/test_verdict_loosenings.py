@@ -21,7 +21,7 @@ from tests.support.architecture import (
     contracts_toml,
     loosened,
 )
-from tests.support.baselines import spec_table
+from tests.support.baselines import adapter_table, spec_table
 from tests.support.generated_files import generated_config
 from tests.support.verdict import declaration, gate_config, job
 
@@ -126,6 +126,9 @@ UNDECLARED_KINDS = [
     kind(CHECKS, CHECKS, (jobs(e2e=40), ""), id="the job limit baseline removed"),
     kind(CHECKS, CHECKS, (spec_table("ST-01"), spec_table("ST-01", "ST-02")), id="a spec ID added"),
     kind(CHECKS, CHECKS, (spec_table("ST-01"), ""), id="the spec citation baseline removed"),
+    kind(CHECKS, CHECKS, (adapter_table({"tests/api": 2}), adapter_table({"tests/api": 3})), id="an adapter import count raised"),
+    kind(CHECKS, CHECKS, (adapter_table({"tests/api": 2}), adapter_table({"tests/api": 2, "tests/app": 1})), id="an adapter import directory added"),
+    kind(CHECKS, CHECKS, (adapter_table({"tests/api": 2}), ""), id="the adapter import baseline removed"),
     kind(CHECKS, CHECKS, imports=(GUARDED, None), id="an import-linter config removed"),
     kind(CHECKS, CHECKS, imports=(GUARDED, contracts_ini({"guarded": FORBIDDEN}, roots=("shop", "extra"))),
          id="a session option changed"),
@@ -166,6 +169,9 @@ PRINTED = {
     "the job limit baseline removed": ["    ! job limit baseline removed"],
     "a spec ID added": ["    ! spec citation baseline adds ST-02"],
     "the spec citation baseline removed": ["    ! spec citation baseline removed"],
+    "an adapter import count raised": ["    ! adapter import baseline raises tests/api 2 -> 3"],
+    "an adapter import directory added": ["    ! adapter import baseline adds tests/app 1"],
+    "the adapter import baseline removed": ["    ! adapter import baseline removed"],
     "an import-linter config removed": ["    ! import-linter config in .importlinter removed"],
     "a session option changed": ["    ! import-linter changes root_packages"],
     "a contract removed": ['    ! import contract "guarded" removed'],
@@ -423,3 +429,24 @@ def test_a_removed_config_is_the_only_line_whatever_the_adapter_id_was():
     assert loosened({"pyproject.toml": contracts_toml(CARRYING)}, {"pyproject.toml": "[project]\nname = 'x'\n"}) == [
         "import-linter config in pyproject.toml removed"
     ]
+
+
+@pytest.mark.parametrize(
+    ("baselines", "expected"),
+    [
+        pytest.param(("", adapter_table({"tests/api": 2})), [], id="a base without the table: adoption"),
+        pytest.param((None, adapter_table({"tests/api": 2})), [], id="no base file: adoption of the file"),
+        pytest.param((adapter_table({"tests/api": 2}), adapter_table({"tests/api": 2})), [], id="equal"),
+        pytest.param((adapter_table({"tests/api": 2, "tests/app": 1}), adapter_table({"tests/api": 1})), [], id="lowered and a directory dropped"),
+        pytest.param((adapter_table({"tests/api": 2}), "[adapter_imports]\n"), [], id="the table held and emptied"),
+        pytest.param(("", ""), [], id="neither side holds the table"),
+        pytest.param(
+            (spec_table("ST-01") + adapter_table({"tests/api": 1}), spec_table("ST-01", "ST-02") + adapter_table({"tests/api": 2})),
+            ["    ! spec citation baseline adds ST-02", "    ! adapter import baseline raises tests/api 1 -> 2"],
+            id="the adapter lines stand after the spec citation lines",
+        ),
+    ],
+)
+def test_an_adapter_import_table_loosens_only_by_a_raised_or_added_count_or_its_removal(baselines, expected):
+    """ADAPTERIMPORT-29, BASELINE-8: a base without the table is an adoption, and the lines stand after the spec lines."""
+    assert printed(judged(CHECKS, CHECKS, baselines, (None, None))) == expected

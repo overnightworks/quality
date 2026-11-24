@@ -24,8 +24,10 @@ from quality import checkout, ratchet_scripts, repository
 from quality.baseline_file import (
     BASELINE_PATH,
     FIX_COMMAND,
+    AdapterCounts,
     Baseline,
     ClonePair,
+    DirectoryKey,
     JobKey,
     JobMinutes,
     Key,
@@ -34,6 +36,7 @@ from quality.baseline_file import (
     SizeError,
     UnknownTable,
     key_order,
+    moved_adapter_counts,
 )
 from quality.config import GENERATED_FILE_HEADING, GeneratedFile
 from quality.config_entries import CONFIG_PATH
@@ -351,7 +354,7 @@ def compare(measurements: Measurements, baseline: SizeEntries, gone: Mapping[Key
 class RaisedEntry:
     """A baseline entry the head holds higher than the base; `base` is None when the head adds the entry."""
 
-    key: Key | JobKey
+    key: Key | JobKey | DirectoryKey
     base: int | None
     head: int
 
@@ -366,11 +369,17 @@ class RaisedEntry:
 class Renames:
     """What git renamed between two commits: `moves` maps a source path to its target, `targets` holds every target.
 
-    A target whose source no baseline key can name (not UTF-8) is a target without a move.
+    A target whose source no baseline key can name (not UTF-8) is a target without a move. `marked` holds the targets
+    that are test modules carrying the registered `imports_adapter` mark at the head.
     """
 
     moves: Mapping[str, str]
     targets: frozenset[str]
+    marked: frozenset[str] = frozenset()
+
+    def marked_moves(self) -> dict[str, str]:
+        """The moves whose target carries the registered mark."""
+        return {old: new for old, new in self.moves.items() if new in self.marked}
 
 
 NO_RENAMES = Renames({}, frozenset())
@@ -452,7 +461,8 @@ def carried_base(base: Baseline, renames: Renames, kept: Collection[str]) -> Bas
         for pair in base.clones
         if (first := new_path(pair.first.path)) and (second := new_path(pair.second.path))
     }
-    return copy.replace(base, size=size, job_minutes=limits, clones=None if pairs is None else frozenset(pairs))
+    adapters = None if base.adapter_imports is None else moved_adapter_counts(base.adapter_imports, renames.marked_moves())[0]
+    return copy.replace(base, size=size, job_minutes=limits, clones=None if pairs is None else frozenset(pairs), adapter_imports=adapters)
 
 
 def raised_entries(base: SizeEntries, head: SizeEntries) -> list[RaisedEntry]:
@@ -467,6 +477,11 @@ def raised_job_limits(base: JobMinutes, head: JobMinutes) -> list[RaisedEntry]:
 
 def _raised[Entry: (Key, JobKey)](base: Mapping[Entry, int], head: Mapping[Entry, int], order: Iterable[Entry]) -> list[RaisedEntry]:
     return [RaisedEntry(key, base.get(key), head[key]) for key in order if key not in base or head[key] > base[key]]
+
+
+def raised_adapter_counts(base: AdapterCounts, head: AdapterCounts) -> list[RaisedEntry]:
+    """The same for adapter import counts, in directory order; a directory the base lacks holds 0."""
+    return [RaisedEntry(DirectoryKey(path), base.get(path), head[path]) for path in sorted(head) if head[path] > base.get(path, 0)]
 
 
 def added_pairs(base: frozenset[ClonePair], head: frozenset[ClonePair]) -> list[ClonePair]:
@@ -658,7 +673,8 @@ def _followed_entries[Entry: (Key, JobKey)](
 
 def follow_renames(held: Baseline, committed: Baseline, renames: Renames, tracked: frozenset[str]) -> CeilingFix:
     """The held ceiling as the verdict will carry the committed one, for the size entries, the clone pairs and the job
-    entries alike; a table the held ceiling lacks stays lacking."""
+    entries alike; a table the held ceiling lacks stays lacking. The adapter import counts follow in
+    `fixed_adapter_counts`, which the contract that carries the id gates."""
     carried = carried_base(committed, renames, ())  # git renamed every source out of the index, so the fix keeps none
     size, changes = _followed_entries(SIZE_ENTRIES, held.size, committed.size, carried.size, renames, tracked)
     pairs = held.clones
