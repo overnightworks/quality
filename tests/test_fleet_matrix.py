@@ -497,7 +497,7 @@ def test_locator_text_on_main_reads_whether_the_clone_declares_catalogs(declares
 RULES_FIRST_RELEASED_IN_V0_21_OR_LATER = [
     Rule.LOCATOR_TEXT.release, Rule.FLEET_SOURCE.release, Rule.NAMING.release, Rule.PR_WORKFLOWS.release,
     Rule.PYTEST_RANDOM.release, Rule.LIVE_LAYER.release, Rule.VITEST_RANDOM.release,
-    Rule.NODE_TEST_RANDOM.release
+    Rule.NODE_TEST_RANDOM.release, Rule.ADAPTER_IMPORT.release
 ]
 REPORT_ONLY_RULES_FIRST_RELEASED_IN_V0_23_OR_LATER = [Rule.TEST_TWIN.release, Rule.LOGGING.release, Rule.SPEC_CITATION.release]
 
@@ -516,7 +516,7 @@ def test_a_rule_first_shipped_in_a_release_reads_its_switch_under_that_release(r
     """FLEET-18: a gate pinned at the release that names the rule reads the rule's switch."""
     tags = {**FIRST_RELEASES, rule_release.first_release: FIRST_RELEASE_COMMIT}
     release = gate_release((gate_call(FIRST_RELEASE_COMMIT),), False, tags)
-    assert rule_cell(rule_release, release, declared(declares_catalogs=True)) == "enforced"
+    assert rule_cell(rule_release, release, declared(declares_catalogs=True, has_adapter_contract=True)) == "enforced"
 
 
 @pytest.mark.parametrize("rule_release", REPORT_ONLY_RULES_FIRST_RELEASED_IN_V0_23_OR_LATER, ids=lambda release: release.rule)
@@ -701,10 +701,10 @@ def test_the_adapter_import_cell_follows_the_contract_the_config_holds(fleet_rep
     assert cell(output, GATE_REPOSITORY, "adapter-import") == cell_words
 
 
-def test_the_adapter_import_cell_says_not_released_under_a_tag(fleet_report, public):
-    """FLEET-19, ADAPTERIMPORT-21: only main has the rule."""
+def test_the_adapter_import_cell_says_not_in_the_tag_under_a_pin_below_its_release(fleet_report, public):
+    """FLEET-18, ADAPTERIMPORT-21: a gate pinned below the release that names the rule has no such rule."""
     _, output = fleet_report(public("tagged", pinned_gate(NEWEST)), tags=first_releases())
-    assert cell(output, "o/tagged", "adapter-import") == "not released"
+    assert cell(output, "o/tagged", "adapter-import") == "not in v0.3.1"
 
 
 def test_without_a_gate_every_cell_that_needs_one_is_a_dash_and_an_unreadable_workflow_makes_each_unreadable(
