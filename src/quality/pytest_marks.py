@@ -119,23 +119,32 @@ def marks_by_test(tree: ast.Module) -> Iterator[frozenset[str]]:
 
 def unseen_tests(tree: ast.Module) -> Iterator[frozenset[str]]:
     """The marks that can reach each test the module holds but its source does not show, beside `marks_by_test`: a class
-    of the module's own scope with a base other than `object`, whatever its name, and a nested class named `Test…` with
-    one, have their tests from the base, and only a mark reaching the class marks them; a name the module imports that
-    starts with `test` or `Test`, and each star import, may bring tests that only the module's `pytestmark` marks."""
-    module_scope = {id(node) for node in _scope_nodes(tree.body)}
+    with a base other than `object`, whatever its name, in the module's scope or nested in classes, has its tests from
+    the base, and only a mark reaching the class marks them; a name the module imports that starts with `test` or `Test`
+    or that a class of the module's scope names as a base, and each star import, may bring tests that only the module's
+    `pytestmark` marks."""
+    class_scope = {id(node) for node in _class_scope_classes(tree.body)}
     for definition, marks in _marked_definitions(tree):
-        if (
-            isinstance(definition, ast.ClassDef)
-            and (id(definition) in module_scope or definition.name.startswith(TEST_CLASS_PREFIX))
-            and any(not _is_object(base) for base in definition.bases)
-        ):
+        if id(definition) in class_scope and any(not _is_object(base) for base in definition.bases):
             yield marks
     module = frozenset(module_marks(tree))
+    bases = {base.id for node in _scope_nodes(tree.body) if isinstance(node, ast.ClassDef) for base in node.bases if isinstance(base, ast.Name)}
     for statement in _scope_nodes(tree.body):
         if isinstance(statement, ast.ImportFrom):
             for imported in statement.names:
-                if (imported.asname or imported.name).startswith((*TEST_NAME_PREFIXES, STAR)):
+                bound = imported.asname or imported.name
+                if bound.startswith((*TEST_NAME_PREFIXES, STAR)) or bound in bases:
                     yield module
+
+
+def _class_scope_classes(body: list[ast.stmt]) -> Iterator[ast.ClassDef]:
+    """Every class of the module's scope and of the class bodies below it, none that a function encloses."""
+    bodies = [body]
+    while bodies:
+        for node in _scope_nodes(bodies.pop()):
+            if isinstance(node, ast.ClassDef):
+                yield node
+                bodies.append(node.body)
 
 
 def _is_object(base: ast.expr) -> bool:

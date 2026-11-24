@@ -44,6 +44,10 @@ def unmarked(build_repo):
     return judge
 
 
+def red(fact: str) -> list[tuple[str, str, str]]:
+    return [(f"{NON_CORE}:1", fact, FIX)]
+
+
 def read(findings) -> list[tuple[str, str, str]]:
     return [(finding.location, finding.fact, finding.fix) for finding in findings]
 
@@ -131,67 +135,77 @@ def test_a_support_module_that_imports_an_adapter_binds_every_non_core_test_that
     assert [finding.path for finding in unmarked({**support, **named})] == [paths[index] for index in bound]
 
 
+def counted(k_of_n: str) -> list[tuple[str, str, str]]:
+    return red(f"{FACT}{k_of_n} tests not marked integration")
+
+
 MARKED_FORMS = [
-    pytest.param(MARK + TEST_A, None, id="a bare module mark"),
-    pytest.param("pytestmark = pytest.mark.integration()\n\n\n" + TEST_A, None, id="a called module mark"),
-    pytest.param("pytestmark = [pytest.mark.slow, pytest.mark.integration]\n\n\n" + TEST_A, None, id="a mark in a module list"),
-    pytest.param("layer = pytest.mark.integration\npytestmark = layer\n\n\n" + TEST_A, None, id="a module-level alias"),
-    pytest.param(MARKED_TEST + "\n\n" + MARKED_TEST.replace("test_a", "test_b"), None, id="a mark on each test"),
-    pytest.param("@pytest.mark.integration\nclass TestDb:\n    def test_a(self): ...\n", None, id="a mark on the enclosing class"),
-    pytest.param("class TestDb:\n    pytestmark = pytest.mark.integration\n\n    def test_a(self): ...\n", None, id="a class pytestmark"),
-    pytest.param(MARKED_TEST + TEST_B, "1 of 2", id="a mark on one of two tests"),
+    pytest.param(MARK + TEST_A, [], id="a bare module mark"),
+    pytest.param("pytestmark = pytest.mark.integration()\n\n\n" + TEST_A, [], id="a called module mark"),
+    pytest.param("pytestmark = [pytest.mark.slow, pytest.mark.integration]\n\n\n" + TEST_A, [], id="a mark in a module list"),
+    pytest.param("layer = pytest.mark.integration\npytestmark = layer\n\n\n" + TEST_A, [], id="a module-level alias"),
+    pytest.param(MARKED_TEST + "\n\n" + MARKED_TEST.replace("test_a", "test_b"), [], id="a mark on each test"),
+    pytest.param("@pytest.mark.integration\nclass TestDb:\n    def test_a(self): ...\n", [], id="a mark on the enclosing class"),
+    pytest.param("class TestDb:\n    pytestmark = pytest.mark.integration\n\n    def test_a(self): ...\n", [], id="a class pytestmark"),
+    pytest.param(MARKED_TEST + TEST_B, counted("1 of 2"), id="a mark on one of two tests"),
     pytest.param(
-        '@pytest.mark.parametrize("x", [pytest.param(1, marks=pytest.mark.integration)])\ndef test_a(x): ...\n', "1 of 1",
+        '@pytest.mark.parametrize("x", [pytest.param(1, marks=pytest.mark.integration)])\ndef test_a(x): ...\n', counted("1 of 1"),
         id="a mark of a parameter set",
     ),
-    pytest.param(MARK + MARK + TEST_A, "1 of 1", id="a module that binds pytestmark twice"),
-    pytest.param("if True:\n    pytestmark = pytest.mark.integration\n\n\n" + TEST_A, "1 of 1", id="a conditional module mark"),
-    pytest.param("pytestmark = pytest.mark.slow\n\n\n" + TEST_A, "1 of 1", id="another mark"),
+    pytest.param(MARK + MARK + TEST_A, counted("1 of 1"), id="a module that binds pytestmark twice"),
+    pytest.param("if True:\n    pytestmark = pytest.mark.integration\n\n\n" + TEST_A, counted("1 of 1"), id="a conditional module mark"),
+    pytest.param("pytestmark = pytest.mark.slow\n\n\n" + TEST_A, counted("1 of 1"), id="another mark"),
 ]
 
 
-@pytest.mark.parametrize(("body", "tail"), MARKED_FORMS)
-def test_an_adapter_bound_module_is_clean_when_every_test_carries_the_mark_in_a_form_the_report_reads(unmarked, body, tail):
+@pytest.mark.parametrize(("body", "expected"), MARKED_FORMS)
+def test_an_adapter_bound_module_is_clean_when_every_test_carries_the_mark_in_a_form_the_report_reads(unmarked, body, expected):
     """INTEGRATION-4: the module is clean when the mark reaches every test; a mark only a run applies counts for none."""
-    expected = [] if tail is None else [(f"{NON_CORE}:1", f"{FACT}{tail} tests not marked integration", FIX)]
     assert read(unmarked({NON_CORE: BOUND + body})) == expected
-
-
-def counted(k_of_n: str) -> str:
-    return f"{k_of_n} tests not marked integration"
 
 
 UNSEEN = [
     pytest.param(INHERITED, counted("1 of 1"), id="an inherited suite"),
-    pytest.param("@pytest.mark.integration\n" + INHERITED, None, id="an inherited suite marked by its decorator"),
-    pytest.param("class TestDb(Base):\n    pytestmark = pytest.mark.integration\n", None, id="an inherited suite marked by its pytestmark"),
-    pytest.param(MARK + INHERITED, None, id="an inherited suite marked by the module"),
+    pytest.param("@pytest.mark.integration\n" + INHERITED, [], id="an inherited suite marked by its decorator"),
+    pytest.param("class TestDb(Base):\n    pytestmark = pytest.mark.integration\n", [], id="an inherited suite marked by its pytestmark"),
+    pytest.param(MARK + INHERITED, [], id="an inherited suite marked by the module"),
     pytest.param(MARKED_TEST + "\n\n" + INHERITED, counted("1 of 2"), id="an inherited suite beside a marked test"),
     pytest.param("class TestDb(object):\n    def test_a(self): ...\n", counted("1 of 1"), id="object is no base"),
     pytest.param(SHARED, counted("1 of 1"), id="an inherited suite whose name is no test class"),
-    pytest.param("@pytest.mark.integration\n" + SHARED, None, id="an inherited suite whose name is no test class, marked by its decorator"),
-    pytest.param(MARK + SHARED, None, id="an inherited suite whose name is no test class, marked by the module"),
+    pytest.param("@pytest.mark.integration\n" + SHARED, [], id="an inherited suite whose name is no test class, marked by its decorator"),
+    pytest.param(MARK + SHARED, [], id="an inherited suite whose name is no test class, marked by the module"),
     pytest.param(MARKED_TEST + "\n\n" + SHARED, counted("1 of 2"), id="a helper class with a base beside a marked test"),
-    pytest.param("def make():\n    class Fake(Base): ...\n\n\n" + MARKED_TEST, None, id="a class with a base inside a function is no test class"),
+    pytest.param("def make():\n    class Fake(Base): ...\n\n\n" + MARKED_TEST, [], id="a class with a base inside a function is no test class"),
     pytest.param(
         "class TestOuter:\n    @pytest.mark.integration\n    def test_a(self): ...\n\n    class TestInner(Base): ...\n", counted("1 of 2"),
         id="a nested inherited suite beside a marked test",
     ),
+    pytest.param(
+        "class TestOuter:\n    @pytest.mark.integration\n    def test_a(self): ...\n\n    class Shop(Base): ...\n", counted("1 of 2"),
+        id="a nested inherited suite whose name is no test class beside a marked test",
+    ),
+    pytest.param(
+        "from shop.core.config import Base\n\n\n@pytest.mark.integration\nclass ShopCase(Base): ...\n", counted("1 of 2"),
+        id="an imported base of an inherited suite marked by its decorator",
+    ),
+    pytest.param(
+        "from shop.core.config import Base\n\n\n" + MARK + "class ShopCase(Base): ...\n", [],
+        id="an imported base of an inherited suite marked by the module",
+    ),
     pytest.param("from shop.core.config import test_round\n\n\n" + MARKED_TEST, counted("1 of 2"), id="an imported test beside a marked test"),
-    pytest.param("from shop.core.config import test_round\n\n\n" + MARK + TEST_A, None, id="an imported test marked by the module"),
+    pytest.param("from shop.core.config import test_round\n\n\n" + MARK + TEST_A, [], id="an imported test marked by the module"),
     pytest.param("from shop.core.config import make as test_make\n", counted("1 of 1"), id="an import renamed to a test name"),
-    pytest.param("from shop.core.config import test_make as make\n", NO_TEST, id="an import renamed away from a test name"),
+    pytest.param("from shop.core.config import test_make as make\n", red(FACT + NO_TEST), id="an import renamed away from a test name"),
     pytest.param("from shop.core.config import TestRound\n", counted("1 of 1"), id="an imported test class"),
     pytest.param("from shop.core.config import *\n", counted("1 of 1"), id="a star import"),
-    pytest.param(MARK + "from shop.core.config import *\n", None, id="a star import marked by the module"),
+    pytest.param(MARK + "from shop.core.config import *\n", [], id="a star import marked by the module"),
     pytest.param("@pytest.mark.integration\nclass TestDb:\n    def test_a(self): ...\n\n\n" + INHERITED, counted("1 of 2"), id="a decorator on another class"),
 ]
 
 
-@pytest.mark.parametrize(("body", "fact"), UNSEEN)
-def test_a_test_the_source_does_not_show_counts_as_one_more_that_only_a_reaching_mark_marks(unmarked, body, fact):
+@pytest.mark.parametrize(("body", "expected"), UNSEEN)
+def test_a_test_the_source_does_not_show_counts_as_one_more_that_only_a_reaching_mark_marks(unmarked, body, expected):
     """INTEGRATION-5: inherited suites, whatever their class is named, and imported tests stand beside the tests the reader sees."""
-    expected = [] if fact is None else [(f"{NON_CORE}:1", FACT + fact, FIX)]
     assert read(unmarked({NON_CORE: BOUND + body})) == expected
 
 

@@ -386,12 +386,13 @@ It applies these rules:
   An adapter-bound module is clean when every test in it carries `integration` in a form the report's suite columns read
   (`docs/commands.md`, FLEET-121): on the test, on an enclosing class, in a class's or the module's `pytestmark`, or
   through a module-level alias. A mark that only a `conftest.py` hook, `pytest.param(marks=…)` or `-m` sets counts for
-  no test (INTEGRATION-4). A class of the module's own scope that names a base other than
+  no test (INTEGRATION-4). A class that names a base other than
   `object`, whatever its name, counts as one more test that only a mark reaching the class (its decorator, its own
-  `pytestmark` or the module's) marks, since its inherited tests are not in the module's source; so does a nested class
-  named `Test…` with such a base. A test or test class the module imports by name (`from x import test_y` or `TestY`,
-  also under `as` when the bound name starts with `test` or `Test`) counts as one more test that only the module's
-  `pytestmark` marks, since pytest collects it there, and so does each star import. These counts stand beside the
+  `pytestmark` or the module's) marks, since its inherited tests are not in the module's source; so does such a class
+  nested in a class, whatever its name, but not one a function encloses. A test or test class the module imports by name
+  (`from x import test_y` or `TestY`, also under `as` when the bound name starts with `test` or `Test`) counts as one
+  more test that only the module's `pytestmark` marks, since pytest collects it there, and so does each star import and
+  each imported name that a class of the module's scope names as its base. These counts stand beside the
   per-test reading and move no test count of the report (INTEGRATION-5, FLEET-120). A module in which no test is read or
   counted is clean only when its own `pytestmark` carries the mark; its fact reads `imports <forbidden modules> · no
   test read and the module is not marked integration` (INTEGRATION-6). The mark counts only where the project's
