@@ -83,7 +83,7 @@ rows, by area:
   of at most 15`, of `new debt` `lower timeout-minutes to 15 or less` (`, or run quality check --fix to record it` where
   the ceiling has no `[job_minutes]` table), of `grew` `bring it back to <entry> or below` and
   of `can fall` `quality check --fix` ([rules](rules.md)).
-- `imports`: a core test that imports an adapter is an `adapter import` finding at `path:line`; a broken contract is a `broken` finding; an unmatched ignore is an `unused` finding at `error` and an
+- `imports`: a core test that imports an adapter is an `adapter import` finding at `path:line`, a marked module that imports none is `unused` at its `pytestmark` line, and the held counts of marked modules are `grew`, `new debt` or `can fall` (ADAPTERIMPORT-25, ADAPTERIMPORT-26); a broken contract is a `broken` finding; an unmatched ignore is an `unused` finding at `error` and an
   `unused` note at `warn`; a grimp or import-linter warning is a `warning` note (O23); a `broken` finding's detail
   lines are import-linter's own rendering of the contract ([Rows](#rows)).
 - `secrets`: a key is a `secret` finding whose fact names gitleaks' rule and, in history, the commit's first eight
@@ -184,7 +184,7 @@ entries over the thresholds · measured only` (`M clone pairs · partly measured
 `[clones]` table, O21, with `, K uncited spec IDs` after the pairs where a `[spec_citations]` table holds an ID, CITE-8), with `fix: quality check --fix` under it. Under `quality check debt --fix` it is `✓
 debt  lowered  N entries · quality/baseline.toml` with a `✓` row per lowered or dropped entry, `✓ debt  moved  N entries
 · quality/baseline.toml` where it moves entries and lowers none, `✓ debt  recorded  N entries, M clone pairs ·
-quality/baseline.toml is new` (`, K job limits` after the pairs where it records the job table, `, K uncited spec IDs` after them where it records the spec table), `✓ debt  recorded  K job limits · quality/baseline.toml` with a `✓` row `recorded  K job limits` under
+quality/baseline.toml is new` (`, K job limits` after the pairs where it records the job table, `, K uncited spec IDs` after them where it records the spec table, `, K adapter import exceptions` after those where it records the adapter table), `✓ debt  recorded  K job limits · quality/baseline.toml` with a `✓` row `recorded  K job limits` under
 it (`K uncited spec IDs` for the spec table, CITE-11) (it names the clone pairs recorded beside, and stands in place of the lowered or moved row where entries fall or move in
 the same fix), `✓ debt  rewritten  quality/baseline.toml` (entries equal, text not), `! debt  N findings
 nothing lowered` or `✗ debt  not fixed  <reason>`; under `--dry-run` it is `~ debt  N to lower` (`N to move`, `to

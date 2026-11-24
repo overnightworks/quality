@@ -3,13 +3,13 @@ and the files git renamed between the two."""
 
 import re
 import subprocess
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
-from quality import architecture, checkout, process, repository
+from quality import adapter_imports, architecture, checkout, layout, process, repository
 from quality.baseline_file import BASELINE_PATH, Baseline, SizeError, load_baseline, read_baseline
 from quality.config import GateSettings, LegacyMode, load_gate_settings, read_gate_settings
 from quality.config_entries import CONFIG_PATH, ConfigError
@@ -102,14 +102,17 @@ def _reads_tree(base: Side | None, head: Side) -> bool:
 
 
 def pull_files(
-    base: Side | None, head: Side, read_tree: Callable[[], architecture.PullTree], read_renames_listing: Callable[[], Renames]
+    base: Side | None, head: Side, read_tree: Callable[[bool], architecture.PullTree],
+    read_renames_listing: Callable[[bool], Renames],
 ) -> tuple[architecture.PullTree | None, Renames]:
     """What the pull request's two commits add to the judgement, read by the caller's readers: the tree when a module is
-    struck (its renames serve the baselines), else the renames when two baselines are compared, else nothing."""
+    struck (its renames serve the baselines), else the renames when two baselines are compared, else nothing. A reader
+    is told whether to read the test modules' marks, which only a base that holds `[adapter_imports]` carries."""
+    carries_marks = base is not None and base.baseline is not None and base.baseline.adapter_imports is not None
     if _reads_tree(base, head):
-        return read_tree(), NO_RENAMES
+        return read_tree(carries_marks), NO_RENAMES
     if compares_baselines(base, head):
-        return None, read_renames_listing()
+        return None, read_renames_listing(carries_marks)
     return None, NO_RENAMES
 
 
@@ -117,27 +120,6 @@ def compares_baselines(base: Side | None, head: Side) -> bool:
     """Whether the renames can change the judgement: only a comparison of two baselines reads them. Any other pair is
     judged without them, so a pull request that renames nothing the baselines name is never held up by the diff."""
     return base is not None and base.baseline is not None and head.baseline is not None
-
-
-def read_renames(
-    repo: Path, base: str, head: str, env: dict[str, str] | None = None, bound: float | None = None
-) -> Renames:
-    """The files git renamed between two commits; the verdict and the door read the same pair.
-
-    A `bound` in seconds runs git in its own process group, for the door inside its scratch directory."""
-    _require_safe_ref(base, "base")
-    _require_safe_ref(head, "head")
-    try:
-        listed = process.git(
-            ["-C", str(repo.resolve()), "diff", *checkout.RENAME_LISTING, "--end-of-options", base, head, "--"],
-            f"cannot list the files renamed between {base} and {head}",
-            env,
-            bound,
-            encoding=None,
-        )
-    except process.ProcessError as error:
-        raise CannotJudge(str(error)) from error
-    return renames_of(listed)
 
 
 @dataclass(frozen=True)
@@ -161,9 +143,50 @@ DOOR_WORDS = TreeWords(
 )
 
 
+def read_renames(
+    repo: Path, base: str, head: str, env: dict[str, str] | None = None, bound: float | None = None, marks: bool = False,
+    words: TreeWords = CHECKOUT_WORDS,
+) -> Renames:
+    """The files git renamed between two commits, with the test modules that carry the registered mark at the head when
+    `marks`; the verdict and the door read the same pair.
+
+    A `bound` in seconds runs git in its own process group, for the door inside its scratch directory."""
+    _require_safe_ref(base, "base")
+    _require_safe_ref(head, "head")
+    try:
+        listed = process.git(
+            ["-C", str(repo.resolve()), "diff", *checkout.RENAME_LISTING, "--end-of-options", base, head, "--"],
+            words.unrenamed.format(base=base, head=head),
+            env,
+            bound,
+            encoding=None,
+        )
+    except process.ProcessError as error:
+        raise CannotJudge(str(error)) from error
+    renames = renames_of(listed)
+    if not marks:
+        return renames
+    head_paths, _ = _tracked_at(["git", "-C", str(repo.resolve())], head, env, bound, words)
+    return _marked_at(renames, repo, head, env, head_paths)
+
+
+def _marked_at(renames: Renames, repo: Path, commit: str, env: dict[str, str] | None, tracked: Iterable[str]) -> Renames:
+    """The renames with the test modules that carry the registered mark in the commit's blobs, never the working tree;
+    `tracked` is the commit's paths, which say each module's project. A blob that cannot be read has no mark, so its
+    module carries no count and the verdict shows the raise."""
+
+    def read(path: str) -> str | None:
+        try:
+            return process.read_blob(repo, commit, path, f"cannot list {path} at {commit}", f"cannot read {path} at {commit}", env)
+        except process.ProcessError:
+            return None
+
+    return adapter_imports.with_marks(renames, read, layout.test_project_files(tracked))
+
+
 def read_pull_tree(
     repo: Path, base: str, head: str, env: dict[str, str] | None = None, bound: float | None = None,
-    words: TreeWords = CHECKOUT_WORDS,
+    words: TreeWords = CHECKOUT_WORDS, marks: bool = False,
 ) -> architecture.PullTree:
     """The files git tracks at two commits, the head's empty ones, and the renames between them; the verdict and the
     door read the same. A rename list git finished with anything on its standard error may miss renames (past `-l1000`
@@ -182,7 +205,7 @@ def read_pull_tree(
         renames = renames_of(listed.stdout)
     except CannotJudge:
         raise CannotJudge(words.unrenamed.format(**words_of)) from None
-    return architecture.PullTree(base_paths, head_paths, head_empty, renames)
+    return architecture.PullTree(base_paths, head_paths, head_empty, _marked_at(renames, repo, head, env, head_paths) if marks else renames)
 
 
 def _tracked_at(
@@ -260,19 +283,23 @@ def _fetched_pull(remote: str, base_sha: str, merge_sha: str, environment: Mappi
         yield repository, isolated
 
 
-def read_renames_of_pull(remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str]) -> Renames:
+def read_renames_of_pull(
+    remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str], marks: bool = False
+) -> Renames:
     """The renames the verdict reads at the checkout, from the pull request's two commits fetched into a bare repository."""
     with _fetched_pull(remote, base_sha, merge_sha, environment) as (repository, isolated):
         try:
-            return read_renames(repository, base_sha, merge_sha, isolated, bound=FETCH_TIMEOUT_SECONDS)
+            return read_renames(repository, base_sha, merge_sha, isolated, bound=FETCH_TIMEOUT_SECONDS, marks=marks, words=DOOR_WORDS)
         except CannotJudge:
             raise CannotJudge(DOOR_WORDS.unrenamed) from None
 
 
-def read_pull_tree_of_pull(remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str]) -> architecture.PullTree:
+def read_pull_tree_of_pull(
+    remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str], marks: bool = False
+) -> architecture.PullTree:
     """The tree the verdict reads at the checkout, from the same fetched commits, in the door's words."""
     with _fetched_pull(remote, base_sha, merge_sha, environment) as (repository, isolated):
-        return read_pull_tree(repository, base_sha, merge_sha, isolated, FETCH_TIMEOUT_SECONDS, DOOR_WORDS)
+        return read_pull_tree(repository, base_sha, merge_sha, isolated, FETCH_TIMEOUT_SECONDS, DOOR_WORDS, marks)
 
 
 def side_of(config: str | None, baseline: str | None, where: str, import_configs: Mapping[str, str | None] = MappingProxyType({})) -> Side:

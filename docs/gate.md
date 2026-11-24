@@ -244,6 +244,10 @@ reason = "the operator ruled the requirement shelf machinery out"
   `spec citation leaves <path> to its implementers · <item> of <date>`, after the generated-file lines, and every other case
   of the bullet above holds for it (CITE-18). A [malformed `[spec_citations]` entry](rules.md) is exit `2` in the verdict and
   the door, naming the side. An implementer's `[[spec_citations.foreign]]` entry is no loosening.
+- A baseline loosening (`size baseline raises …`, `clone baseline adds …`, `job limit baseline raises …`, `spec citation
+  baseline adds …`, and `adapter import baseline raises <directory> <from> -> <to>`, `adapter import baseline adds
+  <directory> <count>` or `adapter import baseline removed`, see "The baseline only falls" in [rules](rules.md)) is declared
+  by a `[[gate.loosened]]` entry with the printed text as `what`, like a removed mandatory job.
 - Ruled by the operator: removing, softening or bypassing an import-linter contract declares the same way, with one of these texts as `what`
   (the rule is in [rules](rules.md), "The import contracts only tighten"): `import contract "<name>" removed`,
   `import-linter config in <file> removed`, `import contract "<name>" ignores <expression>`,

@@ -3,6 +3,7 @@
 import pytest
 
 from quality import architecture
+from quality.baseline_file import BASELINE_PATH
 from quality.report import CannotJudge, FindingEvent, NoteEvent, Unparsable
 from quality.rules import Area, Rule
 from tests.support.architecture import (
@@ -12,8 +13,10 @@ from tests.support.architecture import (
     adapter_findings,
     adapter_refusal,
     adapter_split,
+    pytest_markers,
     shop_with_adapters,
 )
+from tests.support.baselines import adapter_table
 from tests.support.check import check_output, check_result, refusal_row, rule_notes
 from tests.support.layout import CONFIG, assert_prints_as_kind, declaring
 from tests.support.merge import ONE_JOB
@@ -289,3 +292,116 @@ def test_a_layout_declaration_for_the_rule_is_refused_like_any_rule_outside_the_
     config = ONE_JOB + declaring(CORE_TEST, rule="adapter-import")
     code, output = check_output(capsys, build_repo(shop_with_adapters({CORE_TEST: ADAPTER_IMPORT, CONFIG: config})))
     assert (code, "[[layout.allow]] entry 1 needs rule as one of" in output, "adapter-import," in output) == (2, True, False)
+
+
+REGISTERED = ("imports_adapter: reads a real service",)
+MARK = "pytestmark = pytest.mark.imports_adapter\n"
+MARKED = "import pytest\n\n" + MARK + ADAPTER_IMPORT
+FEW_HELD = {BASELINE_PATH: adapter_table({"tests/core": 1})}
+
+
+def test_a_registered_module_mark_exempts_a_core_test(red):
+    """ADAPTERIMPORT-22: the module's `pytestmark` exempts; the forms it can take are `pytest_marks`' to judge."""
+    assert red({CORE_TEST: MARKED}, extra=FEW_HELD, markers=REGISTERED) == []
+
+
+def test_a_test_mark_exempts_nothing(red):
+    """ADAPTERIMPORT-22: only the module's own `pytestmark` is the module marker; which other marks are not is
+    `pytest_marks`' to judge."""
+    assert red({CORE_TEST: ADAPTER_IMPORT + "\n\n@pytest.mark.imports_adapter\ndef test_a(): ...\n"}, markers=REGISTERED) == [f"{CORE_TEST}:1"]
+
+
+def test_an_unregistered_mark_exempts_nothing_and_the_fix_names_the_registration(build_repo):
+    """ADAPTERIMPORT-23: the finding stands, its fix registers the mark in the project's pytest markers."""
+    (finding,) = adapter_findings(build_repo(shop_with_adapters({CORE_TEST: MARKED}, markers=("unit: fast",))))
+    assert (finding.location, finding.event, finding.fix) == (
+        f"{CORE_TEST}:4", FindingEvent.ADAPTER_IMPORT, "register imports_adapter in [tool.pytest.ini_options] markers",
+    )
+
+
+def test_a_mark_is_registered_by_the_pyproject_of_its_own_project(red):
+    """ADAPTERIMPORT-23: the registration is the pyproject.toml of the project whose tests the module is in."""
+    member = {"tool/pyproject.toml": "", "tool/tests/test_db.py": MARKED}
+    assert red({}, adapter_contract(source=("shop",)), extra=member, markers=REGISTERED) == ["tool/tests/test_db.py:4"]
+
+
+def test_a_project_inside_a_tests_folder_is_registered_by_its_own_pyproject(red):
+    """ADAPTERIMPORT-23, LAYOUT-1: the project of a test module is the one layout judges it under, also where its
+    directory has a `tests` part of its own."""
+    harness = "qa/tests/harness"
+    member = {
+        f"{harness}/pyproject.toml": pytest_markers(*REGISTERED), f"{harness}/tests/test_db.py": MARKED,
+        BASELINE_PATH: adapter_table({f"{harness}/tests": 1}),
+    }
+    assert red({}, adapter_contract(source=("shop",)), extra=member) == []
+
+
+def test_the_marked_modules_count_toward_their_direct_parent_directory_and_parents_are_never_summed(red):
+    """ADAPTERIMPORT-24: two marked modules in `tests/core` and one in `tests/core/deep` are held apart."""
+    tests = {CORE_TEST: MARKED, "tests/core/test_config_stores.py": MARKED, "tests/core/deep/test_nothing_known.py": MARKED}
+    held = {BASELINE_PATH: adapter_table({"tests/core": 2})}
+    assert red(tests, extra=held, markers=REGISTERED) == ["tests/core/deep"]
+
+
+UNUSED = [
+    pytest.param(CORE_TEST, "import pytest\n\n" + MARK + "import shop.core.config\n", REGISTERED, 3, id="a core test that imports no adapter"),
+    pytest.param("tests/test_main.py", MARKED, REGISTERED, 3, id="a test that is no core test"),
+    pytest.param(CORE_TEST, "import pytest\n\n" + MARK, (), 3, id="an unregistered mark on a clean test"),
+    pytest.param("tests/test_main.py", MARKED, (), 3, id="an unregistered mark on a test that is no core test"),
+]
+
+
+@pytest.mark.parametrize(("path", "content", "markers", "line"), UNUSED)
+def test_a_marked_module_the_rule_would_not_report_is_unused_at_its_pytestmark_line_only(build_repo, path, content, markers, line):
+    """ADAPTERIMPORT-25: a stale mark cannot let a later adapter import in silently, registered or not."""
+    (finding,) = adapter_findings(build_repo(shop_with_adapters({path: content}, markers=markers)))
+    assert (finding.location, finding.event, finding.fix) == (f"{path}:{line}", FindingEvent.UNUSED, "remove the imports_adapter mark")
+
+
+COUNTS = [
+    pytest.param({CORE_TEST: MARKED, "tests/core/test_config_stores.py": MARKED}, FEW_HELD,
+                 [("tests/core", FindingEvent.GREW, "2 marked modules import an adapter · ceiling 1")], id="above the held count"),
+    pytest.param({CORE_TEST: MARKED}, {BASELINE_PATH: "[adapter_imports]\n"},
+                 [("tests/core", FindingEvent.NEW_DEBT, "1 marked module imports an adapter · ceiling 0")], id="a directory with no entry"),
+    pytest.param({CORE_TEST: MARKED}, {},
+                 [("tests/core", FindingEvent.NEW_DEBT, "1 marked module imports an adapter · ceiling 0")], id="no baseline file holds 0"),
+    pytest.param({CORE_TEST: MARKED}, {BASELINE_PATH: "[file_lines]\n"},
+                 [("tests/core", FindingEvent.NEW_DEBT, "1 marked module imports an adapter · ceiling 0")], id="a baseline without the table holds 0"),
+    pytest.param({CORE_TEST: MARKED}, {BASELINE_PATH: adapter_table({"tests/core": 3})},
+                 [(BASELINE_PATH, FindingEvent.CAN_FALL, "tests/core · 1 marked module imports an adapter · ceiling 3")], id="below the held count"),
+    pytest.param({CORE_TEST: "import shop.core.config\n"}, FEW_HELD,
+                 [(BASELINE_PATH, FindingEvent.CAN_FALL, "tests/core · 0 marked modules import an adapter · ceiling 1")], id="a mark gone"),
+    pytest.param({CORE_TEST: MARKED}, FEW_HELD, [], id="equal"),
+]
+
+
+@pytest.mark.parametrize(("tests", "held", "expected"), COUNTS)
+def test_the_marked_count_of_a_directory_is_held_by_the_baseline(build_repo, tests, held, expected):
+    """ADAPTERIMPORT-26: above the held count `grew`, with no entry `new debt`, below it `can fall`; a missing table or entry holds 0."""
+    findings = adapter_findings(build_repo({**shop_with_adapters(tests, markers=REGISTERED), **held}))
+    assert [(finding.location, finding.event, finding.fact) for finding in findings] == expected
+
+
+@pytest.mark.parametrize(
+    ("held", "fix"),
+    [
+        pytest.param({}, "quality check --fix", id="while the file has no table"),
+        pytest.param({BASELINE_PATH: adapter_table({"tests/other": 1})}, "import no adapter in one of them, or move it into the integration suite", id="with a table"),
+    ],
+)
+def test_new_debt_names_the_fix_that_fits_whether_the_file_holds_a_table(build_repo, held, fix):
+    """ADAPTERIMPORT-26."""
+    findings = adapter_findings(build_repo({**shop_with_adapters({CORE_TEST: MARKED}, markers=REGISTERED), **held}))
+    assert [finding.fix for finding in findings if finding.event is FindingEvent.NEW_DEBT] == [fix]
+
+
+def test_without_the_contract_the_table_is_neither_judged_nor_changed(red):
+    """ADAPTERIMPORT-27: marked modules and a held table are ignored where no contract carries the id."""
+    held = {BASELINE_PATH: adapter_table({"tests/core": 5})}
+    assert red({CORE_TEST: MARKED}, adapter_split(), extra=held, markers=REGISTERED) == []
+
+
+def test_a_baseline_that_cannot_be_read_refuses_the_rule_while_the_contract_carries_the_id(build_repo):
+    """ADAPTERIMPORT-26: the rule judges the held count, so it cannot judge without it."""
+    repo = build_repo({**shop_with_adapters({CORE_TEST: MARKED}, markers=REGISTERED), BASELINE_PATH: "[adapter_imports\n"})
+    assert BASELINE_PATH in str(adapter_refusal(repo))
