@@ -303,7 +303,7 @@ def test_a_module_that_does_not_parse_makes_the_imports_row_not_checked(build_re
     assert (code, f"{refusal_row('imports')}{path} is not valid Python (" in output) == (2, True)
 
 
-def test_a_config_that_cannot_be_read_refuses_both_rules_of_the_area_with_one_row(build_repo, capsys):
+def test_a_config_that_cannot_be_read_refuses_every_rule_of_the_area_with_one_row(build_repo, capsys):
     """ADAPTERIMPORT-20: a read that cannot judge refuses every rule of the area, and the area says it once."""
     contract = adapter_contract(type="custom")
     repo = build_repo(shop_with_adapters({CORE_TEST: ADAPTER_IMPORT}, contract))
