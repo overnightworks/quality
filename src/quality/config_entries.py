@@ -7,6 +7,8 @@ from quality import repository
 
 CONFIG_PATH = "quality/config.toml"
 BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
+ONE_LINE_REASON = "a non-empty one-line reason"
+PATH_PATTERN_CHARACTERS = "*?["
 type ExampleLines = tuple[str, *tuple[str, ...]]
 
 
@@ -99,3 +101,14 @@ def is_one_line_text(value: object) -> bool:
 def is_date_without_time(value: object) -> bool:
     """A TOML date: tomllib reads a date with a time as a datetime, which is a date too."""
     return isinstance(value, datetime.date) and not isinstance(value, datetime.datetime)
+
+
+def is_exact_file_path(path: object) -> bool:
+    """A relative path to one file: no folder (trailing `/`), no pattern character, no empty, `.` or `..` component, not absolute."""
+    if not isinstance(path, str) or not path.strip() or path.startswith("/") or path.endswith("/"):
+        return False
+    components = path.split("/")
+    return not any(character in path for character in PATH_PATTERN_CHARACTERS) and all(
+        component not in ("", ".", "..") for component in components
+    )
+

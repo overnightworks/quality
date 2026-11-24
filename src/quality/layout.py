@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 
 from quality import checkout, python_imports, ratchet
-from quality.config import LayoutAllowance, declared_paths
+from quality.config_allowances import LayoutAllowance, declared_paths
 from quality.report import Finding, FindingEvent, Unparsable, allowance_clause, stale_declaration
 from quality.rules import Rule
 

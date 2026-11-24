@@ -123,6 +123,7 @@ layers = [
     "deadline | ci_time",
     "report",
     "config",
+    "config_allowances",
     "config_entries",
     "repository",
     "process",

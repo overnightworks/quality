@@ -13,7 +13,7 @@ from typing import NoReturn
 
 import pytest
 
-from quality import architecture, baseline_file, check, cli, config, pin, report, scanners
+from quality import architecture, baseline_file, check, cli, config, config_allowances, pin, report, scanners
 from quality.baseline_file import BASELINE_PATH
 from quality.output import SEPARATOR, Glyph
 from quality.report import FindingEvent, NoteEvent, printable
@@ -502,7 +502,7 @@ def test_the_files_block_lists_every_finding_in_run_order_python_floor_last_then
     """O14, O15, ROW-10: the files rows stand in the rule runner's order, the notes after the last finding, and the area
     row counts the findings."""
     floor = '[project]\nrequires-python = ">=3.12"\n'
-    allowance = f'{config.PYTHON_ALLOWANCE_HEADING}\npath = "src/s/pyproject.toml"\nreason = "r"\n'
+    allowance = f'{config_allowances.PYTHON_ALLOWANCE_HEADING}\npath = "src/s/pyproject.toml"\nreason = "r"\n'
     tracked = {".env": "A=1\n", "CLAUDE.md": "own\n", "notes.txt": "x\n", "docs/NOTES": "x\n", "pyproject.toml": floor,
                "src/s/pyproject.toml": floor, "quality/config.toml": ONE_JOB + allowance}
     repo = build_repo(tracked)
