@@ -358,7 +358,8 @@ It applies these rules:
   carries the id the table is neither judged nor changed (ADAPTERIMPORT-27); with it, a baseline that cannot be read
   refuses the rule. Under `--fix --dry-run` the rule judges the table the fix would write.
   `quality check debt --fix` lowers or drops entries and never raises or adds one, except a carried move, which it
-  writes under the new directory and reports as `moved` as it does for `[job_minutes]` (FIX-34). It records the measured
+  writes under the new directory and reports as `moved` as it does for `[job_minutes]` (FIX-34); each report is a change
+  of the written table against the held one, so a fix run again before the commit tells none. It records the measured
   counts (`recorded  K adapter import exceptions · quality/baseline.toml`, `to record` in a dry run) where the file has no
   table, a marked module exempts an import and git never held the table, as FIX-12, FIX-13 and FIX-46 say for every
   held table; a table git holds and the tree lost refuses with the restore step. The fix reads the import contracts and

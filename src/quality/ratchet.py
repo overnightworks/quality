@@ -35,7 +35,6 @@ from quality.baseline_file import (
     SizeEntries,
     SizeError,
     UnknownTable,
-    followed_adapter_counts,
     key_order,
     moved_adapter_counts,
 )
@@ -674,7 +673,8 @@ def _followed_entries[Entry: (Key, JobKey)](
 
 def follow_renames(held: Baseline, committed: Baseline, renames: Renames, tracked: frozenset[str]) -> CeilingFix:
     """The held ceiling as the verdict will carry the committed one, for the size entries, the clone pairs and the job
-    entries alike; a table the held ceiling lacks stays lacking."""
+    entries alike; a table the held ceiling lacks stays lacking. The adapter import counts follow in
+    `fixed_adapter_counts`, which the contract that carries the id gates."""
     carried = carried_base(committed, renames, ())  # git renamed every source out of the index, so the fix keeps none
     size, changes = _followed_entries(SIZE_ENTRIES, held.size, committed.size, carried.size, renames, tracked)
     pairs = held.clones
@@ -687,11 +687,7 @@ def follow_renames(held: Baseline, committed: Baseline, renames: Renames, tracke
             JOB_ENTRIES, held.job_minutes, committed.job_minutes, carried.job_minutes, renames, tracked
         )
         changes += limit_changes
-    counts = held.adapter_imports
-    if counts is not None and committed.adapter_imports is not None:
-        counts, adapter_changes = followed_adapter_counts(counts, committed.adapter_imports, renames.marked_moves())
-        changes += adapter_changes
-    return CeilingFix(replace(held, size=size, clones=pairs, job_minutes=limits, adapter_imports=counts), tuple(changes))
+    return CeilingFix(replace(held, size=size, clones=pairs, job_minutes=limits), tuple(changes))
 
 
 def _followed_pairs(

@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from quality.baseline_file import ClonePair, JobKey, Key, Metric, Place
+from quality.baseline_file import ClonePair, JobKey, Key, Metric, Place, fixed_adapter_counts
 from quality.ratchet import (
     RESTORE_STEP,
     Renames,
@@ -460,24 +460,29 @@ MOVED_MODULES = [
 ]
 
 
+ENOUGH = {"tests/a": 9, "tests/b": 9, "tests/c": 9}
+
+
+def fixed(held, committed, renames, measured=ENOUGH):
+    """What `--fix` makes of the held adapter counts: the counts and the notes, where `measured` is what the tree holds."""
+    return fixed_adapter_counts(held.adapter_imports, committed.adapter_imports, renames.marked_moves(), measured)
+
+
 @pytest.mark.parametrize(("held", "renames", "expected", "moved"), MOVED_MODULES)
 def test_a_renamed_marked_module_carries_one_count_to_its_new_directory_capped_at_the_old_held_count(held, renames, expected, moved):
     """FIX-34, ADAPTERIMPORT-28: the fix moves the counts and names each move; the verdict, carrying the committed table
     the same way, names nothing the fix moved."""
-    followed = follow_renames(held, held, renames, tracked_after(held, held, renames))
-    assert (followed.ceiling.adapter_imports, [change.event for change in followed.changes]) == (expected, [NoteEvent.MOVED] * moved)
-    carried = carried_base(held, renames, named_paths(followed.ceiling))
-    assert raised_adapter_counts(carried.adapter_imports, followed.ceiling.adapter_imports) == []
+    counts, notes = fixed(held, held, renames)
+    assert (counts, [note.event for note in notes]) == (expected, [NoteEvent.MOVED] * moved)
+    carried = carried_base(held, renames, frozenset())
+    assert raised_adapter_counts(carried.adapter_imports, counts) == []
 
 
 @pytest.mark.parametrize(("held", "renames", "expected", "moved"), MOVED_MODULES)
 def test_a_second_fix_moves_no_count_the_first_one_moved(held, renames, expected, moved):
-    """FIX-34, ADAPTERIMPORT-28: the fix applies only the part of a move the held counts have not taken, so it holds on
-    its own result."""
-    tracked = tracked_after(held, held, renames)
-    first = follow_renames(held, held, renames, tracked)
-    second = follow_renames(first.ceiling, held, renames, tracked)
-    assert (second.ceiling.adapter_imports, second.changes) == (expected, ())
+    """FIX-34, ADAPTERIMPORT-28: the fix ends at the same counts when run on its own result and tells nothing."""
+    first, _ = fixed(held, held, renames)
+    assert fixed(adapters(first), held, renames) == (expected, [])
 
 
 def staged(*moves):
@@ -504,18 +509,45 @@ def test_a_second_fix_ends_where_the_verdict_carries_the_committed_table(committ
     """FIX-34, ADAPTERIMPORT-28: the counts come from the committed table and the staged renames alone, whatever the
     first fix wrote, and only a move the first fix did not know is told, with the count that falls with no move."""
     first_renames, second_renames = staged(*first_moves), staged(*second_moves)
-    first = follow_renames(committed, committed, first_renames, tracked_after(committed, committed, first_renames))
-    second = follow_renames(first.ceiling, committed, second_renames, tracked_after(committed, committed, second_renames))
-    assert (second.ceiling.adapter_imports, [(change.path, change.event) for change in second.changes]) == (expected, noted)
-    carried = carried_base(committed, second_renames, named_paths(second.ceiling))
-    assert raised_adapter_counts(carried.adapter_imports, second.ceiling.adapter_imports) == []
+    first, _ = fixed(committed, committed, first_renames)
+    counts, notes = fixed(adapters(first), committed, second_renames)
+    assert (counts, [(note.path, note.event) for note in notes]) == (expected, noted)
+    carried = carried_base(committed, second_renames, frozenset())
+    assert raised_adapter_counts(carried.adapter_imports, counts) == []
+
+
+MOVE_A_TO_B = moved_marked({MODULE_A: MODULE_B}, [MODULE_B])
+MOVED_NOTE = Note("tests/b", NoteEvent.MOVED, "adapter import exception from tests/a")
+NET_CHANGES = [
+    pytest.param(adapters({"tests/a": 2, "tests/b": 1}), {"tests/a": 1, "tests/b": 1}, {"tests/a": 1, "tests/b": 1},
+                 [Note("tests/a", NoteEvent.LOWERED, "2 → 1 adapter import exceptions")],
+                 id="the first fix tells the count the tree does not hold"),
+    pytest.param(adapters({"tests/a": 1, "tests/b": 1}), {"tests/a": 1, "tests/b": 1}, {"tests/a": 1, "tests/b": 1}, [],
+                 id="the fix again tells nothing, the file stays as it is"),
+    pytest.param(adapters({"tests/a": 1}), {"tests/b": 1}, {"tests/b": 1}, [MOVED_NOTE],
+                 id="a count the move takes is told once, as moved and not as dropped"),
+]
+
+
+@pytest.mark.parametrize(("held", "measured", "expected", "notes"), NET_CHANGES)
+def test_the_notes_tell_the_change_from_the_held_table_to_the_written_one(held, measured, expected, notes):
+    """FIX-23, ADAPTERIMPORT-28: a note is a change of the written table against the held one, so a fix that changes
+    nothing tells nothing."""
+    committed = adapters({"tests/a": 2, "tests/b": 1})
+    assert fixed(held, committed, MOVE_A_TO_B, measured) == (expected, notes)
+
+
+def test_a_hand_lowered_directory_a_move_brings_back_is_told_once_per_count():
+    """ADAPTERIMPORT-28: the carry brings the committed count back with the moved one, and each is a note."""
+    held, committed = adapters({"tests/a": 1}), adapters({"tests/a": 1, "tests/b": 1})
+    counts, notes = fixed(held, committed, MOVE_A_TO_B)
+    assert (counts, notes) == ({"tests/b": 2}, [MOVED_NOTE, MOVED_NOTE])
 
 
 def test_a_fix_without_a_committed_table_moves_no_count():
     """ADAPTERIMPORT-28: counts the fix has just measured are already under their new directories."""
     held = adapters({"tests/a": 1, "tests/b": 1})
-    followed = follow_renames(held, ceiling({}, None), moved_marked({MODULE_A: MODULE_B}, [MODULE_B]), frozenset({MODULE_B}))
-    assert (followed.ceiling.adapter_imports, followed.changes) == ({"tests/a": 1, "tests/b": 1}, ())
+    assert fixed_adapter_counts(held.adapter_imports, None, MOVE_A_TO_B.marked_moves(), ENOUGH) == ({"tests/a": 1, "tests/b": 1}, [])
 
 
 def test_the_verdict_names_only_a_count_above_the_carried_one():

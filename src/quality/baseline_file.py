@@ -117,25 +117,33 @@ def lowered_adapter_note(directory: str, before: int, now: int) -> Note:
     return Note(directory, event, f"{before} → {now} {ADAPTER_EXCEPTION}s")
 
 
-def followed_adapter_counts(
-    held: AdapterCounts, committed: AdapterCounts, moves: Mapping[str, str]
+def fixed_adapter_counts(
+    held: AdapterCounts, committed: AdapterCounts | None, moves: Mapping[str, str], measured: Mapping[str, int]
 ) -> tuple[AdapterCounts, list[Note]]:
-    """The held counts as the verdict carries the committed ones, and a note for each change against the held table. A
-    directory a move brings a count to takes the carried count, even where a hand edit lowered the held one: the carry
-    is what the verdict allows, and the later lowering to the measured counts caps it, so no count is written above the
-    carry. Any other directory keeps no more than the carry and no more than it holds, and one the carry lacks goes.
-    Size and job entries move the held value so a hand-lowered entry stays lowered; a brought directory differs on
-    purpose, since capping it at the held value would make the written counts depend on the order of the runs.
-    The committed table and the moves alone say what a move brings, so a fix run again, or after one more staged move,
-    ends at the same counts. A move is told when its target gained a count, once per count, with a source that lost one
-    first; a count that fell and no told move explains is told as lowered or dropped."""
-    carried, planned = moved_adapter_counts(committed, moves)
+    """The counts `--fix` writes for the held table, and a note for each change from the held table to them. The held
+    counts follow the committed ones as the verdict carries them, then fall to the measured counts and never rise
+    beyond a carried move. A directory a move brings a count to takes the carried count, even where a hand edit lowered
+    the held one: the carry is what the verdict allows, and the lowering to the measured counts caps it. Any other
+    directory keeps no more than the carry and no more than it holds, and one the carry lacks goes. Size and job
+    entries move the held value so a hand-lowered entry stays lowered; a brought directory differs on purpose, since
+    capping it at the held value would make the written counts depend on the order of the runs. Without a committed
+    table nothing is carried. The committed table, the moves and the measured counts alone give the result, so a fix run
+    again, or after one more staged move, ends at the same counts and tells no change a file does not have. A move is
+    told when its target gained a count, once per count, with a source that lost one first; a count that fell and no
+    told move explains is told as lowered or dropped."""
+    carried, planned = (held, []) if committed is None else moved_adapter_counts(committed, moves)
     brought = {target for _, target in planned}
-    counts = {
+    followed = {
         directory: carried[directory] if directory in brought else min(held.get(directory, 0), carried[directory])
         for directory in carried
     }
-    counts = {directory: count for directory, count in counts.items() if count}
+    counts = {directory: now for directory, count in followed.items() if (now := min(count, measured.get(directory, 0)))}
+    return counts, _adapter_notes(held, counts, planned)
+
+
+def _adapter_notes(held: AdapterCounts, counts: AdapterCounts, planned: list[tuple[str, str]]) -> list[Note]:
+    """The notes of the change from `held` to `counts`: each planned move whose target gained a count, a source that lost
+    one first, then a count the target gained beyond its moves, then each count that fell and no move explains."""
     change = Counter({directory: counts.get(directory, 0) - held.get(directory, 0) for directory in {*counts, *held}})
     notes, untold = [], list(planned)
     for source_lost in (True, False):
@@ -147,12 +155,18 @@ def followed_adapter_counts(
                 if change[source] < 0:
                     change[source] += 1
                 notes.append(Note(target, NoteEvent.MOVED, f"{ADAPTER_EXCEPTION} from {source}"))
+    origin = {target: source for source, target in planned}
+    notes += [
+        Note(directory, NoteEvent.MOVED, f"{ADAPTER_EXCEPTION} from {origin[directory]}")
+        for directory in sorted(origin)
+        for _ in range(max(change[directory], 0))
+    ]
     notes += [
         lowered_adapter_note(directory, held[directory], counts.get(directory, 0))
         for directory in sorted(held)
         if change[directory] < 0
     ]
-    return counts, notes
+    return notes
 
 
 @dataclass(frozen=True, order=True)

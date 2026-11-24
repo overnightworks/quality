@@ -87,9 +87,24 @@ def test_the_fix_records_no_table_while_no_mark_exempts_anything(build_repo, cap
     assert (planned[0], done[0], digest(repo)) == (0, 0, before)
 
 
-def test_the_fix_leaves_the_table_alone_where_no_contract_carries_the_id(build_repo, capsys):
-    """ADAPTERIMPORT-27."""
-    repo = build_repo(shop({CORE_TEST: MARKED}, HELD + adapter_table({"tests/core": 5, "tests/old": 1}), contract=adapter_split()))
+def staged_in(pull_request, tests: dict[str, str], committed: dict[str, int], held: dict[str, int], moved_to: str | None, **options) -> Path:
+    """A `shop` repository whose last commit holds the table `committed` and whose working tree holds `held`, with the
+    marked core test renamed to `moved_to` in the index where given."""
+    repo, commit_base = pull_request
+    for name, text in shop(tests, **options).items():
+        put(repo / name, text)
+    commit_base(rendered(HELD + adapter_table(committed)))
+    put(repo / BASELINE_PATH, rendered(HELD + adapter_table(held)))
+    if moved_to is not None:
+        git(repo, "mv", CORE_TEST, moved_to)
+    return repo
+
+
+@pytest.mark.parametrize("moved_to", [None, "tests/test_config.py"], ids=["no rename", "a marked module renamed across directories"])
+def test_the_fix_leaves_the_table_alone_where_no_contract_carries_the_id(pull_request, capsys, moved_to):
+    """ADAPTERIMPORT-27: neither lowering, dropping nor following a staged move changes a table no contract judges."""
+    held = {"tests/core": 5, "tests/old": 1}
+    repo = staged_in(pull_request, {CORE_TEST: MARKED}, {"tests/core": 1}, held, moved_to, contract=adapter_split())
     before = digest(repo)
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
     assert (code, digest(repo), "nothing to lower" in out) == (0, before, True)
@@ -165,3 +180,16 @@ def test_a_directory_moved_whole_carries_its_count_in_the_fix(pull_request, caps
     git(repo, "mv", CORE_TEST, "tests/test_config.py")
     code, out, _ = fixed(capsys, repo, *FIX_WORDS)
     assert (code, written(repo), "debt moved 1 entry · quality/baseline.toml" in squashed(out)) == (0, {"tests": 1}, True), out
+
+
+def test_a_fix_run_again_before_the_commit_changes_nothing_and_its_dry_run_exits_0(pull_request, capsys):
+    """FIX-23, ADAPTERIMPORT-28: a count the first fix brought with a staged move and lowered to what the tree holds is
+    the written table, so the same move brings and lowers nothing again and the dry run exits 0."""
+    committed = {"tests/core": 2, "tests": 1}
+    repo = staged_in(pull_request, {CORE_TEST: MARKED, STORES_TEST: MARKED}, committed, committed, "tests/test_config.py")
+    code, _, _ = fixed(capsys, repo, *FIX_WORDS)
+    first = (repo / BASELINE_PATH).read_bytes()
+    again, out_again, _ = fixed(capsys, repo, *FIX_WORDS)
+    planned, out_planned, _ = fixed(capsys, repo, *DRY_RUN_WORDS)
+    assert (code, written(repo), (repo / BASELINE_PATH).read_bytes() == first) == (0, {"tests/core": 1, "tests": 1}, True)
+    assert (again, planned, "nothing to lower" in out_again, "nothing to lower" in out_planned) == (0, 0, True, True), (out_again, out_planned)
