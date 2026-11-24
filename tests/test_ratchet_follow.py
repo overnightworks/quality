@@ -480,17 +480,35 @@ def test_a_second_fix_moves_no_count_the_first_one_moved(held, renames, expected
     assert (second.ceiling.adapter_imports, second.changes) == (expected, ())
 
 
-def test_a_second_fix_carries_only_the_move_the_first_one_did_not_know():
-    """FIX-34, ADAPTERIMPORT-28: a move out of a directory the first fix already left is carried once, the earlier move
-    never again."""
-    held = adapters({"tests/a": 2})
-    first_moves = moved_marked({MODULE_A: MODULE_B}, [MODULE_B])
-    both_moves = moved_marked({MODULE_A: MODULE_B, OTHER_A: "tests/c/test_y.py"}, [MODULE_B, "tests/c/test_y.py"])
-    first = follow_renames(held, held, first_moves, tracked_after(held, held, first_moves))
-    second = follow_renames(first.ceiling, held, both_moves, tracked_after(held, held, both_moves))
-    assert (second.ceiling.adapter_imports, [change.path for change in second.changes]) == (
-        {"tests/b": 1, "tests/c": 1}, ["tests/c"],
-    )
+def staged(*moves):
+    """The renames of module moves given as (old directory, new directory, module name), each carrying the mark."""
+    return moved_marked({f"tests/{old}/{name}.py": f"tests/{new}/{name}.py" for old, new, name in moves}, [f"tests/{new}/{name}.py" for _, new, name in moves])
+
+
+SECOND_RUNS = [
+    pytest.param(adapters({"tests/a": 2}), [("a", "b", "test_x")], [("a", "b", "test_x")], {"tests/a": 1, "tests/b": 1}, [],
+                 id="the same renames again move nothing"),
+    pytest.param(adapters({"tests/a": 2}), [("a", "b", "test_x")], [("a", "b", "test_x"), ("a", "c", "test_y")],
+                 {"tests/b": 1, "tests/c": 1}, ["tests/c"], id="a move staged later carries the count that is left"),
+    pytest.param(adapters({"tests/a": 1}), [("a", "b", "test_x")], [("a", "b", "test_x"), ("a", "c", "test_y")], {"tests/b": 1}, [],
+                 id="one source into two targets keeps the first target by sort order"),
+    pytest.param(adapters({"tests/a": 1}), [("a", "c", "test_y")], [("a", "b", "test_x"), ("a", "c", "test_y")], {"tests/b": 1}, [],
+                 id="one source into two targets drops the count a later sorted move no longer carries"),
+    pytest.param(adapters({"tests/a": 1, "tests/c": 1}), [("c", "b", "test_z")], [("c", "b", "test_z"), ("a", "b", "test_x")],
+                 {"tests/b": 2}, ["tests/b"], id="two sources into one target across two runs"),
+]
+
+
+@pytest.mark.parametrize(("committed", "first_moves", "second_moves", "expected", "noted"), SECOND_RUNS)
+def test_a_second_fix_ends_where_the_verdict_carries_the_committed_table(committed, first_moves, second_moves, expected, noted):
+    """FIX-34, ADAPTERIMPORT-28: the counts come from the committed table and the staged renames alone, whatever the
+    first fix wrote, and only a move the first fix did not know is told."""
+    first_renames, second_renames = staged(*first_moves), staged(*second_moves)
+    first = follow_renames(committed, committed, first_renames, tracked_after(committed, committed, first_renames))
+    second = follow_renames(first.ceiling, committed, second_renames, tracked_after(committed, committed, second_renames))
+    assert (second.ceiling.adapter_imports, [change.path for change in second.changes]) == (expected, noted)
+    carried = carried_base(committed, second_renames, named_paths(second.ceiling))
+    assert raised_adapter_counts(carried.adapter_imports, second.ceiling.adapter_imports) == []
 
 
 def test_a_fix_without_a_committed_table_moves_no_count():

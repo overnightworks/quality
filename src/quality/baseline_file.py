@@ -1,6 +1,7 @@
 """The baseline file, `quality/baseline.toml`: the data model of what it holds (the size entries, the clone pairs, the
-job limits, the uncited spec IDs, the adapter import exceptions) and the text that renders and reads it. The `size` rule measures and compares, and owns what a value means; this
-module owns the key and the text.
+job limits, the uncited spec IDs, the adapter import exceptions) and the text that renders and reads it. The `size` rule
+measures and compares, and owns what a value means; this module owns the key and the text, and with the key of
+`[adapter_imports]` the carrying of its counts across test module moves, which the verdict and the fix share.
 """
 
 import json
@@ -92,29 +93,20 @@ def adapter_directory(test: str) -> str:
 
 
 def moved_adapter_counts(
-    held: AdapterCounts, committed: AdapterCounts, moves: Mapping[str, str]
+    committed: AdapterCounts, moves: Mapping[str, str]
 ) -> tuple[AdapterCounts, list[tuple[str, str]]]:
-    """`held` after the moves `committed` carries, and each move as (old directory, new directory): a module in `moves`
+    """`committed` after the moves it carries, and each move as (old directory, new directory): a module in `moves`
     (old path to new path) takes one count from its old directory to its new one, while the old directory holds one;
-    modules that leave one directory together share its count. A move the held counts have already made is not made
-    again: each target holds the moves it gained over `committed` once, and an old directory holds no more than
-    `committed` leaves it."""
-    left, planned = dict(committed), []
+    modules that leave one directory together share its count. The result depends on the committed table and the moves
+    alone, so the verdict and the fix, run any number of times in any order, carry the same counts."""
+    counts, planned = dict(committed), []
     for old, new in sorted(moves.items()):
         source, target = adapter_directory(old), adapter_directory(new)
-        if source != target and left.get(source, 0) > 0:
-            left[source] -= 1
-            planned.append((source, target))
-    made = {target: held.get(target, 0) - committed.get(target, 0) for _, target in planned}
-    counts, taken = dict(held), []
-    for source, target in planned:
-        if made[target] > 0:
-            made[target] -= 1
-        elif counts.get(source, 0) > left[source]:
+        if source != target and counts.get(source, 0) > 0:
             counts[source] -= 1
             counts[target] = counts.get(target, 0) + 1
-            taken.append((source, target))
-    return {directory: count for directory, count in counts.items() if count}, taken
+            planned.append((source, target))
+    return {directory: count for directory, count in counts.items() if count}, planned
 
 
 @dataclass(frozen=True, order=True)

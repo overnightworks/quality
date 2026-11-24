@@ -462,7 +462,7 @@ def carried_base(base: Baseline, renames: Renames, kept: Collection[str]) -> Bas
         for pair in base.clones
         if (first := new_path(pair.first.path)) and (second := new_path(pair.second.path))
     }
-    adapters = None if base.adapter_imports is None else moved_adapter_counts(base.adapter_imports, base.adapter_imports, renames.marked_moves())[0]
+    adapters = None if base.adapter_imports is None else moved_adapter_counts(base.adapter_imports, renames.marked_moves())[0]
     return copy.replace(base, size=size, job_minutes=limits, clones=None if pairs is None else frozenset(pairs), adapter_imports=adapters)
 
 
@@ -689,9 +689,34 @@ def follow_renames(held: Baseline, committed: Baseline, renames: Renames, tracke
         changes += limit_changes
     counts = held.adapter_imports
     if counts is not None and committed.adapter_imports is not None:
-        counts, moves = moved_adapter_counts(counts, committed.adapter_imports, renames.marked_moves())
+        counts, moves = _followed_adapter_counts(counts, committed.adapter_imports, renames.marked_moves())
         changes += [Note(target, NoteEvent.MOVED, f"{ADAPTER_EXCEPTION} from {source}") for source, target in moves]
     return CeilingFix(replace(held, size=size, clones=pairs, job_minutes=limits, adapter_imports=counts), tuple(changes))
+
+
+def _followed_adapter_counts(
+    held: AdapterCounts, committed: AdapterCounts, moves: Mapping[str, str]
+) -> tuple[AdapterCounts, list[tuple[str, str]]]:
+    """The held counts as the verdict carries the committed ones, and the moves that changed them. A directory a move
+    brings a count to takes the carried count, any other no more than the carried count and no more than it holds, and
+    a directory the carry lacks goes; the committed table and the moves alone say what a move brings, so a fix run
+    again, or after one more staged move, ends at the same counts. A move is reported when its target gained a count
+    and its source lost one, once per count."""
+    carried, planned = moved_adapter_counts(committed, moves)
+    brought = {target for _, target in planned}
+    counts = {
+        directory: carried[directory] if directory in brought else min(held.get(directory, 0), carried[directory])
+        for directory in carried
+    }
+    counts = {directory: count for directory, count in counts.items() if count}
+    change = Counter({directory: counts.get(directory, 0) - held.get(directory, 0) for directory in {*counts, *held}})
+    taken = []
+    for source, target in planned:
+        if change[target] > 0 > change[source]:
+            change[target] -= 1
+            change[source] += 1
+            taken.append((source, target))
+    return counts, taken
 
 
 def _followed_pairs(
