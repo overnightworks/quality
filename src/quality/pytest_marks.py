@@ -85,11 +85,11 @@ def registers(pyproject: str, mark: str) -> bool:
     return isinstance(markers, list) and any(isinstance(entry, str) and entry.partition(":")[0].strip() == mark for entry in markers)
 
 
-def carries_registered_mark(source: str | bytes, pyproject: str | None) -> bool:
-    """Whether the module's `pytestmark` names `imports_adapter` and its project's `pyproject.toml` registers it."""
-    if pyproject is None or not registers(pyproject, IMPORTS_ADAPTER):
-        return False
+def imports_adapter_line(source: str | bytes) -> int | None:
+    """The line of the module's `pytestmark` that names the `imports_adapter` mark; a module that does not parse has none."""
+    if (IMPORTS_ADAPTER if isinstance(source, str) else IMPORTS_ADAPTER.encode()) not in source:
+        return None
     try:
-        return IMPORTS_ADAPTER in module_marks(ast.parse(source))
+        return module_marks(ast.parse(source)).get(IMPORTS_ADAPTER)
     except (SyntaxError, ValueError):
-        return False
+        return None

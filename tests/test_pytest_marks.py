@@ -4,7 +4,7 @@ import ast
 
 import pytest
 
-from quality.pytest_marks import IMPORTS_ADAPTER, carries_registered_mark, marks_by_test, module_marks, registers
+from quality.pytest_marks import IMPORTS_ADAPTER, imports_adapter_line, marks_by_test, module_marks, registers
 
 MODULE_MARKS = [
     pytest.param("pytestmark = pytest.mark.imports_adapter\n", {IMPORTS_ADAPTER: 1}, id="bare"),
@@ -66,14 +66,15 @@ def test_a_project_registers_a_mark_in_the_markers_of_its_pytest_ini_options(pyp
 
 
 @pytest.mark.parametrize(
-    ("source", "pyproject", "expected"),
+    ("source", "expected"),
     [
-        pytest.param("pytestmark = pytest.mark.imports_adapter\n", REGISTRATIONS[0].values[0], True, id="marked and registered"),
-        pytest.param("pytestmark = pytest.mark.imports_adapter\n", REGISTRATIONS[2].values[0], False, id="marked, not registered"),
-        pytest.param("pytestmark = pytest.mark.imports_adapter\n", None, False, id="marked, no project file"),
-        pytest.param("x = 1\n", REGISTRATIONS[0].values[0], False, id="registered, not marked"),
-        pytest.param("def broken(:\n", REGISTRATIONS[0].values[0], False, id="a module that does not parse"),
+        pytest.param("pytestmark = pytest.mark.imports_adapter\n", 1, id="marked"),
+        pytest.param(b"import pytest\n\npytestmark = [pytest.mark.imports_adapter]\n", 3, id="marked, read as bytes at its line"),
+        pytest.param("x = 1\n", None, id="not marked"),
+        pytest.param("pytestmark = pytest.mark.anyio\n", None, id="another mark"),
+        pytest.param("@pytest.mark.imports_adapter\ndef test_a(): ...\n", None, id="a test mark"),
+        pytest.param("def broken(:  # imports_adapter\n", None, id="a module that does not parse"),
     ],
 )
-def test_a_module_carries_the_registered_mark_when_it_names_it_and_its_project_registers_it(source, pyproject, expected):
-    assert carries_registered_mark(source, pyproject) is expected
+def test_the_registered_mark_of_a_module_is_found_at_the_line_of_its_pytestmark(source, expected):
+    assert imports_adapter_line(source) == expected

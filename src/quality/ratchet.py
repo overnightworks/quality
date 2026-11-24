@@ -36,6 +36,7 @@ from quality.baseline_file import (
     SizeEntries,
     SizeError,
     UnknownTable,
+    adapter_directory,
     key_order,
 )
 from quality.config import GENERATED_FILE_HEADING, GeneratedFile
@@ -468,7 +469,7 @@ def moved_adapter_counts(counts: AdapterCounts, renames: Renames) -> tuple[Adapt
     carried = dict(counts)
     moves = []
     for old, new in sorted(renames.moves.items()):
-        source, target = str(PurePosixPath(old).parent), str(PurePosixPath(new).parent)
+        source, target = adapter_directory(old), adapter_directory(new)
         if new in renames.marked and source != target and carried.get(source, 0) > 0:
             carried[source] -= 1
             if not carried[source]:

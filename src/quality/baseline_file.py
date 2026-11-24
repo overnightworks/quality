@@ -7,7 +7,7 @@ import json
 import re
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import NamedTuple, Self
 
 from quality import __version__, checkout, repository
@@ -83,6 +83,11 @@ class DirectoryKey(NamedTuple):
 
 
 AdapterCounts = dict[str, int]
+
+
+def adapter_directory(test: str) -> str:
+    """The key of `[adapter_imports]` that a test module counts toward: its direct parent directory."""
+    return str(PurePosixPath(test).parent)
 
 
 @dataclass(frozen=True, order=True)

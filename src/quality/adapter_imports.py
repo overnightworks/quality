@@ -5,7 +5,6 @@ its name mirrors, never by what it imports; its own import statements and those 
 judged against the one import graph the imports area builds. A module marked `imports_adapter` is the one exception, and
 the baseline's `[adapter_imports]` table holds how many such modules each test directory may keep."""
 
-import ast
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -15,7 +14,7 @@ from typing import NamedTuple
 import grimp
 
 from quality import architecture, layout, pytest_marks
-from quality.baseline_file import BASELINE_PATH, FIX_COMMAND
+from quality.baseline_file import BASELINE_PATH, FIX_COMMAND, adapter_directory
 from quality.config import LayoutAllowance
 from quality.output import SEPARATOR, counted
 from quality.ratchet import Renames
@@ -144,21 +143,16 @@ def with_marks(renames: Renames, read: Callable[[str], str | None]) -> Renames:
     marked = set()
     for old, new in renames.moves.items():
         project = project_file_of(new)
-        if project is not None and new.endswith(".py") and PurePosixPath(old).parent != PurePosixPath(new).parent:
-            module = read(new)
-            if module is not None and pytest_marks.carries_registered_mark(module, read(project)):
+        if project is not None and new.endswith(".py") and adapter_directory(old) != adapter_directory(new):
+            module, pyproject = read(new), read(project)
+            if (
+                module is not None
+                and pyproject is not None
+                and pytest_marks.registers(pyproject, pytest_marks.IMPORTS_ADAPTER)
+                and pytest_marks.imports_adapter_line(module) is not None
+            ):
                 marked.add(new)
     return replace(renames, marked=frozenset(marked))
-
-
-def _mark_line(content: bytes) -> int | None:
-    """The line of the module's `pytestmark` that names the `imports_adapter` mark; a module that does not parse has none."""
-    if pytest_marks.IMPORTS_ADAPTER.encode() not in content:
-        return None
-    try:
-        return pytest_marks.module_marks(ast.parse(content)).get(pytest_marks.IMPORTS_ADAPTER)
-    except (SyntaxError, ValueError):
-        return None
 
 
 def _module_findings(path: str, mark_line: int | None, reds: list[tuple[layout.ModuleImport, set[_Red]]]) -> list[Finding]:
@@ -204,11 +198,11 @@ def measure_adapter_imports(
     findings: list[Finding] = []
     counts: Counter[str] = Counter()
     for path in sorted(path for path in subjects if path in contents):
-        line = _mark_line(contents[path])
+        line = pytest_marks.imports_adapter_line(contents[path])
         statements = imports_of(path) if path in core else []
         reds = [(statement, found) for statement in statements if (found := judgement.reds(statement, imports_of))]
         if reds and line is not None and registered(path):
-            counts[str(PurePosixPath(path).parent)] += 1
+            counts[adapter_directory(path)] += 1
         else:
             findings.extend(_module_findings(path, line, reds))
     return Measure(sorted(findings, key=lambda finding: (finding.path, finding.line or 0)), counts, len(core))
