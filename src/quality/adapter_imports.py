@@ -7,7 +7,7 @@ the baseline's `[adapter_imports]` table holds how many such modules each test d
 
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import NamedTuple
 
 import grimp
@@ -144,7 +144,7 @@ def with_marks(renames: Renames, read: Callable[[str], str | None], projects: Ma
             registered[project] = text is not None and pytest_marks.registers(text, pytest_marks.IMPORTS_ADAPTER)
         if registered[project] and (module := read(new)) is not None and pytest_marks.imports_adapter_line(module) is not None:
             marked.add(new)
-    return replace(renames, marked=frozenset(marked))
+    return Renames(renames.moves, renames.targets, frozenset(marked))
 
 
 def _module_findings(path: str, mark_line: int | None, reds: list[tuple[layout.ModuleImport, set[_Red]]]) -> list[Finding]:

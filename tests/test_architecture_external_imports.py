@@ -158,7 +158,9 @@ def test_a_refining_contract_with_as_packages_false_cannot_be_judged(tmp_path):
 ], ids=["a module grimp reads and Python does not parse", "a module the checkout does not track"])
 def test_a_module_that_cannot_be_read_is_refused_without_a_local_path(tmp_path, core, untracked, refusal):
     """IMPORT-32: the statements of a module that Python cannot parse, or that git does not track, cannot be judged."""
+    files = skat_files(core)
+    contracts = one(unmatched_ignored())
     with pytest.raises(architecture.ContractError) as refused:
-        judged_in(tmp_path, skat_files(core), one(unmatched_ignored()), untracked)
+        judged_in(tmp_path, files, contracts, untracked)
     assert refusal in str(refused.value)
     assert str(tmp_path) not in str(refused.value)
