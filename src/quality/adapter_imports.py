@@ -8,7 +8,6 @@ the baseline's `[adapter_imports]` table holds how many such modules each test d
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from pathlib import PurePosixPath
 from typing import NamedTuple
 
 import grimp
@@ -123,28 +122,22 @@ class Measure:
     extent: int
 
 
-def project_file_of(test: str) -> str | None:
-    """The `pyproject.toml` beside the outermost `tests/` folder of a test module, None for a path outside any."""
-    parts = PurePosixPath(test).parts
-    if layout.TESTS_DIRECTORY not in parts[:-1]:
-        return None
-    return str(PurePosixPath(*parts[: parts.index(layout.TESTS_DIRECTORY)], layout.PROJECT_FILE))
-
-
 def candidates(modes: Mapping[str, str]) -> list[str]:
     """The files the rule reads: the imports of each test and the `pyproject.toml` of each project that holds tests."""
     tests = layout.test_import_candidates(modes)
-    return [*tests, *sorted({project for test in tests if (project := project_file_of(test)) in modes})]
+    projects = layout.test_project_files(modes)
+    return [*tests, *sorted({project for test in tests if (project := projects[test]) in modes})]
 
 
-def with_marks(renames: Renames, read: Callable[[str], str | None]) -> Renames:
+def with_marks(renames: Renames, read: Callable[[str], str | None], projects: Mapping[str, str]) -> Renames:
     """The renames with `marked`: the targets that moved to another directory and carry the registered mark. `read` gives
-    the text of a path at the side the marks are read from, None where it holds nothing."""
+    the text of a path at the side the marks are read from, None where it holds nothing; `projects` is the head's
+    `layout.test_project_files`."""
     marked = set()
     registered: dict[str, bool] = {}
     for old, new in renames.moves.items():
-        project = project_file_of(new)
-        if project is None or not new.endswith(".py") or adapter_directory(old) == adapter_directory(new):
+        project = projects.get(new)
+        if project is None or adapter_directory(old) == adapter_directory(new):
             continue
         if project not in registered:
             text = read(project)
@@ -188,8 +181,10 @@ def measure_adapter_imports(
             parsed[path] = layout.module_imports(path, contents[path], support) if path in contents else []
         return parsed[path]
 
+    projects = layout.test_project_files(modes)
+
     def registered(path: str) -> bool:
-        project = project_file_of(path)
+        project = projects.get(path)
         return project in contents and pytest_marks.registers(contents[project].decode("utf-8", "replace"), pytest_marks.IMPORTS_ADAPTER)
 
     subjects = layout.test_subjects(modes, allowances)

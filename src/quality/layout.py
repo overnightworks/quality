@@ -537,14 +537,27 @@ def check_test_import(
 def _judged_paths(modes: Mapping[str, str], *, links: bool = False) -> Iterator[tuple[PurePosixPath, PurePosixPath, tuple[str, ...]]]:
     """Each tracked `.py` under a Python project's `tests/` outside `fixtures/`, with that `tests/` and the folders
     between; a link only with `links`, since an importer is read and a target is only named."""
-    tests = [project.tests_directory for project in python_projects(modes)]
-    for path, mode in modes.items():
+    for file, directory, folders in _modules_under_tests(modes):
+        if links or modes[str(file)] not in LINK_MODES:
+            yield file, directory, folders
+
+
+def _modules_under_tests(paths: Iterable[str]) -> Iterator[tuple[PurePosixPath, PurePosixPath, tuple[str, ...]]]:
+    tracked = list(paths)
+    tests = [project.tests_directory for project in python_projects(tracked)]
+    for path in tracked:
         file = PurePosixPath(path)
         directory = next((directory for directory in tests if directory in file.parents), None)
-        if directory is not None and (links or mode not in LINK_MODES) and file.suffix == ".py":
+        if directory is not None and file.suffix == ".py":
             folders = file.relative_to(directory).parts[:-1]
             if not _in_fixtures(folders):
                 yield file, directory, folders
+
+
+def test_project_files(paths: Iterable[str]) -> dict[str, str]:
+    """For each tracked `.py` under a Python project's `tests/` outside `fixtures/`, the `pyproject.toml` of that project
+    (LAYOUT-1): the one the judged `tests/` belongs to, never the one beside an outer `tests` folder of the path."""
+    return {str(file): str(directory.parent / PROJECT_FILE) for file, directory, _ in _modules_under_tests(paths)}
 
 
 @dataclass(frozen=True)

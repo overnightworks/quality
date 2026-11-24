@@ -13,6 +13,7 @@ from tests.support.architecture import (
     adapter_findings,
     adapter_refusal,
     adapter_split,
+    pytest_markers,
     shop_with_adapters,
 )
 from tests.support.baselines import adapter_table
@@ -322,6 +323,17 @@ def test_a_mark_is_registered_by_the_pyproject_of_its_own_project(red):
     """ADAPTERIMPORT-23: the registration is the pyproject.toml of the project whose tests the module is in."""
     member = {"tool/pyproject.toml": "", "tool/tests/test_db.py": MARKED}
     assert red({}, adapter_contract(source=("shop",)), extra=member, markers=REGISTERED) == ["tool/tests/test_db.py:4"]
+
+
+def test_a_project_inside_a_tests_folder_is_registered_by_its_own_pyproject(red):
+    """ADAPTERIMPORT-23, LAYOUT-1: the project of a test module is the one layout judges it under, also where its
+    directory has a `tests` part of its own."""
+    harness = "qa/tests/harness"
+    member = {
+        f"{harness}/pyproject.toml": pytest_markers(*REGISTERED), f"{harness}/tests/test_db.py": MARKED,
+        BASELINE_PATH: adapter_table({f"{harness}/tests": 1}),
+    }
+    assert red({}, adapter_contract(source=("shop",)), extra=member) == []
 
 
 def test_the_marked_modules_count_toward_their_direct_parent_directory_and_parents_are_never_summed(red):

@@ -3,13 +3,13 @@ and the files git renamed between the two."""
 
 import re
 import subprocess
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
-from quality import adapter_imports, architecture, checkout, process, repository
+from quality import adapter_imports, architecture, checkout, layout, process, repository
 from quality.baseline_file import BASELINE_PATH, Baseline, SizeError, load_baseline, read_baseline
 from quality.config import GateSettings, LegacyMode, load_gate_settings, read_gate_settings
 from quality.config_entries import CONFIG_PATH, ConfigError
@@ -141,12 +141,17 @@ def read_renames(
         )
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
-    return _marked_at(renames_of(listed), repo, head, env) if marks else renames_of(listed)
+    renames = renames_of(listed)
+    if not marks:
+        return renames
+    head_paths, _ = _tracked_at(["git", "-C", str(repo.resolve())], head, env, bound, CHECKOUT_WORDS)
+    return _marked_at(renames, repo, head, env, head_paths)
 
 
-def _marked_at(renames: Renames, repo: Path, commit: str, env: dict[str, str] | None) -> Renames:
-    """The renames with the test modules that carry the registered mark in the commit's blobs, never the working tree. A
-    blob that cannot be read has no mark, so its module carries no count and the verdict shows the raise."""
+def _marked_at(renames: Renames, repo: Path, commit: str, env: dict[str, str] | None, tracked: Iterable[str]) -> Renames:
+    """The renames with the test modules that carry the registered mark in the commit's blobs, never the working tree;
+    `tracked` is the commit's paths, which say each module's project. A blob that cannot be read has no mark, so its
+    module carries no count and the verdict shows the raise."""
 
     def read(path: str) -> str | None:
         try:
@@ -154,7 +159,7 @@ def _marked_at(renames: Renames, repo: Path, commit: str, env: dict[str, str] | 
         except process.ProcessError:
             return None
 
-    return adapter_imports.with_marks(renames, read)
+    return adapter_imports.with_marks(renames, read, layout.test_project_files(tracked))
 
 
 @dataclass(frozen=True)
@@ -199,7 +204,7 @@ def read_pull_tree(
         renames = renames_of(listed.stdout)
     except CannotJudge:
         raise CannotJudge(words.unrenamed.format(**words_of)) from None
-    return architecture.PullTree(base_paths, head_paths, head_empty, _marked_at(renames, repo, head, env) if marks else renames)
+    return architecture.PullTree(base_paths, head_paths, head_empty, _marked_at(renames, repo, head, env, head_paths) if marks else renames)
 
 
 def _tracked_at(
