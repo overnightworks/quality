@@ -340,15 +340,16 @@ It applies these rules:
   test directory in `[adapter_imports]` of `quality/baseline.toml`, a raise being a loosening.
 
   A core test whose module-level `pytestmark` holds `pytest.mark.imports_adapter` gets no `adapter import` finding: the
-  mark may be bare or called, alone, in a list or tuple, or reached through a module-level alias; a mark on a class or a
-  test exempts nothing (ADAPTERIMPORT-22). It exempts only where the project's `pyproject.toml` registers it, as
-  `imports_adapter` or `imports_adapter: <text>` in `[tool.pytest.ini_options] markers`; otherwise the finding stands and
-  its fix is `register imports_adapter in [tool.pytest.ini_options] markers`. A registration only a `conftest.py` hook,
-  pytest's native `[tool.pytest]` table, `pytest.ini`, `tox.ini` or `setup.cfg` makes is not read, so the test stays red
+  mark may be bare or called, alone, in a list or tuple, or reached through a module-level alias, read as the report's
+  suite columns read it (`docs/commands.md`, FLEET-122); a mark on a class or a test exempts nothing
+  (ADAPTERIMPORT-22). It exempts only where the project's `pyproject.toml` registers it, as `imports_adapter` or
+  `imports_adapter: <text>` in `[tool.pytest.ini_options] markers`; otherwise the finding stands and its fix is
+  `register imports_adapter in [tool.pytest.ini_options] markers`. A registration only a `conftest.py` hook, pytest's
+  native `[tool.pytest]` table, `pytest.ini`, `tox.ini` or `setup.cfg` makes is not read, so the test stays red
   (ADAPTERIMPORT-23). Each exempted module counts once toward its direct parent directory, and parents are never summed
   (ADAPTERIMPORT-24). A marked test module the rule would not report, a clean core test or a test that is no core test,
-  registered or not, is `unused` at its `pytestmark` line with the fix `remove the imports_adapter mark`, so a stale mark
-  cannot let a later adapter import in silently (ADAPTERIMPORT-25).
+  registered or not, is `unused` at its `pytestmark` line with the fix `remove the imports_adapter mark`, so a stale
+  mark cannot let a later adapter import in silently (ADAPTERIMPORT-25).
 
   `[adapter_imports]` of `quality/baseline.toml` holds a positive count per test directory; a missing table or entry holds
   0. The rule judges the count: above the held one is `grew` at the directory (`3 marked modules import an adapter ·

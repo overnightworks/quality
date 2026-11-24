@@ -33,25 +33,40 @@ def _dotted_name(node: ast.expr) -> str:
     return ".".join([node.id, *reversed(names)]) if isinstance(node, ast.Name) else ""
 
 
-def _bound_marks(body: list[ast.stmt], aliases: dict[str, frozenset[str]]) -> Iterator[tuple[str, frozenset[str], int]]:
-    """Each single-name assignment of the body, its name, the marks its value names and its line."""
-    for statement in body:
-        if isinstance(statement, ast.Assign) and len(statement.targets) == 1 and isinstance(statement.targets[0], ast.Name):
-            yield statement.targets[0].id, _marks_named(statement.value, aliases), statement.lineno
+def _bindings(scope: ast.AST) -> Iterator[tuple[str, ast.expr | None, int]]:
+    """Each binding of a plain name in the scope's own statements, also inside compound statements, in source order: its
+    name, its value (none for an augmented binding, which this reader cannot add up) and its line. Functions and classes
+    open their own scope."""
+    for child in ast.iter_child_nodes(scope):
+        if isinstance(child, ast.Assign) and len(child.targets) == 1 and isinstance(child.targets[0], ast.Name):
+            yield child.targets[0].id, child.value, child.lineno
+        elif isinstance(child, ast.AnnAssign) and child.value is not None and isinstance(child.target, ast.Name):
+            yield child.target.id, child.value, child.lineno
+        elif isinstance(child, ast.AugAssign) and isinstance(child.target, ast.Name):
+            yield child.target.id, None, child.lineno
+        elif not isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.expr):
+            yield from _bindings(child)
 
 
 def _aliases(tree: ast.Module) -> dict[str, frozenset[str]]:
-    return {name: marks for name, marks, _ in _bound_marks(tree.body, {}) if marks and name != MODULE_MARKS}
+    named = ((name, _marks_named(value, {})) for name, value, _ in _bindings(tree) if value is not None)
+    return {name: marks for name, marks in named if marks and name != MODULE_MARKS}
+
+
+def _last_pytestmark(scope: ast.AST, aliases: dict[str, frozenset[str]]) -> tuple[frozenset[str], int]:
+    """The marks of the scope's last `pytestmark` binding, which is the one pytest applies (`get_unpacked_marks` reads
+    the attribute the body leaves), and its line; no binding, an augmented one or one that is no mark expression has none."""
+    marks, line = NO_MARKS, 0
+    for name, value, bound_line in _bindings(scope):
+        if name == MODULE_MARKS:
+            marks, line = (NO_MARKS if value is None else _marks_named(value, aliases)), bound_line
+    return marks, line
 
 
 def module_marks(tree: ast.Module) -> dict[str, int]:
-    """Each mark the module's own `pytestmark` names, with the line of the first statement that names it."""
-    marks: dict[str, int] = {}
-    for name, named, line in _bound_marks(tree.body, _aliases(tree)):
-        if name == MODULE_MARKS:
-            for mark in sorted(named):
-                marks.setdefault(mark, line)
-    return marks
+    """Each mark the module's last `pytestmark` binding names, with the line of that binding."""
+    marks, line = _last_pytestmark(tree, _aliases(tree))
+    return dict.fromkeys(sorted(marks), line)
 
 
 def marks_by_test(tree: ast.Module) -> Iterator[frozenset[str]]:
@@ -65,7 +80,7 @@ def marks_by_test(tree: ast.Module) -> Iterator[frozenset[str]]:
             if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
                 marks = inherited.union(*(_marks_named(decorator, aliases) for decorator in child.decorator_list))
             if isinstance(child, ast.ClassDef):
-                marks = marks.union(*(named for name, named, _ in _bound_marks(child.body, aliases) if name == MODULE_MARKS))
+                marks = marks.union(_last_pytestmark(child, aliases)[0])
             if clones.is_test_function(child):
                 yield marks
             pending.append((child, marks))

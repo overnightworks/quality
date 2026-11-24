@@ -336,16 +336,18 @@ repository a token can list is dropped without a trace (FLEET-72).
   enclosing test or, in a describe outside any test, every test of that describe, and outside any test or describe every
   test of the file; a conditional mark counts even where CI runs the test (FLEET-122). The forms of a Python test's
   marks are read by `pytest_marks`, the one owner `adapter-import` shares, and `suites` maps its mark names to these
-  columns. `Fixme` counts the same way for Playwright `test.fixme`, `describe.fixme` and pytest `pytest.mark.xfail`; a
-  test with both marks counts in both columns (FLEET-123). A Python test file that does not parse and a script test file
-  that is not UTF-8 or that the lexer refuses count no test; `Note` reads `N files not read`, and an unmeasured
-  repository reads `cannot judge: <reason>` there with `—` in every number (FLEET-124). Named limits: probe and
-  `browser`-marked pytest tests outside `tests/e2e/` count by their `integration` mark; an `integration` mark that only
-  a conftest hook adds counts as `Unit`, as does an integration layer by folder (`tests/integration/`), and a script
-  test has no integration mark; not read are imperative `pytest.skip()` and `pytest.xfail()`, `pytest.param(marks=…)`,
-  `from pytest import mark`, marks added by conftest hooks, `-m` or `--deselect` in workflows, `unittest.skip`,
-  Playwright `test.fail`, vitest `todo` and `fails` and `.only`; a test written in a loop counts once; the counts are
-  static, not what a run skipped.
+  columns. Of the `pytestmark` bindings of a module or class body, plain, annotated or augmented, also inside a
+  top-level `if`, `try`, `with`, `for`, `while` or `match`, the last decides, as in pytest; an augmented last binding
+  or one that is no mark or list or tuple of marks gives no marks. `Fixme` counts the same way for Playwright
+  `test.fixme`, `describe.fixme` and pytest `pytest.mark.xfail`; a test with both marks counts in both columns
+  (FLEET-123). A Python test file that does not parse and a script test file that is not UTF-8 or that the lexer
+  refuses count no test; `Note` reads `N files not read`, and an unmeasured repository reads `cannot judge: <reason>`
+  there with `—` in every number (FLEET-124). Named limits: probe and `browser`-marked pytest tests outside
+  `tests/e2e/` count by their `integration` mark; an `integration` mark that only a conftest hook adds counts as
+  `Unit`, as does an integration layer by folder (`tests/integration/`), and a script test has no integration mark; not
+  read are imperative `pytest.skip()` and `pytest.xfail()`, `pytest.param(marks=…)`, `from pytest import mark`, marks
+  added by conftest hooks, `-m` or `--deselect` in workflows, `unittest.skip`, Playwright `test.fail`, vitest `todo`
+  and `fails` and `.only`; a test written in a loop counts once; the counts are static, not what a run skipped.
 - A `.py` file Python cannot parse, or a TypeScript, JavaScript, Svelte or Vue file that is not UTF-8, still has its
   lines counted (FLEET-89); the row's note says how many such files there are, as `N files not valid Python` and
   `N files not UTF-8` (FLEET-90), never which (FLEET-91).
