@@ -90,7 +90,7 @@ def test_a_script_call_is_a_test_only_in_the_forms_the_standard_names(source, te
         ("pytestmark = pytest.mark.skip\ndef test_a(): ...\ndef test_b(): ...", (2, 2, 0)),
         ("pytestmark = [pytest.mark.slow, pytest.mark.xfail]\ndef test_a(): ...", (1, 0, 1)),
         ("pytestmark = (pytest.mark.skipif(True, reason='x'),)\ndef test_a(): ...", (1, 1, 0)),
-        ("pytestmark = pytest.mark.skip\npytestmark = pytest.mark.slow\ndef test_a(): ...", (1, 0, 0)),
+        ("pytestmark = pytest.mark.skip\npytestmark = pytest.mark.skip\ndef test_a(): ...", (1, 0, 0)),
         ("slow = pytest.mark.skipif(True, reason='x')\n@slow\ndef test_a(): ...", (1, 1, 0)),
         ("@pytest.mark.skip\n@pytest.mark.xfail\ndef test_a(): ...", (1, 1, 1)),
         ("@pytest.mark.parametrize('x', [1, 2, 3])\ndef test_a(x): ...", (1, 0, 0)),
@@ -98,7 +98,7 @@ def test_a_script_call_is_a_test_only_in_the_forms_the_standard_names(source, te
     ],
     ids=[
         "bare skip", "called skip", "skipif", "xfail is fixme", "other mark", "class mark", "module mark", "list of marks", "tuple of marks",
-        "a later module pytestmark drops the earlier skip", "module alias", "skip and xfail count in both", "parametrized counts once", "helper is no test",
+        "a second module pytestmark gives no marks", "module alias", "skip and xfail count in both", "parametrized counts once", "helper is no test",
     ],
 )
 def test_a_python_test_counts_the_skip_and_xfail_marks_that_reach_it(source, expected):

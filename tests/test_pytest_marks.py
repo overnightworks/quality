@@ -17,14 +17,9 @@ MODULE_MARKS = [
     pytest.param("adapter = pytest.mark.imports_adapter\npytestmark = [adapter]\n", {IMPORTS_ADAPTER: 2}, id="an alias in a list"),
     pytest.param("pytestmark = pytest.mark.anyio\n", {"anyio": 1}, id="another mark only"),
     pytest.param("x = 1\n", {}, id="no pytestmark"),
-    pytest.param("pytestmark = pytest.mark.imports_adapter\npytestmark = pytest.mark.anyio\n", {"anyio": 2}, id="a later plain rebind drops the earlier mark"),
-    pytest.param("pytestmark = pytest.mark.anyio\npytestmark: list = [pytest.mark.imports_adapter]\n", {IMPORTS_ADAPTER: 2}, id="an annotated last binding decides"),
-    pytest.param("pytestmark = pytest.mark.imports_adapter\nif X:\n    pytestmark = pytest.mark.anyio\n", {"anyio": 3}, id="a binding inside an if after a plain one decides"),
-    pytest.param("try:\n    pytestmark = pytest.mark.anyio\nexcept E:\n    pytestmark = pytest.mark.slow\n", {"slow": 4}, id="the last binding of a try decides"),
-    pytest.param("pytestmark = pytest.mark.imports_adapter\npytestmark += [pytest.mark.anyio]\n", {}, id="an augmented binding gives no marks"),
-    pytest.param("pytestmark = pytest.mark.imports_adapter\npytestmark = make_marks()\n", {}, id="a last binding that is no mark expression gives no marks"),
-    pytest.param("pytestmark: int\npytestmark = pytest.mark.anyio\n", {"anyio": 2}, id="an annotation without a value binds nothing"),
-    pytest.param("def f():\n    pytestmark = pytest.mark.anyio\npytestmark = pytest.mark.slow\n", {"slow": 3}, id="a binding inside a function is no module binding"),
+    pytest.param("adapter = pytest.mark.imports_adapter\nadapter = pytest.mark.anyio\npytestmark = adapter\n", {}, id="an alias bound twice holds no marks"),
+    pytest.param("if X:\n    adapter = pytest.mark.imports_adapter\npytestmark = adapter\n", {}, id="an alias bound inside an if holds no marks"),
+    pytest.param("adapter = pytest.mark.imports_adapter\nfor adapter in marks:\n    pass\npytestmark = adapter\n", {}, id="an alias bound again by a loop holds no marks"),
 ]
 
 
@@ -56,94 +51,43 @@ def test_a_test_carries_its_own_marks_its_classes_and_the_modules():
     assert list(marks_by_test(tree)) == [{"slow", "skip", IMPORTS_ADAPTER, "xfail"}]
 
 
-@pytest.mark.parametrize(
-    ("body", "expected"),
-    [
-        pytest.param("pytestmark = pytest.mark.slow\n    pytestmark = pytest.mark.skip\n", {"skip"}, id="a later plain rebind drops the earlier mark"),
-        pytest.param("pytestmark = pytest.mark.slow\n    pytestmark: list = [pytest.mark.skip]\n", {"skip"}, id="an annotated last binding decides"),
-        pytest.param("pytestmark = pytest.mark.slow\n    if X:\n        pytestmark = pytest.mark.skip\n", {"skip"}, id="a binding inside an if decides"),
-        pytest.param("pytestmark = pytest.mark.slow\n    pytestmark += [pytest.mark.skip]\n", set(), id="an augmented binding gives no marks"),
-        pytest.param("pytestmark = pytest.mark.slow\n    pytestmark = make_marks()\n", set(), id="a last binding that is no mark expression gives no marks"),
-        pytest.param("pytestmark = pytest.mark.slow\n", {"slow"}, id="a single binding"),
-    ],
-)
-def test_the_last_pytestmark_binding_of_a_class_body_decides(body, expected):
-    tree = ast.parse(f"class TestA:\n    {body}    def test_a(self): ...\n")
-    assert list(marks_by_test(tree)) == [expected]
-
-
-REBINDING_FORMS = [
-    pytest.param("pytestmark = other = pytest.mark.anyio", {"anyio"}, id="a chained assignment decides"),
-    pytest.param("other = pytestmark = [pytest.mark.anyio]", {"anyio"}, id="a chained assignment decides with the name last"),
-    pytest.param("(pytestmark := pytest.mark.anyio)", {"anyio"}, id="a walrus decides by its value"),
-    pytest.param("f = lambda: (pytestmark := pytest.mark.anyio)", {"imports_adapter"}, id="a lambda walrus binds only the lambda"),
-    pytest.param("@(pytestmark := pytest.mark.anyio)\ndef f(): ...", {"anyio"}, id="a decorator walrus decides"),
-    pytest.param("def f(a=(pytestmark := pytest.mark.anyio)): ...", {"anyio"}, id="a default walrus decides"),
-    pytest.param("class C((pytestmark := pytest.mark.anyio)): ...", {"anyio"}, id="a base walrus decides"),
-    pytest.param(
-        "(pytestmark := pytest.mark.anyio) if (pytestmark := pytest.mark.imports_adapter) else None",
-        set(),
-        id="two walruses of a conditional run out of source order and give no marks",
-    ),
-    pytest.param(
-        "@(pytestmark := pytest.mark.imports_adapter)\ndef f(a=(pytestmark := pytest.mark.anyio)): ...",
-        set(),
-        id="a decorator walrus beside a default walrus gives no marks",
-    ),
-    pytest.param(
-        "@(pytestmark := pytest.mark.imports_adapter)\nclass C((pytestmark := pytest.mark.anyio)): ...",
-        set(),
-        id="a decorator walrus beside a base walrus gives no marks",
-    ),
-    pytest.param(
-        "[(pytestmark := pytest.mark.anyio) for _ in (pytestmark := pytest.mark.imports_adapter)]",
-        set(),
-        id="a comprehension element walrus beside its iterable walrus gives no marks",
-    ),
-    pytest.param(
-        "other[(pytestmark := pytest.mark.imports_adapter)] = (pytestmark := pytest.mark.anyio)",
-        set(),
-        id="a target walrus beside a value walrus gives no marks",
-    ),
-    pytest.param("(pytestmark := make())", set(), id="a walrus of no mark gives no marks"),
-    pytest.param("pytestmark = print((pytestmark := pytest.mark.anyio))", set(), id="an assignment binds after the walrus in its call value"),
-    pytest.param("pytestmark = [(pytestmark := pytest.mark.anyio)]", set(), id="an assignment binds after the walrus in its list value and reads the list"),
-    pytest.param("pytestmark: list = print((pytestmark := pytest.mark.anyio))", set(), id="an annotated assignment binds after the walrus in its value"),
-    pytest.param("for pytestmark in (pytestmark := pytest.mark.anyio):\n    pass", set(), id="a for target binds after the walrus in its iterable"),
-    pytest.param("with (pytestmark := pytest.mark.anyio) as pytestmark:\n    pass", set(), id="a with target binds after the walrus in its context expression"),
-    pytest.param("pytestmark, other = make(), 1", set(), id="a tuple target gives no marks"),
-    pytest.param("*pytestmark, other = make()", set(), id="a star target gives no marks"),
-    pytest.param("for pytestmark in marks:\n    pass", set(), id="a for target gives no marks"),
-    pytest.param("with ctx() as pytestmark:\n    pass", set(), id="a with target gives no marks"),
-    pytest.param("import foo as pytestmark", set(), id="an import alias gives no marks"),
-    pytest.param("from foo import bar as pytestmark", set(), id="an import-from alias gives no marks"),
-    pytest.param("def pytestmark(): ...", set(), id="a function definition gives no marks"),
-    pytest.param("class pytestmark: ...", set(), id="a class definition gives no marks"),
-    pytest.param("match x:\n    case [*pytestmark]:\n        pass", set(), id="a match star capture gives no marks"),
-    pytest.param("match x:\n    case {**pytestmark}:\n        pass", set(), id="a match mapping rest gives no marks"),
-    pytest.param("del pytestmark", set(), id="a deletion gives no marks"),
-    pytest.param("try:\n    pass\nexcept E as pytestmark:\n    pass", set(), id="an except name gives no marks"),
-    pytest.param("match x:\n    case pytestmark:\n        pass", set(), id="a match capture gives no marks"),
-    pytest.param("other = 1\nother.pytestmark = 2\nx = [pytestmark for pytestmark in y]", {"imports_adapter"}, id="no binding of the name in this scope leaves the mark"),
+MARK_SLOW = "pytestmark = pytest.mark.slow"
+BODY_MARKS = [
+    pytest.param(MARK_SLOW, {"slow"}, id="one plain binding reads"),
+    pytest.param("pytestmark: list = [pytest.mark.slow]", {"slow"}, id="one annotated binding reads"),
+    pytest.param("pytestmark = (pytest.mark.slow, pytest.mark.skip)", {"slow", "skip"}, id="one binding of a tuple of marks reads"),
+    pytest.param("pytestmark = other = pytest.mark.slow", {"slow"}, id="one chained binding reads"),
+    pytest.param(f"def helper():\n    pytestmark = pytest.mark.skip\n{MARK_SLOW}", {"slow"}, id="a binding inside a function is another scope"),
+    pytest.param(f"{MARK_SLOW}\n{MARK_SLOW}", set(), id="a second plain binding gives no marks"),
+    pytest.param(f"{MARK_SLOW}\npytestmark: list = [pytest.mark.skip]", set(), id="a second annotated binding gives no marks"),
+    pytest.param(f"{MARK_SLOW}\npytestmark += [pytest.mark.skip]", set(), id="an augmented binding gives no marks"),
+    pytest.param(f"{MARK_SLOW}\n(pytestmark := pytest.mark.skip)", set(), id="a walrus binding gives no marks"),
+    pytest.param(f"{MARK_SLOW}\nfor pytestmark in marks:\n    pass", set(), id="a for target gives no marks"),
+    pytest.param(f"{MARK_SLOW}\nwith ctx() as pytestmark:\n    pass", set(), id="a with target gives no marks"),
+    pytest.param(f"{MARK_SLOW}\nimport foo as pytestmark", set(), id="an import alias gives no marks"),
+    pytest.param(f"{MARK_SLOW}\ndel pytestmark", set(), id="a deletion gives no marks"),
+    pytest.param(f"{MARK_SLOW}\nmatch x:\n    case pytestmark:\n        pass", set(), id="a match capture gives no marks"),
+    pytest.param(f"{MARK_SLOW}\ntry:\n    pass\nexcept E as pytestmark:\n    pass", set(), id="an except name gives no marks"),
+    pytest.param(f"{MARK_SLOW}\npytestmark, other = make(), 1", set(), id="a tuple target gives no marks"),
+    pytest.param("if X:\n    pytestmark = pytest.mark.slow", set(), id="a binding inside an if gives no marks"),
+    pytest.param("try:\n    pytestmark = pytest.mark.slow\nexcept E:\n    pass", set(), id="a binding inside a try gives no marks"),
+    pytest.param("with ctx():\n    pytestmark = pytest.mark.slow", set(), id="a binding inside a with gives no marks"),
+    pytest.param("for _ in xs:\n    pytestmark = pytest.mark.slow", set(), id="a binding inside a for gives no marks"),
+    pytest.param("while X:\n    pytestmark = pytest.mark.slow", set(), id="a binding inside a while gives no marks"),
+    pytest.param("match x:\n    case _:\n        pytestmark = pytest.mark.slow", set(), id="a binding inside a match gives no marks"),
+    pytest.param("pytestmark = make_marks()", set(), id="a value that is no mark gives no marks"),
 ]
 
 
-@pytest.mark.parametrize(("rebinding", "expected"), REBINDING_FORMS)
-def test_any_later_binding_of_a_module_pytestmark_decides_as_in_pytest(rebinding, expected):
-    tree = ast.parse(f"pytestmark = pytest.mark.imports_adapter\n{rebinding}\n")
-    assert set(module_marks(tree)) == expected
+@pytest.mark.parametrize(("body", "expected"), BODY_MARKS)
+def test_a_module_reads_its_pytestmark_only_when_one_direct_binding_holds_it(body, expected):
+    assert set(module_marks(ast.parse(f"{body}\n"))) == expected
 
 
-@pytest.mark.parametrize(("rebinding", "expected"), REBINDING_FORMS)
-def test_any_later_binding_of_a_class_pytestmark_decides_as_in_pytest(rebinding, expected):
-    indented = textwrap.indent(rebinding, "    ")
-    tree = ast.parse(f"class TestA:\n    pytestmark = pytest.mark.imports_adapter\n{indented}\n    def test_a(self): ...\n")
+@pytest.mark.parametrize(("body", "expected"), BODY_MARKS)
+def test_a_class_reads_its_pytestmark_only_when_one_direct_binding_holds_it(body, expected):
+    tree = ast.parse(f"class TestA:\n{textwrap.indent(body, '    ')}\n    def test_a(self): ...\n")
     assert list(marks_by_test(tree)) == [expected]
-
-
-def test_an_alias_rebound_to_no_mark_gives_no_marks():
-    tree = ast.parse("a = pytest.mark.imports_adapter\na = 1\npytestmark = a\n")
-    assert module_marks(tree) == {}
 
 
 REGISTRATIONS = [
@@ -172,8 +116,6 @@ def test_a_project_registers_a_mark_in_the_markers_of_its_pytest_ini_options(pyp
         pytest.param("x = 1\n", None, id="not marked"),
         pytest.param("pytestmark = pytest.mark.anyio\n", None, id="another mark"),
         pytest.param("@pytest.mark.imports_adapter\ndef test_a(): ...\n", None, id="a test mark"),
-        pytest.param("pytestmark = pytest.mark.imports_adapter\npytestmark = pytest.mark.anyio\n", None, id="a later rebind drops it"),
-        pytest.param("pytestmark = pytest.mark.anyio\npytestmark = pytest.mark.imports_adapter\n", 2, id="a later rebind brings it, at its line"),
         pytest.param("def broken(:  # imports_adapter\n", None, id="a module that does not parse"),
     ],
 )
