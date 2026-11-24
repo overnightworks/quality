@@ -4,7 +4,7 @@ The contract's `source_modules` are the core and its `forbidden_modules` the ada
 its name mirrors, never by what it imports; its own import statements and those of the support modules it imports are
 judged against the one import graph the imports area builds. A core test imports no adapter, and a module marked
 `imports_adapter` is the one exception, which the baseline's `[adapter_imports]` table holds per test directory. Any other
-test module that reaches an adapter carries the registered `integration` mark. One pass reads both."""
+test module that reaches an adapter carries the registered `integration` mark in its module `pytestmark`. One pass reads both."""
 
 import ast
 from collections import Counter
@@ -26,7 +26,8 @@ FIX = "name the test after an adapter or composition module, or import no adapte
 REGISTRATION_FIX = f"register {pytest_marks.IMPORTS_ADAPTER} in [tool.pytest.ini_options] markers"
 INTEGRATION_REGISTRATION_FIX = f"register {pytest_marks.INTEGRATION} in [tool.pytest.ini_options] markers"
 INTEGRATION_FIX = f"put pytest.mark.{pytest_marks.INTEGRATION} in the module's one direct pytestmark binding"
-NO_TEST_FACT = f"no test read and the module is not marked {pytest_marks.INTEGRATION}"
+UNMARKED_FACT = f"module not marked {pytest_marks.INTEGRATION}"
+UNREGISTERED_FACT = f"{pytest_marks.INTEGRATION} is not registered"
 UNUSED_FACT = f"the {pytest_marks.IMPORTS_ADAPTER} mark exempts no adapter import"
 UNUSED_FIX = f"remove the {pytest_marks.IMPORTS_ADAPTER} mark"
 COUNT_FIX = "import no adapter in one of them, or move it into the integration suite"
@@ -198,20 +199,13 @@ def _registers(projects: Mapping[str, str], contents: Mapping[str, bytes], path:
 
 
 def _unmarked_findings(path: str, content: bytes, reds: list[tuple[layout.ModuleImport, set[_Red]]], registered: bool) -> list[Finding]:
-    """The finding of an adapter-bound test module in which a test no registered `integration` mark reaches, at its first
-    red statement; a module with no test to read or count is judged by its own `pytestmark`. A module with no red
-    statement is not adapter-bound."""
-    if not reds:
+    """The finding of an adapter-bound test module whose one direct module-level `pytestmark` binding does not carry the
+    registered `integration` mark, at its first red statement. A module with no red statement is not adapter-bound."""
+    if not reds or (registered and pytest_marks.INTEGRATION in pytest_marks.module_marks(ast.parse(python_text(content)))):
         return []
-    tree = ast.parse(python_text(content))
-    tests = [*pytest_marks.marks_by_test(tree), *pytest_marks.unseen_tests(tree)]
-    reached = [registered and pytest_marks.INTEGRATION in marks for marks in tests or [frozenset(pytest_marks.module_marks(tree))]]
-    if all(reached):
-        return []
-    tail = f"{reached.count(False)} of {len(tests)} tests not marked {pytest_marks.INTEGRATION}" if tests else NO_TEST_FACT
+    tail, fix = (UNMARKED_FACT, INTEGRATION_FIX) if registered else (UNREGISTERED_FACT, INTEGRATION_REGISTRATION_FIX)
     fact = SEPARATOR.join((f"imports {_words(set().union(*(found for _, found in reds)))}", tail))
     line = min(statement.line for statement, _ in reds)
-    fix = INTEGRATION_FIX if registered else INTEGRATION_REGISTRATION_FIX
     return [Finding(Rule.INTEGRATION_MARKER, path, line, fact, fix, event=FindingEvent.UNMARKED)]
 
 
@@ -222,8 +216,8 @@ def measure_adapter_imports(
     """One finding per import statement of a core test that is red, itself or through a support module it imports, unless
     the module's `pytestmark` holds the `imports_adapter` mark its project registers; that exempts the module, which
     counts toward its directory. A mark on a module the rule would not report is an `unused` finding at its `pytestmark`
-    line. One finding per other test module that reaches an adapter and has a test the registered `integration` mark does
-    not reach. Findings are sorted by path and line, the extents are the core tests and the other test modules judged.
+    line. One finding per other test module that reaches an adapter without the registered `integration` mark in its
+    `pytestmark`. Findings are sorted by path and line, the extents are the core tests and the other test modules judged.
     `contents` holds the bytes of `candidates`."""
     judgement = _Judgement(split, _reach(split, graph))
     imports = _Imports(layout.ImportTargets.support(modes), contents)

@@ -2,7 +2,6 @@
 
 import pytest
 
-from quality import suites
 from quality.report import FindingEvent, Unparsable
 from quality.rules import Area, Rule
 from tests.support.architecture import (
@@ -29,9 +28,9 @@ TEST_A = "def test_a(): ...\n"
 TEST_B = "\n\ndef test_b(): ...\n"
 MARKED_TEST = "@pytest.mark.integration\n" + TEST_A
 INHERITED = "class TestDb(Base): ...\n"
-SHARED = "class ShopCase(Base): ...\n"
 FACT = "imports shop.adapters · "
-NO_TEST = "no test read and the module is not marked integration"
+UNMARKED = FACT + "module not marked integration"
+UNREGISTERED = FACT + "integration is not registered"
 BROKEN = "def broken(:\n"
 
 
@@ -44,8 +43,8 @@ def unmarked(build_repo):
     return judge
 
 
-def red(fact: str) -> list[tuple[str, str, str]]:
-    return [(f"{NON_CORE}:1", fact, FIX)]
+def red(fact: str, fix: str = FIX) -> list[tuple[str, str, str]]:
+    return [(f"{NON_CORE}:1", fact, fix)]
 
 
 def read(findings) -> list[tuple[str, str, str]]:
@@ -135,153 +134,90 @@ def test_a_support_module_that_imports_an_adapter_binds_every_non_core_test_that
     assert [finding.path for finding in unmarked({**support, **named})] == [paths[index] for index in bound]
 
 
-def counted(k_of_n: str) -> list[tuple[str, str, str]]:
-    return red(f"{FACT}{k_of_n} tests not marked integration")
-
-
-MARKED_FORMS = [
-    pytest.param(MARK + TEST_A, [], id="a bare module mark"),
-    pytest.param("pytestmark = pytest.mark.integration()\n\n\n" + TEST_A, [], id="a called module mark"),
-    pytest.param("pytestmark = [pytest.mark.slow, pytest.mark.integration]\n\n\n" + TEST_A, [], id="a mark in a module list"),
-    pytest.param("layer = pytest.mark.integration\npytestmark = layer\n\n\n" + TEST_A, [], id="a module-level alias"),
-    pytest.param(MARKED_TEST + "\n\n" + MARKED_TEST.replace("test_a", "test_b"), [], id="a mark on each test"),
-    pytest.param("@pytest.mark.integration\nclass TestDb:\n    def test_a(self): ...\n", [], id="a mark on the enclosing class"),
-    pytest.param("class TestDb:\n    pytestmark = pytest.mark.integration\n\n    def test_a(self): ...\n", [], id="a class pytestmark"),
-    pytest.param(MARKED_TEST + TEST_B, counted("1 of 2"), id="a mark on one of two tests"),
-    pytest.param(
-        '@pytest.mark.parametrize("x", [pytest.param(1, marks=pytest.mark.integration)])\ndef test_a(x): ...\n', counted("1 of 1"),
-        id="a mark of a parameter set",
-    ),
-    pytest.param(MARK + MARK + TEST_A, counted("1 of 1"), id="a module that binds pytestmark twice"),
-    pytest.param("if True:\n    pytestmark = pytest.mark.integration\n\n\n" + TEST_A, counted("1 of 1"), id="a conditional module mark"),
-    pytest.param("pytestmark = pytest.mark.slow\n\n\n" + TEST_A, counted("1 of 1"), id="another mark"),
+MODULE_MARKS = [
+    pytest.param(MARK, id="a bare module mark"),
+    pytest.param("pytestmark = pytest.mark.integration()\n\n\n", id="a called module mark"),
+    pytest.param("pytestmark = [pytest.mark.slow, pytest.mark.integration]\n\n\n", id="a mark in a module list"),
+    pytest.param("pytestmark = (pytest.mark.slow, pytest.mark.integration)\n\n\n", id="a mark in a module tuple"),
+    pytest.param("layer = pytest.mark.integration\npytestmark = layer\n\n\n", id="a module-level alias"),
+]
+MODULE_CONTENTS = [
+    pytest.param(TEST_A, id="with its own tests"),
+    pytest.param(INHERITED, id="with an inherited suite"),
+    pytest.param("", id="with no test"),
 ]
 
 
-@pytest.mark.parametrize(("body", "expected"), MARKED_FORMS)
-def test_an_adapter_bound_module_is_clean_when_every_test_carries_the_mark_in_a_form_the_report_reads(unmarked, body, expected):
-    """INTEGRATION-4: the module is clean when the mark reaches every test; a mark only a run applies counts for none."""
-    assert read(unmarked({NON_CORE: BOUND + body})) == expected
+@pytest.mark.parametrize("contents", MODULE_CONTENTS)
+@pytest.mark.parametrize("mark", MODULE_MARKS)
+def test_a_module_mark_cleans_an_adapter_bound_module_whatever_it_holds(unmarked, mark, contents):
+    """INTEGRATION-4: pytest applies the module's mark to every item it collects there, so nothing is counted."""
+    assert unmarked({NON_CORE: BOUND + mark + contents}) == []
 
 
-UNSEEN = [
-    pytest.param(INHERITED, counted("1 of 1"), id="an inherited suite"),
-    pytest.param("@pytest.mark.integration\n" + INHERITED, [], id="an inherited suite marked by its decorator"),
-    pytest.param("class TestDb(Base):\n    pytestmark = pytest.mark.integration\n", [], id="an inherited suite marked by its pytestmark"),
-    pytest.param(MARK + INHERITED, [], id="an inherited suite marked by the module"),
-    pytest.param(MARKED_TEST + "\n\n" + INHERITED, counted("1 of 2"), id="an inherited suite beside a marked test"),
-    pytest.param("class TestDb(object):\n    def test_a(self): ...\n", counted("1 of 1"), id="object is no base"),
-    pytest.param(SHARED, counted("1 of 1"), id="an inherited suite whose name is no test class"),
-    pytest.param("@pytest.mark.integration\n" + SHARED, [], id="an inherited suite whose name is no test class, marked by its decorator"),
-    pytest.param(MARK + SHARED, [], id="an inherited suite whose name is no test class, marked by the module"),
-    pytest.param(MARKED_TEST + "\n\n" + SHARED, counted("1 of 2"), id="a helper class with a base beside a marked test"),
-    pytest.param("def make():\n    class Fake(Base): ...\n\n\n" + MARKED_TEST, [], id="a class with a base inside a function is no test class"),
+UNCLEAN = [
+    pytest.param(TEST_A, id="no mark"),
+    pytest.param("", id="no mark and no test"),
+    pytest.param(MARKED_TEST + "\n\n" + MARKED_TEST.replace("test_a", "test_b"), id="a mark on each test"),
+    pytest.param("@pytest.mark.integration\nclass TestDb:\n    def test_a(self): ...\n", id="a mark on the enclosing class"),
+    pytest.param("class TestDb:\n    pytestmark = pytest.mark.integration\n\n    def test_a(self): ...\n", id="a class pytestmark"),
     pytest.param(
-        "class TestOuter:\n    @pytest.mark.integration\n    def test_a(self): ...\n\n    class TestInner(Base): ...\n", counted("1 of 2"),
-        id="a nested inherited suite beside a marked test",
+        '@pytest.mark.parametrize("x", [pytest.param(1, marks=pytest.mark.integration)])\ndef test_a(x): ...\n',
+        id="the mark of a parameter set",
     ),
-    pytest.param(
-        "class TestOuter:\n    @pytest.mark.integration\n    def test_a(self): ...\n\n    class Shop(Base): ...\n", counted("1 of 2"),
-        id="a nested inherited suite whose name is no test class beside a marked test",
-    ),
-    pytest.param(
-        "from shop.core.config import Base\n\n\n@pytest.mark.integration\nclass ShopCase(Base): ...\n", counted("1 of 2"),
-        id="an imported base of an inherited suite marked by its decorator",
-    ),
-    pytest.param(
-        "from shop.core.config import Base\n\n\n" + MARK + "class ShopCase(Base): ...\n", [],
-        id="an imported base of an inherited suite marked by the module",
-    ),
-    pytest.param(
-        "from shop.core.config import Base\n\n\n@pytest.mark.integration\nclass TestOuter:\n    class Inner(Base): ...\n", counted("1 of 2"),
-        id="an imported base of a nested inherited suite marked by the enclosing class",
-    ),
-    pytest.param(
-        "from shop.core.config import Base\n\n\n@pytest.mark.integration\nclass TestOuter:\n    def test_a(self): ...\n\n    class Inner(Base): ...\n",
-        counted("1 of 3"), id="an imported base of a nested inherited suite inside a marked class",
-    ),
-    pytest.param("from shop.core.config import test_round\n\n\n" + MARKED_TEST, counted("1 of 2"), id="an imported test beside a marked test"),
-    pytest.param("from shop.core.config import test_round\n\n\n" + MARK + TEST_A, [], id="an imported test marked by the module"),
-    pytest.param("from shop.core.config import make as test_make\n", counted("1 of 1"), id="an import renamed to a test name"),
-    pytest.param("from shop.core.config import test_make as make\n", red(FACT + NO_TEST), id="an import renamed away from a test name"),
-    pytest.param("from shop.core.config import TestRound\n", counted("1 of 1"), id="an imported test class"),
-    pytest.param("from shop.core.config import *\n", counted("1 of 1"), id="a star import"),
-    pytest.param(MARK + "from shop.core.config import *\n", [], id="a star import marked by the module"),
-    pytest.param("@pytest.mark.integration\nclass TestDb:\n    def test_a(self): ...\n\n\n" + INHERITED, counted("1 of 2"), id="a decorator on another class"),
+    pytest.param(MARK + MARK + TEST_A, id="a module that binds pytestmark twice"),
+    pytest.param("if True:\n    pytestmark = pytest.mark.integration\n\n\n" + TEST_A, id="a conditional module mark"),
+    pytest.param("pytestmark = pytest.mark.slow\n\n\n" + TEST_A, id="another mark"),
 ]
 
 
-@pytest.mark.parametrize(("body", "expected"), UNSEEN)
-def test_a_test_the_source_does_not_show_counts_as_one_more_that_only_a_reaching_mark_marks(unmarked, body, expected):
-    """INTEGRATION-5: inherited suites, whatever their class is named, and imported tests stand beside the tests the reader sees."""
-    assert read(unmarked({NON_CORE: BOUND + body})) == expected
+@pytest.mark.parametrize("body", UNCLEAN)
+def test_an_adapter_bound_module_stays_red_without_one_direct_module_mark(unmarked, body):
+    """INTEGRATION-4: a mark on a test, a class or a class pytestmark, or a shape the reader does not read, cleans nothing."""
+    assert read(unmarked({NON_CORE: BOUND + body})) == red(UNMARKED)
 
 
-def test_a_test_the_source_does_not_show_moves_no_count_of_the_report():
-    """INTEGRATION-5, FLEET-120: the report counts the tests it reads, not the inherited or imported ones."""
-    module = "from shop.core.config import *\nfrom shop.core.config import test_round\n\n\nclass TestDb(Base): ...\n\n\n" + TEST_A
-    counted = suites.count_suites([NON_CORE], {NON_CORE: module.encode()})
-    assert sum(counted.layers.values()) == 1
-
-
-MODULE_ONLY = [
-    pytest.param(BOUND, None, FACT + NO_TEST, id="a module with no test"),
-    pytest.param(MARK + BOUND, None, None, id="a module with no test, marked"),
-    pytest.param(BOUND, ("unit: fast",), FACT + NO_TEST, id="a module with no test, unregistered"),
-]
-
-
-@pytest.mark.parametrize(("module", "markers", "fact"), MODULE_ONLY)
-def test_an_adapter_bound_module_with_no_test_is_clean_only_when_its_own_pytestmark_carries_the_mark(unmarked, module, markers, fact):
-    """INTEGRATION-6: a module in which no test is read or counted needs the module's own mark."""
-    findings = unmarked({NON_CORE: module}, markers=markers or REGISTERED)
-    assert [finding.fact for finding in findings] == ([] if fact is None else [fact])
-
-
+@pytest.mark.parametrize("marked", [pytest.param(MARK, id="a marked module"), pytest.param("", id="an unmarked one")])
 @pytest.mark.parametrize(
-    ("markers", "tests"),
-    [
-        pytest.param(("unit: fast",), MARKED_TEST + "\n\n" + MARKED_TEST.replace("test_a", "test_b"), id="a registration of another mark"),
-        pytest.param((), MARKED_TEST + "\n\n" + MARKED_TEST.replace("test_a", "test_b"), id="no registration"),
-    ],
+    "markers",
+    [pytest.param(("unit: fast",), id="a registration of another mark"), pytest.param((), id="no registration")],
 )
-def test_without_the_registration_no_mark_reaches_any_test_and_the_fix_registers_it(unmarked, markers, tests):
-    """INTEGRATION-7: the fact counts every test and the fix is the registration."""
-    findings = unmarked({NON_CORE: BOUND + tests}, markers=markers)
-    assert read(findings) == [(f"{NON_CORE}:1", f"{FACT}2 of 2 tests not marked integration", REGISTER)]
+def test_without_the_registration_every_adapter_bound_module_is_red_and_the_fix_registers_it(unmarked, markers, marked):
+    """INTEGRATION-5: marked or not, a module whose project does not register the mark is unclean."""
+    assert read(unmarked({NON_CORE: BOUND + marked + TEST_A}, markers=markers)) == red(UNREGISTERED, REGISTER)
 
 
 def test_a_mark_is_registered_by_the_pyproject_of_its_own_project(unmarked):
-    """INTEGRATION-7: the registration is the `pyproject.toml` of the project whose tests the module is in."""
+    """INTEGRATION-5: the registration is the `pyproject.toml` of the project whose tests the module is in."""
     member = {
         "tool/pyproject.toml": "", "tool/src/tool/__init__.py": "", "tool/src/tool/db.py": "",
-        "tool/tests/test_db.py": BOUND + MARKED_TEST,
+        "tool/tests/test_db.py": BOUND + MARK + TEST_A,
     }
     (finding,) = unmarked(member)
     assert (finding.location, finding.fix) == ("tool/tests/test_db.py:1", REGISTER)
 
 
 def test_one_finding_stands_at_the_first_red_statement_and_names_every_adapter_the_module_reaches(build_repo):
-    """INTEGRATION-8: one finding per module, at the line of its first red statement."""
+    """INTEGRATION-6: one finding per module, at the line of its first red statement."""
     web = {"src/shop/web/__init__.py": "", "src/shop/web/views.py": ""}
     module = "import pytest\n\nimport shop.core.config\nimport shop.web.views\nimport shop.adapters.db\n\n\n" + TEST_A
     forbidden = adapter_contract(forbidden=("shop.adapters", "shop.web"))
     repo = build_repo(shop_with_adapters({NON_CORE: module, **web}, forbidden, markers=REGISTERED))
     (finding,) = imports_findings(repo, Rule.INTEGRATION_MARKER)
-    assert (finding.location, finding.fact) == (f"{NON_CORE}:4", "imports shop.adapters, shop.web · 1 of 1 tests not marked integration")
+    assert (finding.location, finding.fact) == (f"{NON_CORE}:4", "imports shop.adapters, shop.web · module not marked integration")
 
 
 def test_a_finding_names_the_support_module_that_carried_the_adapter_and_prints_as_its_kind(build_repo, capsys):
-    """INTEGRATION-8: the fact is the words ADAPTERIMPORT-16 gives, then the count; the row is an `unmarked` one."""
+    """INTEGRATION-6: the fact is the words ADAPTERIMPORT-16 gives, then the verdict; the row is an `unmarked` one."""
     tests = {NON_CORE: "from tests.support import stores\n" + TEST_A, SUPPORT: ADAPTER_IMPORT}
     repo = build_repo(shop_with_adapters(tests, markers=REGISTERED))
     finding = assert_prints_as_kind(capsys, repo, Rule.INTEGRATION_MARKER, FindingEvent.UNMARKED, "shop.adapters")
-    assert (finding.fact, finding.fix) == (f"imports shop.adapters (through {SUPPORT}) · 1 of 1 tests not marked integration", FIX)
+    assert (finding.fact, finding.fix) == (f"imports shop.adapters (through {SUPPORT}) · module not marked integration", FIX)
 
 
 @pytest.mark.parametrize("body", [pytest.param(MARK + TEST_A, id="a marked module"), pytest.param(TEST_A, id="an unmarked one")])
 def test_a_module_that_reaches_no_adapter_is_no_finding_marked_or_not(unmarked, body):
-    """INTEGRATION-9: the mark on a module that is not adapter-bound is no finding of this rule."""
+    """INTEGRATION-7: the mark on a module that is not adapter-bound is no finding of this rule."""
     assert unmarked({NON_CORE: "import pytest\nimport shop.core.config\n\n\n" + body}) == []
 
 
@@ -300,7 +236,7 @@ def test_a_module_that_reaches_no_adapter_is_no_finding_marked_or_not(unmarked, 
     ],
 )
 def test_a_module_that_does_not_parse_refuses_the_rules_it_is_or_is_carried_by_and_only_those(build_repo, tests, refused):
-    """INTEGRATION-10: one read serves both rules, and each rule refuses for the modules it judges."""
+    """INTEGRATION-8: one read serves both rules, and each rule refuses for the modules it judges."""
     verdicts = check_result(build_repo(shop_with_adapters(tests, markers=REGISTERED)), named=[Area.IMPORTS]).verdicts
     assert {verdict.rule for verdict in verdicts if verdict.refusal is not None} == refused
     assert all(isinstance(verdict.refusal, Unparsable) for verdict in verdicts if verdict.refusal is not None)
@@ -314,27 +250,27 @@ def test_a_module_that_does_not_parse_refuses_the_rules_it_is_or_is_carried_by_a
     ],
 )
 def test_one_rules_refusal_never_silences_the_other_rule(build_repo, capsys, tests, judged_rule, judged_path):
-    """INTEGRATION-10: the rule a module does not refuse keeps its findings, and the run is exit 2."""
+    """INTEGRATION-8: the rule a module does not refuse keeps its findings, and the run is exit 2."""
     repo = build_repo(shop_with_adapters(tests, markers=REGISTERED))
     assert [finding.path for finding in imports_findings(repo, judged_rule)] == [judged_path]
     assert check_output(capsys, repo)[0] == 2
 
 
 def test_a_layout_declaration_for_the_rule_is_refused_like_any_rule_outside_the_layout_rules(build_repo, capsys):
-    """INTEGRATION-11: `[[layout.allow]]` names no path an unmarked module is excused for."""
+    """INTEGRATION-9: `[[layout.allow]]` names no path an unmarked module is excused for."""
     config = ONE_JOB + declaring(NON_CORE, rule="integration-marker")
     code, output = check_output(capsys, build_repo(shop_with_adapters({NON_CORE: BOUND + TEST_A, CONFIG: config})))
     assert (code, "[[layout.allow]] entry 1 needs rule as one of" in output, "integration-marker," in output) == (2, True, False)
 
 
 def test_the_integration_mark_exempts_nothing_from_adapter_import(build_repo):
-    """INTEGRATION-12: a core test that imports an adapter is red marked or not."""
+    """INTEGRATION-10: a core test that imports an adapter is red marked or not."""
     repo = build_repo(shop_with_adapters({CORE_TEST: "import pytest\n" + MARK + ADAPTER_IMPORT}, markers=REGISTERED))
     assert [finding.event for finding in adapter_findings(repo)] == [FindingEvent.ADAPTER_IMPORT]
 
 
 def test_the_adapter_mark_exempts_nothing_from_the_integration_marker(build_repo):
-    """INTEGRATION-12: `imports_adapter` marks a core test only, and a module of this rule is red under it."""
+    """INTEGRATION-10: `imports_adapter` marks a core test only, and a module of this rule is red under it."""
     module = BOUND + "pytestmark = pytest.mark.imports_adapter\n\n\n" + TEST_A
     repo = build_repo(shop_with_adapters({NON_CORE: module}, markers=(*REGISTERED, "imports_adapter: reads a real service")))
     assert [finding.path for finding in imports_findings(repo, Rule.INTEGRATION_MARKER)] == [NON_CORE]

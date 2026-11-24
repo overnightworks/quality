@@ -699,7 +699,7 @@ ADAPTER_CONTRACT_COLUMNS = pytest.mark.parametrize("column", ["adapter-import", 
     ids=["the contract with the id", "a contract without it", "no config", "two configs", "two contracts with the id"],
 )
 def test_the_adapter_contract_cells_follow_the_contract_the_config_holds(fleet_report, gate_clone, files, code, cell_words, column):
-    """FLEET-13, ADAPTERIMPORT-21, INTEGRATION-13: on main the cell reads enforced when the config holds the contract with the id."""
+    """FLEET-13, ADAPTERIMPORT-21, INTEGRATION-11: on main the cell reads enforced when the config holds the contract with the id."""
     result, output = fleet_report(gate_clone({**caller("./.github/workflows/gate.yml"), **files}), tags=first_releases())
     assert result == code, output
     assert cell(output, GATE_REPOSITORY, column) == cell_words
@@ -707,7 +707,7 @@ def test_the_adapter_contract_cells_follow_the_contract_the_config_holds(fleet_r
 
 @ADAPTER_CONTRACT_COLUMNS
 def test_the_adapter_contract_cells_say_not_released_under_a_tag(fleet_report, public, column):
-    """FLEET-19, ADAPTERIMPORT-21, INTEGRATION-13: only main has the rules."""
+    """FLEET-19, ADAPTERIMPORT-21, INTEGRATION-11: only main has the rules."""
     _, output = fleet_report(public("tagged", pinned_gate(NEWEST)), tags=first_releases())
     assert cell(output, "o/tagged", column) == "not released"
 

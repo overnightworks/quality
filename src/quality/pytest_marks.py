@@ -11,10 +11,7 @@ IMPORTS_ADAPTER = "imports_adapter"
 INTEGRATION = "integration"
 MARK_PREFIX = "pytest.mark."
 MODULE_MARKS = "pytestmark"
-STAR = "*"
 NO_MARKS: frozenset[str] = frozenset()
-TEST_CLASS_PREFIX = "Test"
-TEST_NAME_PREFIXES = (clones.TEST_NAME_PREFIX, TEST_CLASS_PREFIX)
 
 
 def _marks_named(node: ast.expr, aliases: dict[str, frozenset[str]]) -> frozenset[str]:
@@ -93,9 +90,9 @@ def module_marks(tree: ast.Module) -> dict[str, int]:
     return _own_marks(tree.body, _aliases(tree))
 
 
-def _marked_definitions(tree: ast.Module) -> Iterator[tuple[ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef, frozenset[str]]]:
-    """Each function and class of the module with the marks that reach it: its own, its enclosing classes' and the
-    module's `pytestmark`. A name a class body binds is no module alias inside that class."""
+def marks_by_test(tree: ast.Module) -> Iterator[frozenset[str]]:
+    """The marks that reach each test function: its own, its enclosing classes' and the module's `pytestmark`.
+    A name a class body binds is no module alias inside that class."""
     aliases = _aliases(tree)
     pending: list[tuple[ast.AST, frozenset[str], dict[str, frozenset[str]]]] = [(tree, frozenset(_own_marks(tree.body, aliases)), aliases)]
     while pending:
@@ -104,52 +101,13 @@ def _marked_definitions(tree: ast.Module) -> Iterator[tuple[ast.FunctionDef | as
             marks, child_visible = inherited, visible
             if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
                 marks = inherited.union(*(_marks_named(decorator, visible) for decorator in child.decorator_list))
-                if isinstance(child, ast.ClassDef):
-                    rebound = {name for scoped in _scope_nodes(child.body) for name in _bound_names(scoped)}
-                    child_visible = {name: held for name, held in visible.items() if name not in rebound}
-                    marks = marks.union(_own_marks(child.body, child_visible))
-                yield child, marks
+            if isinstance(child, ast.ClassDef):
+                rebound = {name for scoped in _scope_nodes(child.body) for name in _bound_names(scoped)}
+                child_visible = {name: held for name, held in visible.items() if name not in rebound}
+                marks = marks.union(_own_marks(child.body, child_visible))
+            if clones.is_test_function(child):
+                yield marks
             pending.append((child, marks, child_visible))
-
-
-def marks_by_test(tree: ast.Module) -> Iterator[frozenset[str]]:
-    """The marks that reach each test function: its own, its enclosing classes' and the module's `pytestmark`."""
-    return (marks for definition, marks in _marked_definitions(tree) if clones.is_test_function(definition))
-
-
-def unseen_tests(tree: ast.Module) -> Iterator[frozenset[str]]:
-    """The marks that can reach each test the module holds but its source does not show, beside `marks_by_test`: a class
-    with a base other than `object`, whatever its name, in the module's scope or nested in classes, has its tests from
-    the base, and only a mark reaching the class marks them; a name the module imports that starts with `test` or `Test`
-    or that such a class names as a base, and each star import, may bring tests that only the module's
-    `pytestmark` marks."""
-    scope_classes = list(_class_scope_classes(tree.body))
-    class_scope = {id(node) for node in scope_classes}
-    for definition, marks in _marked_definitions(tree):
-        if id(definition) in class_scope and any(not _is_object(base) for base in definition.bases):
-            yield marks
-    module = frozenset(module_marks(tree))
-    bases = {base.id for node in scope_classes for base in node.bases if isinstance(base, ast.Name)}
-    for statement in _scope_nodes(tree.body):
-        if isinstance(statement, ast.ImportFrom):
-            for imported in statement.names:
-                bound = imported.asname or imported.name
-                if bound.startswith((*TEST_NAME_PREFIXES, STAR)) or bound in bases:
-                    yield module
-
-
-def _class_scope_classes(body: list[ast.stmt]) -> Iterator[ast.ClassDef]:
-    """Every class of the module's scope and of the class bodies below it, none that a function encloses."""
-    bodies = [body]
-    while bodies:
-        for node in _scope_nodes(bodies.pop()):
-            if isinstance(node, ast.ClassDef):
-                yield node
-                bodies.append(node.body)
-
-
-def _is_object(base: ast.expr) -> bool:
-    return isinstance(base, ast.Name) and base.id == "object"
 
 
 def registers(pyproject: str, mark: str) -> bool:
