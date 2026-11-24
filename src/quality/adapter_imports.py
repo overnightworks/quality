@@ -154,15 +154,19 @@ def _module_findings(path: str, mark_line: int | None, reds: list[tuple[layout.M
 
 
 def _words(reds: set[_Red]) -> str:
-    """Each forbidden module once, with the support modules that carried it."""
-    carriers: dict[str, set[str]] = {}
+    """Each forbidden module once; with support carriers it also says `directly` where the statement is the module."""
+    carriers: dict[str, set[str | None]] = {}
     for red in reds:
-        carriers.setdefault(red.adapter, set())
-        if red.through is not None:
-            carriers[red.adapter].add(red.through)
-    return ", ".join(
-        f"{adapter} (through {', '.join(sorted(through))})" if through else adapter for adapter, through in sorted(carriers.items())
-    )
+        carriers.setdefault(red.adapter, set()).add(red.through)
+    return ", ".join(_carried(adapter, through) for adapter, through in sorted(carriers.items()))
+
+
+def _carried(adapter: str, through: set[str | None]) -> str:
+    support = sorted(path for path in through if path is not None)
+    if not support:
+        return adapter
+    ways = (["directly"] if None in through else []) + [f"through {', '.join(support)}"]
+    return f"{adapter} ({', '.join(ways)})"
 
 
 def measure_adapter_imports(

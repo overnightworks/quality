@@ -78,16 +78,12 @@ def test_a_core_test_is_red_for_an_import_that_is_or_reaches_an_adapter(red, con
 
 
 def test_a_finding_names_the_adapter_a_name_is_or_reaches_and_prints_as_its_kind(build_repo, capsys):
-    """ADAPTERIMPORT-16: the fact names the imported name and the forbidden module it is or reaches."""
+    """ADAPTERIMPORT-16: the fact names the forbidden module a name is or reaches."""
     repo = build_repo(shop_with_adapters({CORE_TEST: "import shop.main\nimport shop.adapters.db\n"}))
     assert [(finding.event, finding.fact) for finding in adapter_findings(repo)] == [
         (FindingEvent.ADAPTER_IMPORT, "imports shop.adapters"), (FindingEvent.ADAPTER_IMPORT, "imports shop.adapters"),
     ]
     assert check_output(capsys, repo)[0] == 1
-
-
-TWO_ADAPTERS = adapter_contract(forbidden=("shop.adapters", "shop.web"))
-WEB_FILES = {"src/shop/web/__init__.py": "", "src/shop/web/views.py": ""}
 
 
 @pytest.mark.parametrize(
@@ -100,8 +96,10 @@ WEB_FILES = {"src/shop/web/__init__.py": "", "src/shop/web/views.py": ""}
 )
 def test_a_finding_names_each_forbidden_module_once_per_statement(build_repo, content, expected):
     """ADAPTERIMPORT-16: one statement is one finding whose fact names each forbidden module once."""
-    files = {CORE_TEST: content, "src/shop/adapters/queries.py": "", **WEB_FILES}
-    (finding,) = adapter_findings(build_repo(shop_with_adapters(files, TWO_ADAPTERS)))
+    web = {"src/shop/web/__init__.py": "", "src/shop/web/views.py": ""}
+    files = {CORE_TEST: content, "src/shop/adapters/queries.py": "", **web}
+    forbidden = adapter_contract(forbidden=("shop.adapters", "shop.web"))
+    (finding,) = adapter_findings(build_repo(shop_with_adapters(files, forbidden)))
     assert finding.fact == expected
 
 
@@ -113,6 +111,13 @@ def test_a_finding_names_each_support_module_that_carried_a_forbidden_module_onc
     }
     (finding,) = adapter_findings(build_repo(shop_with_adapters(files)))
     assert finding.fact == f"imports shop.adapters (through tests/support/other.py, {SUPPORT})"
+
+
+def test_a_finding_keeps_a_direct_import_visible_beside_the_support_module_that_also_carried_it(build_repo):
+    """ADAPTERIMPORT-16: a statement that is a forbidden module and also reaches it through support names both."""
+    files = {CORE_TEST: "import tests.support.stores, shop.adapters.db\n", SUPPORT: "import shop.adapters.db\n"}
+    (finding,) = adapter_findings(build_repo(shop_with_adapters(files)))
+    assert finding.fact == f"imports shop.adapters (directly, through {SUPPORT})"
 
 
 def test_a_finding_prints_as_one_row_of_its_own_kind(build_repo, capsys):
