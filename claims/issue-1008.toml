@@ -1,5 +1,5 @@
 claim_id = "eafdfcf5c9db4fceb5101acf19ddcc5a"
-agent = "Claude eaac3b48-6964-423b-ac4c-dd8481e5f394"
+agent = "Claude 77a8e517-b14c-4dd2-ae51-ea6e6e345495"
 role = "builder"
 base = "3c642fc992d7687db03629aedc7c3f4a4fa8d71c"
 branch = "claude/issue-1008-integration-marker"
