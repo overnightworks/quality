@@ -247,11 +247,15 @@ def test_a_module_that_does_not_parse_refuses_the_rules_it_is_or_is_carried_by_a
     [
         pytest.param({CORE_TEST: ADAPTER_IMPORT, NON_CORE: BROKEN}, Rule.ADAPTER_IMPORT, CORE_TEST, id="a non-core test that does not parse"),
         pytest.param({CORE_TEST: BROKEN, NON_CORE: BOUND + TEST_A}, Rule.INTEGRATION_MARKER, NON_CORE, id="a core test that does not parse"),
+        pytest.param(
+            {NON_CORE: "import pytest\nfrom tests.support import stores\n\npytestmark = pytest.mark.imports_adapter\n", SUPPORT: BROKEN},
+            Rule.ADAPTER_IMPORT, NON_CORE, id="a support module that does not parse under a non-core test with an unused imports_adapter mark",
+        ),
     ],
 )
 def test_one_rules_refusal_never_silences_the_other_rule(build_repo, capsys, tests, judged_rule, judged_path):
     """INTEGRATION-8: the rule a module does not refuse keeps its findings, and the run is exit 2."""
-    repo = build_repo(shop_with_adapters(tests, markers=REGISTERED))
+    repo = build_repo(shop_with_adapters(tests, markers=(*REGISTERED, "imports_adapter: reaches a real service")))
     assert [finding.path for finding in imports_findings(repo, judged_rule)] == [judged_path]
     assert check_output(capsys, repo)[0] == 2
 

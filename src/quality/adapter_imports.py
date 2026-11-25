@@ -231,14 +231,15 @@ def measure_adapter_imports(
     refusals: dict[Rule, Unparsable] = {}
     for path in sorted(present):
         rule = Rule.ADAPTER_IMPORT if path in core else Rule.INTEGRATION_MARKER
+        line = pytest_marks.imports_adapter_line(contents[path])
+        if path not in core:
+            findings.extend(_module_findings(path, line, []))
         try:
             reds = [(statement, found) for statement in imports.of(path) if (found := judgement.reds(statement, imports.of))]
         except layout.UnparsableTestModule as error:
             refusals.setdefault(rule, Unparsable(str(error)))
             continue
-        line = pytest_marks.imports_adapter_line(contents[path])
         if path not in core:
-            findings.extend(_module_findings(path, line, []))
             unmarked.extend(_unmarked_findings(path, contents[path], reds, _registers(projects, contents, path, pytest_marks.INTEGRATION)))
         elif reds and line is not None and _registers(projects, contents, path, pytest_marks.IMPORTS_ADAPTER):
             counts[adapter_directory(path)] += 1
