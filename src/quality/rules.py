@@ -51,6 +51,7 @@ RELEASE_0_23 = "v0.23.0"
 RELEASE_0_24 = "v0.24.0"
 RELEASE_0_25 = "v0.25.0"
 RELEASE_0_26 = "v0.26.0"
+RELEASE_0_27 = "v0.27.0"
 
 
 class Area(StrEnum):
@@ -88,7 +89,7 @@ class Rule(StrEnum):
     TEST_TWIN = "test-twin", Area.DEBT, RELEASE_0_23, Switch.REPORT_ONLY
     SPEC_CITATION = "spec-citation", Area.DEBT, RELEASE_0_25, Switch.REPORT_ONLY, SwitchChange(RELEASE_0_26, Switch.SPEC_TABLE)
     IMPORT_CONTRACT = "import-contract", Area.IMPORTS, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
-    ADAPTER_IMPORT = "adapter-import", Area.IMPORTS, None, Switch.ADAPTER_CONTRACT
+    ADAPTER_IMPORT = "adapter-import", Area.IMPORTS, RELEASE_0_27, Switch.ADAPTER_CONTRACT
     INTEGRATION_MARKER = "integration-marker", Area.IMPORTS, None, Switch.ADAPTER_CONTRACT
     CLAUDE_MD = "claude-md", Area.FILES, RELEASE_0_3, Switch.ALWAYS
     AGENTS_MD = "agents-md", Area.FILES, RELEASE_0_11, Switch.ALWAYS
