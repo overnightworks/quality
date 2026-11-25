@@ -71,9 +71,9 @@ def test_the_help_stands_in_its_frame(capsys):
         "  check [AREA ...] [--staged] [--fix] [--dry-run]\n"
         "      Check this repository against the fleet's rules, with the quality\n"
         "      release its gate pins.\n"
-        "  merge OWNER/REPO#N [--dry-run]\n"
-        "      Operator only: merge one pull request whose gate is red only for\n"
-        "      legacy findings or loosenings he ruled, after he types yes.\n"
+        "  merge OWNER/REPO#N [OWNER/REPO#N ...] [--dry-run]\n"
+        "      Operator only: merge pull requests whose gate is red only for legacy\n"
+        "      findings or loosenings he ruled, each after he types yes.\n"
         "  report\n"
         "      Measure every fleet repository: size, debt, the gate release it pins.\n"
         "\n"
@@ -101,10 +101,11 @@ def test_the_help_stands_in_its_frame(capsys):
 def test_the_merge_help_stands_in_its_frame(capsys):
     """HELP-4: the merge help stands in a frame of its own."""
     assert help_of(capsys, ["merge"]) == (
-        "usage: quality merge OWNER/REPO#N [--dry-run] [-v]\n"
+        "usage: quality merge OWNER/REPO#N [OWNER/REPO#N ...] [--dry-run] [-v]\n"
         "\n"
-        "Operator only: merge one pull request whose gate is red only for legacy\n"
-        "findings or loosenings he ruled, after he types yes.\n"
+        "Operator only: merge pull requests whose gate is red only for legacy findings\n"
+        "or loosenings he ruled, each after he types yes. Several names run one after\n"
+        "the other, each as a run of its own.\n"
         "\n"
         "Options:\n"
         "  --dry-run   show the rows, then stop before the question: nothing changes,\n"
@@ -140,18 +141,21 @@ def test_the_report_help_stands_in_its_frame(capsys):
 
 
 @pytest.mark.parametrize(
-    ("words", "dry_run", "verbose"),
+    ("words", "numbers", "dry_run", "verbose"),
     [
-        pytest.param(["acme/widgets#7"], False, False, id="name alone"),
-        pytest.param(["acme/widgets#7", "--dry-run"], True, False, id="dry run after"),
-        pytest.param(["--dry-run", "acme/widgets#7"], True, False, id="dry run before"),
-        pytest.param(["-v", "acme/widgets#7", "--dry-run"], True, True, id="every flag"),
+        pytest.param(["acme/widgets#7"], [7], False, False, id="name alone"),
+        pytest.param(["acme/widgets#7", "--dry-run"], [7], True, False, id="dry run after"),
+        pytest.param(["--dry-run", "acme/widgets#7"], [7], True, False, id="dry run before"),
+        pytest.param(["-v", "acme/widgets#7", "--dry-run"], [7], True, True, id="every flag"),
+        pytest.param(["acme/widgets#7", "acme/widgets#9"], [7, 9], False, False, id="two names"),
+        pytest.param(["acme/widgets#7", "--dry-run", "acme/widgets#9", "-v"], [7, 9], True, True, id="flags between names"),
     ],
 )
-def test_the_merge_invocation_names_the_pull_request_and_how(words, dry_run, verbose):
-    """MERGE-53: the door takes a pull request name, with --dry-run before or after it, and -v."""
+def test_the_merge_invocation_names_the_pull_requests_and_how(words, numbers, dry_run, verbose):
+    """MERGE-53, MERGE-108: the door takes pull request names in the order given, with --dry-run and -v anywhere among them."""
     arguments = cli.read_invocation(["merge", *words])
-    assert (arguments.pull_request, arguments.dry_run, arguments.verbose) == (cli.PullRequestName("acme/widgets", 7), dry_run, verbose)
+    names = [cli.PullRequestName("acme/widgets", number) for number in numbers]
+    assert (arguments.pull_requests, arguments.dry_run, arguments.verbose) == (names, dry_run, verbose)
 
 
 def test_the_check_help_stands_in_its_frame(capsys):
@@ -485,7 +489,6 @@ def test_a_closed_stdout_takes_no_help_and_exit_is_0(tmp_path):
         pytest.param(
             ["merge", "acme/widg\u0435ts#7"], (), "no pull request acme/widg\u0435ts#7{sep}a pull request reads OWNER/REPO#N", "quality merge", id="a lookalike name"
         ),
-        pytest.param(["merge", "acme/widgets#7", "acme/widgets#8"], (), "unknown argument{sep}acme/widgets#8", "quality merge", id="two pull requests"),
         pytest.param(["merge", "acme/widgets#7", "--dry"], (), "unknown argument{sep}--dry", "quality merge", id="an abbreviated dry run"),
         pytest.param(["merge", "acme/widgets#7", "--verbose"], (), "unknown argument{sep}--verbose", "quality merge", id="the long form of the merge flag"),
         pytest.param(

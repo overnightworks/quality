@@ -271,6 +271,24 @@ otherwise (a folder without permission, a repository git refuses) `error: . is n
 A folder outside the home folder, or any folder where no home folder is known, stands as its absolute path (CLOSING-25).
 No run that cannot start ends in a traceback (CLOSING-26).
 
+## A merge run over several names
+
+A `quality merge` run over several names prints each child's own rows, closing line and pair as a run for that name
+alone prints them (MERGE-111), and its own lines around them, in the grammar of [Rows](#rows):
+
+- Before each child one note row `· <n> of <total>  judging  <name>`, `<name>` the fact (MERGE-110).
+- At the end one row per name in the order named, the name its subject and the event what the child's exit says
+  (MERGE-111): `✓ merged`, `~ would merge` (a dry run), `! not merged` (exit `1`), `! interrupted`, `✗ stopped`
+  (exit `2`), `✗ killed  signal <n>` and `· not run`.
+- Then one closing line or one pair (MERGE-111, MERGE-112, MERGE-117): `✓ merged <n> of <n> · <duration>`, or
+  `~ dry run · would merge <n> of <n> · nothing changed`, or the pair `error: merged <m> of <n> · <k> not merged ·
+  nothing changed` with `next: quality merge <names not merged>`, or the pair of a run that stopped, which begins
+  `stopped at <name>` (a child's exit `2`) or `quality_gate MAY STILL BE OFF on <owner/repo>` (a child killed by a
+  signal) and names under `next:` first the step to take at once, then `quality merge <names not run>` (MERGE-112,
+  MERGE-114). An interrupted run ends with its rows and no pair (MERGE-113).
+- The exit is the worst of the children's: `2` beats `130` beats `1` beats `0` (MERGE-118), so an interrupted run never
+  exits `0` or `1`.
+
 ## Refusals
 
 A refused area is its `✗` row (REFUSAL-1), which carries no extent (REFUSAL-2), and a [pair on stderr](#streams),
