@@ -255,7 +255,7 @@ def test_a_module_that_does_not_parse_refuses_the_rules_it_is_or_is_carried_by_a
 )
 def test_one_rules_refusal_never_silences_the_other_rule(build_repo, capsys, tests, judged_rule, judged_path):
     """INTEGRATION-8: the rule a module does not refuse keeps its findings, and the run is exit 2."""
-    repo = build_repo(shop_with_adapters(tests, markers=(*REGISTERED, "imports_adapter: reaches a real service")))
+    repo = build_repo(shop_with_adapters(tests))
     assert [finding.path for finding in imports_findings(repo, judged_rule)] == [judged_path]
     assert check_output(capsys, repo)[0] == 2
 
