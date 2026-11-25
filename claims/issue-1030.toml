@@ -1,0 +1,8 @@
+claim_id = "42115aeb4a2c4f2db0536926d21c4935"
+agent = "Claude 77a8e517-b14c-4dd2-ae51-ea6e6e345495"
+role = "builder"
+base = "9cc46a35d4fa874e96d0fc45e5c4871e06e093ec"
+branch = "claude/issue-1030-cover-parsing-modules"
+scope = ["pyproject.toml", "src/quality/catalog_rules.py", "src/quality/compose.py", "src/quality/layout.py", "src/quality/locator_text.py", "src/quality/run_script.py", "src/quality/sonar_scanner.py", "src/quality/typescript_tokens.py", "src/quality/vitest_random.py", "tests"]
+opened_commit = "2a109cf0e15f0ff2e34b78c4ce7f6ac64f08845d"
+whole_reason = "One class of site (parsers) with one kind of answer per site and one floor value; each module alone is a few lines."
