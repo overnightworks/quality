@@ -1,6 +1,6 @@
 import pytest
 
-from quality.run_script import Tool, segments, tool_arguments
+from quality.run_script import ScriptLine, Tool, logical_lines, segments, tool_arguments, with_env_strings_split
 
 PYTEST = Tool(commands=frozenset({"pytest", "py.test"}), module="pytest")
 PLAYWRIGHT = Tool(commands=frozenset({"playwright"}), module="playwright")
@@ -67,6 +67,8 @@ def test_a_c_string_the_reader_cannot_split_is_refused():
         (["./.venv/bin/pytest", "x"], ("x",)),
         (["python", "-m", "pytest", "-n", "2"], ("-n", "2")),
         (["python3.14", "-W", "error", "-m", "pytest"], ()),
+        (["python", "-u"], None),
+        (["python", "-W", "error"], None),
         (["uv", "run", "--locked", "pytest", "-q"], ("-q",)),
         (["uv", "run", "python", "-m", "pytest"], ()),
         (["uvx", "pytest@8", "-q"], ("-q",)),
@@ -114,3 +116,29 @@ def test_the_arguments_of_a_pytest_call_follow_the_command_the_module_or_a_runne
 def test_the_arguments_of_a_playwright_call_follow_the_command_the_module_or_a_runner(words, expected):
     """RUNTIME-3."""
     assert tool_arguments(words, PLAYWRIGHT) == expected
+
+
+@pytest.mark.parametrize(
+    ("physical", "expected"),
+    [
+        ([("pytest -q \\", 3), ("  tests", 4)], [ScriptLine("pytest -q   tests", 3, 4)]),
+        ([("pytest -q \\", 3)], [ScriptLine("pytest -q ", 3, 3)]),
+    ],
+    ids=["a backslash joins the next line", "a backslash on the last line joins nothing"],
+)
+def test_a_line_ending_in_a_backslash_is_one_command_from_its_first_line(physical, expected):
+    """PYTEST-2."""
+    assert list(logical_lines(physical)) == expected
+
+
+@pytest.mark.parametrize(
+    ("words", "expected"),
+    [
+        (["env", "-S", "a b", "c"], ["env", "a", "b", "c"]),
+        (["env", "-S"], ["env"]),
+    ],
+    ids=["the value is split in place", "a flag without a value"],
+)
+def test_the_value_of_env_s_is_read_as_the_words_it_splits_into(words, expected):
+    """PYTEST-3."""
+    assert with_env_strings_split(words) == expected

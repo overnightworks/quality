@@ -455,6 +455,7 @@ def test_a_symbolic_link_that_stays_inside_the_folder_installs(scene, drive):
         links=(
             (f"{FOLDER}/bin/launcher", "sonar-scanner"), (f"{FOLDER}/lib/current", "../bin/sonar-scanner"),
             (f"{FOLDER}/lib/again", "current"), (f"{FOLDER}/bin/deep/up", "../../lib/again"),
+            (f"{FOLDER}/lib/dotted", "./../bin//sonar-scanner"),
         )
     )
     assert drive()[0] == 0

@@ -40,6 +40,8 @@ def project(files: dict[str, str]) -> dict[str, str]:
              {"tests/conftest.py": "", "tests/x.py": "from . import conftest\n"}, ["tests/x.py:1"]),
         case("relative conftest above",
              {"tests/conftest.py": "", "tests/support/x.py": "from ..conftest import z\n"}, ["tests/support/x.py:1"]),
+        case("a relative import that climbs above the root is no module",
+             {"tests/conftest.py": "", "tests/x.py": "from ... import conftest\n"}, []),
         case("relative support module", {"tests/support/y.py": "", "tests/support/x.py": "from .y import z\n"}, []),
         case("a relative name matches only the exact path",
              {"tests/test_a.py": "", "tests/support/x.py": "from .test_a import y\n"}, []),

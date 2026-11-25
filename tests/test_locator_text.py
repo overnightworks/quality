@@ -432,6 +432,7 @@ def test_each_literal_of_a_multi_line_call_is_a_finding_at_its_own_line(build_re
         "page.locator('Abbrechen');\n",
         "page.getByteTimeDomainData('Abbrechen');\n",
         "page.getByText(`${label}`);\n",
+        "page.getByText('Abbrechen'\n",
     ],
     ids=[
         "template with a hole", "unanchored regex", "regex anchored at the start only", "regex anchored at the end only",
@@ -439,7 +440,7 @@ def test_each_literal_of_a_multi_line_call_is_a_finding_at_its_own_line(build_re
         "index", "ternary branch", "ternary else branch", "arrow comparison", "concatenation", "role", "another text", "test id", "toBe",
         "data attribute", "attribute name unknown", "attribute name is the text", "toHaveValue", "let", "var", "const declared twice",
         "const and function", "const and class", "function-local const", "const concatenation", "const list", "typed const",
-        "dynamic name", "locator selector", "not a locator", "hole alone",
+        "dynamic name", "locator selector", "not a locator", "hole alone", "a literal in a call that never closes",
     ],
 )
 def test_scenario_data_and_every_other_script_value_is_no_site(build_repo, scenario, source):
@@ -494,6 +495,7 @@ def test_scenario_data_and_every_other_script_value_is_no_site(build_repo, scena
         "const a = this.#in?.#of / 2; // it's\n",
         "const a = [...await /'/.source];\n",
         "const a = [...yield /'/.source];\n",
+        "!/'/.test(y);\n",
     ],
     ids=[
         "quote in a regex", "quote in a comment", "slash in a class", "divisions", "division after parentheses",
@@ -509,7 +511,7 @@ def test_scenario_data_and_every_other_script_value_is_no_site(build_repo, scena
         "regex after a with head", "regex after a head with nested parentheses",
         "division after the parentheses of a property named like a head keyword",
         "division after a private field named like a keyword", "division after a chain of private fields named like keywords",
-        "regex after a spread await", "regex after a spread yield",
+        "regex after a spread await", "regex after a spread yield", "regex after a not that starts the file",
     ],
 )
 def test_a_valid_file_is_read_to_its_last_site_whatever_comes_first(build_repo, scenario, prefix):
