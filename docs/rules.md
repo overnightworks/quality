@@ -336,7 +336,7 @@ It applies these rules:
   and `adapter-import` judge that one read. A read that cannot judge refuses both, a rule's own refusal only that rule,
   and grimp's warnings print once, as `import-contract`'s note rows (IMPORT-25) (ADAPTERIMPORT-20). The
   [fleet matrix](commands.md#quality-report) cell reads `enforced` when the repository's config holds the contract with
-  the id, `no adapter contract` otherwise, and `not in <tag>` under a pin below v0.27.0, where the rule first ships
+  the id, `no adapter contract` otherwise, and `not in <tag>` under a pin below v0.27.0. It first ships in v0.27.0
   (ADAPTERIMPORT-21).
 
   Ruled by the operator: a core test is exempt only through the registered module marker `imports_adapter`, counted per
