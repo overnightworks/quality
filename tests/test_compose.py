@@ -24,16 +24,18 @@ from tests.support.merge import ONE_JOB
 
 
 @pytest.mark.parametrize(
-    ("body", "code"),
+    ("body", "code", "open_ports"),
     [
-        ('services:\n  web:\n    image: x\n    ports: !override\n      - "127.0.0.1:80:80"\n    profiles: !reset []\n', 0),
-        ('services:\n  web: !override\n    image: x\n    ports:\n      - "0.0.0.0:80:80"\n', 1),
+        ('services:\n  web:\n    image: x\n    ports: !override\n      - "127.0.0.1:80:80"\n    profiles: !reset []\n', 0, 0),
+        ('services:\n  web: !override\n    image: x\n    ports:\n      - "0.0.0.0:80:80"\n', 1, 1),
     ],
     ids=["a list under a tag", "a mapping under a tag"],
 )
-def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys, body, code):
+def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys, body, code, open_ports):
     """COMPOSE-8: valid Compose YAML tags are read, and their ports still checked."""
-    assert run(capsys, build_repo({"compose.yaml": body}))[0] == code
+    repo = build_repo({"compose.yaml": body})
+    exit_code, output = run(capsys, repo)
+    assert (exit_code, len(rule_findings(repo, Rule.COMPOSE_PORT)), is_clean(output)) == (code, open_ports, code == 0)
 
 
 @pytest.mark.parametrize("tagged", ["!reset null", "!reset []"], ids=["null", "empty-list"])
