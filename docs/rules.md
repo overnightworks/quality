@@ -1024,25 +1024,25 @@ the top mapping or `on:`, are exit `2` naming the file (PRWORKFLOW-6). The clean
 the rule's extent is the number of pull-request workflows. No configuration switches the rule off. It first ships in v0.23.0, so a gate pinned below that release shows
 `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `enforced` (FLEET-18).
 
-The `pytest-workers` rule judges every pytest call that runs tests in a `run:` step of every tracked workflow, whether or
-not a pull request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a composite
-action is not (PYTEST-1). The script is never run. The value is read line by line, as the shell reads it: a literal
-block scalar at each file line, a folded or quoted one with each line break kept at the scalar's first line; each `${{
-}}` on a line becomes one dynamic word; a line ending in a backslash joins the next, and one that ends the script joins nothing; a `#` that starts a word outside
-quotes ends the command text; a pair of backticks that no quote or backslash protects is read as `$(` and `)`, and a
-last backtick left without a partner on the line is read as `$(` when a word follows it (a substitution that spans
-lines) and dropped otherwise; the words are split by Python's `shlex`, and `&&`, `||`, `;`, `|`, `&`, `(` and `)`,
-also one glued to `<` or `>`, end a segment. A word that holds `$(` is split again the same way,
-so `"$(pytest -q)"` reads as `$(pytest -q)` (PYTEST-2). The string after the `-c` flag of `sh`, `bash`, `dash`, `zsh` or
-`ksh` is taken whole, substitutions included, before it is split, and is read as a script of its own by the same reader;
-its segments stand after the shell's. The shell's flags are read only before its first operand: a flag is a word that
-starts with a dash or a plus sign, and `-o`, `+o`, `-O`, `+O` and `--rcfile` and `--init-file` take the next word as their
-value (so does any flag that ends in `o` or `O`, as `-eo`).
-A lone `-` or `--` ends the flags, and the word after it is the first operand. A `-c` flag is a single-dash word that
-holds the letter `c`, so `-c`, `-ec` and `-lc` count, and the first operand after one is the string. A string the reader
-cannot split to its end is `invalid` where the run holds the word `pytest` (PYTEST-6); `bash run.sh -c 'pytest -q'`
-reads no code, since its first operand is the script's name, and `bash -- -c 'pytest -q'` reads none either, since its
-first operand is `-c` (PYTEST-2).
+The `pytest-workers` rule judges every pytest call that runs tests in a `run:` step of every tracked workflow, whether
+or not a pull request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a
+composite action is not (PYTEST-1). The script is never run. The value is read line by line, as the shell reads it: a
+literal block scalar at each file line, a folded or quoted one with each line break kept at the scalar's first line;
+each `${{ }}` on a line becomes one dynamic word; a line ending in a backslash joins the next, and one that ends the
+script joins nothing; a `#` that starts a word outside quotes ends the command text; a pair of backticks that no quote
+or backslash protects is read as `$(` and `)`, and a last backtick left without a partner on the line is read as `$(`
+when a word follows it (a substitution that spans lines) and dropped otherwise; the words are split by Python's `shlex`,
+and `&&`, `||`, `;`, `|`, `&`, `(` and `)`, also one glued to `<` or `>`, end a segment. A word that holds `$(` is split
+again the same way, so `"$(pytest -q)"` reads as `$(pytest -q)` (PYTEST-2). The string after the `-c` flag of `sh`,
+`bash`, `dash`, `zsh` or `ksh` is taken whole, substitutions included, before it is split, and is read as a script of
+its own by the same reader; its segments stand after the shell's. The shell's flags are read only before its first
+operand: a flag is a word that starts with a dash or a plus sign, and `-o`, `+o`, `-O`, `+O` and `--rcfile` and
+`--init-file` take the next word as their value (so does any flag that ends in `o` or `O`, as `-eo`). A lone `-` or `--`
+ends the flags, and the word after it is the first operand. A `-c` flag is a single-dash word that holds the letter `c`,
+so `-c`, `-ec` and `-lc` count, and the first operand after one is the string. A string the reader cannot split to its
+end is `invalid` where the run holds the word `pytest` (PYTEST-6); `bash run.sh -c 'pytest -q'` reads no code, since its
+first operand is the script's name, and `bash -- -c 'pytest -q'` reads none either, since its first operand is `-c`
+(PYTEST-2).
 
 A segment is a pytest call when its command word, after assignments (`VAR=value`), `env`, `sudo`, `timeout`, `nice` and
 `xargs` with their flags and operands, `time`, `exec`, `command`, `nohup` and the shell keywords `if`, `then`, `elif`,
