@@ -125,6 +125,10 @@ class Measure:
     integration: RuleResult
     refusals: Mapping[Rule, Unparsable]
 
+    def of(self, rule: Rule) -> Measure | Unparsable:
+        """What stands in the place of this measure for `rule`: its refusal, else the measure."""
+        return self.refusals.get(rule, self)
+
 
 def candidates(modes: Mapping[str, str]) -> list[str]:
     """The files the rule reads: the imports of each test and the `pyproject.toml` of each project that holds tests."""

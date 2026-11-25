@@ -165,7 +165,7 @@ def _measured_rule(inputs: RunInputs, read: architecture.ContractsRead | None, r
     measure = inputs.adapter_measure
     if measure is None:
         return RuleResult([], 0, read is None)
-    return measure if isinstance(measure, CannotJudge) else measure.refusals.get(rule, measure)
+    return measure if isinstance(measure, CannotJudge) else measure.of(rule)
 
 
 def check_adapter_imports(inputs: RunInputs, read: architecture.ContractsRead | None) -> Judged:
@@ -605,7 +605,7 @@ def _adapter_counts(inputs: RunInputs) -> Callable[[], Mapping[str, int] | None]
 
     def counts() -> Mapping[str, int] | None:
         measure = _required(inputs.adapter_measure)
-        return None if measure is None else _required(measure.refusals.get(Rule.ADAPTER_IMPORT, measure)).counts
+        return None if measure is None else _required(measure.of(Rule.ADAPTER_IMPORT)).counts
 
     return counts
 
