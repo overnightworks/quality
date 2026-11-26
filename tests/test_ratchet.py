@@ -102,6 +102,8 @@ def test_a_file_python_can_read_is_measured_in_its_declared_encoding(build_repo,
     assert note_rows(output, SOURCE_NAME) == [], output
 
 
+OPERATOR_CHAIN = b"x = " + b" + ".join([b"1"] * 200_000) + b"\n"
+
 NOT_PYTHON = pytest.mark.parametrize(
     "source",
     [
@@ -112,7 +114,7 @@ NOT_PYTHON = pytest.mark.parametrize(
         b'print "py2"\n',
         b"# coding: rot13\nx = 1\n",
         b"# coding: base64_codec\nx = 1\n",
-        b"x = " + b" + ".join([b"1"] * 200_000) + b"\n",
+        OPERATOR_CHAIN,
     ],
     ids=[
         "undecodable-utf-8",
@@ -137,9 +139,8 @@ def test_without_a_baseline_the_size_rule_notes_a_file_python_cannot_read_and_py
     code, output = run(capsys, repo)
     assert code == 2, output
     assert list(refusals(repo)) == [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT]
-    assert all(
-        re.search(rf"(cannot read|ruff cannot parse) {re.escape(SOURCE_NAME)}|ruff exited", reason) for reason in refusals(repo).values()
-    )
+    expected = r"ruff exited" if source is OPERATOR_CHAIN else rf"(cannot read|ruff cannot parse) {re.escape(SOURCE_NAME)}"
+    assert all(re.search(expected, reason) for reason in refusals(repo).values())
     (note,) = rule_notes(repo, Rule.SIZE)
     assert (note.path, note.event) == (SOURCE_NAME, NoteEvent.NOT_MEASURED)
     assert [(row.event, row.fact) for row in note_rows(output, SOURCE_NAME)] == [(note.event, note.fact)], output

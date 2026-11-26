@@ -161,7 +161,8 @@ def area_of(path: str) -> Area:
 
 
 class FunctionSource(Enum):
-    """What reads a file's functions, and so why it cannot be read: Python's parser or a script's UTF-8 text and nesting depth."""
+    """What reads a file's functions, and so why it cannot be read:
+    Python's parser or a script's UTF-8 text and nesting depth."""
 
     PYTHON = "not valid Python"
     SCRIPT = "not UTF-8"
@@ -189,8 +190,8 @@ def function_source(path: str) -> FunctionSource | None:
 
 @dataclass(frozen=True)
 class TreeMeasurement:
-    """Every file's lines, and the functions of every Python file Python can parse and every script file that is UTF-8 and not nested too deeply;
-    `unparsable` maps the rest of those files to why."""
+    """Every file's lines, and the functions of every Python file Python can parse and every script file that is
+    UTF-8 and not nested too deeply; `unparsable` maps the rest of those files to why."""
 
     measurements: Measurements
     unparsable: dict[str, Unparsed]
@@ -222,8 +223,15 @@ def measure(sources: dict[str, bytes]) -> TreeMeasurement:
 
 
 def _unparsed_source(path: str, error: Exception) -> FunctionSource:
+    """A script file is unreadable only as non-UTF-8 text or as nested too deeply; any other error from it escapes."""
     source = function_source(path)
-    return FunctionSource.SCRIPT_TOO_DEEP if source is FunctionSource.SCRIPT and isinstance(error, RecursionError) else source
+    if source is not FunctionSource.SCRIPT:
+        return source
+    if isinstance(error, RecursionError):
+        return FunctionSource.SCRIPT_TOO_DEEP
+    if isinstance(error, UnicodeDecodeError):
+        return source
+    raise error
 
 
 def _functions_of(path: str, source: bytes) -> Iterator[tuple[Key, Measured]]:
