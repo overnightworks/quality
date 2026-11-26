@@ -178,11 +178,12 @@ def test_a_name_that_leads_nowhere_is_not_on_disk(arranged, arrange, on_disk):
 
 
 @NEEDS_PERMISSIONS
-def test_a_name_the_filesystem_refuses_to_reach_is_an_error(arranged, repo):
+@pytest.mark.parametrize("ask", [repository.is_on_disk, repository.is_symlink], ids=["is_on_disk", "is_symlink"])
+def test_a_name_the_filesystem_refuses_to_reach_is_an_error(arranged, repo, ask):
     """A name behind a directory without permission cannot be reached, named without a path."""
     locked_repo = arranged(directory_without_permission)
     with pytest.raises(RepositoryFileError) as raised:
-        repository.is_on_disk(locked_repo, NAME)
+        ask(locked_repo, NAME)
     assert str(raised.value) == f"cannot reach {NAME}: [Errno 13] Permission denied"
 
 
