@@ -208,7 +208,7 @@ CATALOG_SWITCH_PIN = "8" * 40
     ids=["first release with a declaration", "first release with none", "switch release with a declaration", "switch release with none"],
 )
 def test_catalog_check_under_a_tag_reads_report_only_until_the_release_names_the_switch(pin, declares_catalogs, words):
-    """CATALOG-30, FLEET-98, FLEET-99: a tag before the switch change only reports; from it the cell reads as on main."""
+    """FLEET-98, FLEET-99: a tag before the switch change only reports; from it the cell reads as on main."""
     tags = {**CATALOG_TAGS, CATALOG_CHECK.switched[0].release: CATALOG_SWITCH_PIN}
     release = gate_release((gate_call(pin),), False, tags)
     assert rule_cell(CATALOG_CHECK, release, declared(declares_catalogs=declares_catalogs)) == words
