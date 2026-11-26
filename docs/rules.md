@@ -2156,37 +2156,37 @@ Without a `[spec_citations]` table in `quality/baseline.toml` it reports three c
 and holds no list; with the table it holds the repository's list so that it only falls: a new uncited ID, a citation of an ID
 no spec defines or one that is retired, and a duplicate definition are red, and the table holds the uncited IDs.
 
-- **Definitions (CITE-1).** Every tracked `.md` file the tree holds is read. A list item (`-`, `*`, `+`, `1.`, `1)`, at any
+- CITE-1: **Definitions.** Every tracked `.md` file the tree holds is read. A list item (`-`, `*`, `+`, `1.`, `1)`, at any
   indent; a number is ASCII digits only) that opens with `ID:` defines a live ID, and `ID (retired).` a retired one, which needs
   no test. A table row defines its first cell when that cell is exactly an ID and either the table's header row has `ID`
   as its exact first cell, wherever the table stands, or the table follows a rule's list item with no heading or
   unindented prose between them. A fenced code block, prose, `(ID)` and a list item without the colon define nothing.
   An ID is `[A-Z][A-Z0-9]*(-[A-Z][A-Z0-9]*)*-[0-9]+`, and IDs compare as exact tokens: `CSRF-01` is not `CSRF-1`.
-- **Python citations (CITE-2).** The docstring of a function whose name starts with `test` in a Python test file (TWIN-1)
+- CITE-2: **Python citations.** The docstring of a function whose name starts with `test` in a Python test file (TWIN-1)
   cites. Its head is the run of IDs at the docstring's start, after an optional `Spec:`, joined by `,`, `and` or `, and`, and every
   ID-shaped token in the head counts, so a mistyped prefix is caught. A module or class docstring, a helper, a comment and a
   later mention do not cite.
-- **TypeScript and JavaScript citations (CITE-3).** In a file `Language.is_test_file` accepts, a bare `it(` or `test(` whose
+- CITE-3: **TypeScript and JavaScript citations.** In a file `Language.is_test_file` accepts, a bare `it(` or `test(` whose
   first token is a string, or a template without a hole, cites by its head as in CITE-2. `describe`, `.each`, `.skip` and other
   modifiers are not read (a named gap).
-- **The note (CITE-4).** Without the table one `open` note under the `debt` area at the location `.` reads
+- CITE-4: **The note.** Without the table one `open` note under the `debt` area at the location `.` reads
   `16 spec IDs uncited · 2 cited IDs undefined or retired · 1 spec ID defined twice`. The undefined count is distinct IDs, not
   citations, and a cited retired ID counts with them. A count of zero leaves its part out, and with all three at zero no note
   stands.
-- **What cannot be read (CITE-5).** Sources the `debt` area cannot read refuse the area as before, and no note stands. Without
+- CITE-5: **What cannot be read.** Sources the `debt` area cannot read refuse the area as before, and no note stands. Without
   the table a tracked `.md` file that cannot be read, is absent from the tree or is not UTF-8 and a TypeScript or JavaScript test
   file that is absent, is not UTF-8 or that the lexer refuses are left out and named in the note's last part (`· 1 file not read: docs/x.md`), so the rule
   changes no exit code; with only such files the note is that part alone. A Python test file that does not parse is skipped,
   since `size` and `clone` refuse it.
-- **Report only (CITE-6).** The rule is report-only exactly where the baseline has no `[spec_citations]` table, a missing
+- CITE-6: **Report only.** The rule is report-only exactly where the baseline has no `[spec_citations]` table, a missing
   baseline file and a baseline that cannot be read included (the latter refuses `size` and `clone`, CLONE-9, and the area). Then
   it holds no finding, its extent is 0, it is never measured only, and it never decides whether the `debt` area is partly measured,
   so a repository that has not adopted the table keeps its row. It first ships in v0.25.0, so a gate pinned below that release
   shows `not in <tag>` in the fleet matrix's column (FLEET-18).
-- **The held list (CITE-7).** `[spec_citations] uncited` holds the live IDs no test cites, sorted, one per line. The ID alone
+- CITE-7: **The held list.** `[spec_citations] uncited` holds the live IDs no test cites, sorted, one per line. The ID alone
   is the key, since IDs are unique in their repository, so a rule moving between files moves nothing; an ID is held wherever it
   is defined. A table with no ID stands as `[spec_citations]` alone, and any other key is a malformed file.
-- **With the table (CITE-8).** A live ID no test cites and the table lacks is `uncited` at its definition's path and line
+- CITE-8: **With the table.** A live ID no test cites and the table lacks is `uncited` at its definition's path and line
   (`spec ID ST-02 is cited by no test`). A citation of an ID defined nowhere is `undefined`, of a retired ID `retired`, at the
   citing test's path and line, one finding per citing test. Every definition after an ID's first is `duplicate` at its own path
   and line, naming the first (`spec ID ST-01 is defined again, first at docs/spec.md:12`). None of these three is held: no entry of the
@@ -2194,18 +2194,18 @@ no spec defines or one that is retired, and a duplicate definition are red, and 
   `can fall` at `quality/baseline.toml` (`spec ID ST-01 is cited`), fix `quality check --fix`. The debt row counts the held
   IDs (`ceiling held · 0 entries, 0 clone pairs, 16 uncited spec IDs`, nothing for an empty table), the rule's extent is that
   count, it is never measured only, and no note stands.
-- **What cannot be read with the table (CITE-9).** A tracked `.md` file or a TypeScript or JavaScript test file that cannot be
+- CITE-9: **What cannot be read with the table.** A tracked `.md` file or a TypeScript or JavaScript test file that cannot be
   read, or that the tree lacks (a sparse checkout, a deletion), can hide a definition or a citation, so with the table the rule is `cannot judge`, naming the files (`spec IDs cannot be
   judged, 1 file not read: docs/x.md`), exit `2`, as for `clone` (CLONE-9). A Python test file that does not parse is skipped as
   before.
-- **Dropping under `--fix` (CITE-10).** `quality check --fix` drops each held ID that is now cited, retired or undefined (a
+- CITE-10: **Dropping under `--fix`.** `quality check --fix` drops each held ID that is now cited, retired or undefined (a
   `dropped` row, `spec ID ST-01 is cited`, counted among the entries that fell) and never adds one: a new uncited ID stays a
   finding, and a raise is a hand edit with a declared loosening. While any `.md` or script test file is unread it neither drops nor
   records: with the table the rule reads `cannot judge`, naming the unread files, exit `2`, writing nothing, in the dry run too;
   without it nothing is recorded, the report-only note stays and the exit is unchanged. An ID defined in an unread file would
   otherwise look undefined and be dropped, then return as a new uncited ID only the operator's door could merge. Named limit: a
   tracked `.md` file that is not UTF-8 keeps its repository from recording until it is fixed.
-- **Recording under `--fix` (CITE-11).** `quality check --fix` records the table, the uncited IDs of the tree, only where the
+- CITE-11: **Recording under `--fix`.** `quality check --fix` records the table, the uncited IDs of the tree, only where the
   baseline has none, git never held one, the tree defines a live ID, no citation is undefined or retired (a declared foreign
   citation is not undefined, CITE-14; an implemented document's IDs are not recorded, CITE-15) and no ID is defined
   twice; the row reads `recorded  K uncited spec IDs · quality/baseline.toml` (`1 uncited spec ID`, a first recording
@@ -2214,18 +2214,18 @@ no spec defines or one that is retired, and a duplicate definition are red, and 
   documents never turns it red. Where the fix would record and a version of the baseline in git held the table, it refuses
   through the same question as `[job_minutes]` (TIMEOUT-28): `quality/baseline.toml lost its [spec_citations] table, which git
   holds`, exit `2`, the restore step, nothing written; where it would not record, git is not asked.
-- **The loosenings (CITE-12).** On a pull request the verdict holds the head's table against the base's: each held ID the base's
+- CITE-12: **The loosenings.** On a pull request the verdict holds the head's table against the base's: each held ID the base's
   table lacks is `spec citation baseline adds <ID>` (a set has no raise, so an add is the raise), and the base's table gone from
   a head that still has the file is `spec citation baseline removed`; a base without the table is an adoption and green. Both
   are declarable as in [gate](gate.md#declared-loosenings).
-- **The matrix cell (FLEET-118).** The cell reads `not in <tag>` below the first release, `report-only` without the table,
+- FLEET-118: **The matrix cell.** The cell reads `not in <tag>` below the first release, `report-only` without the table,
   `enforced` with it from v0.26.0, the release that holds the list (`SwitchChange` in `src/quality/rules.py` names it), and
   `cannot read quality/baseline.toml` for a baseline that cannot be read.
-- **The unknown-table message (CITE-13).** `quality/baseline.toml has an unknown table [future]; quality <version> knows ccn,
+- CITE-13: **The unknown-table message.** `quality/baseline.toml has an unknown table [future]; quality <version> knows ccn,
   file_lines, function_lines, clones, job_minutes, spec_citations` (CEILING-3). A quality that predates the table meets it as an
   unknown table and exits `2` (BASELINE-25), so a repository records the table only once its gate pins v0.26.0, the release that holds it.
 
-- **Foreign prefixes (CITE-14).** An implementer declares each prefix whose IDs its tests cite, one entry per prefix, in
+- CITE-14: **Foreign prefixes.** An implementer declares each prefix whose IDs its tests cite, one entry per prefix, in
   `quality/config.toml`; `owner` is the repository that defines them:
 
   ```toml
@@ -2240,7 +2240,7 @@ no spec defines or one that is retired, and a duplicate definition are red, and 
   nothing and every ID of it is judged as any other (CITE-19). The declaration is no loosening. A foreign citation is not
   resolved against its owner, so a mistyped foreign ID or a typo onto a declared prefix is not caught; CITE-2's caught typo
   holds for undeclared prefixes only.
-- **Implemented documents (CITE-15).** An owner declares its document, a tracked `.md` file, in `quality/config.toml`:
+- CITE-15: **Implemented documents.** An owner declares its document, a tracked `.md` file, in `quality/config.toml`:
 
   ```toml
   [[spec_citations.implemented]]
@@ -2254,7 +2254,7 @@ no spec defines or one that is retired, and a duplicate definition are red, and 
   a held one `can fall` (`spec ID CALLING-3 is left to its implementers`) and `--fix` drops it (CITE-10). A citation by the
   repository's own tests still counts as cited, and a held ID both cited and in a declared document falls as `is cited` first.
   Undefined and retired citations and duplicates are judged there as anywhere.
-- **Malformed declarations (CITE-16).** Exit `2` naming the entry with its example. For `foreign`: a missing or extra key, a
+- CITE-16: **Malformed declarations.** Exit `2` naming the entry with its example. For `foreign`: a missing or extra key, a
   `prefix` outside the ID pattern, an `owner` that is not `<owner>/<repo>`, or two entries for one prefix. For `implemented`: a
   missing or extra key, a `path` that is not the exact path of one `.md` file (no folder, pattern, `..` or absolute path), a
   malformed `item` or `date`, a `reason` that is not one line, or two entries for one path. Either key as anything but an array
@@ -2262,61 +2262,73 @@ no spec defines or one that is retired, and a duplicate definition are red, and 
   door naming the side, as GENERATED-6 to GENERATED-8; `check secrets --staged` reads only `[secrets]`. A quality older than
   v0.26.0 refuses `[spec_citations]` in `quality/config.toml` as an unknown key (the baseline's table of that name is
   CITE-13's), so a repository declares only once its gate pins v0.26.0, the release that holds the list.
-- **Unused declarations (CITE-17).** With the baseline table, a foreign prefix that matches no citation of an ID the tree
+- CITE-17: **Unused declarations.** With the baseline table, a foreign prefix that matches no citation of an ID the tree
   defines nowhere is `unused` at `quality/config.toml` (`[[spec_citations.foreign]] prefix LANG matches no citation`), and an
   implemented path that is not tracked or holds no live ID's first definition is `unused` at that path
   (`[[spec_citations.implemented]] matches no tracked file that defines a live spec ID`). Both fixes read
   `delete its <heading> entry from quality/config.toml`. Without the table neither is judged (CITE-6).
-- **The owner's loosening (CITE-18).** On a pull request a head `[[spec_citations.implemented]]` path the base does not
+- CITE-18: **The owner's loosening.** On a pull request a head `[[spec_citations.implemented]]` path the base does not
   declare prints `spec citation leaves <path> to its implementers · <item> of <date>`, declared by the entry's own `item` and
   `date` and red until the operator's door merges it ([gate](gate.md#declared-loosenings)). A base without
   `quality/config.toml` makes every entry new; an inherited or deleted entry and a changed `reason`, `item` or `date` loosen
   nothing; a changed `path` is new; a `[[gate.loosened]]` entry with this text matches nothing and is red; without a base
   nothing is judged. An implementer's foreign prefix is no loosening.
-- **A foreign prefix defined here (CITE-19).** With the baseline table, a declared prefix that the tree also defines, live or
+- CITE-19: **A foreign prefix defined here.** With the baseline table, a declared prefix that the tree also defines, live or
   retired, is `conflict` at `quality/config.toml` (`[[spec_citations.foreign]] prefix ST is defined here, first at
   docs/spec.md:3`), fix `delete its [[spec_citations.foreign]] entry from quality/config.toml, or give the local IDs a prefix of
   their own`. Without it a repository could silence every undefined citation of its own prefix through a declaration that is
   no loosening.
 
-The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that starts
-with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not (ADVISORY-30)), root
-and nested, with osv-scanner against the OSV advisory database (dev dependencies count) (ADVISORY-1). `uv.lock` and the
-requirements files are judged against the PyPI database, `pnpm-lock.yaml` against the npm database (ADVISORY-31). A
-`package-lock.json`, `yarn.lock` or `bun.lock` is not judged yet.
-A repository with no tracked lock [needs no osv-scanner](commands.md#scanners) (and none is located); a database is
-fetched only for an ecosystem with a tracked lock (ADVISORY-32), once per run
-however many locks it has (ADVISORY-33).
-A lock that is tracked but missing on disk is skipped (ADVISORY-2); one that links out of the repository (ADVISORY-3),
-is not a regular file (ADVISORY-4) or is empty (zero bytes) (ADVISORY-5) is exit `2`. A lock listed in `.gitignore` is
-still judged (ADVISORY-6).
-The [clean row](output.md#area-rows) counts the lock files it judged and the packages osv-scanner lists for them:
-`✓ dependencies  clean  1 lockfile · 63 packages`, and `0 lockfiles · 0 packages` with none.
-A package counts once per tracked file, by its ecosystem, its name as the ecosystem compares it (Python's rule for PyPI,
-exact for npm, so `lodash.merge` and `lodash-merge` are two) and its version (ADVISORY-20), so a requirements file's pin
-and the wheel line for the same package are one (ADVISORY-21); every tracked name counts, so a lock reached by two names
-counts for each (ADVISORY-22).
-A finding is one per advisory group, package and lock file (ADVISORY-23), named by the tracked relative path
-(ADVISORY-24): `! uv.lock  affected  pyyaml 5.3.1 · GHSA-8q59-q68h-6hv4 · fixed in 5.4` with
-`fix: uv lock --upgrade-package pyyaml`.
-[The row](output.md#rows) names the group's first id; an allowance matches every id and alias of the group.
-For a nested lock the [fix](output.md#rows) names its directory (`in speech/: uv lock --upgrade-package ...`). Several
-fixed versions are listed as osv lists them (ADVISORY-25). An advisory with no listed fixed version, a package listed as
-malicious included, says `no fixed version listed` with
-`fix: remove or replace <package>; see https://osv.dev/vulnerability/<id>` (ADVISORY-26). Where osv's record names no
-such package the row says nothing of a fix, with `fix: see <url>` (ADVISORY-27).
-The fix prints a command only where it works as printed: for `pnpm-lock.yaml` it says to upgrade each listed package,
-or its parent when it is transitive, or set a pnpm override in `package.json`; for a `requirements.txt` it says to raise
-each listed package's pin, and to compile the file again when it is generated. A package name that needs quoting prints
-quoted in the command (ADVISORY-28); one that no shell word can hold (a control or format character) gets
-`fix: see <url>`, or `in <dir>/: see <url>` for a nested lock (ADVISORY-29), so no command is printed that would not
-work. npm names match as written (`lodash.merge` is not
-`lodash-merge`); Python's name rule applies to PyPI only (ADVISORY-7). A repository's own `osv-scanner.toml` (ignored
-advisories, package overrides), its `package.json` `pnpm.auditConfig`, its `.npmrc` and its `.gitignore` change
-nothing: the gate passes its own empty `src/quality/osv-scanner.toml` and each tracked lock explicitly, so only a real
-fix in the lock (an upgrade or an override) turns a finding green.
+- ADVISORY-30: The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that
+  starts with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not),
+- ADVISORY-1: root and nested, with osv-scanner against the OSV advisory database (dev dependencies count).
+- ADVISORY-31: `uv.lock` and the requirements files are judged against the PyPI database, `pnpm-lock.yaml` against the npm
+  database.
 
-An advisory the repository cannot fix is allowed in its own `quality/config.toml`, one entry per advisory and lock (ALLOW-1):
+A `package-lock.json`, `yarn.lock` or `bun.lock` is not judged yet.
+
+- ADVISORY-32: A repository with no tracked lock [needs no osv-scanner](commands.md#scanners) (and none is located); a
+  database is fetched only for an ecosystem with a tracked lock,
+- ADVISORY-33: once per run however many locks it has.
+- ADVISORY-2: A lock that is tracked but missing on disk is skipped;
+- ADVISORY-3: one that links out of the repository,
+- ADVISORY-4: is not a regular file
+- ADVISORY-5: or is empty (zero bytes) is exit `2`.
+- ADVISORY-6: A lock listed in `.gitignore` is still judged.
+
+The [clean row](output.md#area-rows) counts the lock files it judged and the packages osv-scanner lists for them: `✓
+dependencies  clean  1 lockfile · 63 packages`, and `0 lockfiles · 0 packages` with none.
+
+- ADVISORY-20: A package counts once per tracked file, by its ecosystem, its name as the ecosystem compares it (Python's rule
+  for PyPI, exact for npm, so `lodash.merge` and `lodash-merge` are two) and its version,
+- ADVISORY-21: so a requirements file's pin and the wheel line for the same package are one;
+- ADVISORY-22: every tracked name counts, so a lock reached by two names counts for each.
+- ADVISORY-23: A finding is one per advisory group, package and lock file,
+- ADVISORY-24: named by the tracked relative path: `! uv.lock  affected  pyyaml 5.3.1 · GHSA-8q59-q68h-6hv4 · fixed in 5.4`
+  with `fix: uv lock --upgrade-package pyyaml`.
+
+[The row](output.md#rows) names the group's first id; an allowance matches every id and alias of the group. For a nested lock
+the [fix](output.md#rows) names its directory (`in speech/: uv lock --upgrade-package ...`).
+
+- ADVISORY-25: Several fixed versions are listed as osv lists them.
+- ADVISORY-26: An advisory with no listed fixed version, a package listed as malicious included, says `no fixed version
+  listed` with `fix: remove or replace <package>; see https://osv.dev/vulnerability/<id>`.
+- ADVISORY-27: Where osv's record names no such package the row says nothing of a fix, with `fix: see <url>`.
+
+The fix prints a command only where it works as printed: for `pnpm-lock.yaml` it says to upgrade each listed package, or its
+parent when it is transitive, or set a pnpm override in `package.json`; for a `requirements.txt` it says to raise each listed
+package's pin, and to compile the file again when it is generated.
+
+- ADVISORY-28: A package name that needs quoting prints quoted in the command;
+- ADVISORY-29: one that no shell word can hold (a control or format character) gets `fix: see <url>`, or `in <dir>/: see
+  <url>` for a nested lock, so no command is printed that would not work.
+- ADVISORY-7: npm names match as written (`lodash.merge` is not `lodash-merge`); Python's name rule applies to PyPI only.
+
+A repository's own `osv-scanner.toml` (ignored advisories, package overrides), its `package.json` `pnpm.auditConfig`, its
+`.npmrc` and its `.gitignore` change nothing: the gate passes its own empty `src/quality/osv-scanner.toml` and each tracked
+lock explicitly, so only a real fix in the lock (an upgrade or an override) turns a finding green.
+
+- ALLOW-1: An advisory the repository cannot fix is allowed in its own `quality/config.toml`, one entry per advisory and lock:
 
 ```toml
 [[advisories.allow]]
@@ -2328,28 +2340,34 @@ item = "overnightworks/agent-presentator#371"
 reason = "gradio caps pillow<13; no image input"
 ```
 
-- `id` is any id of the advisory group, GHSA, PYSEC or CVE alike (ALLOW-2). `lock` is the tracked relative path; the entry
-  allows the advisory on every package it affects in that lock and in no other, so a lock reached by two tracked names
-  needs an entry per name (ALLOW-7). Two entries matching one group in one lock (its GHSA and its CVE id) are a finding
-  at `quality/config.toml` naming both, and the group is allowed by neither (ALLOW-9):
-  `! quality/config.toml  conflict  <id> and <id> in <lock> match one advisory · none allows it`.
-- `until` is the re-check date and `date` the day of the ruling, both TOML dates without a time (ALLOW-3); `item` and `reason`
-  are as in a [declared loosening](gate.md#declared-loosenings). The allowance holds through `until` (in UTC) and the advisory
-  is red again from the next day: its row ends in `· allowance ran out on <until> (<item>)` (ALLOW-4). quality sets no
-  latest `until` (ALLOW-10), and an advisory with no fixed version is allowed like any other (ALLOW-19).
-- Each allowed advisory stands as a row under the dependencies row, after the area's findings and their `fix:`, and the rule stays clean (ALLOW-6):
-  `· <lock>  allowed  <package> <version> · <id> · fixed in <versions> · until <until> (<item>) · <reason>`. The fact
-  says what the `affected` row says of a fix (ALLOW-20). [A clean row](output.md#notes) counts them (`· 1 allowed`).
-- An entry no reported advisory matches is a finding (ALLOW-5):
-  `! quality/config.toml  unused  <id> in <lock> matches no advisory`.
-  [Deleting it is no loosening](gate.md#declared-loosenings). With no tracked lock every entry matches nothing
-  (ALLOW-11).
-- A malformed entry (a missing or extra key (ALLOW-12), an empty or multi-line `id`, `lock` or `reason` (ALLOW-13), an
-  `item` that is not `#<n>` or `<owner>/<repo>#<n>` (ALLOW-14), an `until` or `date` that is text or carries a time
-  (ALLOW-15), two entries for one `id` and `lock` (ALLOW-16), or an unknown key in `[advisories]` (ALLOW-17)) is exit
-  `2` in every rule that reads the config and in `verdict` (ALLOW-18),
-  [naming the entry by its position](output.md#refusals) (`[[advisories.allow]] entry 2`), except the last two, which
-  name the `id` and `lock` and the key; [`check secrets --staged` reads only `[secrets]`](gate.md#declared-loosenings).
+- ALLOW-2: `id` is any id of the advisory group, GHSA, PYSEC or CVE alike.
+- ALLOW-7: `lock` is the tracked relative path; the entry allows the advisory on every package it affects in that lock and in
+  no other, so a lock reached by two tracked names needs an entry per name.
+- ALLOW-9: Two entries matching one group in one lock (its GHSA and its CVE id) are a finding at `quality/config.toml` naming
+  both, and the group is allowed by neither: `! quality/config.toml  conflict  <id> and <id> in <lock> match one advisory ·
+  none allows it`.
+- ALLOW-3: `until` is the re-check date and `date` the day of the ruling, both TOML dates without a time; `item` and `reason`
+  are as in a [declared loosening](gate.md#declared-loosenings).
+- ALLOW-4: The allowance holds through `until` (in UTC) and the advisory is red again from the next day: its row ends in `·
+  allowance ran out on <until> (<item>)`.
+- ALLOW-10: quality sets no latest `until`,
+- ALLOW-19: and an advisory with no fixed version is allowed like any other.
+- ALLOW-6: Each allowed advisory stands as a row under the dependencies row, after the area's findings and their `fix:`, and
+  the rule stays clean: `· <lock>  allowed  <package> <version> · <id> · fixed in <versions> · until <until> (<item>) ·
+  <reason>`.
+- ALLOW-20: The fact says what the `affected` row says of a fix. [A clean row](output.md#notes) counts them (`· 1 allowed`).
+- ALLOW-5: An entry no reported advisory matches is a finding: `! quality/config.toml  unused  <id> in <lock> matches no
+  advisory`. [Deleting it is no loosening](gate.md#declared-loosenings).
+- ALLOW-11: With no tracked lock every entry matches nothing.
+- ALLOW-12: A malformed entry (a missing or extra key,
+- ALLOW-13: an empty or multi-line `id`, `lock` or `reason`,
+- ALLOW-14: an `item` that is not `#<n>` or `<owner>/<repo>#<n>`,
+- ALLOW-15: an `until` or `date` that is text or carries a time,
+- ALLOW-16: two entries for one `id` and `lock`,
+- ALLOW-17: or an unknown key in `[advisories]`)
+- ALLOW-18: is exit `2` in every rule that reads the config and in `verdict`, [naming the entry by its
+  position](output.md#refusals) (`[[advisories.allow]] entry 2`), except the last two, which name the `id` and `lock` and the
+  key; [`check secrets --staged` reads only `[secrets]`](gate.md#declared-loosenings).
 - A new allowance, and one whose `until` moves later, is a [declared loosening](gate.md#declared-loosenings) the allowance
   makes itself, so only the operator's door merges it. The pull request writes the allowance, so its item, date and
   reason prove nothing alone: the verdict's red and the door are the gate. An `id` that is an alias covers every
@@ -2363,132 +2381,158 @@ Ruled by the operator:
 
 - An exception stands per advisory in `quality/config.toml`, with a reason, an item and a date (ALLOW-1).
 - A new exception is a loosening: the pull request stays red until the operator's door merges it (VERDICT-64).
-- From the merge on, the advisory is green until the date and red again after it (ALLOW-8).
+- ALLOW-8: From the merge on, the advisory is green until the date and red again after it.
 - No agent can silence an advisory alone.
 - A pull request cannot move the re-check date later without the operator: a later `until` for an existing exception is
   a loosening like a new one (VERDICT-64).
 - A new exception declares itself: it needs no separate `[[gate.loosened]]` entry (VERDICT-67).
 
-quality gets each needed database itself on every run (PyPI about 37 MB, npm about 219 MB;
-`https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`), checks it, places it in the scan's own 0700
-scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call and reads no cache of
-its own (ADVISORY-8). A request that fails transiently (HTTP 500 to 599 or 429, a refused or
-reset connection, a timeout, a DNS failure, an unreachable network or host, a body cut short) is tried again after 3,
-9 and 27 seconds, each wait cut to the time left. A request that waits 30 seconds without a byte is cut and tried
-again (ADVISORY-42). A database that cannot be fetched within 300 seconds in total for all databases together
-(the retries and their waits included; connect, headers and body, however the server drags them out; reading and
-hashing a local copy not included; the run's end caps the 300 seconds), or still not after the fourth attempt
-(`cannot download the <ecosystem> advisory database from <url>: <error> after 4 attempts`)
-(ADVISORY-9), cannot be placed in the scratch directory (ADVISORY-10), is not a valid zip (ADVISORY-11), or holds no
-advisory (ADVISORY-12) is exit `2`,
-never clean, naming the database; so are an osv-scanner [that is missing, at another version](commands.md#scanners),
-exits other than `0` or `1` (ADVISORY-13), runs past the run's deadline (ADVISORY-14), or writes a report that is
-not the expected JSON (ADVISORY-15), disagrees with its exit (ADVISORY-16), or names a lock file quality did not pass
-(ADVISORY-17).
+- ADVISORY-8: quality gets each needed database itself on every run (PyPI about 37 MB, npm about 219 MB;
+  `https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`), checks it, places it in the scan's own 0700
+  scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call and reads no cache of its
+  own.
+
+A request that fails transiently (HTTP 500 to 599 or 429, a refused or reset connection, a timeout, a DNS failure, an
+unreachable network or host, a body cut short) is tried again after 3, 9 and 27 seconds, each wait cut to the time left.
+
+- ADVISORY-42: A request that waits 30 seconds without a byte is cut and tried again.
+- ADVISORY-9: A database that cannot be fetched within 300 seconds in total for all databases together (the retries and their
+  waits included; connect, headers and body, however the server drags them out; reading and hashing a local copy not
+  included; the run's end caps the 300 seconds), or still not after the fourth attempt (`cannot download the <ecosystem>
+  advisory database from <url>: <error> after 4 attempts`),
+- ADVISORY-10: cannot be placed in the scratch directory,
+- ADVISORY-11: is not a valid zip,
+- ADVISORY-12: or holds no advisory
+- ADVISORY-13: is exit `2`, never clean, naming the database; so are an osv-scanner [that is missing, at another
+  version](commands.md#scanners), exits other than `0` or `1`,
+- ADVISORY-14: runs past the run's deadline,
+- ADVISORY-15: or writes a report that is not the expected JSON,
+- ADVISORY-16: disagrees with its exit,
+- ADVISORY-17: or names a lock file quality did not pass.
 
 Trust boundary: the bucket's answer over TLS, its ETag and its unsigned zip, is what quality trusts, from the same
 source osv-scanner itself uses. quality keeps a copy of each archive it fetched, so that a run downloads only what
 changed, and trusts no file in the cache directory, its name, its time stamp or any stored hash:
 
-- The copy of an ecosystem lives at `<cache>/advisories/<ecosystem>/all.zip`, where `<cache>` is
+- ADVISORY-43: The copy of an ecosystem lives at `<cache>/advisories/<ecosystem>/all.zip`, where `<cache>` is
   `overnightworks-quality` below `$XDG_CACHE_HOME` where that is an absolute path, else below `~/.cache`; with neither
-  there is no copy. The door finds `<cache>` once from the environment it is given. quality creates each missing level
-  with mode 0700. One archive stays per ecosystem a tracked lock names, replaced in place and never pruned. The copy is
-  read once, only as a regular file (a directory, a FIFO or a file that cannot be opened or read counts as no copy)
-  (ADVISORY-43).
-- With a copy, the request is one conditional GET with the md5 of the copy's own bytes as `If-None-Match`; without one,
-  a plain GET. The copy is used only on a `304` whose ETag is that md5. A `304` that names another md5 costs one of the
-  four attempts and is followed by a plain GET. A `200` is used only when its body's md5 is the md5 its ETag states, and
-  then replaces the copy through a temporary file `all.zip.tmp-*` beside it and an atomic rename; an archive that is not
-  a valid zip with an advisory is kept nowhere. osv-scanner reads a private copy in the scratch directory of the
-  bytes that were checked, never the cache file. Two runs at once need no lock: each reader checks the bytes it read,
-  and a writer renames a whole file (ADVISORY-44).
-- Exit `2`, never clean, naming the database: a `304` without an md5 ETag, a `304` to a request that sent no copy, a
-  `200` whose body is not the md5 of its md5 ETag, a `200` without an md5 ETag (weak, not 32 hex digits or missing)
-  while a copy exists, and a server that does not answer, though a copy exists. A copy that fails the comparison is
-  never scanned. A `200` without an md5 ETag and no copy is scanned and kept nowhere (ADVISORY-45).
-- A cache directory quality cannot create, write or read is a run without a copy: it judges from the verified download
-  and prints nothing (ADVISORY-46).
+  there is no copy. The door finds `<cache>` once from the environment it is given. quality creates each missing level with
+  mode 0700. One archive stays per ecosystem a tracked lock names, replaced in place and never pruned. The copy is read
+  once, only as a regular file (a directory, a FIFO or a file that cannot be opened or read counts as no copy).
+- ADVISORY-44: With a copy, the request is one conditional GET with the md5 of the copy's own bytes as `If-None-Match`;
+  without one, a plain GET. The copy is used only on a `304` whose ETag is that md5. A `304` that names another md5 costs one
+  of the four attempts and is followed by a plain GET. A `200` is used only when its body's md5 is the md5 its ETag states,
+  and then replaces the copy through a temporary file `all.zip.tmp-*` beside it and an atomic rename; an archive that is not
+  a valid zip with an advisory is kept nowhere. osv-scanner reads a private copy in the scratch directory of the bytes that
+  were checked, never the cache file. Two runs at once need no lock: each reader checks the bytes it read, and a writer
+  renames a whole file.
+- ADVISORY-45: Exit `2`, never clean, naming the database: a `304` without an md5 ETag, a `304` to a request that sent no
+  copy, a `200` whose body is not the md5 of its md5 ETag, a `200` without an md5 ETag (weak, not 32 hex digits or missing)
+  while a copy exists, and a server that does not answer, though a copy exists. A copy that fails the comparison is never
+  scanned. A `200` without an md5 ETag and no copy is scanned and kept nowhere.
+- ADVISORY-46: A cache directory quality cannot create, write or read is a run without a copy: it judges from the verified
+  download and prints nothing.
 - A local green means the server's state at run time. `gate.yml` and `ci.yml` restore no copy, a hosted runner starts
   without one, and a self-hosted runner keeps a verified copy under its user's cache directory, which
   `XDG_CACHE_HOME` moves.
 
-A doctored or rolled-back copy is caught by its md5: the server answers a request that names it with the genuine
-archive. md5 is an integrity check against the server's own statement and no signature; the server states no other hash
-that an attacker could not forge, and a collision does not help against an archive the attacker did not produce.
-Records the pinned osv-scanner cannot read are dropped by it silently; the live-database test for
-`pyyaml 5.3.1` on every quality pull request is the canary (ADVISORY-18). osv-scanner judges the lock as written; the
-caller's own `uv sync --locked` guards against a hand-edited lock. A `pnpm-lock.yaml` entry pinned by URL without
-`integrity` is refused by the caller's own `pnpm install --frozen-lockfile` from pnpm 10.34.1 and 11.4.0 on
-(`ERR_PNPM_MISSING_TARBALL_INTEGRITY`); quality does not read it. osv-scanner exits `127` on a `uv.lock` or
-`pnpm-lock.yaml` it cannot parse, which is `cannot judge`, never clean.
+A doctored or rolled-back copy is caught by its md5: the server answers a request that names it with the genuine archive. md5
+is an integrity check against the server's own statement and no signature; the server states no other hash that an attacker
+could not forge, and a collision does not help against an archive the attacker did not produce.
 
-The check job in `gate.yml` stops at a limit that setup, the scanner install step's limit, the run's deadline and a
-margin add up to, so quality's own `cannot judge` shows before GitHub cancels the job; the retries spend the 300
-seconds and add none. A test adds them up from the workflow and the constants (ADVISORY-34).
-Measured with osv-scanner 2.7.0 on 12 cores (the download at load 17 to 20): the npm archive is 219,026,863 bytes (230,735 files), the PyPI archive 37,064,024 bytes
-(26,612 files); downloading npm took 34 s; a whole `check` run over a repository with one `pnpm-lock.yaml` and one hashed
-`requirements.txt` (one pin) under `--all-packages`, both databases included, took 63 s and 69 s wall and 640 MB resident (load 3 to 5).
-A `uv.lock` is judged against the same PyPI database; that setup was not measured.
+- ADVISORY-18: Records the pinned osv-scanner cannot read are dropped by it silently; the live-database test for `pyyaml
+  5.3.1` on every quality pull request is the canary.
 
-A requirements file is read by quality itself (`pip_requirements.py`), because osv-scanner skips a line it cannot parse
-and still reports clean. Exactly two logical forms are accepted, after comments are dropped and `\` continuations
-joined (ADVISORY-35): `name[extras]==version`, with an optional `; marker` and `--hash=` tokens (ADVISORY-36), and
-`name[extras] @ https://.../<name>-<version>-....whl` with at least one `--hash`, where the wheel's distribution name
-equals `name` (PEP 503) (ADVISORY-37). Any other line (`-e`, `>=`, `~=`, a bare name, `-r`, `-c`, `--index-url`, any
-other option, a git or sdist URL, a wheel without a hash or named for another package) is exit `2`, naming the file and
-the line (`.github/requirements-build.txt: line 4 is neither ...`) (ADVISORY-38); a minimum version is refused because
-pip installs the newest one, so judging the lowest could hide a hole. osv-scanner reads the file as written under
-`--all-packages`; the wheel lines, which it skips, reach it as a scratch file of `name==version` lines judged under the
-same tracked name, so a finding on a wheel is named by the tracked file and an allowance's `lock` is that file's path
-(ADVISORY-39). The packages osv-scanner lists for each file must equal the pins quality read: a pin it did not list is
-exit `2` (`osv-scanner did not read line 4 of <file>`) (ADVISORY-40), and so is a package it lists that quality did
-not read (ADVISORY-41). The grammar is an allowlist; `-r`, `-c`, `--index-url`, `-e`, git and sdist URLs and ranges
-wait for a caller that needs them.
-An advisory database zip with an entry that is not valid JSON is exit `2` too (ADVISORY-19).
-Every other download failure is exit `2` at once, without a retry: another 4xx (a missing database is permanent), a
-missing file, an error no list above names, and every error after the body is whole (a bad zip, no advisory, not JSON,
-a scratch write) (ADVISORY-42).
+osv-scanner judges the lock as written; the caller's own `uv sync --locked` guards against a hand-edited lock. A
+`pnpm-lock.yaml` entry pinned by URL without `integrity` is refused by the caller's own `pnpm install --frozen-lockfile` from
+pnpm 10.34.1 and 11.4.0 on (`ERR_PNPM_MISSING_TARBALL_INTEGRITY`); quality does not read it. osv-scanner exits `127` on a
+`uv.lock` or `pnpm-lock.yaml` it cannot parse, which is `cannot judge`, never clean.
+
+The check job in `gate.yml` stops at a limit that setup, the scanner install step's limit, the run's deadline and a margin
+add up to, so quality's own `cannot judge` shows before GitHub cancels the job; the retries spend the 300 seconds and add
+none.
+
+- ADVISORY-34: A test adds them up from the workflow and the constants.
+
+Measured with osv-scanner 2.7.0 on 12 cores (the download at load 17 to 20): the npm archive is 219,026,863 bytes (230,735
+files), the PyPI archive 37,064,024 bytes (26,612 files); downloading npm took 34 s; a whole `check` run over a repository
+with one `pnpm-lock.yaml` and one hashed `requirements.txt` (one pin) under `--all-packages`, both databases included, took
+63 s and 69 s wall and 640 MB resident (load 3 to 5). A `uv.lock` is judged against the same PyPI database; that setup was
+not measured.
+
+A requirements file is read by quality itself (`pip_requirements.py`), because osv-scanner skips a line it cannot parse and
+still reports clean.
+
+- ADVISORY-35: Exactly two logical forms are accepted, after comments are dropped and `\` continuations joined:
+- ADVISORY-36: `name[extras]==version`, with an optional `; marker` and `--hash=` tokens,
+- ADVISORY-37: and `name[extras] @ https://.../<name>-<version>-....whl` with at least one `--hash`, where the wheel's
+  distribution name equals `name` (PEP 503).
+- ADVISORY-38: Any other line (`-e`, `>=`, `~=`, a bare name, `-r`, `-c`, `--index-url`, any other option, a git or sdist
+  URL, a wheel without a hash or named for another package) is exit `2`, naming the file and the line
+  (`.github/requirements-build.txt: line 4 is neither ...`); a minimum version is refused because pip installs the newest
+  one, so judging the lowest could hide a hole.
+- ADVISORY-39: osv-scanner reads the file as written under `--all-packages`; the wheel lines, which it skips, reach it as a
+  scratch file of `name==version` lines judged under the same tracked name, so a finding on a wheel is named by the tracked
+  file and an allowance's `lock` is that file's path.
+- ADVISORY-40: The packages osv-scanner lists for each file must equal the pins quality read: a pin it did not list is exit
+  `2` (`osv-scanner did not read line 4 of <file>`),
+- ADVISORY-41: and so is a package it lists that quality did not read.
+
+The grammar is an allowlist; `-r`, `-c`, `--index-url`, `-e`, git and sdist URLs and ranges wait for a caller that needs
+them.
+
+- ADVISORY-19: An advisory database zip with an entry that is not valid JSON is exit `2` too.
+
+Every other download failure is exit `2` at once, without a retry: another 4xx (a missing database is permanent), a missing
+file, an error no list above names, and every error after the body is whole (a bad zip, no advisory, not JSON, a scratch
+write) (ADVISORY-42).
 
 Ruled by the operator:
 
-- An `[[advisories.allow]]` entry for an npm finding is the same entry with `lock` set to the file's tracked path
-  (`id = "..."`, `lock = "frontend/pnpm-lock.yaml"`); it is a declared loosening and merges only through the operator's
-  door like any other (NPM-1).
-- Nothing in the repository's own files silences an advisory; only a real fix in the lock, an upgrade or an override,
-  counts (NPM-2).
+- NPM-1: An `[[advisories.allow]]` entry for an npm finding is the same entry with `lock` set to the file's tracked path (`id
+  = "..."`, `lock = "frontend/pnpm-lock.yaml"`); it is a declared loosening and merges only through the operator's door like
+  any other.
+- NPM-2: Nothing in the repository's own files silences an advisory; only a real fix in the lock, an upgrade or an override,
+  counts.
 - Open npm advisories keep the bump pull request red (ADVISORY-31).
 
 When a repository's frontend and its lock are gone, the npm database is no longer downloaded and an
 entry for it is a finding until it is deleted. A repository that falls back to an older quality leaves such an entry
 unmatched and red likewise. The predecessor `pnpm audit --prod` steps are retired by each repository's own head.
 
-`fleet-source` reads every tracked `uv.lock`, the root one and each nested one, offline. A `[[package]]` whose canonical
-name starts with `overnightworks-` and whose `source` is `registry` is a `from index` finding at the lock's tracked path
-(SOURCE-1), one per package and lock, its fact the package, its version and the index, its fix the git tag pin
-([the standard](release.md#depending-on-a-fleet-package)). A `git`, `url`, `editable`, `virtual`, `directory` or `path`
-source is allowed (SOURCE-2), and a package outside the prefix is not read further (SOURCE-3). A lock that is not UTF-8
-TOML or whose packages are not a list of tables, a fleet package without a `source` and a source of another kind are exit `2`, so a future uv never reads green
-(SOURCE-4). A tracked lock the tree no longer holds is skipped, and one that links outside the repository or is no file
-is exit `2` (SOURCE-5). A lock tracked under several names is judged once, under the first (SOURCE-6). The row's extent
-is the locks read, and a repository without a `uv.lock` is clean at `0` (SOURCE-7); the rule is on for every
-repository, and the lock's content decides whether it judges anything. It does not check that a `git` source is a tag
-rather than a branch, nor the host of a `url` source: the lock pins the resolved commit or a hash either way, and a reviewer reads
-the rest. It judges independently of `advisory`, so neither refuses the other (SOURCE-8).
+`fleet-source` reads every tracked `uv.lock`, the root one and each nested one, offline.
+
+- SOURCE-1: A `[[package]]` whose canonical name starts with `overnightworks-` and whose `source` is `registry` is a `from
+  index` finding at the lock's tracked path, one per package and lock, its fact the package, its version and the index, its
+  fix the git tag pin ([the standard](release.md#depending-on-a-fleet-package)).
+- SOURCE-2: A `git`, `url`, `editable`, `virtual`, `directory` or `path` source is allowed,
+- SOURCE-3: and a package outside the prefix is not read further.
+- SOURCE-4: A lock that is not UTF-8 TOML or whose packages are not a list of tables, a fleet package without a `source` and
+  a source of another kind are exit `2`, so a future uv never reads green.
+- SOURCE-5: A tracked lock the tree no longer holds is skipped, and one that links outside the repository or is no file is
+  exit `2`.
+- SOURCE-6: A lock tracked under several names is judged once, under the first.
+- SOURCE-7: The row's extent is the locks read, and a repository without a `uv.lock` is clean at `0`; the rule is on for
+  every repository, and the lock's content decides whether it judges anything.
+
+It does not check that a `git` source is a tag rather than a branch, nor the host of a `url` source: the lock pins the
+resolved commit or a hash either way, and a reviewer reads the rest.
+
+- SOURCE-8: It judges independently of `advisory`, so neither refuses the other.
 
 It first ships in v0.21.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column (FLEET-18).
 
 `pytest-random`, in the `dependencies` area, holds the unit and integration layers to the fleet standard's "random order
 with the seed printed" (pytest-randomly). Three readers judge that one decision.
 
-- **The lock (RANDOM-1, RANDOM-2).** Every tracked `uv.lock`, found and read as `fleet-source` finds and reads it
-  (SOURCE-5, SOURCE-6): a lock that holds the package `pytest` and not `pytest-randomly`, names compared canonicalised, is
-  one `missing` finding at the lock (`pytest 9.2.0 is locked without pytest-randomly`), its fix adding the plugin to the dev
-  dependency group, then `uv lock`. A lock with neither package, or with the plugin alone, is clean. The row's extent is the
-  locks read, and a repository without a lock, a `pyproject.toml` or a workflow is clean at `0`. The rule reads the lock,
-  not a layer: R6 binds the unit and integration layers, and the marker (RANDOM-8) is the way out of a flow layer on the
-  workflow side only.
-- **The options (RANDOM-4 to RANDOM-7).** Three sources hold a list of pytest options: `addopts` in
+- RANDOM-1: **The lock.** Every tracked `uv.lock`, found and read as `fleet-source` finds and reads it (SOURCE-5, SOURCE-6):
+  a lock that holds the package `pytest` and not `pytest-randomly`, names compared canonicalised, is one `missing` finding at
+  the lock (`pytest 9.2.0 is locked without pytest-randomly`), its fix adding the plugin to the dev dependency group, then
+  `uv lock`. A lock with neither package, or with the plugin alone, is clean.
+- RANDOM-2: The row's extent is the locks read, and a repository without a lock, a `pyproject.toml` or a workflow is clean at
+  `0`. The rule reads the lock, not a layer: R6 binds the unit and integration layers, and the marker (RANDOM-8) is the way
+  out of a flow layer on the workflow side only.
+- RANDOM-4: **The options.** Three sources hold a list of pytest options: `addopts` in
   `[tool.pytest.ini_options]` or in the native table `[tool.pytest]` (pytest refuses both in one file) of each
   `pyproject.toml` the `python-floor` rule reads (a list, or a string split as shell words; so a gitlink and a fixture
   project under another project's `tests/` stay out), a pytest call of a workflow `run:` script (the calls
@@ -2497,18 +2541,18 @@ with the seed printed" (pytest-randomly). Three readers judge that one decision.
   `PYTEST_ADDOPTS`, then the call, and the rule does not; it is stricter than R6 only where a `-q` in one source meets a
   `-v` in another, or where the plugin is loaded again from another source than the one that switched autoload off, a
   case no fleet repository has.
-  - *No random order, `unshuffled` (RANDOM-5):* `-p no:randomly` or `-pno:randomly`, `--randomly-dont-reorganize`, a
+  - RANDOM-5: *No random order, `unshuffled`:* `-p no:randomly` or `-pno:randomly`, `--randomly-dont-reorganize`, a
     fixed seed (`--randomly-seed=<integer>` or `--randomly-seed=last`, the last of them counting) and
     `--disable-plugin-autoload` unless the source also holds `-p randomly` or `-p pytest_randomly`, which loads the
     plugin again. `--randomly-seed=default` draws a fresh seed and is clean. `last` is `unshuffled` although a runner
     without a restored cache draws a new seed: it exists to reproduce a run, and it fixes the order as soon as a cache
     persists.
-  - *No seed in the log, `unseeded` (RANDOM-6):* the plugin prints its seed only as a report-header line, and pytest
+  - RANDOM-6: *No seed in the log, `unseeded`:* the plugin prints its seed only as a report-header line, and pytest
     prints header lines only from verbosity 0 up. `-v` adds one to the level, `-q` and `--quiet` take one,
     `--verbosity=<n>` and `--verbosity <n>` set it, read in order of appearance; a level below zero, or `--no-header`, is
     `unseeded`. So `-q`, `-qq`, `-qn4` and `--verbosity=-1` hide the seed, `-q -v`, `-qv`, `-q --verbosity=0` and
     `-n auto` show it, and `--verbosity=0 -q` hides it.
-  - *Reading (RANDOM-7):* the options are read by the reader `pytest-workers` shares (PYTEST-5), and only the words
+  - RANDOM-7: *Reading:* the options are read by the reader `pytest-workers` shares (PYTEST-5), and only the words
     before the first `--` are options. In a short cluster (`-abc`) each letter is read from the left, and a letter that
     takes a value (the set pytest's and xdist's parsers declare) ends the cluster with the rest of the word, or the next
     word, as its value: `-kquick`, `-rfq` and `-n4 -k q` are clean, `-qn4` and `-qk quick` are `unseeded`. A long option
@@ -2521,37 +2565,37 @@ with the seed printed" (pytest-randomly). Three readers judge that one decision.
     pytest splits it, so `-p "no:randomly"` is read as `-p no:randomly`.
   - An `addopts` finding stands at the key's line in the `pyproject.toml` (no line where the key is not a plain
     `addopts =` line of its table), and nothing clears it, since `addopts` holds for every layer (RANDOM-8).
-- **The workflow (RANDOM-9, RANDOM-11).** A call is read with the reader of `pytest-workers` (PYTEST-2, PYTEST-3),
-  through `uv run`, `python -m pytest` and the other runners, at the call's first line. `PYTEST_ADDOPTS` and
-  `PYTEST_DISABLE_PLUGIN_AUTOLOAD` are read where a workflow, a job or a step sets them in `env:`, at the value's line,
-  and as an assignment word of a script, leading a command (`PYTEST_ADDOPTS=-q pytest`, `env PYTEST_ADDOPTS=-q pytest`)
-  or after `export`. Any value of `PYTEST_DISABLE_PLUGIN_AUTOLOAD` that is not empty (a blank one included) switches the
-  autoload off, as pytest reads it, so it is `unshuffled`, whatever else `env:` holds. A call behind a script, `make` or
-  a mise task, a `pytest.main([...])`, a flag in `pytest.ini`, `.pytest.ini`, `pytest.toml`, `.pytest.toml`, `tox.ini` or
-  `setup.cfg` and a plugin disabled in a `conftest.py` are not read. A call that only lists tests, as `pytest-workers`
-  reads it (PYTEST-5: `--collect-only`, `--collectonly` or `--co` before the first `--`), runs none and is not judged
-  (`pytest --collect-only -q` is clean, `pytest -q -- --collect-only` is `unseeded`).
-- **The marker (RANDOM-8).** A comment `# pytest-random: <reason>`, with a reason that holds a letter, on the line of a
+- RANDOM-9: **The workflow.** A call is read with the reader of `pytest-workers` (PYTEST-2, PYTEST-3), through `uv run`,
+  `python -m pytest` and the other runners, at the call's first line.
+- RANDOM-11: `PYTEST_ADDOPTS` and `PYTEST_DISABLE_PLUGIN_AUTOLOAD` are read where a workflow, a job or a step sets them in
+  `env:`, at the value's line, and as an assignment word of a script, leading a command (`PYTEST_ADDOPTS=-q pytest`, `env
+  PYTEST_ADDOPTS=-q pytest`) or after `export`. Any value of `PYTEST_DISABLE_PLUGIN_AUTOLOAD` that is not empty (a blank one
+  included) switches the autoload off, as pytest reads it, so it is `unshuffled`, whatever else `env:` holds. A call behind a
+  script, `make` or a mise task, a `pytest.main([...])`, a flag in `pytest.ini`, `.pytest.ini`, `pytest.toml`,
+  `.pytest.toml`, `tox.ini` or `setup.cfg` and a plugin disabled in a `conftest.py` are not read. A call that only lists
+  tests, as `pytest-workers` reads it (PYTEST-5: `--collect-only`, `--collectonly` or `--co` before the first `--`), runs
+  none and is not judged (`pytest --collect-only -q` is clean, `pytest -q -- --collect-only` is `unseeded`).
+- RANDOM-8: **The marker.** A comment `# pytest-random: <reason>`, with a reason that holds a letter, on the line of a
   workflow call, assignment or `env:` value, or on a line of the unbroken run of comment-only lines directly above it,
   clears the finding (the form of `# pytest-workers:`, PYTEST-7), so `# pytest-workers:` and `# pytest-random:` stand on
   two lines above one call; a marker that trails another command's line clears that command only. It is the way out of a flow layer (end-to-end, browser, image); it clears nothing in `addopts`, and it has
   no other form.
-- **Facts and fixes (RANDOM-10).** `unshuffled`: `pytest-randomly is switched off or its order fixed by <source>`, its
+- RANDOM-10: **Facts and fixes.** `unshuffled`: `pytest-randomly is switched off or its order fixed by <source>`, its
   fix naming what to drop (`-p no:randomly`, `--randomly-dont-reorganize`, `--randomly-seed=<integer or last>`,
   `--disable-plugin-autoload` and `PYTEST_DISABLE_PLUGIN_AUTOLOAD`). `unseeded`:
   `pytest-randomly's seed header is hidden by <source>`, its fix
   `drop -q, --verbosity=-1 and --no-header so the log prints "Using --randomly-seed=N"`. The `<source>` is `addopts`,
   `the call`, `PYTEST_ADDOPTS` or `PYTEST_DISABLE_PLUGIN_AUTOLOAD`; a workflow finding adds
   `, or explain on the line above: # pytest-random: <reason>`.
-- **What cannot be read (RANDOM-3, RANDOM-12, RANDOM-13).** A lock or `pyproject.toml` that is no UTF-8 TOML, a lock
-  whose packages are no list of tables and an `addopts` that is neither a string of shell words nor a list of strings are
-  exit `2` naming the file. A workflow whose YAML cannot be read, and an alias or a merge key where it can hide `jobs`, a
-  job, `steps`, a step or an `env:`, and a `jobs` or a job that is no mapping, are exit `2` naming the file, as for
-  `pytest-workers` (PYTEST-9), and so is an
-  `env:` value of the two variables, or a script assignment of `PYTEST_ADDOPTS`, that is no shell words. A pytest line
-  the shared reading cannot read or finds built at run time is `invalid` for `pytest-workers` (PYTEST-6) and no finding
-  of this rule, so it is red once.
-- **No release, no switch (RANDOM-14).** No configuration switches the rule off and no declaration table exists. The rule
+- RANDOM-3: **What cannot be read.** A lock or `pyproject.toml` that is no UTF-8 TOML, a lock whose packages are no list of
+  tables and an `addopts` that is neither a string of shell words nor a list of strings are exit `2` naming the file.
+- RANDOM-12: A workflow whose YAML cannot be read, and an alias or a merge key where it can hide `jobs`, a job, `steps`, a
+  step or an `env:`, and a `jobs` or a job that is no mapping, are exit `2` naming the file, as for `pytest-workers`
+  (PYTEST-9), and so is an `env:` value of the two variables, or a script assignment of `PYTEST_ADDOPTS`, that is no shell
+  words.
+- RANDOM-13: A pytest line the shared reading cannot read or finds built at run time is `invalid` for `pytest-workers`
+  (PYTEST-6) and no finding of this rule, so it is red once.
+- RANDOM-14: **No release, no switch.** No configuration switches the rule off and no declaration table exists. The rule
   first ships in v0.24.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column (FLEET-18)
   and a dependent meets it at its bump to it. quality's own tree holds no finding of
   it. Not covered, named: pytest and pytest-randomly locked in different dependency groups where a job installs one group
@@ -2562,27 +2606,28 @@ with the seed printed" (pytest-randomly). Three readers judge that one decision.
 project to the same R6. Vitest runs files and tests in a fixed order unless `test.sequence.shuffle` is set, and prints
 `Running tests with seed "N"` whenever it shuffles, so the config decides it for every run, CI, local and IDE.
 
-- **The project (VITEST-1).** The directory of each `package.json` that `frontend_projects` yields (none under a project's
+- VITEST-1: **The project.** The directory of each `package.json` that `frontend_projects` yields (none under a project's
   `tests/`) and whose `dependencies` or `devDependencies` names `vitest`. Its config is the first tracked file among
   `vitest.config.<ext>` and then `vite.config.<ext>` (`.ts`, `.mts`, `.cts`, `.js`, `.mjs`, `.cjs`), vitest's own order. The
   row's extent is the projects read.
-- **No shuffle, `unshuffled` (VITEST-2, VITEST-3).** One finding per project, at the config or, with none tracked, at the
+- VITEST-2: **No shuffle, `unshuffled`.** One finding per project, at the config or, with none tracked, at the
   `package.json`, the fact `vitest runs its files and tests in a fixed order`. The config shuffles when the exported object
   (the object after `export default`, the argument of `defineConfig(` and the arrow form `=> ({` included; only a file
-  without `export default` falls back to its first `defineConfig(` argument; an `export default` that names no object,
-  as in `export default c`, reads none and is `unshuffled`) has a direct `test`
-  key whose object has a direct `sequence` key whose object holds `shuffle: true` or `shuffle: { files: true, tests: true }`.
-  A `sequence` anywhere else counts for nothing, since vitest 4 ignores a project's own; `{ files: true }` or
-  `{ tests: true }` alone leaves the other order fixed, so it is no shuffle. Any `shuffle: false` elsewhere in the file is a
-  finding too, since a vitest 5 project can turn the root's shuffle off. A `seed:` with a number literal in that
-  `sequence` is `unshuffled` as well (a fixed seed, as RANDOM-5 treats one); a seed set from an expression is clean. The fix
-  is `set test.sequence.shuffle: true in <config>; vitest then prints Running tests with seed "N"`, and for a fixed seed
-  `draw test.sequence.seed at run time or drop it in <config>; vitest then prints Running tests with seed "N"`.
-- **Reading (VITEST-4).** The config is read as tokens (`typescript_tokens`), never run. A config with a string, template,
+  without `export default` falls back to its first `defineConfig(` argument; an `export default` that names no object, as in
+  `export default c`, reads none and is `unshuffled`) has a direct `test` key whose object has a direct `sequence` key whose
+  object holds `shuffle: true` or `shuffle: { files: true, tests: true }`. A `sequence` anywhere else counts for nothing,
+  since vitest 4 ignores a project's own; `{ files: true }` or `{ tests: true }` alone leaves the other order fixed, so it is
+  no shuffle. Any `shuffle: false` elsewhere in the file is a finding too, since a vitest 5 project can turn the root's
+  shuffle off.
+- VITEST-3: A `seed:` with a number literal in that `sequence` is `unshuffled` as well (a fixed seed, as RANDOM-5 treats
+  one); a seed set from an expression is clean. The fix is `set test.sequence.shuffle: true in <config>; vitest then prints
+  Running tests with seed "N"`, and for a fixed seed `draw test.sequence.seed at run time or drop it in <config>; vitest then
+  prints Running tests with seed "N"`.
+- VITEST-4: **Reading.** The config is read as tokens (`typescript_tokens`), never run. A config with a string, template,
   regex or block comment that does not close, or that is no UTF-8, and a package.json that is no UTF-8 JSON (`unparsable`, as
   `naming` reports it, through the reader both share) are exit `2` naming the file. A key set in an imported module, a
   spread or `mergeConfig` does not count, which is stricter than vitest.
-- **No release, no switch (VITEST-5).** No configuration switches the rule off, and no marker exists: vitest has no flow
+- VITEST-5: **No release, no switch.** No configuration switches the rule off, and no marker exists: vitest has no flow
   layer, since the fleet's flow layer is Playwright. It first ships in v0.25.0, so a gate pinned below that release shows
   `not in <tag>` in the fleet matrix's column (FLEET-18). Not covered, named: negatives in scripts and workflow calls
   (`--sequence.shuffle=false`, `--sequence.seed=N`), `--config` pointing elsewhere, `extends: false`, a `reporters` list
@@ -2594,28 +2639,28 @@ R6. Node's runner runs its files and tests in a fixed order unless `--test-rando
 otherwise (node 24.16 or newer; an older node refuses the flag), and prints `Randomized test order seed: N` through its
 spec, tap and junit reporters.
 
-- **The call (NODETEST-1).** A command in a `run:` script of a tracked workflow, read by the reader of `pytest-workers`
+- NODETEST-1: **The call.** A command in a `run:` script of a tracked workflow, read by the reader of `pytest-workers`
   (PYTEST-2, PYTEST-3: wrappers, assignments, a shell's `-c` string, and the runners `npx`, `npm exec`, `pnpm exec` and
   `yarn`), whose command word is `node` and whose words before the first `--` hold `--test`. The row's extent is the
   workflows read; a repository without such a call is clean.
-- **No shuffle, `unshuffled` (NODETEST-2).** One finding at the call's first line, the fact `node --test runs its files and
+- NODETEST-2: **No shuffle, `unshuffled`.** One finding at the call's first line, the fact `node --test runs its files and
   tests in a fixed order`. Among the words before the first `--`, a call shuffles when the last of `--test-randomize` and
   `--no-test-randomize` is `--test-randomize` (`--test-randomize=<anything>` counts as set, as node reads it), or when a
   `--test-random-seed` stands; a seed whose value (`=n` or the next word) is a whole number fixes the order and is
   `unshuffled` as well (as RANDOM-5 treats one), while a seed built at run time (`${{ }}`, `$VAR`, `$(...)`) is clean. The fix
   is `pass --test-randomize before the test files and drop --no-test-randomize and a fixed --test-random-seed (node 24.16 or
   newer); node then prints "Randomized test order seed: N"`.
-- **No seed in the log, `unseeded` (NODETEST-3).** A call that shuffles and has `--test-reporter` words, none of them a
+- NODETEST-3: **No seed in the log, `unseeded`.** A call that shuffles and has `--test-reporter` words, none of them a
   `spec`, `tap` or `junit` reporter whose destination is `stdout` or `stderr`: the n-th `--test-reporter-destination` goes
   with the n-th `--test-reporter`, and a reporter without one writes to stdout. `dot`, `lcov` and a reporter named by
   module path or package do not count; a call without `--test-reporter` is clean. The fact is `no reporter of the call prints
   the seed to the log`, the fix `add --test-reporter=spec --test-reporter-destination=stdout so the log prints "Randomized
   test order seed: N"`. A call that does not shuffle has the first finding only, so each call has at most one.
-- **Reading (NODETEST-4).** The words are read, never run. A line the reader cannot finish that holds the words `node` and
+- NODETEST-4: **Reading.** The words are read, never run. A line the reader cannot finish that holds the words `node` and
   `--test` is `invalid` (`command cannot be read to its end`), and so is a command built at run time in a script holding
   them (`command is built at run time, node --test cannot be read`). A workflow that cannot be read is exit `2` naming the
   file, as PYTEST-9 says.
-- **No release, no switch (NODETEST-5).** No configuration switches the rule off, and no marker exists, as for VITEST-5. It
+- NODETEST-5: **No release, no switch.** No configuration switches the rule off, and no marker exists, as for VITEST-5. It
   first ships in v0.26.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column (FLEET-18).
   Not covered, named: a call behind a package.json script (`npm test`, `pnpm test`, `node --run`), `make` or a mise task,
   `run()` from `node:test` inside a script, `NODE_OPTIONS` (a randomizing value there leaves the finding, a fixing one goes
