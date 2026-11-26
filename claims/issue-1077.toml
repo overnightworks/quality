@@ -1,8 +1,0 @@
-claim_id = "3e1ea5e93f6447098dc80448ce8d9d0a"
-agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
-role = "builder"
-base = "0334114dd750136013aeb6dbee25728baf708e11"
-branch = "claude/issue-1077-added-allow-entry-loosens"
-scope = ["docs/ARCHITECTURE.md", "docs/commands.md", "docs/gate.md", "docs/output.md", "docs/rules.md", "src/quality/cli.py", "src/quality/config.py", "src/quality/config_allowances.py", "src/quality/config_entries.py", "src/quality/landing.py", "src/quality/loosenings.py", "src/quality/merge.py", "src/quality/ratchet.py", "src/quality/report.py", "src/quality/root_layout.py", "src/quality/sides.py", "src/quality/verdict.py", "tests"]
-opened_commit = "657283e9f47ac177dc95f55cb124133a0d948038"
-whole_reason = "One judgement, an added allow entry, carried through its two tables' readers, the verdict's one loosening path and the door, the fixes that ask for an entry, and their spec sentences; the tests directory because the cases sit in the reader, verdict and door test modules."
