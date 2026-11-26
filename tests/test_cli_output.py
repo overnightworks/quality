@@ -123,8 +123,8 @@ def test_a_closed_stderr_keeps_the_stop_on_stdout_and_the_exit(broken_compose_re
 
 @pytest.mark.parametrize(
     "arguments",
-    [("sonar", "properties")],
-    ids=["sonar properties"],
+    [("sonar", "properties"), ("sonar", "scanner")],
+    ids=["sonar properties", "sonar scanner"],
 )
 def test_other_doors_start_with_the_stop_too(clean_repo, arguments):
     """MASK-14: the other doors start with the stop too."""

@@ -550,10 +550,16 @@ def is_quality_checkout(root: Path) -> bool:
 class NoGatePin:
     """No tracked workflow calls quality's gate.yml."""
 
+    def version_words(self) -> str:
+        return "no workflow here calls quality's gate.yml"
+
 
 @dataclass(frozen=True)
 class OwnGate:
     """quality's own checkout calls its own gate.yml: the checkout judges itself."""
+
+    def version_words(self) -> str:
+        return "this checkout of quality judges itself"
 
 
 @dataclass(frozen=True)
@@ -564,12 +570,18 @@ class GatePin:
     release: str
     workflows: tuple[str, ...]
 
+    def version_words(self) -> str:
+        return f"this repository's gate pins {self.release}"
+
 
 @dataclass(frozen=True)
 class UnknownGatePin:
     """The workflows do not say which release the gate runs at; `reason` says why and how to pin."""
 
     reason: Reason
+
+    def version_words(self) -> str:
+        return self.reason.fact
 
 
 GateState = NoGatePin | OwnGate | GatePin | UnknownGatePin
