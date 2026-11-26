@@ -1,8 +1,0 @@
-claim_id = "3ab45eaab28a43f688bb8bf04c0bd811"
-agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
-role = "builder"
-base = "4b84cef7c2600f60ac36568d4071659b8a5a004d"
-branch = "claude/issue-1057-rules-md-opening-to-adapter-import"
-scope = ["docs/rules.md", "tests"]
-opened_commit = "d77520097cb961559ffdad8386ef0b0d89ff98d7"
-whole_reason = "One range of one document converted to one form, plus at most the test docstrings that already prove their uncited IDs."
