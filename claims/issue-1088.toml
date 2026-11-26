@@ -1,7 +1,0 @@
-claim_id = "ef9de5f571cd4d43bca7c515ab045d74"
-agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
-role = "builder"
-base = "a32fe356d37c012f9136cdfe3dce80545834923e"
-branch = "claude/issue-1088-protective-checks-list"
-scope = ["AGENTS.md", "docs/protective-checks.md"]
-opened_commit = "b98e63a78c42f2ded87e9fbb0c18303bdf61d932"
