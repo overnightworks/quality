@@ -295,6 +295,15 @@ def test_every_tracked_regular_python_file_is_judged(build_repo, path):
 
 
 @pytest.mark.integration
+def test_two_files_whose_names_ruff_prints_alike_cannot_be_judged(build_repo, capsys):
+    """SECURITY-28, SECURITY-30: two names that differ only in bytes that are not UTF-8 make both rules `cannot judge`,
+    exit 2, and the other rules are still judged."""
+    repo = build_repo({".env": "A=1\n", **{f"src/p/{byte}.py": EVAL for byte in ("\udcff", "\udcfe")}})
+    code, output = run(capsys, repo)
+    assert (code, list(refusals(repo)), env_row_stands(output)) == (2, [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT], True)
+
+
+@pytest.mark.integration
 def test_untracked_linked_submodule_notebook_stub_and_suffixless_files_are_not_judged(build_repo):
     """SECURITY-6: none of these is judged, and the rule is clean."""
     repo = build_repo({"a.ipynb": EVAL, "a.pyi": EVAL, "scripts/run_it": EVAL, "real.txt": EVAL})
@@ -432,13 +441,14 @@ def test_a_syntax_error_is_unparsable_and_the_other_rules_are_still_judged(build
         ("echo boom >&2; exit 2", "ruff exited 2"),
         ("echo 'not json'", "ruff printed a report quality cannot read"),
         ("echo 'warning: Failed to lint src/p/a.py: gone' >&2; echo '[]'", "warning: Failed to lint src/p/a.py"),
+        ("printf '\\377'", "printed output that is not UTF-8"),
         ("exec sleep 5", "did not finish within"),
     ],
-    ids=["exit 2", "unreadable JSON", "failed to lint", "timeout"],
+    ids=["exit 2", "unreadable JSON", "failed to lint", "report that is not UTF-8", "timeout"],
 )
 def test_a_ruff_run_quality_cannot_trust_cannot_be_judged(build_repo, capsys, monkeypatch, elsewhere, on_check, says):
     """SECURITY-22, SECURITY-23, SECURITY-24, SECURITY-25, SECURITY-28, CHECK-4: a ruff exit other than 0 or 1,
-    a `Failed to lint` warning, a report quality cannot read and a time-out make both rules `cannot judge`, exit 2, and
+    a `Failed to lint` warning, a report quality cannot read (JSON or text) and a time-out make both rules `cannot judge`, exit 2, and
     the other rules are still judged."""
     repo = build_repo({".env": "A=1\n", "src/p/a.py": "x = 1\n"})
     binary = fake_ruff(elsewhere, on_check)

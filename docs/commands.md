@@ -116,7 +116,8 @@ What a run that names areas judges and prints is in [rules](rules.md).
 - PIN-33: Ctrl-C or
   SIGTERM while uv prepares ends quality, uv and every process uv started.
 - PIN-34: In quality's checkout an installation
-  runs the checkout's code, prepared through `uv run`;
+  runs the checkout's code, prepared through `uv run`; a run that is not the checkout's code (a marked child, which never
+  runs another, PIN-18) is `error: this is quality <version>, not this checkout's code` with `next: uv run quality check`;
 - PIN-35: a preparation that fails there is
   `error: cannot prepare this checkout · uv exited 2` with `next: uv run quality check`.
 

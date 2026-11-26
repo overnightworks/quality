@@ -1,3 +1,4 @@
+import json
 import shlex
 import tomllib
 
@@ -105,6 +106,17 @@ def test_unreadable_or_inconsistent_workflow_result_cannot_be_judged(scanner, re
     code = FINDING_EXIT[scanner] if exit_code == "finding" else exit_code
     with pytest.raises(ScannerError):
         workflow_findings(scanner, text, code)
+
+
+@pytest.mark.parametrize(
+    ("scanner", "field", "value"), [("actionlint", "line", "4"), ("zizmor", "ident", 7)], ids=["actionlint line as text", "zizmor rule as number"],
+)
+def test_a_workflow_finding_with_a_field_of_the_wrong_type_cannot_be_judged(scanner, field, value):
+    """A finding whose field has the wrong type is a ScannerError, never a finding at a made-up place."""
+    entries = json.loads(recorded(f"{scanner}-finding.json"))
+    entries[0][field] = value
+    with pytest.raises(ScannerError):
+        workflow_findings(scanner, json.dumps(entries), FINDING_EXIT[scanner])
 
 
 def test_the_manifest_pins_each_scanner_once():

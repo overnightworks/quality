@@ -262,6 +262,26 @@ def test_a_git_older_than_2_41_is_exit_2_naming_the_version(
     assert f"{refusal_row('secrets')}git {git_version} cannot hide .gitattributes from the gitleaks scan, it needs git 2.41" in heard(capsys)
 
 
+@pytest.mark.parametrize("words", [(CHECK_WORD,), STAGED_WORDS], ids=["check", "staged"])
+def test_a_git_whose_version_cannot_be_read_is_exit_2(served_scanners, build_repo, fake_git, capsys, words):
+    """SECRET-14: a git that names no version is exit 2 like one below the floor, and the refusal row says so."""
+    fake_gitleaks(served_scanners)
+    repo = build_repo({})
+    fake_git('[ "$1" = "--version" ] && echo "not a version" && exit 0')
+    assert door_in(repo, *words) == 2
+    assert f"{refusal_row('secrets')}cannot read the git version" in heard(capsys)
+
+
+def test_a_repository_without_a_commit_is_exit_2_for_the_secret_rule_alone(served_scanners, tmp_path, capsys):
+    """SECRET-28: a repository with no commit has no history to scan, which is exit 2 for the secret rule alone."""
+    fake_gitleaks(served_scanners)
+    repo = tmp_path / "fresh"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", "https://github.com/acme/shop"], check=True)
+    check_exit_2(repo, capsys)
+    assert set(refusals(repo)) == {Rule.LEAK}
+
+
 @pytest.mark.scanner
 def test_installed_binary_reports_the_pinned_version(build_repo, installed_scanners):
     """SCANNER-5: the gitleaks mise installed reports the pinned version, so it runs."""

@@ -380,8 +380,12 @@ def test_an_editable_installation_judges_at_the_pin_only_while_clean(scene):
     )
 
 
-def test_uv_missing_is_the_pair(scene):
-    """PIN-30: a uv that is not installed is the pair that asks to install it."""
+@pytest.mark.parametrize("recorded", [pytest.param(False, id="no record"), pytest.param(True, id="a record, prepared offline first")])
+def test_uv_missing_is_the_pair(scene, recorded):
+    """PIN-30: a uv that is not installed is the pair that asks to install it, whether the run would prepare offline or
+    fetched."""
+    if recorded:
+        pin.keep_record(scene.records, scene.commit, RELEASE)
     bin_directory = scene.root / "uv-free-bin"
     bin_directory.mkdir()
     for tool in ("git", "sh"):
@@ -399,6 +403,37 @@ def test_a_vanished_environment_is_the_pair(scene):
     assert (done.returncode, done.stderr.splitlines()) == (
         2, [f"error: cannot start quality {RELEASE} · No such file or directory", "next: quality check again"],
     )
+
+
+@pytest.mark.parametrize(
+    ("uv_answer", "cause"),
+    [
+        pytest.param({"exit": 1}, "uv exited 1", id="uv exited"),
+        pytest.param({}, pin.Failure.NO_EXECUTABLE.value, id="uv left no quality executable"),
+    ],
+)
+def test_a_release_uv_cannot_prepare_is_the_pair(scene, uv_answer, cause):
+    """PIN-29: where github.com answered but uv exited or left no `quality` executable, the run is the pair that names
+    the cause, with no row."""
+    scene.answer(offline=uv_answer, online=uv_answer)
+    done = scene.run("check", "files")
+    assert (done.returncode, done.stdout, done.stderr.splitlines()[0]) == (
+        2, "", f"error: cannot prepare quality {RELEASE}, which the gate pins · {cause}",
+    )
+
+
+def test_a_machine_without_a_cache_directory_still_judges_and_fetches_every_time(scene):
+    """PIN-13, PIN-23, PIN-26: with neither `$XDG_CACHE_HOME` nor `$HOME` an absolute path, no record can stand, so every
+    run fetches and still judges as the pinned release."""
+    runs = [scene.run("check", "files", XDG_CACHE_HOME="", HOME="") for _ in range(2)]
+    assert ([done.returncode for done in runs], [("--offline" in call["argv"]) for call in scene.uv_calls()]) == ([0, 0], [False, False])
+
+
+def test_a_tag_query_answered_with_what_is_not_text_is_the_offline_pair(scene, fake_git):
+    """PIN-27: a quality remote whose answer cannot be read is no answer from github.com."""
+    fake_git("case \" $* \" in *\" ls-remote \"*) printf '\\377'; exit 0;; esac")
+    done = scene.run("check", "files")
+    assert (done.returncode, done.stdout, done.stderr.splitlines(), scene.uv_calls()) == (2, "", OFFLINE_PAIR, [])
 
 
 def wait_for_group_to_end(started: subprocess.Popen) -> None:
@@ -508,15 +543,23 @@ def own_gate_ci() -> dict[str, str]:
     return {".github/workflows/ci.yml": "on: push\njobs:\n  gate:\n    uses: ./.github/workflows/gate.yml\n"}
 
 
-def test_quality_s_checkout_reexecutes_through_uv_run(scene):
-    """PIN-34: quality's checkout is prepared through `uv run`, and an installation run there re-executes into the
-    checkout's code."""
+@pytest.mark.parametrize(
+    ("cached", "flags", "guard"),
+    [
+        pytest.param(True, [["--offline", "--quiet"]], pin.Fetch.CACHED, id="uv's cache holds it"),
+        pytest.param(False, [["--offline", "--quiet"], ["--quiet"]], pin.Fetch.FETCHED, id="uv's cache lacks it"),
+    ],
+)
+def test_quality_s_checkout_reexecutes_through_uv_run(scene, cached, flags, guard):
+    """PIN-34: quality's checkout is prepared through `uv run`, offline first and fetched where uv's cache lacks it, and
+    an installation run there re-executes into the checkout's code."""
     checkout = new_repo(scene.root / "quality", own_gate_ci())
     git(checkout, "remote", "add", "origin", QUALITY_URL)
+    scene.answer(offline=None if cached else {"exit": 1})
     done = scene.run("check", "files", cwd=checkout)
-    calls = [call["argv"][:6] for call in scene.uv_calls()]
+    calls = [call["argv"][: len(wanted) + 4] for call, wanted in zip(scene.uv_calls(), flags, strict=True)]
     assert (done.returncode, calls, scene.queried_tags(), scene.child()["guard"]) == (
-        0, [["run", "--offline", "--quiet", "--locked", "--project", str(checkout)]], False, pin.Fetch.CACHED,
+        0, [["run", *wanted, "--locked", "--project", str(checkout)] for wanted in flags], False, guard,
     )
 
 

@@ -17,7 +17,7 @@ from typing import ClassVar
 import pytest
 import yaml
 
-from quality import __version__, cli, fleet_ci_time, web
+from quality import __version__, cli, fleet, fleet_ci_time, web
 from quality.fleet import REPORT_DEADLINE_SECONDS, anonymous_environment, parse_fleet, read_fleet
 from quality.output import SEPARATOR
 from quality.report import CannotJudge
@@ -239,6 +239,24 @@ def test_a_file_name_that_is_not_utf8_is_measured(fleet_report, public):
     code, output = fleet_report(public("bytes", {"caf\udce9.py": "a = 1\n"}))
     assert code == 0, output
     assert row(output, "o/bytes")[3] == "1 / 0"
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("git_preamble", "label"),
+    [
+        pytest.param('case " $* " in *" clone "*) sleep 30;; esac', "cannot judge: cannot clone (", id="a clone that outlasts its bound"),
+        pytest.param('case " $* " in *" rev-list "*) exit 1;; esac', "cannot judge: cannot read the cloned commit", id="a clone whose commit git cannot name"),
+    ],
+)
+def test_a_repo_whose_git_fails_is_a_cannot_judge_row_with_no_local_path(fleet_report, public, fake_git, monkeypatch, tmp_path, git_preamble, label):
+    """FLEET-95, FLEET-96: a clone git does not finish or a cloned commit git cannot name is a `cannot judge` row without
+    a path."""
+    monkeypatch.setattr(fleet, "CLONE_TIMEOUT_SECONDS", 1)
+    name = public("stuck", {"a.py": "a = 1\n"})
+    fake_git(git_preamble)
+    code, output = fleet_report(name)
+    assert (code, row(output, name)[2].startswith(label), str(tmp_path) in output) == (2, True, False), output
 
 
 @pytest.mark.integration

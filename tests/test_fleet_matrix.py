@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from quality import baseline_file
+from quality import baseline_file, fleet
 from quality.checkout import GATE_REPOSITORY
 from quality.fleet import (
     MATRIX_COLUMNS,
@@ -165,6 +165,21 @@ def test_release_tags_are_the_peeled_commits_of_annotated_and_lightweight_tags(g
         subprocess.run([*git, "tag", *tag], check=True)
     tip = head_commit(directory)
     assert read_release_tags() == {"v0.1.0": tip, "v0.2.0": tip}
+
+
+@pytest.mark.parametrize(
+    "git_preamble",
+    [
+        pytest.param('case " $* " in *" ls-remote "*) exit 3;; esac', id="a listing git refuses"),
+        pytest.param('case " $* " in *" ls-remote "*) sleep 30;; esac', id="a listing git does not finish"),
+    ],
+)
+def test_release_tags_git_cannot_list_are_unreadable(fake_git, monkeypatch, git_preamble):
+    """FLEET-1, FLEET-25: a listing that fails or does not finish in its bound is no release tags."""
+    monkeypatch.setattr(fleet, "LS_REMOTE_TIMEOUT_SECONDS", 1)
+    fake_git(git_preamble)
+    with pytest.raises(ReleaseTagsError):
+        read_release_tags()
 
 
 @pytest.mark.parametrize(
