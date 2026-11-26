@@ -1,8 +1,0 @@
-claim_id = "c91c25b7575e41eba8be74950c211bd8"
-agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
-role = "builder"
-base = "bde65d7f6ed50d7ad6031c8d636a33fe1891a452"
-branch = "claude/issue-1064-cover-remaining-sites"
-scope = ["docs/commands.md", "docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/adapter_imports.py", "src/quality/checkout.py", "src/quality/cli.py", "src/quality/compose.py", "src/quality/merge.py", "src/quality/sides.py", "src/quality/suites.py", "tests"]
-opened_commit = "1fe43b921d29f0511b7a3ab3e208987e199949dd"
-whole_reason = "The residue of one measurement with one kind of answer per site and one floor value; each module alone is a few lines."
