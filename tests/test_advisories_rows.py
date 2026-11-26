@@ -222,7 +222,7 @@ def rows_and_fixes_of(block: list[BlockLine]) -> tuple[int, int]:
     ids=["one fixed version", "several", "none listed", "no affected entry for the package", "a shell metacharacter", "an escape character"],
 )
 def test_each_kind_of_advisory_finding_carries_its_event_fact_and_fix(drive_advisories, edited_report, edit, name, fixed, fix_is):
-    """ADVISORY-25, ADVISORY-26, ADVISORY-27, ADVISORY-28, ADVISORY-29, ROW-7, ROW-14, O41: the event, the fact
+    """ADVISORY-25, ADVISORY-26, ADVISORY-27, ADVISORY-28, ADVISORY-29, ROW-7, ROW-14, ROW-30: the event, the fact
     from the report's own values and the fix per kind, and no fact or fix names a rule id or ends in a full stop."""
     run = drive_advisories({"uv.lock": uv_lock()}, edited_report("osv-scanner-finding.json", edit))
     (finding,) = run.area.findings
@@ -242,7 +242,7 @@ def test_each_kind_of_advisory_finding_carries_its_event_fact_and_fix(drive_advi
 
 @pytest.mark.integration
 def test_the_row_names_one_id_of_a_group_with_aliases(drive_advisories):
-    """O42: the row holds the group's first id and no alias."""
+    """ROW-31: the row holds the group's first id and no alias."""
     run = drive_advisories({"uv.lock": uv_lock()})
     assert (FIRST_ID in run.out, ALIAS in run.out + run.err, run.err) == (True, False, "")
 
@@ -279,7 +279,7 @@ PNPM_PACKAGE = npm_report("lodash", "lodash")
     ids=["two groups of one uv package", "two uv packages", "two pnpm packages", "two requirements pins"],
 )
 def test_equal_fixes_share_one_fix_line_and_different_ones_do_not(drive_advisories, edited_report, files, edit, rows_and_fixes):
-    """ADVISORY-23, O44: one `fix:` per run of equal fixes, and a uv fix names its package."""
+    """ADVISORY-23, ROW-33: one `fix:` per run of equal fixes, and a uv fix names its package."""
     run = drive_advisories(files, edited_report("osv-scanner-finding.json", edit))
     block = area_block(run.out, Area.DEPENDENCIES)
     assert_block_prints(block, run.area.findings, ())
@@ -298,7 +298,7 @@ def test_equal_fixes_share_one_fix_line_and_different_ones_do_not(drive_advisori
     ids=["uv.lock", "a nested uv.lock", "a nested pnpm lock", "a requirements file"],
 )
 def test_the_fix_of_each_lock_kind_holds_its_hint_and_its_folder(drive_advisories, edited_report, lock, files, edit, package):
-    """ADVISORY-24, O43, O44: the root lock's fix is the hint, a nested lock's ends with it and names its directory."""
+    """ADVISORY-24, ROW-32, ROW-33: the root lock's fix is the hint, a nested lock's ends with it and names its directory."""
     run = drive_advisories(files, edited_report("osv-scanner-finding.json", edit))
     (finding,) = run.area.findings
     directory = str(PurePosixPath(lock).parent)
@@ -310,7 +310,7 @@ def test_the_fix_of_each_lock_kind_holds_its_hint_and_its_folder(drive_advisorie
 
 @pytest.mark.integration
 def test_a_nested_lock_keeps_its_folder_when_the_package_has_no_shell_word(drive_advisories, edited_report):
-    """ADVISORY-29, O41, O43: the link replaces the command, and the folder stays."""
+    """ADVISORY-29, ROW-30, ROW-32: the link replaces the command, and the folder stays."""
     name, lock = "py\x1byaml", "src/speech/uv.lock"
     run = drive_advisories({lock: uv_lock()}, edited_report("osv-scanner-finding.json", then(rename_package(name), add_fixed_version("6.0"))))
     (finding,) = run.area.findings
@@ -346,7 +346,7 @@ def test_two_tracked_names_of_one_lock_print_one_row_each_and_align(drive_adviso
     ids=["an allowance that ran out", "two allowances on one group", "an allowance no advisory matches", "an allowance with no lock"],
 )
 def test_each_allowance_finding_stands_as_a_row(drive_advisories, with_lock, config, expected, words):
-    """ALLOW-4, ALLOW-5, ALLOW-9, ALLOW-11, O45, O46, ROW-7, ROW-14: a ran-out allowance stays an affected row,
+    """ALLOW-4, ALLOW-5, ALLOW-9, ALLOW-11, ROW-34, ROW-35, ROW-7, ROW-14: a ran-out allowance stays an affected row,
     a conflict and an unused entry stand at the config, and no fact or fix names a rule id or ends in a full stop."""
     files = {"quality/config.toml": config, **({"uv.lock": uv_lock()} if with_lock else {})}
     run = drive_advisories(files)
@@ -432,7 +432,7 @@ def test_a_refused_area_leaves_the_note_row_and_the_exact_pair(drive_advisories,
     ],
 )
 def test_a_clean_row_counts_the_lockfiles_and_the_packages_the_report_lists(drive_advisories, build_repo, files, edit, counts):
-    """ADVISORY-20, O48: a package counts once per tracked file, by ecosystem, name as the ecosystem compares it and
+    """ADVISORY-20, ROW-39: a package counts once per tracked file, by ecosystem, name as the ecosystem compares it and
     version."""
     repo = build_repo(files)
     run = drive_advisories(repo, report_naming(repo, next(iter(files)), edit), code=0)
@@ -465,7 +465,7 @@ def test_a_report_with_two_malformed_packages_refuses_with_the_fact_of_the_first
 
 @pytest.mark.integration
 def test_the_packages_of_two_lock_files_add_up(drive_advisories, build_repo):
-    """ADVISORY-20, O48: each tracked lock counts the packages the report lists for it."""
+    """ADVISORY-20, ROW-39: each tracked lock counts the packages the report lists for it."""
     other = "src/speech/uv.lock"
     repo = build_repo({"uv.lock": uv_lock(), other: uv_lock()})
 
@@ -482,7 +482,7 @@ def test_the_packages_of_two_lock_files_add_up(drive_advisories, build_repo):
 
 @pytest.mark.integration
 def test_a_lock_reached_by_two_tracked_names_counts_for_each(drive_advisories, build_repo, edited_report):
-    """ADVISORY-22, O48: one resolved file under two tracked names is two lock files with a package each."""
+    """ADVISORY-22, ROW-39: one resolved file under two tracked names is two lock files with a package each."""
     repo = build_repo({"uv.lock": uv_lock()})
     (repo / "src/speech").mkdir(parents=True)
     (repo / "src/speech/uv.lock").symlink_to("../../uv.lock")
@@ -494,7 +494,7 @@ def test_a_lock_reached_by_two_tracked_names_counts_for_each(drive_advisories, b
 
 @pytest.mark.integration
 def test_a_package_a_requirements_file_lists_as_a_pin_and_as_a_wheel_counts_once(drive_advisories, build_repo):
-    """ADVISORY-21, O48: the pin and the wheel line of one package are read from two files under one tracked name."""
+    """ADVISORY-21, ROW-39: the pin and the wheel line of one package are read from two files under one tracked name."""
     wheel = f"{PACKAGE_NAME} @ https://example.invalid/{PACKAGE_NAME}-6.0.2-py3-none-any.whl --hash=sha256:{'ab' * 32}"
     name = "docs/requirements.txt"
     repo = build_repo({name: f"{PACKAGE_NAME}==6.0.2\n{wheel}\n"})
@@ -537,7 +537,7 @@ def second_group_id(report_file: Path) -> str:
 )
 @pytest.mark.parametrize("named", [FIRST_ID, ALIAS], ids=["the group's first id", "an alias"])
 def test_an_allowed_advisory_stands_as_a_note_row_under_the_clean_row(drive_advisories, edited_report, lock, files, edit, package, version, named):
-    """ALLOW-2, ALLOW-6, ALLOW-19, ALLOW-20, O15, O49: an allowance matched by any id of the group, with or without
+    """ALLOW-2, ALLOW-6, ALLOW-19, ALLOW-20, ROW-42: an allowance matched by any id of the group, with or without
     a fixed version, stands as a note under the clean row holding the package, the group's first id, the date, the
     item and the reason, and its fact starts with the affected row's."""
     run = drive_advisories({"quality/config.toml": entry(named, lock), **files}, edited_report("osv-scanner-finding.json", edit))
@@ -555,7 +555,7 @@ def test_an_allowed_advisory_stands_as_a_note_row_under_the_clean_row(drive_advi
 
 @pytest.mark.integration
 def test_two_allowed_advisories_stand_as_two_note_rows_and_the_row_counts_them(drive_advisories, edited_report):
-    """ALLOW-6, O15, O49: one note per allowed group, in the order of the groups, and the row counts them."""
+    """ALLOW-6, ROW-42: one note per allowed group, in the order of the groups, and the row counts them."""
     report = edited_report("osv-scanner-finding.json", add_second_group)
     second = second_group_id(report)
     run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry() + entry(second)}, report)
@@ -568,7 +568,7 @@ def test_two_allowed_advisories_stand_as_two_note_rows_and_the_row_counts_them(d
 
 @pytest.mark.integration
 def test_an_allowed_advisory_stands_after_the_findings_and_their_fix(drive_advisories, edited_report):
-    """ALLOW-6, O15, ROW-10: the note follows the last `fix:`, and an area with a finding keeps its row without an
+    """ALLOW-6, ROW-42, ROW-10: the note follows the last `fix:`, and an area with a finding keeps its row without an
     extent."""
     run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry()}, edited_report("osv-scanner-finding.json", add_second_group))
     row_line = next(line for line in run.out.splitlines() if line.split()[1:2] == [Area.DEPENDENCIES])
@@ -579,7 +579,7 @@ def test_an_allowed_advisory_stands_after_the_findings_and_their_fix(drive_advis
 
 @pytest.mark.integration
 def test_an_allowance_that_ran_out_leaves_no_note(drive_advisories):
-    """ALLOW-4, O45: an allowance past its date is an affected row, and no note stands for it."""
+    """ALLOW-4, ROW-34: an allowance past its date is an affected row, and no note stands for it."""
     run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry(until=datetime.date(2000, 1, 1))})
     rows = [line for line in area_block(run.out, Area.DEPENDENCIES) if isinstance(line, FindingLine)]
     assert (run.area.notes, [row.row.event for row in rows], run.err) == ((), [FindingEvent.AFFECTED], "")
@@ -594,7 +594,7 @@ def test_an_allowed_advisory_leaves_no_line_before_the_area_rows(drive_advisorie
 
 @pytest.mark.integration
 def test_an_owner_and_an_allowed_advisory_stand_under_their_own_rows(drive_advisories):
-    """O15: the output owner stands under the code row and the allowed advisory under its own."""
+    """ROW-42: the output owner stands under the code row and the allowed advisory under its own."""
     owner = "# ruff: noqa: T201 - the command line owns its output\nprint(1)\n"
     run = drive_advisories({"src/door.py": owner, "uv.lock": uv_lock(), "quality/config.toml": entry()})
     (code_notes,) = [verdict.notes for verdict in run.areas if verdict.area is Area.CODE]

@@ -296,7 +296,7 @@ def headers(lines: list[str]) -> list[str]:
 
 
 def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_repo, capsys):
-    """ROW-8, ROW-9, ROW-11, ROW-12, CLOSING-4, CLOSING-5, O16, ROW-18, O30, O38, O48: a clean run has one clean row per
+    """ROW-8, ROW-9, ROW-11, ROW-12, CLOSING-4, CLOSING-5, ROW-36, ROW-18, ROW-37, ROW-38, ROW-39: a clean run has one clean row per
     area in area order, each with its extent: the files row its rules and distinct tracked paths, the debt row the
     entries and pairs of the ceiling file, the imports row its contracts, the secrets row its commits, the workflows
     row its workflow files and the offline audits, the dependencies row its lockfiles and packages, the code row its
@@ -322,7 +322,7 @@ def test_a_clean_run_has_seven_clean_rows_in_area_order_and_the_verdict(build_re
 
 
 def test_a_run_without_a_baseline_notes_the_debt_as_not_recorded_and_says_it_is_not_enforced(build_repo, capsys):
-    """O21, CLOSING-8, CLOSING-30: with no ceiling file the debt row counts the entries over the thresholds and ends in
+    """ROW-40, CLOSING-8, CLOSING-30: with no ceiling file the debt row counts the entries over the thresholds and ends in
     the mode measured only, the verdict says `debt ceiling measured, not enforced` and the exit is 0."""
     repo = build_repo({**CLEAN_FILES, **KEPT_CONTRACT, "src/big.py": "x = 1\n" * 800})
     code, out, err = frame_run(capsys, repo)
@@ -333,7 +333,7 @@ def test_a_run_without_a_baseline_notes_the_debt_as_not_recorded_and_says_it_is_
 
 
 def test_a_baseline_without_clones_is_partly_measured_only(build_repo, capsys):
-    """CLOSING-9, O21: a ceiling file with no clones table makes the debt row count the clone pairs and end in the
+    """CLOSING-9, ROW-40: a ceiling file with no clones table makes the debt row count the clone pairs and end in the
     partly mode, and the verdict says `debt ceiling partly measured, not enforced`."""
     repo = build_repo({**CLEAN_FILES, **KEPT_CONTRACT, BASELINE_PATH: "", "src/a.py": function("first", "a", "b"), "src/b.py": function("second", "c", "d")})
     code, out, err = frame_run(capsys, repo)
@@ -362,7 +362,7 @@ def test_findings_in_two_areas_follow_their_rows_and_end_in_the_counted_verdict(
 
 
 def test_the_files_block_lists_the_event_rows_in_run_order_with_one_fix_per_run(build_repo, capsys):
-    """O14, ROW-2, ROW-3: three rows stand under the files row in run order, the compose pair sharing the fix that
+    """ROW-19, ROW-2, ROW-3: three rows stand under the files row in run order, the compose pair sharing the fix that
     follows its last row."""
     repo = build_repo({**CASE_TWO, **ROOT_ALLOWS_ENV})
     code, out, err = frame_run(capsys, repo)
@@ -380,7 +380,7 @@ def test_the_files_block_lists_the_event_rows_in_run_order_with_one_fix_per_run(
 
 
 def test_the_files_block_lists_every_finding_in_run_order_python_floor_last_then_the_notes(build_repo, capsys):
-    """O14, O15, ROW-10: the files rows stand in the rule runner's order, the notes after the last finding, and the area
+    """ROW-19, ROW-42, ROW-10: the files rows stand in the rule runner's order, the notes after the last finding, and the area
     row counts the findings."""
     floor = '[project]\nrequires-python = ">=3.12"\n'
     allowance = f'{config_allowances.PYTHON_ALLOWANCE_HEADING}\npath = "src/s/pyproject.toml"\nreason = "r"\n'

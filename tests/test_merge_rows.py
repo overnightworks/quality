@@ -336,7 +336,7 @@ def push_step():
     "refusal", [refusal for refusal in all_refusals() if "gate" in refusal.loaders and refusal.text is not None], ids=lambda refusal: refusal.id
 )
 def test_every_config_refused_at_the_merge_commit_is_its_fact_on_the_row_and_its_example_under_next(refusal, capsys):
-    """MERGE-17, MERGE-20, O10: a config refused at the merge commit is its fact on the `✗ loosenings` row, its
+    """MERGE-17, MERGE-20, REFUSAL-24: a config refused at the merge commit is its fact on the `✗ loosenings` row, its
     example under `next:` and the push step."""
     gh = FakeGh(merge_config=refusal.text)
     code, out, err = run(gh, capsys)
@@ -410,7 +410,7 @@ def test_a_head_behind_the_base_tip_is_refused_as_base_before_the_checks_and_cha
     ],
 )
 def test_a_config_refusal_at_the_door_reads_as_drawn(gh_kwargs, into, fact, pair_end, capsys):
-    """MERGE-17, MERGE-18, MERGE-20, MERGE-22, O10: a config refused at the base or at the merge commit reads as
+    """MERGE-17, MERGE-18, MERGE-20, MERGE-22, REFUSAL-24: a config refused at the base or at the merge commit reads as
     drawn, with its step and its text escaped."""
     gh = FakeGh(**gh_kwargs)
     assert run(gh, capsys) == (

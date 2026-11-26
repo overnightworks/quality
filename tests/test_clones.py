@@ -139,8 +139,9 @@ def test_a_file_python_cannot_parse_has_no_pair_and_leaves_the_clone_rule_clean_
 
 @pytest.mark.integration
 def test_quality_holds_its_own_clone_table_and_its_clean_debt_row_counts_the_ceiling_file(capsys):
-    """ROW-18: quality's own `[clones]` table is enforced, so its clean `debt` row counts what its ceiling file
-    holds."""
+    """ROW-18, CITE-8: quality's own `[clones]` and `[spec_citations]` tables are enforced, so its clean `debt` row counts
+    what its ceiling file holds."""
     code, output = run(capsys, QUALITY_ITSELF)
     held = read_baseline(QUALITY_ITSELF)
-    assert (code, extent_counts(area_fact(output, "debt"))) == (0, [len(held.size), len(held.clones)]), output
+    expected = [len(held.size), len(held.clones), *([len(held.spec_citations)] if held.spec_citations else [])]
+    assert (code, extent_counts(area_fact(output, "debt"))) == (0, expected), output

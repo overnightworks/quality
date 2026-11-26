@@ -298,7 +298,7 @@ def judged_rules(repo: Path) -> dict[Rule, RuleVerdict]:
 
 
 def assert_the_debt_block_is_the_findings_in_run_order(repo: Path, output: str) -> None:
-    """O14: the debt block decoded once in printed order (several findings at one location included) is exactly the
+    """ROW-19: the debt block decoded once in printed order (several findings at one location included) is exactly the
     size findings then the clone findings the rule runner returned."""
     findings = [finding for rule, verdict in judged_rules(repo).items() if rule.area is Area.DEBT for finding in verdict.findings]
     decoded = [(location, row.event, row.fact, row.fix) for location, row in area_finding_rows(output, Area.DEBT)]
@@ -537,7 +537,7 @@ def test_a_second_side_moved_down_is_named_at_its_new_line(build_repo, capsys):
 
 @pytest.mark.integration
 def test_new_pairs_print_in_sorted_order_across_locations_and_at_one_location(build_repo, capsys):
-    """CLONE-6, O14: three new pairs are three findings, in sorted order across locations and at one location, printed
+    """CLONE-6, ROW-19: three new pairs are three findings, in sorted order across locations and at one location, printed
     in that order."""
     repo, code, output = enforced(capsys, build_repo, THREE_FILES)
     assert code == 1, output
@@ -561,7 +561,7 @@ def test_a_size_can_fall_row_and_a_clone_can_fall_row_share_one_fix(build_repo, 
 
 @pytest.mark.integration
 def test_no_line_before_the_first_area_row_opens_with_a_rule_of_the_debt_area(build_repo, capsys):
-    """O15: the size and clone counts are the debt row's extent, never a prelude line."""
+    """ROW-42: the size and clone counts are the debt row's extent, never a prelude line."""
     repo = build_repo(TWO_FILES)
     _, output = check_output(capsys, repo)
     lines = output.splitlines()
