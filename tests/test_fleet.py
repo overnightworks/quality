@@ -208,14 +208,19 @@ def test_a_file_of_another_language_is_never_not_valid_python(fleet_report, publ
 
 
 @pytest.mark.integration
-def test_a_script_file_that_is_not_utf8_is_counted_beside_the_unparsable_python(fleet_report, public, remotes):
-    """FLEET-90: the note counts a script file that is not UTF-8 apart from a .py Python cannot parse."""
+@pytest.mark.parametrize(
+    ("source", "reason"),
+    [(b"export const a = '\xe9';\n", "not UTF-8"), (b"export const a = " + b"(" * 5_000 + b"1" + b")" * 5_000 + b";\n", "nested too deeply to read")],
+    ids=["not-utf-8", "nested-too-deeply"],
+)
+def test_an_unreadable_script_file_is_counted_beside_the_unparsable_python(fleet_report, public, remotes, source, reason):
+    """FLEET-90: the note counts a script file that is not UTF-8 or nested too deeply apart from a .py Python cannot parse."""
     name = public("mixed", {"src/broken.py": "def (:\n", "src/api.ts": ""})
-    build_repo_with_source(lambda files: remotes / name, {}, "src/api.ts", b"export const a = '\xe9';\n")
-    git(remotes / name, "commit", "-q", "-am", "not utf-8")
+    build_repo_with_source(lambda files: remotes / name, {}, "src/api.ts", source)
+    git(remotes / name, "commit", "-q", "-am", "unreadable script")
     code, output = fleet_report(name)
     assert code == 0, output
-    assert row(output, "o/mixed")[-1] == "1 file not valid Python, 1 file not UTF-8"
+    assert row(output, "o/mixed")[-1] == f"1 file not valid Python, 1 file {reason}"
 
 
 @pytest.mark.integration

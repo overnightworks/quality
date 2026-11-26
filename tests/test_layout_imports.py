@@ -146,8 +146,8 @@ def test_findings_are_all_printed_sorted_by_path_and_line(build_repo):
 
 @pytest.mark.parametrize(
     "content",
-    ["def broken(:\n", "# coding: nonesuch\n", "x = 1\x00\n"],
-    ids=["a syntax error", "an unknown coding cookie", "a null byte"],
+    ["def broken(:\n", "# coding: nonesuch\n", "x = 1\x00\n", "x = " + " + ".join(["1"] * 200_000) + "\n"],
+    ids=["a syntax error", "an unknown coding cookie", "a null byte", "an operator chain past the recursion limit"],
 )
 def test_an_importer_python_cannot_parse_is_unparsable(build_repo, capsys, content):
     """TESTIMPORT-16, TESTIMPORT-17: an importer Python cannot decode or parse makes the files row not checked."""

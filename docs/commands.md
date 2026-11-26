@@ -516,10 +516,10 @@ Pages source (GitHub Actions) is a repository setting that no code owns.
   `from pytest import mark`, marks added by conftest hooks, `-m` or `--deselect` in workflows, `unittest.skip`,
   Playwright `test.fail`, vitest `todo` and `fails` and `.only`; a test written in a loop counts once; the counts are
   static, not what a run skipped.
-- FLEET-89: A `.py` file Python cannot parse, or a TypeScript, JavaScript, Svelte or Vue file that is not UTF-8, still has its
-  lines counted;
-- FLEET-90: the row's note says how many such files there are, as `N files not valid Python` and
-  `N files not UTF-8`,
+- FLEET-89: A `.py` file Python cannot parse, or a TypeScript, JavaScript, Svelte or Vue file that is not UTF-8 or
+  nested too deeply to read, still has its lines counted;
+- FLEET-90: the row's note says how many such files there are, as `N files not valid Python`, `N files not UTF-8`
+  and `N files nested too deeply to read`,
 - FLEET-91: never which.
 - FLEET-1: The matrix stands under a heading naming the newest release tag of `overnightworks/quality` by version, read by an
   anonymous `git ls-remote --tags` and never from the running code's version; an annotated tag counts at the commit it
