@@ -1,4 +1,5 @@
 import json
+import subprocess
 from datetime import UTC, datetime
 
 import pytest
@@ -6,6 +7,7 @@ import pytest
 from quality import architecture, cli
 from quality.baseline_file import BASELINE_PATH
 from quality.config_entries import CONFIG_PATH
+from quality.merge import github_remote
 from quality.sonar import SonarHttpError, basic_authorization
 from tests.support.advisories import allowance_config
 from tests.support.check import assert_every_line_starts_with_the_door
@@ -604,3 +606,15 @@ def test_a_method_github_refuses_at_merge_time_leaves_the_gate_on_and_the_pull_r
     assert drive(gh)[0] == 2
     assert (gh.merge_calls, gh.gate_values) == ([merge_request(method="squash")[0]], ["false", "true"])
     assert "not merged" in capsys.readouterr().out
+
+
+@pytest.mark.integration
+def test_the_door_fetches_a_pull_from_the_repository_clone_url_on_github(tmp_path):
+    """The default remote is the GitHub clone address of the repository: git, told that the GitHub address stands for a
+    local directory, reads it as that directory's repository of the same name."""
+    local = tmp_path / "github"
+    resolved = subprocess.run(
+        ["git", "-c", f"url.{local}/.insteadOf=https://github.com/", "ls-remote", "--get-url", github_remote(REPO)],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert resolved == f"{local}/{REPO}.git"
