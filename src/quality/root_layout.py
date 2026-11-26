@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from quality.config_allowances import ROOT_ALLOWANCE_HEADING, RootAllowance
 from quality.config_entries import CONFIG_PATH
-from quality.layout import PACKAGE_FILE, PROJECT_FILE, PROJECT_FILES
+from quality.layout import PACKAGE_FILE, PROJECT_FILE
 from quality.report import Finding, FindingEvent
 from quality.rules import Rule
 
@@ -27,46 +27,54 @@ ROOT_BASE_DIRECTORIES = frozenset({
 })
 ROOT_BASE_ENTRIES = ROOT_BASE_FILES | ROOT_BASE_DIRECTORIES
 
+FLUX_CLUSTERS = "clusters"
 FLUX_DIRECTORY = "flux-system"
+PROJECT_MANIFESTS = (PROJECT_FILE, PACKAGE_FILE)
+
+
+@dataclass(frozen=True)
+class CaseCondition:
+    """What a case needs of the tracked paths: `sentence` finishes "accepted where", and `met` is the check of that sentence."""
+
+    sentence: str
+    met: Callable[[frozenset[str]], bool]
 
 
 @dataclass(frozen=True)
 class RootCase:
-    """A root directory accepted where `met` holds over the tracked paths; `condition` finishes "accepted where"."""
+    """A root directory accepted where its condition holds over the tracked paths."""
 
     entry: str
-    condition: str
-    met: Callable[[frozenset[str]], bool]
+    condition: CaseCondition
 
 
-def _tracks(path: str) -> Callable[[frozenset[str]], bool]:
-    return lambda tracked: path in tracked
+def _tracks(path: str) -> CaseCondition:
+    return CaseCondition(f"{path} is tracked", lambda tracked: path in tracked)
 
 
-def _directory_of_projects(directory: str) -> Callable[[frozenset[str]], bool]:
+def _directory_of_projects(directory: str) -> CaseCondition:
     """Each child folder of `directory` that holds a tracked file holds a project manifest directly, and at least one does."""
 
     def met(tracked: frozenset[str]) -> bool:
         children = {parts[1] for parts in (path.split("/") for path in tracked) if len(parts) > 2 and parts[0] + "/" == directory}
-        return bool(children) and all(any(f"{directory}{child}/{name}" in tracked for name in PROJECT_FILES) for child in children)
+        return bool(children) and all(any(f"{directory}{child}/{name}" in tracked for name in PROJECT_MANIFESTS) for child in children)
 
-    return met
-
-
-def _flux_bootstrap(tracked: frozenset[str]) -> bool:
-    return any(len(parts) > 3 and parts[0] == "clusters" and parts[2] == FLUX_DIRECTORY for parts in (path.split("/") for path in tracked))
+    return CaseCondition(f"it holds folders and each holds a {' or '.join(PROJECT_MANIFESTS)}", met)
 
 
-_PROJECTS_CONDITION = f"it holds folders and each holds a {PROJECT_FILE} or {PACKAGE_FILE}"
+def _flux_bootstrap() -> CaseCondition:
+    def met(tracked: frozenset[str]) -> bool:
+        return any(len(parts) > 3 and parts[0] == FLUX_CLUSTERS and parts[2] == FLUX_DIRECTORY for parts in (path.split("/") for path in tracked))
+
+    return CaseCondition(f"a file under {FLUX_CLUSTERS}/<name>/{FLUX_DIRECTORY}/ is tracked", met)
+
+
 ROOT_CASES = (
-    RootCase("frontend/", f"frontend/{PACKAGE_FILE} is tracked", _tracks(f"frontend/{PACKAGE_FILE}")),
-    RootCase("legal/", "legal/datenschutz.html is tracked", _tracks("legal/datenschutz.html")),
-    RootCase("packages/", _PROJECTS_CONDITION, _directory_of_projects("packages/")),
-    RootCase("providers/", _PROJECTS_CONDITION, _directory_of_projects("providers/")),
-    *(
-        RootCase(entry, f"a file under clusters/<name>/{FLUX_DIRECTORY}/ is tracked", _flux_bootstrap)
-        for entry in ("clusters/", "infrastructure/", "apps/")
-    ),
+    RootCase("frontend/", _tracks(f"frontend/{PACKAGE_FILE}")),
+    RootCase("legal/", _tracks("legal/datenschutz.html")),
+    RootCase("packages/", _directory_of_projects("packages/")),
+    RootCase("providers/", _directory_of_projects("providers/")),
+    *(RootCase(entry, _flux_bootstrap()) for entry in ("clusters/", "infrastructure/", "apps/")),
 )
 
 _BASE_SPELLINGS = {entry.casefold(): entry for entry in ROOT_BASE_ENTRIES}
@@ -91,7 +99,7 @@ def check_root_layout(tracked: list[str], allowances: Sequence[RootAllowance]) -
 
 def _accepted_by_case(entry: str, tracked: frozenset[str]) -> bool:
     case = _CASES_BY_ENTRY.get(entry)
-    return case is not None and case.met(tracked)
+    return case is not None and case.condition.met(tracked)
 
 
 def _unlisted_fact(entry: str) -> str:
@@ -101,7 +109,7 @@ def _unlisted_fact(entry: str) -> str:
     if case := _CASES_BY_SPELLING.get(entry.casefold()):
         if entry != case.entry:
             facts.append(f"its case spells it {case.entry}")
-        facts.append(f"accepted where {case.condition}")
+        facts.append(f"accepted where {case.condition.sentence}")
     return " · ".join(facts)
 
 

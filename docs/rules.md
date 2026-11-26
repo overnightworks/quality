@@ -721,8 +721,8 @@ It applies these rules:
 
   ```toml
   [[root.allow]]
-  entry = "frontend/"
-  reason = "the web client, built apart from the Python package"
+  entry = "specs/"
+  reason = "the written requirements, kept apart from the code"
   ```
 
   - ROOT-9: A declaration that matches no tracked root entry is a finding;

@@ -1,4 +1,4 @@
-"""The root-layout rule: every root entry on quality's base list or declared with a reason."""
+"""The root-layout rule: every root entry on quality's base list, accepted by its case or declared with a reason."""
 
 import re
 import subprocess
