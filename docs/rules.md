@@ -1010,85 +1010,123 @@ It applies these rules:
 
   - NAMING-21: The rule ships as `Switch.ALWAYS` in its first release with no report-only phase, and no deviation entry,
     held baseline table or `[[gate.loosened]]` entry covers a name red when it ships.
-- `python-security` judges every tracked regular `.py` file in any directory with the `S` codes of quality's own ruff
-  (SECURITY-1) (an exact pin in quality's `pyproject.toml` that serves its own lint too): the ruff binary of quality's
-  installation, never one on `PATH` (SECURITY-2), at [the pinned version](commands.md#scanners), runs `ruff check
-  --isolated --no-cache
-  --ignore-noqa --select S,T20 --target-version py314 --output-format json -- <files>`, in batches below the argument
-  limit (SECURITY-3), and writes nothing into the checkout (SECURITY-4). That one run serves `python-print` too. With no
-  tracked `.py` file ruff is not started (SECURITY-5). A clean `code` row counts what ruff judged
-  ([area rows](output.md#area-rows)). Not judged: untracked files, a link, anything inside a gitlink, notebooks, `.pyi`
-  files and suffixless scripts (SECURITY-6). The repository's own ruff `select`, `ignore`, `per-file-ignores`,
-  `exclude`, `extend` and noqa have no effect (SECURITY-7). Each finding stands as a [row](output.md#rows) under the
-  `code` row, `! src/a.py:12  insecure  S307 Use of possibly insecure function; ...` (SECURITY-8), and its `fix:` names
-  the line its noqa must stand on, ruff's `noqa_row` (SECURITY-9). In the files `test-import` judges (every `.py` under
-  a Python project's `tests/`, outside `fixtures/`) S101, S105 to S107, S603 and S607 are exempt (SECURITY-10); S108 (a
-  shared path breaks test isolation), S310 and every other code stay red there (SECURITY-11), and `tests/fixtures/` and
-  `src/` get no exemption (SECURITY-12). A finding is green only when the line at ruff's `noqa_row` (the last line of a
-  multi-line string) carries `# noqa: <CODE>[, <CODE>...] - <reason>` naming its code (SECURITY-13); the reason
-  is the text after ` - ` up to the next `#` or the end of the line, holds a letter and no comma (SECURITY-14) (Sonar's
-  noqa grammar splits on commas, so a comma raises python:S7632 for every caller that runs Sonar). Every other form is
-  red: no reason, a blanket `# noqa`, another directive as the reason (`# type: ignore[x]  # noqa: S607`,
-  `# noqa: S607  # pragma: no cover`), `# noqa: S607: reason`, a wrong code, another line, a file-level `# ruff: noqa`
-  (SECURITY-15), and a second directive behind a reasoned one, bare or reasoned (`# noqa: S603 - why  # noqa: E501`),
-  since ruff reads only a line's first directive (SECURITY-16). ruff itself honours the reasoned form, so a caller's own
-  ruff stays quiet (SECURITY-17). A caller whose ruff selects none of a family (S or T20) lists exactly that family in
-  `lint.external`, which keeps its RUF100 from calling the gate's noqa unused; a caller whose ruff selects a family (for
-  example `select = ["ALL"]`) leaves it out, because its ruff honours each noqa itself and ignores a file-level
-  `# ruff: noqa` for a code listed in `external`.
-  A file ruff cannot parse makes the `code` row [`✗ not checked`](output.md#refusals) with `ruff cannot parse <path>`
-  (exit 2) (SECURITY-18); a tracked `.py` file the checkout does not hold (deleted, left out by a sparse checkout, or a
-  link to nowhere) (SECURITY-19), a file Python cannot decode (SECURITY-20), or that reads as other text than ruff reads
-  as UTF-8 (a PEP 263 cookie such as utf-7) (SECURITY-21), [a missing or mismatched ruff](commands.md#scanners),
-  ruff exiting other than 0 or 1
-  (SECURITY-22), a `Failed to lint` warning (SECURITY-23), a report quality cannot read (SECURITY-24), a time-out
-  (SECURITY-25), two tracked files whose names ruff's report prints alike, as names that differ only in bytes that are
-  not UTF-8 do (SECURITY-30), or a file with a finding whose comments Python's tokenizer cannot read (SECURITY-26) is
-  `cannot judge` (exit 2). One such file makes the whole rule `cannot judge` or `unparsable`, so the S findings of the
-  other files are not printed in that run (SECURITY-27); everything here but the tokenizer refuses the shared run, so
-  `python-print` refuses with it (SECURITY-28). The other rules are judged either way. A deliberately invalid Python
-  fixture takes another suffix, since a `.py` file is Python. No configuration switches the rule off, and a reasoned
-  noqa asks `quality verdict` for no `[[gate.loosened]]` entry. Not judged, and waiting for usage evidence: notebooks,
-  `.pyi` files and suffixless Python; judging a non-UTF-8 source (a latin-1 file with non-ASCII bytes stays
-  `cannot judge`) (SECURITY-29), since ruff reads UTF-8 only; a stale reasoned noqa, which ruff's RUF100 finds.
+- `python-security` judges:
+  - SECURITY-1: every tracked regular `.py` file in any directory with the `S` codes of quality's own ruff (an exact pin
+    in quality's `pyproject.toml` that serves its own lint too):
+  - SECURITY-2: the ruff binary of quality's installation, never one on `PATH`,
+  - SECURITY-3: at [the pinned version](commands.md#scanners), runs `ruff check --isolated --no-cache --ignore-noqa
+    --select S,T20 --target-version py314 --output-format json -- <files>`, in batches below the argument limit,
+  - SECURITY-4: and writes nothing into the checkout.
+
+  That one run serves `python-print` too.
+
+  - SECURITY-5: With no tracked `.py` file ruff is not started.
+
+  A clean `code` row counts what ruff judged ([area rows](output.md#area-rows)).
+
+  - SECURITY-6: Not judged: untracked files, a link, anything inside a gitlink, notebooks, `.pyi` files and suffixless
+    scripts.
+  - SECURITY-7: The repository's own ruff `select`, `ignore`, `per-file-ignores`, `exclude`, `extend` and noqa have no
+    effect.
+  - SECURITY-8: Each finding stands as a [row](output.md#rows) under the `code` row, `! src/a.py:12  insecure  S307 Use
+    of possibly insecure function; ...`,
+  - SECURITY-9: and its `fix:` names the line its noqa must stand on, ruff's `noqa_row`.
+  - SECURITY-10: In the files `test-import` judges (every `.py` under a Python project's `tests/`, outside `fixtures/`)
+    S101, S105 to S107, S603 and S607 are exempt;
+  - SECURITY-11: S108 (a shared path breaks test isolation), S310 and every other code stay red there,
+  - SECURITY-12: and `tests/fixtures/` and `src/` get no exemption.
+  - SECURITY-13: A finding is green only when the line at ruff's `noqa_row` (the last line of a multi-line string)
+    carries `# noqa: <CODE>[, <CODE>...] - <reason>` naming its code;
+  - SECURITY-14: the reason is the text after ` - ` up to the next `#` or the end of the line, holds a letter and no
+    comma (Sonar's noqa grammar splits on commas, so a comma raises python:S7632 for every caller that runs Sonar).
+  - SECURITY-15: Every other form is red: no reason, a blanket `# noqa`, another directive as the reason (`# type:
+    ignore[x]  # noqa: S607`, `# noqa: S607  # pragma: no cover`), `# noqa: S607: reason`, a wrong code, another line, a
+    file-level `# ruff: noqa`,
+  - SECURITY-16: and a second directive behind a reasoned one, bare or reasoned (`# noqa: S603 - why  # noqa: E501`),
+    since ruff reads only a line's first directive.
+  - SECURITY-17: ruff itself honours the reasoned form, so a caller's own ruff stays quiet.
+
+  A caller whose ruff selects none of a family (S or T20) lists exactly that family in `lint.external`, which keeps its
+  RUF100 from calling the gate's noqa unused; a caller whose ruff selects a family (for example `select = ["ALL"]`)
+  leaves it out, because its ruff honours each noqa itself and ignores a file-level `# ruff: noqa` for a code listed in
+  `external`.
+
+  - SECURITY-18: A file ruff cannot parse makes the `code` row [`✗ not checked`](output.md#refusals) with `ruff cannot
+    parse <path>` (exit 2);
+  - SECURITY-19: a tracked `.py` file the checkout does not hold (deleted, left out by a sparse checkout, or a link to
+    nowhere),
+  - SECURITY-20: a file Python cannot decode,
+  - SECURITY-21: or that reads as other text than ruff reads as UTF-8 (a PEP 263 cookie such as utf-7),
+  - SECURITY-22: [a missing or mismatched ruff](commands.md#scanners), ruff exiting other than 0 or 1,
+  - SECURITY-23: a `Failed to lint` warning,
+  - SECURITY-24: a report quality cannot read,
+  - SECURITY-25: a time-out,
+  - SECURITY-30: two tracked files whose names ruff's report prints alike, as names that differ only in bytes that are
+    not UTF-8 do,
+  - SECURITY-26: or a file with a finding whose comments Python's tokenizer cannot read is `cannot judge` (exit 2).
+  - SECURITY-27: One such file makes the whole rule `cannot judge` or `unparsable`, so the S findings of the other files
+    are not printed in that run;
+  - SECURITY-28: everything here but the tokenizer refuses the shared run, so `python-print` refuses with it.
+
+  The other rules are judged either way. A deliberately invalid Python fixture takes another suffix, since a `.py` file
+  is Python. No configuration switches the rule off, and a reasoned noqa asks `quality verdict` for no
+  `[[gate.loosened]]` entry.
+
+  - SECURITY-29: Not judged, and waiting for usage evidence: notebooks, `.pyi` files and suffixless Python; judging a
+    non-UTF-8 source (a latin-1 file with non-ASCII bytes stays `cannot judge`), since ruff reads UTF-8 only; a stale
+    reasoned noqa, which ruff's RUF100 finds.
 
   Ruled by the operator: the rules are red from the release that ships them, with no report-only phase; `assert` (S101)
   is exempt in tests (SECURITY-10); a rule-specific noqa with a reason is green (SECURITY-13).
-- `python-print` judges `T201` (`print`) and `T203` (`pprint`) (PRINT-1) from `python-security`'s run, over the same
-  files (PRINT-2), with the same deafness to the repository's ruff settings and the same refusals: a run quality cannot
-  trust or a file ruff cannot parse leaves both rules `cannot judge` or `unparsable`. Each finding stands as a
-  [row](output.md#rows) (``! scripts/sync_agents.py:12  print call  T201 `print` found``) (PRINT-3), a print to
-  `sys.stderr` included (PRINT-4), and tests get no exemption (PRINT-5). A reasoned `# noqa: T201 - <reason>` at
-  `noqa_row` clears one line (PRINT-6), as for `python-security`. A program's one output owner declares itself with a
-  file-level `# ruff: noqa: T201[, T203] - <reason>` on a line of its own (PRINT-7), the form ruff honours too
-  (PRINT-8), clears the codes it names in its own file only (PRINT-9); its reason holds a letter and no comma
-  (PRINT-10), and the comment holds no second `#` (PRINT-11). A bare `# ruff: noqa`, one without a reason, a comma in
-  the reason, one naming an S code (`# ruff: noqa: S603, T201 - reason`), one behind code on its line and
-  `# flake8: noqa` clear nothing (PRINT-12), and no file directive clears an S code (PRINT-13).
+- `python-print` judges:
+  - PRINT-1: `T201` (`print`) and `T203` (`pprint`)
+  - PRINT-2: from `python-security`'s run, over the same files, with the same deafness to the repository's ruff settings
+    and the same refusals: a run quality cannot trust or a file ruff cannot parse leaves both rules `cannot judge` or
+    `unparsable`.
+  - PRINT-3: Each finding stands as a [row](output.md#rows) (``! scripts/sync_agents.py:12  print call  T201 `print`
+    found``),
+  - PRINT-4: a print to `sys.stderr` included,
+  - PRINT-5: and tests get no exemption.
+  - PRINT-6: A reasoned `# noqa: T201 - <reason>` at `noqa_row` clears one line, as for `python-security`.
+  - PRINT-7: A program's one output owner declares itself with a file-level `# ruff: noqa: T201[, T203] - <reason>` on a
+    line of its own,
+  - PRINT-8: the form ruff honours too,
+  - PRINT-9: clears the codes it names in its own file only;
+  - PRINT-10: its reason holds a letter and no comma,
+  - PRINT-11: and the comment holds no second `#`.
+  - PRINT-12: A bare `# ruff: noqa`, one without a reason, a comma in the reason, one naming an S code (`# ruff: noqa:
+    S603, T201 - reason`), one behind code on its line and `# flake8: noqa` clear nothing,
+  - PRINT-13: and no file directive clears an S code.
+
   The owner line is a tool directive, so it does not satisfy `script-header`: a script keeps its comment or docstring
-  first and the owner below it, as `scripts/verify_release.py` does. Each honoured owner stands as a
-  [row](output.md#notes) under the `code` row, after its findings,
-  `· scripts/verify_release.py:14  allowed  output owner · <reason>` (PRINT-14), and a clean row counts it
-  (`· 1 allowed`); an owner that names no code found in its file is an `unused` row on its line, to delete (PRINT-15).
-  python-print reads the comments of each file with a print finding or the text `# ruff:` (PRINT-16), and one whose
-  comments Python's tokenizer cannot read leaves python-print alone `cannot judge`.
-  No configuration switches the rule off, and an owner or noqa asks `quality verdict` for no `[[gate.loosened]]`
-  entry. Not judged, and waiting for usage evidence: `sys.stdout.write` and `sys.stderr.write` (ruff's TID251 would
-  flag every reference to the streams, `logging.StreamHandler(sys.stderr)` included, for a bypass nobody has used;
-  reopened when a landing outside `tests/` replaces a `print` with a direct stream write), and `print(...,
-  file=<variable>)`, which ruff does not report as T201.
+  first and the owner below it, as `scripts/verify_release.py` does.
+
+  - PRINT-14: Each honoured owner stands as a [row](output.md#notes) under the `code` row, after its findings, `·
+    scripts/verify_release.py:14  allowed  output owner · <reason>`,
+  - PRINT-15: and a clean row counts it (`· 1 allowed`); an owner that names no code found in its file is an `unused`
+    row on its line, to delete.
+  - PRINT-16: python-print reads the comments of each file with a print finding or the text `# ruff:`, and one whose
+    comments Python's tokenizer cannot read leaves python-print alone `cannot judge`.
+
+  No configuration switches the rule off, and an owner or noqa asks `quality verdict` for no `[[gate.loosened]]` entry.
+  Not judged, and waiting for usage evidence: `sys.stdout.write` and `sys.stderr.write` (ruff's TID251 would flag every
+  reference to the streams, `logging.StreamHandler(sys.stderr)` included, for a bypass nobody has used; reopened when a
+  landing outside `tests/` replaces a `print` with a direct stream write), and `print(..., file=<variable>)`, which ruff
+  does not report as T201.
 
   Ruled by the operator: a program's one output owner declares itself in its code (PRINT-7), never in a path list.
-- The baseline only falls: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the
-  base commit's, so growing a function and rewriting the baseline stays red (BASELINE-1). Each loosening is one line
-  under the verdict's `loosenings` row, named with the baseline's own metric, path and symbol (a file entry has no
-  symbol):
-  - an entry raised: `size baseline raises function_lines src/quality/cli.py main 82 -> 90` (BASELINE-2);
-  - an entry the base does not hold (a function or class under another name included; a moved file is judged as
-    below): `size baseline adds ccn src/a.py f 16` (BASELINE-3);
-  - a clone pair the base does not hold, when the base has a `[clones]` table:
-    `clone baseline adds tests/test_a.py run <-> tests/test_b.py check` (BASELINE-4);
-  - the base's `[clones]` table gone from a head that still has the file: `clone baseline removed` (BASELINE-5);
+- The baseline only falls:
+  - BASELINE-1: on a pull request `quality verdict` holds the head's `quality/baseline.toml` against the base commit's,
+    so growing a function and rewriting the baseline stays red.
+
+  Each loosening is one line under the verdict's `loosenings` row, named with the baseline's own metric, path and symbol
+  (a file entry has no symbol):
+  - BASELINE-2: an entry raised: `size baseline raises function_lines src/quality/cli.py main 82 -> 90`;
+  - BASELINE-3: an entry the base does not hold (a function or class under another name included; a moved file is judged
+    as below): `size baseline adds ccn src/a.py f 16`;
+  - BASELINE-4: a clone pair the base does not hold, when the base has a `[clones]` table: `clone baseline adds
+    tests/test_a.py run <-> tests/test_b.py check`;
+  - BASELINE-5: the base's `[clones]` table gone from a head that still has the file: `clone baseline removed`;
   - a job limit the base's `[job_minutes]` table does not hold or holds lower, when the base has the table:
     `job limit baseline raises .github/workflows/ci.yml e2e 40 -> 45`,
     `job limit baseline adds .github/workflows/ci.yml e2e 40` (TIMEOUT-18);
@@ -1100,130 +1138,158 @@ It applies these rules:
   - a directory count the base's `[adapter_imports]` table holds lower, or lacks, when the base has the table:
     `adapter import baseline raises tests/api 2 -> 3`, `adapter import baseline adds tests/app 1`; the base's table gone
     from a head that still has the file: `adapter import baseline removed`;
-  - the base's file deleted: `quality/baseline.toml removed` (BASELINE-6);
+  - BASELINE-6: the base's file deleted: `quality/baseline.toml removed`;
   - a `[[size.generated]]` or `[[spec_citations.implemented]]` declaration is judged as in [gate](gate.md), "Declared loosenings".
 
   Ruled by the operator: a file git recognises as renamed (BASELINE-11), a directory move included, is no loosening when
   its numbers do not rise (BASELINE-12).
 
-  The verdict reads the renames between the base and the head commit with `git diff -M50% -l1000`, git's default
-  similarity, whatever the repository's git configuration says (BASELINE-11); a file git does not pair is new as
-  before. The base's entries and clone sides under the old path then move to the new path, so the head is compared with
-  the entries its predecessor held and a raise or an added symbol still names the head's path (BASELINE-12); an entry
-  the base holds under the new path is a leftover and does not count (BASELINE-13). A rename from a path that is not
-  UTF-8 moves nothing, since no baseline key can name it, but still clears its new path of leftovers (BASELINE-14); a
-  rename to a path that is not UTF-8 is not read (BASELINE-15).
-  The allowance moves rather than being copied: while the head baseline still names the old path, nothing moves and
-  the new path's entries are adds (BASELINE-16). A pair whose files moved is the same pair (BASELINE-17), and a renamed
-  function is a new entry. Renames are read only when the base and the head both hold a baseline: without a base, or
-  without a baseline on either side, nothing is read (BASELINE-18). `merge` fetches the same two commits; it reads the
-  same renames (BASELINE-19). How `check` and `check --fix` treat the renames is told in the `size` rule's `--fix`
-  paragraph above.
+  - BASELINE-11: The verdict reads the renames between the base and the head commit with `git diff -M50% -l1000`, git's
+    default similarity, whatever the repository's git configuration says;
+  - BASELINE-12: a file git does not pair is new as before. The base's entries and clone sides under the old path then
+    move to the new path, so the head is compared with the entries its predecessor held and a raise or an added symbol
+    still names the head's path;
+  - BASELINE-13: an entry the base holds under the new path is a leftover and does not count.
+  - BASELINE-14: A rename from a path that is not UTF-8 moves nothing, since no baseline key can name it, but still
+    clears its new path of leftovers;
+  - BASELINE-15: a rename to a path that is not UTF-8 is not read.
+  - BASELINE-16: The allowance moves rather than being copied: while the head baseline still names the old path, nothing
+    moves and the new path's entries are adds.
+  - BASELINE-17: A pair whose files moved is the same pair, and a renamed function is a new entry.
+  - BASELINE-18: Renames are read only when the base and the head both hold a baseline: without a base, or without a
+    baseline on either side, nothing is read.
+  - BASELINE-19: `merge` fetches the same two commits; it reads the same renames.
 
-  A lowered, equal or removed entry or pair is green (BASELINE-7), and so is adopting a baseline (the base has none) or
-  neither side having one (BASELINE-8). A `[clones]` table the base lacks is an adoption too: its pairs are not
-  compared (BASELINE-9), while the size entries are still held against the base's (BASELINE-10). A `[job_minutes]` table
-  the base lacks is an adoption in the same way, whatever the base's `[clones]` table is, and the job lines stand after the
-  size and clone lines in the file's order (TIMEOUT-18), and the spec citation lines stand last. A `[spec_citations]` table the base
-  lacks is an adoption in the same way (CITE-12), and so is an `[adapter_imports]` table, whose lines stand last.
-  A test module git renames from one directory to another that carries the registered `imports_adapter` mark at the head
-  moves one count of the old directory's base entry to the new one, capped at the old held count, so modules that leave a
-  directory together share it; only a count above the carried one is a line, and a directory moved whole moves every
-  count. The mark and the project's registration are read from the head commit's files, never the working tree, so the
-  verdict and the door agree (BASELINE-19). They read the marks only where the base holds the table, and a module they
-  cannot read carries no count, so its raise shows. A `--fix` takes its counts from the committed table and the staged renames
-  alone, so a second one before the commit moves no count the first one already moved while it still carries a newly
-  staged move (FIX-34). Each of these lines is declarable (ADAPTERIMPORT-29).
-  A malformed baseline on either side is exit `2`, naming the side (`quality/baseline.toml at the base commit <sha>:
-  ...`, `quality/baseline.toml at the head: ...`) (BASELINE-20). So is a head baseline that links out of the repository
-  (BASELINE-21), a base file that is not a regular file (`... : not a regular file`) (BASELINE-22), and a base that git
-  refuses to read, a base commit the clone lacks included (`... : git exited <n>`) (BASELINE-23), git's own words never
-  printed (BASELINE-24). A `quality/config.toml` the verdict cannot read is told in [gate](gate.md): the side shows in
-  its step, not in its fact.
-  Only the head's malformed baseline adds `restore quality/baseline.toml from git, or repair it by hand` (an unknown
-  table adds `run the quality release your gate pins` instead) (BASELINE-25): a pull request cannot rewrite its base.
-  The base is a commit sha, as [gate](gate.md) tells of the verdict's variables: `HEAD~1` or `-x` is exit `2`
-  (`GATE_BASE_SHA is not a commit sha`) before git runs (BASELINE-26). Outside a pull request (push, `merge_group`,
-  `workflow_dispatch`) `gate.yml` passes no base (BASELINE-27), so the base is never read (BASELINE-28) and only
-  `check` holds the tree. A lizard update that measures a function higher therefore turns the pull request that takes
-  it red; a ruled raise is declared (see [Declared loosenings](gate.md#declared-loosenings)) and stays red until the
-  operator's door merges it.
-- The import contracts only tighten: on a pull request `quality verdict` and the door compare the contracts of the
-  three config places at the head with the base's, as import-linter parses them (never the raw options, so moving a
-  config between `.importlinter`, `setup.cfg` and `pyproject.toml` changes nothing (LOOSE-4)), without building an
-  import graph. A contract is the same on both sides when it has the same `name`; a rename is a removal plus a new
-  contract (LOOSE-5). Each loosening is one line under the verdict's `loosenings` row, sorted (LOOSE-6):
-  - a contract the base holds and the head lacks: `import contract "layers" removed` (LOOSE-7), unless one of its lists
+  How `check` and `check --fix` treat the renames is told in the `size` rule's `--fix` paragraph above.
+
+  - BASELINE-7: A lowered, equal or removed entry or pair is green,
+  - BASELINE-8: and so is adopting a baseline (the base has none) or neither side having one.
+  - BASELINE-9: A `[clones]` table the base lacks is an adoption too: its pairs are not compared,
+  - BASELINE-10: while the size entries are still held against the base's.
+
+  A `[job_minutes]` table the base lacks is an adoption in the same way, whatever the base's `[clones]` table is, and
+  the job lines stand after the size and clone lines in the file's order (TIMEOUT-18), and the spec citation lines stand
+  last. A `[spec_citations]` table the base lacks is an adoption in the same way (CITE-12), and so is an
+  `[adapter_imports]` table, whose lines stand last. A test module git renames from one directory to another that
+  carries the registered `imports_adapter` mark at the head moves one count of the old directory's base entry to the new
+  one, capped at the old held count, so modules that leave a directory together share it; only a count above the carried
+  one is a line, and a directory moved whole moves every count. The mark and the project's registration are read from
+  the head commit's files, never the working tree, so the verdict and the door agree (BASELINE-19). They read the marks
+  only where the base holds the table, and a module they cannot read carries no count, so its raise shows. A `--fix`
+  takes its counts from the committed table and the staged renames alone, so a second one before the commit moves no
+  count the first one already moved while it still carries a newly staged move (FIX-34).
+
+  - ADAPTERIMPORT-29: Each of these lines is declarable.
+  - BASELINE-20: A malformed baseline on either side is exit `2`, naming the side (`quality/baseline.toml at the base
+    commit <sha>: ...`, `quality/baseline.toml at the head: ...`).
+  - BASELINE-21: So is a head baseline that links out of the repository,
+  - BASELINE-22: a base file that is not a regular file (`... : not a regular file`),
+  - BASELINE-23: and a base that git refuses to read, a base commit the clone lacks included (`... : git exited <n>`),
+  - BASELINE-24: git's own words never printed.
+
+  A `quality/config.toml` the verdict cannot read is told in [gate](gate.md): the side shows in its step, not in its
+  fact.
+
+  - BASELINE-25: Only the head's malformed baseline adds `restore quality/baseline.toml from git, or repair it by hand`
+    (an unknown table adds `run the quality release your gate pins` instead): a pull request cannot rewrite its base.
+  - BASELINE-26: The base is a commit sha, as [gate](gate.md) tells of the verdict's variables: `HEAD~1` or `-x` is exit
+    `2` (`GATE_BASE_SHA is not a commit sha`) before git runs.
+  - BASELINE-27: Outside a pull request (push, `merge_group`, `workflow_dispatch`) `gate.yml` passes no base,
+  - BASELINE-28: so the base is never read and only `check` holds the tree.
+
+  A lizard update that measures a function higher therefore turns the pull request that takes it red; a ruled raise is
+  declared (see [Declared loosenings](gate.md#declared-loosenings)) and stays red until the operator's door merges it.
+- The import contracts only tighten:
+  - LOOSE-4: on a pull request `quality verdict` and the door compare the contracts of the three config places at the
+    head with the base's, as import-linter parses them (never the raw options, so moving a config between
+    `.importlinter`, `setup.cfg` and `pyproject.toml` changes nothing), without building an import graph.
+  - LOOSE-5: A contract is the same on both sides when it has the same `name`; a rename is a removal plus a new
+    contract.
+  - LOOSE-6: Each loosening is one line under the verdict's `loosenings` row, sorted:
+  - LOOSE-7: a contract the base holds and the head lacks: `import contract "layers" removed`, unless one of its lists
     names only modules the head no longer has and git does not read as renamed (below);
-  - the base's config gone, whatever it held, or only its section gone from a file that stays, once:
-    `import-linter config in .importlinter removed` (LOOSE-8);
-  - an `ignore_imports` expression the base does not hold, one line each, compared as parsed (spacing around `->`
-    does not count, a wildcard is a new expression):
-    `import contract "domain" ignores app.domain -> app.web.*` (LOOSE-9);
-  - any other field of a contract that differs, `broken_contract_guidance` excepted, unless the change only forbids
-    more (below): `import contract "layers" changes allow_indirect_imports` (LOOSE-10) (a changed `type`
-    reads `changes type` (LOOSE-11); a module dropped from a list reads as that list's field, unless the head no longer
-    has it and git does not read it as renamed, or git reads it as renamed to a module the same list names (below));
-  - `root_packages` (as a set of names), `include_external_packages` or `exclude_type_checking_imports` changed:
-    `import-linter changes root_packages` (LOOSE-12);
-  - the contract that carries the id `core-imports-no-adapter` (the contract of both `adapter-import` and
-    `integration-marker`) stays at the head under the same name without the id: `import contract id core-imports-no-adapter removed`, or
-    `import contract id core-imports-no-adapter moves "a" -> "b"` when contract `b` carries it at the head (LOOSE-36).
-    A carrier that is gone at the head, renamed (LOOSE-5) or removed, gives LOOSE-7's line only, and a removed config
-    LOOSE-8's. Two contracts carrying the id on a side are exit `2` like LOOSE-16.
+  - LOOSE-8: the base's config gone, whatever it held, or only its section gone from a file that stays, once:
+    `import-linter config in .importlinter removed`;
+  - LOOSE-9: an `ignore_imports` expression the base does not hold, one line each, compared as parsed (spacing around
+    `->` does not count, a wildcard is a new expression): `import contract "domain" ignores app.domain -> app.web.*`;
+  - LOOSE-10: any other field of a contract that differs, `broken_contract_guidance` excepted, unless the change only
+    forbids more (below): `import contract "layers" changes allow_indirect_imports`
+  - LOOSE-11: (a changed `type` reads `changes type`; a module dropped from a list reads as that list's field, unless
+    the head no longer has it and git does not read it as renamed, or git reads it as renamed to a module the same list
+    names (below));
+  - LOOSE-12: `root_packages` (as a set of names), `include_external_packages` or `exclude_type_checking_imports`
+    changed: `import-linter changes root_packages`;
+  - LOOSE-36: the contract that carries the id `core-imports-no-adapter` (the contract of both `adapter-import` and
+    `integration-marker`) stays at the head under the same name without the id: `import contract id
+    core-imports-no-adapter removed`, or `import contract id core-imports-no-adapter moves "a" -> "b"` when contract `b`
+    carries it at the head.
+
+  A carrier that is gone at the head, renamed (LOOSE-5) or removed, gives LOOSE-7's line only, and a removed config
+  LOOSE-8's. Two contracts carrying the id on a side are exit `2` like LOOSE-16.
 
   Ruled by the operator:
 
-  - Each of these loosenings is red, can be declared with a `[[gate.loosened]]` entry whose `what` is its line exactly,
-    and lands only through the operator's door (LOOSE-1).
-  - The door reads the import contracts at the merge state and at the base itself and refuses an undeclared loosening,
-    even when it was opened for Sonar's legacy findings (LOOSE-2).
-  - Removing the whole config file can be declared as well and goes through the door (LOOSE-3).
+  - LOOSE-1: Each of these loosenings is red, can be declared with a `[[gate.loosened]]` entry whose `what` is its line
+    exactly, and lands only through the operator's door.
+  - LOOSE-2: The door reads the import contracts at the merge state and at the base itself and refuses an undeclared
+    loosening, even when it was opened for Sonar's legacy findings.
+  - LOOSE-3: Removing the whole config file can be declared as well and goes through the door.
 
-  Ruled by the operator: a change that can only forbid more is no loosening (LOOSE-25). Per contract type:
-  `allow_indirect_imports` turned from true to false (also by dropping the line) (LOOSE-26) and a module added to
-  `source_modules` or `forbidden_modules` of a `forbidden` contract, the base's expressions all kept (LOOSE-27); a
-  module added to the `modules` of an `independence` contract, the base's all kept (LOOSE-28); a base expression that
-  is a plain module name counts as kept when a wildcard expression of the head's same list matches it by import-linter's
-  own matcher, so base `a.x`, `a.y` against head `a.*` is green and base `a.*` against head `a.x` is red (LOOSE-35);
-  and a module newly
-  placed in a `layers` contract: the head's `layers` are compared with every module name the base's `layers` do not
-  name stripped, and a layer left empty dropped. Base layers `a`, `b` against head `a`, `new`, `b` is green (LOOSE-29).
-  A layer left with one module has no sibling, so its independence says nothing: base `(game)` against head
-  `(game) : (agent)` is green, and base `a | b` against head `a : b : new` stays a loosening (LOOSE-30).
-  Everything else stays a loosening, except a struck module the head no longer has and git does not read as renamed
-  (LOOSE-19), or git reads as renamed to a module the same list names (below) (LOOSE-22): a removed, renamed or replaced
-  expression (a wildcard narrowed or replaced by names included), an expression added and another removed in one field
-  (LOOSE-31), `allow_indirect_imports` turned from false to true (LOOSE-32), `as_packages`,
-  `unmatched_ignore_imports_alerting`, `containers`, `exhaustive`, `exhaustive_ignores` (LOOSE-33) and every `protected`
-  or `acyclic_siblings` field in either direction, a reorder, a merge into `a | b`, a module moved to another layer,
-  `a | b` turned into `a : b`, a required `a` made optional `(a)` (LOOSE-34), and the session options (LOOSE-12).
+  Ruled by the operator:
+
+  - LOOSE-25: a change that can only forbid more is no loosening.
+  - LOOSE-26: Per contract type: `allow_indirect_imports` turned from true to false (also by dropping the line)
+  - LOOSE-27: and a module added to `source_modules` or `forbidden_modules` of a `forbidden` contract, the base's
+    expressions all kept;
+  - LOOSE-28: a module added to the `modules` of an `independence` contract, the base's all kept;
+  - LOOSE-35: a base expression that is a plain module name counts as kept when a wildcard expression of the head's same
+    list matches it by import-linter's own matcher, so base `a.x`, `a.y` against head `a.*` is green and base `a.*`
+    against head `a.x` is red;
+  - LOOSE-29: and a module newly placed in a `layers` contract: the head's `layers` are compared with every module name
+    the base's `layers` do not name stripped, and a layer left empty dropped. Base layers `a`, `b` against head `a`,
+    `new`, `b` is green.
+  - LOOSE-30: A layer left with one module has no sibling, so its independence says nothing: base `(game)` against head
+    `(game) : (agent)` is green, and base `a | b` against head `a : b : new` stays a loosening.
+  - LOOSE-31: Everything else stays a loosening, except a struck module the head no longer has and git does not read as
+    renamed (LOOSE-19), or git reads as renamed to a module the same list names (below) (LOOSE-22): a removed, renamed
+    or replaced expression (a wildcard narrowed or replaced by names included), an expression added and another removed
+    in one field,
+  - LOOSE-32: `allow_indirect_imports` turned from false to true,
+  - LOOSE-33: `as_packages`, `unmatched_ignore_imports_alerting`, `containers`, `exhaustive`, `exhaustive_ignores`
+  - LOOSE-34: and every `protected` or `acyclic_siblings` field in either direction, a reorder, a merge into `a | b`, a
+    module moved to another layer, `a | b` turned into `a : b`, a required `a` made optional `(a)`, and the session
+    options (LOOSE-12).
+
   No import graph of the repository is built.
 
-  A new contract (LOOSE-13), a removed `ignore_imports` entry (LOOSE-14), a reworded `broken_contract_guidance` and
-  adopting import contracts (the base has no config) (LOOSE-15) are green. Two contracts of one name on a side
-  (LOOSE-16), two config places holding a section (LOOSE-17), or a config that cannot be read (LOOSE-18) are exit `2`,
-  naming the side: the verdict says `import-linter config at the base commit <sha>: ...` or
-  `import-linter config at the head: ...`, the door names the base commit by its SHA alone,
-  `import-linter config at <sha>: ...`.
+  - LOOSE-13: A new contract,
+  - LOOSE-14: a removed `ignore_imports` entry,
+  - LOOSE-15: a reworded `broken_contract_guidance` and adopting import contracts (the base has no config) are green.
+  - LOOSE-16: Two contracts of one name on a side,
+  - LOOSE-17: two config places holding a section,
+  - LOOSE-18: or a config that cannot be read are exit `2`, naming the side: the verdict says `import-linter config at
+    the base commit <sha>: ...` or `import-linter config at the head: ...`, the door names the base commit by its SHA
+    alone, `import-linter config at <sha>: ...`.
 
-  A module a pull request strikes from a list of a contract (`layers`, `containers`, `source_modules`,
-  `forbidden_modules`, `modules`, `protected_modules`) is no loosening when the head no longer has it: no tracked
-  `<path>.py`, no `<path>/__init__.py` and no file under `<path>/`, below the directory of its root package (LOOSE-19).
-  Every other strike stays `changes <field>`: a module still present, a wildcard expression, a name outside the root
-  packages, a root package the head's files, or the base's, cannot place (LOOSE-20). A module whose file, or a file
-  under whose folder, git reads as renamed between the base and the merge commit, to a file that is not empty, is no
-  deletion: striking it stays a loosening (LOOSE-21). It is no loosening when the same field at the head names the
-  module at its renamed path (LOOSE-22). The name is exact: a renamed folder needs the package's own name, a listed
-  submodule does not count, and several renamed files must agree on one module. In `layers`, `containers` and
-  `protected_modules` the module stands where the struck name stood: another layer, a `:` for a `|`, another position
-  or another order is `changes <field>`. A contract the head lacks is no loosening when one of its lists names only
-  modules the head no longer has and git does not read as renamed, except that `layers` does not count when the
-  contract is `exhaustive` and one of its containers still has a file at the head or git reads a file of it as
-  renamed (LOOSE-23). Only file names and sizes
-  are read, at the checked-out merge commit by the verdict and at the pull request's merge commit by the door, and only
-  when a module is struck or a contract is removed; a read that fails, or a rename list that came with a warning, is
-  exit `2` (LOOSE-24).
+  - LOOSE-19: A module a pull request strikes from a list of a contract (`layers`, `containers`, `source_modules`,
+    `forbidden_modules`, `modules`, `protected_modules`) is no loosening when the head no longer has it: no tracked
+    `<path>.py`, no `<path>/__init__.py` and no file under `<path>/`, below the directory of its root package.
+  - LOOSE-20: Every other strike stays `changes <field>`: a module still present, a wildcard expression, a name outside
+    the root packages, a root package the head's files, or the base's, cannot place.
+  - LOOSE-21: A module whose file, or a file under whose folder, git reads as renamed between the base and the merge
+    commit, to a file that is not empty, is no deletion: striking it stays a loosening.
+  - LOOSE-22: It is no loosening when the same field at the head names the module at its renamed path.
+
+  The name is exact: a renamed folder needs the package's own name, a listed submodule does not count, and several
+  renamed files must agree on one module. In `layers`, `containers` and `protected_modules` the module stands where the
+  struck name stood: another layer, a `:` for a `|`, another position or another order is `changes <field>`.
+
+  - LOOSE-23: A contract the head lacks is no loosening when one of its lists names only modules the head no longer has
+    and git does not read as renamed, except that `layers` does not count when the contract is `exhaustive` and one of
+    its containers still has a file at the head or git reads a file of it as renamed.
+  - LOOSE-24: Only file names and sizes are read, at the checked-out merge commit by the verdict and at the pull
+    request's merge commit by the door, and only when a module is struck or a contract is removed; a read that fails, or
+    a rename list that came with a warning, is exit `2`.
 
 The `secret` rule scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found
 (SECRET-1); other branches the checkout fetched are not scanned (SECRET-2)), always with quality's own config
