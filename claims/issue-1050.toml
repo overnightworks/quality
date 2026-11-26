@@ -1,8 +1,0 @@
-claim_id = "0af4ab78176549308c75c53939dda9f2"
-agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
-role = "builder"
-base = "81772803ae9ec40ea9391affd51b9caff46db4eb"
-branch = "claude/issue-1050-commands-md-check-fix-staged-report"
-scope = ["docs/commands.md", "tests"]
-opened_commit = "d123a1dd7f24e16a6681cc4275f6f1c9359f19bb"
-whole_reason = "Three sections of one document converted to one form, plus at most the test docstrings that already prove their uncited IDs."
