@@ -58,7 +58,7 @@ def project(dependencies: str) -> str:
     ],
 )
 def test_a_repository_that_declares_logline_gets_one_open_note_for_a_broken_call(build_repo, covered, broken, declaration):
-    """A covered repository's finding is one open note at its place naming the logline rule value."""
+    """LOGGING-1, LOGGING-3: a covered repository's finding is one open note at its place naming the logline rule value."""
     repo = build_repo(covered(declaration=declaration))
     (note,) = rule_notes(repo, Rule.LOGGING)
     assert (note.path, note.line, note.event, note.fact) == (broken.path, broken.line, NoteEvent.OPEN, broken.rule)
@@ -74,6 +74,7 @@ def test_a_repository_that_declares_logline_gets_one_open_note_for_a_broken_call
     ],
 )
 def test_a_repository_that_does_not_declare_logline_gets_no_row_and_no_file_is_judged(build_repo, covered, declaration):
+    """LOGGING-1: a repository that does not declare logline sees no row, and no file of it is judged."""
     repo = build_repo(covered(declaration=declaration))
     assert logging_verdicts(repo) == []
 
@@ -97,11 +98,13 @@ def test_a_repository_without_a_root_declaration_gets_no_row(build_repo, covered
     ],
 )
 def test_every_python_file_that_is_no_test_file_is_judged(build_repo, covered, path, judged):
+    """LOGGING-2: every tracked regular `.py` file that is no test file is judged."""
     notes = rule_notes(build_repo(covered(path=path)), Rule.LOGGING)
     assert [note.path for note in notes] == ([path] if judged else [])
 
 
 def test_the_notes_stand_in_path_and_line_order(build_repo, covered, broken):
+    """LOGGING-3: the notes stand in path and source order."""
     twice = broken.source + 'log.info("loggedOut")\n'
     repo = build_repo({**covered(twice, "src/b.py"), "src/a.py": broken.source})
     assert [(note.path, note.line) for note in rule_notes(repo, Rule.LOGGING)] == [("src/a.py", 3), ("src/b.py", 3), ("src/b.py", 4)]
@@ -122,7 +125,7 @@ def test_a_clean_covered_repository_gets_a_row_without_a_note(build_repo, covere
 
 
 def test_a_text_the_check_cannot_parse_refuses_the_rule_naming_the_file(build_repo, covered, broken, capsys):
-    """ruff reads a text that nests 250 parentheses; Python's parser refuses it."""
+    """LOGGING-4: ruff reads a text that nests 250 parentheses; Python's parser refuses it."""
     nested = f"x = {'(' * 250}1{')' * 250}\n"
     repo = build_repo(covered(nested))
     assert broken.path in refusals(repo)[Rule.LOGGING]
@@ -130,13 +133,14 @@ def test_a_text_the_check_cannot_parse_refuses_the_rule_naming_the_file(build_re
 
 
 def test_a_root_pyproject_that_cannot_be_read_refuses_the_rule_naming_the_file(build_repo, broken, capsys):
-    """The declaration is checked before logline judges any file, in every repository, so a broken root `pyproject.toml` refuses the code area."""
+    """LOGGING-1: the declaration is checked before logline judges any file, in every repository, so a broken root `pyproject.toml` refuses the code area."""
     repo = build_repo({"pyproject.toml": "[project\n", broken.path: broken.source})
     assert "pyproject.toml" in refusals(repo)[Rule.LOGGING]
     assert check_output(capsys, repo)[0] == 2
 
 
 def test_a_text_that_exhausts_the_check_refuses_the_rule_naming_the_file(build_repo, covered, broken, monkeypatch):
+    """LOGGING-4: a text the check exhausts the interpreter on refuses the rule, named with the file."""
     def exhausted(source, path):
         raise RecursionError
 
@@ -145,6 +149,7 @@ def test_a_text_that_exhausts_the_check_refuses_the_rule_naming_the_file(build_r
 
 
 def test_any_other_exception_of_the_check_is_not_caught(build_repo, covered, monkeypatch):
+    """LOGGING-4: any other exception of the check is not caught."""
     def broken_check(source, path):
         raise ArithmeticError
 

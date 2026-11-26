@@ -312,7 +312,7 @@ def _assert_line_in_place(block: Sequence[BlockLine], index: int) -> None:
 
 
 def assert_block_order(block: Sequence[BlockLine]) -> None:
-    """ROW-5, ROW-6, O15: a finding's detail lines follow its row or another detail line, a line to copy follows a
+    """ROW-5, ROW-6, ROW-42: a finding's detail lines follow its row or another detail line, a line to copy follows a
     `fix:` or another line to copy, a `fix:` follows a row or a detail line and equals the fix of the row above it (with
     a colon where that row has lines to copy), no finding row follows a note, and every note follows the block's last
     `fix:` or line to copy."""

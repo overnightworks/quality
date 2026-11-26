@@ -128,7 +128,7 @@ def test_a_module_name_with_a_format_character_prints_escaped_in_the_detail(buil
 
 @pytest.mark.integration
 def test_two_broken_contracts_stand_in_config_order_with_their_lines_and_one_fix(build_repo, capsys):
-    """O14, ROW-3, ROW-5: two broken contracts stand in config order, each row with its import-linter lines directly
+    """ROW-19, ROW-3, ROW-5: two broken contracts stand in config order, each row with its import-linter lines directly
     under it, and the shared fix follows the second row's lines."""
     files = {**SHOP_DB_IMPORTS_WEB, ".importlinter": contracts_ini({"first": FORBIDDEN, "second": INDEPENDENT_SHOP})}
     _, block, repo = broken_block(capsys, files, build_repo)
@@ -156,7 +156,7 @@ def test_a_broken_and_an_unused_finding_keep_their_own_fixes(build_repo, capsys)
 
 @pytest.mark.integration
 def test_the_notes_follow_the_final_fix_in_the_shared_columns_grimp_first(build_repo, capsys):
-    """O23, IMPORT-25, ROW-15, O15: grimp's warning, then each contract's `warn` note in config order, after the block's
+    """ROW-23, IMPORT-25, ROW-15, ROW-42: grimp's warning, then each contract's `warn` note in config order, after the block's
     last `fix:` and in the findings' columns."""
     warned = {"unmatched_ignore_imports_alerting": "warn"}
     contracts = {"broken": FORBIDDEN, "first": {**STALE, **warned}, "second": {**STALE, **warned}}
@@ -173,7 +173,7 @@ def test_the_notes_follow_the_final_fix_in_the_shared_columns_grimp_first(build_
 
 @pytest.mark.integration
 def test_warnings_stand_in_order_when_every_contract_is_kept(build_repo, capsys):
-    """O23, IMPORT-25: with every contract kept, a grimp warning is still a note and stands before the unmatched-ignore
+    """ROW-23, IMPORT-25: with every contract kept, a grimp warning is still a note and stands before the unmatched-ignore
     notes in config order; the exit stays 0."""
     warned = {"unmatched_ignore_imports_alerting": "warn"}
     files = {**SHOP, "src/shop/some.module.py": "",
@@ -199,7 +199,7 @@ def test_warnings_stand_in_order_when_every_contract_is_kept(build_repo, capsys)
     ids=["without a config", "a warn note", "a grimp warning"],
 )
 def test_no_import_contract_line_stands_before_the_area_rows(build_repo, capsys, files):
-    """O15: no stdout line opens with the rule's id, and stderr stays empty."""
+    """ROW-42: no stdout line opens with the rule's id, and stderr stays empty."""
     repo = build_repo(files)
     _, out, err = check_streams(capsys, repo)
     printed_lines = [line for line in out.splitlines() if line.startswith(Rule.IMPORT_CONTRACT)]

@@ -356,7 +356,7 @@ def test_a_file_under_tests_is_not_read_for_a_shebang(build_repo, capsys):
 
 
 def test_a_suffixless_file_is_a_tracked_finding_the_door_prints_as_its_row(build_repo, capsys):
-    """SUFFIX-14, O12: the kind `tracked`, no trailing period, the row equal to the finding."""
+    """SUFFIX-14, ROW-20: the kind `tracked`, no trailing period, the row equal to the finding."""
     assert_prints_as_kind(capsys, build_repo({**GUIDANCE, "docs/EDGE_SHA": "x"}), Rule.FILE_SUFFIX, FindingEvent.TRACKED)
 
 
@@ -389,7 +389,7 @@ def test_the_allowance_fix_names_the_findings_own_rule_and_its_entry_clears_the_
 
 
 def test_a_path_declared_under_two_rules_and_untracked_is_one_equal_stale_row_per_rule(build_repo, capsys):
-    """SUFFIX-12, O18: the rows read alike and name no rule; deleting every entry of the path clears both."""
+    """SUFFIX-12, ROW-21: the rows read alike and name no rule; deleting every entry of the path clears both."""
     config = ONE_JOB + declaring("scripts/gone.sh", rule=Rule.SCRIPT_NAME) + declaring("scripts/gone.sh", rule=Rule.SCRIPT_HEADER)
     repo = build_repo({**GUIDANCE, CONFIG: config})
     found = [finding for rule in SCRIPT_RULES for finding in rule_findings(repo, rule)]
@@ -402,7 +402,7 @@ def test_a_path_declared_under_two_rules_and_untracked_is_one_equal_stale_row_pe
 
 
 def test_script_name_is_misnamed_where_the_shape_breaks_and_misplaced_where_only_the_place_does(build_repo, capsys):
-    """O19, ROW-3, SCRIPT-9: both broken is `misnamed` and holds the place-only fact;
+    """ROW-22, ROW-3, SCRIPT-9: both broken is `misnamed` and holds the place-only fact;
     all three share one fix, printed once."""
     paths = ["scripts/check.sh", "tools/Entry.sh", "tools/entry_point.sh"]
     repo = build_repo({**GUIDANCE, **dict.fromkeys(paths, SHELL_HEADER)})
@@ -420,7 +420,7 @@ def test_script_name_is_misnamed_where_the_shape_breaks_and_misplaced_where_only
 
 
 def test_a_script_without_a_header_is_a_no_header_finding(build_repo, capsys):
-    """SCRIPT-7, O12: the fact names the window it checks, never the file."""
+    """SCRIPT-7, ROW-20: the fact names the window it checks, never the file."""
     repo = build_repo({**GUIDANCE, "scripts/run_it.sh": "set -e\n"})
     finding = assert_prints_as_kind(capsys, repo, Rule.SCRIPT_HEADER, FindingEvent.NO_HEADER, str(layout.HEADER_LINES))
     assert finding.path not in finding.fact

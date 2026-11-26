@@ -320,7 +320,7 @@ def test_a_covered_repository_with_an_unreadable_workflow_exits_two_through_the_
 
 
 def test_a_make_goal_that_reaches_the_check_in_the_makefile_is_clean(build_repo, capsys):
-    """CATALOG-12, CATALOG-14 to CATALOG-18, CATALOG-21, CATALOG-24: `lint` reaches `words-check` through `$(MAKE)`, and the
+    """CATALOG-12, CATALOG-14, CATALOG-15, CATALOG-18, CATALOG-21, CATALOG-24: `lint` reaches `words-check` through `$(MAKE)`, and the
     check's line is the same reading as a direct call: no row and exit 0."""
     repo = build_repo(
         {

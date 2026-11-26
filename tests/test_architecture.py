@@ -203,7 +203,7 @@ KIND_CELLS = [
 def test_each_kind_of_import_contract_result_carries_its_event_at_the_config(
     build_repo, files, finding_events, note_events
 ):
-    """O23, IMPORT-1, IMPORT-6, ROW-7, ROW-14: a broken contract and an unmatched ignore at `error` are findings of
+    """ROW-23, IMPORT-1, IMPORT-6, ROW-7, ROW-14: a broken contract and an unmatched ignore at `error` are findings of
     their own event, one at `warn` or a grimp warning is a note of its own, `none` is nothing; a finding's location is
     the config, and its fact and fix carry no rule id and no full stop."""
     repo = build_repo(files)
@@ -230,7 +230,7 @@ def test_an_unmatched_ignore_names_its_expression_and_a_grimp_warning_the_skippe
     ({**SHOP_DB_IMPORTS_WEB, ".importlinter": ini(FORBIDDEN)}, FindingEvent.BROKEN, ("src/shop/db.py", "x = 1\n")),
 ], ids=["an unmatched ignore", "an offending import"])
 def test_removing_the_unmatched_ignore_or_the_offending_import_clears_its_finding(build_repo, files, event, remedy):
-    """O23, IMPORT-1, IMPORT-6: the finding is there first; removing the unmatched ignore, or the offending import,
+    """ROW-23, IMPORT-1, IMPORT-6: the finding is there first; removing the unmatched ignore, or the offending import,
     leaves the rule clean."""
     repo = build_repo(files)
     before = [finding.event for finding in rule_findings(repo, Rule.IMPORT_CONTRACT)]

@@ -118,7 +118,7 @@ def test_clean_history_passes(build_repo, installed_scanners):
 
 @pytest.mark.scanner
 def test_committed_secret_fails(build_repo, installed_scanners, capsys):
-    """ROW-2, O28: a committed key is one secret row at its file:line and the key is not printed."""
+    """ROW-2, ROW-24: a committed key is one secret row at its file:line and the key is not printed."""
     repo = build_repo({"config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
     assert_key_found(repo, capsys)
 
@@ -417,7 +417,7 @@ ONLY_AN_ONLINE_AUDIT_FLAGS_THIS = (
 
 @pytest.mark.scanner
 def test_a_clean_row_says_a_workflow_only_an_online_audit_would_flag_was_audited_offline_only(workflow_repo, installed_scanners, capsys):
-    """O38: the clean row of a workflow only an online audit would flag (impostor-commit) says offline audits only."""
+    """ROW-38: the clean row of a workflow only an online audit would flag (impostor-commit) says offline audits only."""
     assert scan(workflow_repo(ONLY_AN_ONLINE_AUDIT_FLAGS_THIS)) == 0
     assert area_fact(capsys.readouterr().out, Area.WORKFLOWS).endswith(cli.OFFLINE_AUDITS)
 
@@ -518,7 +518,7 @@ def red_workflows(drive_workflows, workflow_pair) -> WorkflowRun:
 
 
 def test_the_workflows_block_prints_lint_before_security_each_message_under_its_row_and_one_fix_per_run(red_workflows):
-    """O37: rows, details and fixes equal what the rules returned, in order."""
+    """ROW-28: rows, details and fixes equal what the rules returned, in order."""
     assert [finding.rule for finding in red_workflows.area.findings] == [Rule.WORKFLOW_LINT, Rule.WORKFLOW_SECURITY]
     block = area_block(red_workflows.out, Area.WORKFLOWS)
     assert_block_prints(block, red_workflows.area.findings, ())
@@ -526,7 +526,7 @@ def test_the_workflows_block_prints_lint_before_security_each_message_under_its_
 
 
 def test_the_whole_recorded_message_stands_on_one_detail_line_under_the_lint_row(red_workflows):
-    """O37: no cut and no wrap of the message, whatever its length."""
+    """ROW-28: no cut and no wrap of the message, whatever its length."""
     (lint_row, *_) = [line for line in area_block(red_workflows.out, Area.WORKFLOWS) if isinstance(line, FindingLine)]
     assert lint_row.row.detail == (printable(recorded_entry("actionlint")["message"]),)
 
@@ -564,7 +564,7 @@ def test_equal_zizmor_fixes_share_one_fix_line_and_different_ones_do_not(drive_w
     ("tracked", "deleted"), [(0, 0), (1, 0), (2, 0), (2, 1)], ids=["none", "one", "two", "two, one deleted from the tree"]
 )
 def test_a_clean_workflows_row_counts_the_workflow_files_the_tree_holds_and_ends_with_the_offline_audits(drive_workflows, tracked, deleted):
-    """O38: N is what the tree holds; the disclosure follows."""
+    """ROW-38: N is what the tree holds; the disclosure follows."""
     names = [f".github/workflows/{name}.yml" for name in ("a", "b")[:tracked]]
     run = drive_workflows({name: "on: push\n" for name in names}, deleted=tuple(names[:deleted]))
     fact = area_fact(run.out, Area.WORKFLOWS)
@@ -577,12 +577,12 @@ def workflows_row(printed: str) -> str:
 
 
 def test_a_workflows_row_with_a_finding_carries_no_extent(red_workflows):
-    """O39: a red area claims no pass."""
+    """ROW-29: a red area claims no pass."""
     assert cli.OFFLINE_AUDITS not in workflows_row(red_workflows.out)
 
 
 def test_a_workflows_row_that_could_not_check_carries_no_extent(drive_workflows, workflow_pair):
-    """O39: a refusal names its reason and none of the clean row's words."""
+    """ROW-29: a refusal names its reason and none of the clean row's words."""
     run = drive_workflows(workflow_pair, lint="echo boom >&2; exit 3")
     row = area_row(run.out, Area.WORKFLOWS)
     assert (run.code, row.event, cli.OFFLINE_AUDITS not in workflows_row(run.out)) == (2, cli.AreaEvent.NOT_CHECKED, True)

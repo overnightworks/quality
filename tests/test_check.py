@@ -190,7 +190,7 @@ def test_every_rule_is_judged_and_the_exit_is_the_worst(
 
 @pytest.mark.integration
 def test_a_python_file_with_a_non_utf8_name_the_size_rule_cannot_parse_is_one_escaped_note(build_repo, capsys):
-    """O22, ROW-16, MASK-4: a Python file the size rule cannot parse is one note row at its escaped path, with the
+    """ROW-41, ROW-16, MASK-4: a Python file the size rule cannot parse is one note row at its escaped path, with the
     note's own event and fact."""
     repo = build_repo({"src/\udcff.py": "def broken(:\n"})
     _, output = run(capsys, repo)
@@ -452,7 +452,7 @@ def test_the_run_holds_the_line_up_only_around_a_named_areas_scanners(build_repo
 
 @pytest.mark.integration
 def test_every_rule_a_malformed_config_refuses_carries_its_fact_and_its_example_as_fields(build_repo):
-    """O10, REFUSAL-20: the adapter turns a ConfigError into a refusal whose reason holds the error's fact and an
+    """REFUSAL-24, REFUSAL-20: the adapter turns a ConfigError into a refusal whose reason holds the error's fact and an
     Example step; the refusals of one run are all the same reason."""
     repo = build_repo({"quality/config.toml": GATE + generated_config(job="other")})
     reasons = {verdict.refusal.reason for area in check_result(repo, installed_ruff, never_located).areas for verdict in area.verdicts if verdict.refusal}
@@ -483,7 +483,7 @@ def check_over(build_repo, capsys, refusal: Refusal) -> tuple[int, list[str], li
 @pytest.mark.integration
 @pytest.mark.parametrize("refusal", check_refusals(), ids=lambda refusal: refusal.id)
 def test_check_names_a_config_refusal_on_its_rows_and_shows_the_example_once_under_next(build_repo, capsys, refusal):
-    """O10, REFUSAL-8, REFUSAL-15, REFUSAL-16, REFUSAL-17, REFUSAL-19, REFUSAL-20: each refused area's row ends in the
+    """REFUSAL-24, REFUSAL-8, REFUSAL-15, REFUSAL-16, REFUSAL-17, REFUSAL-19, REFUSAL-20: each refused area's row ends in the
     fact; the example's label and lines stand once on stderr, four spaces deep, each line whole; a refusal without one
     gets the general instruction and no label."""
     code, out, err = check_over(build_repo, capsys, refusal)
@@ -505,7 +505,7 @@ def test_check_names_a_config_refusal_on_its_rows_and_shows_the_example_once_und
 
 @pytest.mark.integration
 def test_a_path_in_conflict_counts_once_among_the_tracked_paths(build_repo):
-    """O16: git lists an unmerged path once per stage; the extent counts distinct paths."""
+    """ROW-36: git lists an unmerged path once per stage; the extent counts distinct paths."""
     repo = build_repo({"README.md": "x\n", "a.txt": "x\n"})
     blob = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD:a.txt"], capture_output=True, text=True, check=True).stdout.strip()
     stages = "".join(f"100644 {blob} {stage}\ta.txt\n" for stage in (1, 2, 3))

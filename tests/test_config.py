@@ -397,7 +397,7 @@ def test_a_malformed_advisory_allowance_cannot_be_judged_where_the_whole_config_
 
 @pytest.mark.parametrize("entry", [allowance_config(reason=None), allowance_config(until="2027-01-31")])
 def test_a_malformed_advisory_allowance_shows_the_example(entry):
-    """O10: the refusal of an [[advisories.allow]] entry carries the example of how to write one."""
+    """REFUSAL-24: the refusal of an [[advisories.allow]] entry carries the example of how to write one."""
     with pytest.raises(ConfigError) as refused:
         load_declarations(entry)
     assert refused.value.example == config.ADVISORY_ALLOWANCE_EXAMPLE
@@ -434,7 +434,7 @@ LAYOUT_RULE_IDS = "agents-md, file-suffix, script-header, script-name, test-impo
     ids=["an unknown rule", "a duplicate declaration", "an unhashable rule"],
 )
 def test_a_layout_allowance_refusal_names_the_rules_in_plain_words(entries, message):
-    """The refusal of a [[layout.allow]] entry prints rule ids as plain words, never an enum's or a list's repr."""
+    """REFUSAL-23: the refusal of a [[layout.allow]] entry prints rule ids as plain words, never an enum's or a list's repr."""
     with pytest.raises(ConfigError) as refused:
         load_declarations(entries)
     assert refused.value.fact == message
@@ -625,7 +625,7 @@ REFUSALS = all_refusals()
     ids=[f"{refusal.id} ({loader})" for refusal in REFUSALS for loader in refusal.loaders],
 )
 def test_a_config_refusal_carries_its_whole_fact_and_its_example_apart(refusal, loader, tmp_path):
-    """REFUSAL-20, REFUSAL-21, O10, O11: every refusal names its table, entry position and unmet need as the fact,
+    """REFUSAL-20, REFUSAL-21, REFUSAL-24: every refusal names its table, entry position and unmet need as the fact,
     without a Python repr, and carries the example the table owns as TOML lines, or none."""
     error = refused_by(refusal, loader, tmp_path)
     assert (error.fact, error.example) == (refusal.fact, refusal.example)
@@ -689,7 +689,7 @@ def test_the_secrets_example_holds_a_placeholder_hash_a_person_fills():
 
 
 def test_the_array_of_tables_form_and_the_inline_form_of_the_same_entries_read_equal_allowances():
-    """SECRET-17, O31: quality prints the block form; a file that holds the inline list reads the same."""
+    """SECRET-17, LENGTH-15: quality prints the block form; a file that holds the inline list reads the same."""
     fields = [("aws-access-token", "a.py", "first"), ("generic-api-key", "b.py", "second")]
     inline = secrets_text(*(secret_entry(rule=rule, file=file, reason=reason) for rule, file, reason in fields))
     blocks = "".join(
@@ -711,7 +711,7 @@ QUOTED = r'"(?:[^"\\]|\\.)*"'
 
 @pytest.mark.parametrize("character", AWKWARD_CHARACTERS, ids=AWKWARD_IDS)
 def test_a_repeated_value_is_quoted_so_that_its_printed_form_reads_back_as_the_value(character):
-    """O11: the fact passed through the one escaping holds the value as a TOML string."""
+    """REFUSAL-20: the fact passed through the one escaping holds the value as a TOML string."""
     value = f"a{character}b"
     entries = f'[[root.allow]]\nentry = "{toml_escaped(value)}"\nreason = "r"\n' * 2
     with pytest.raises(ConfigError) as refused:

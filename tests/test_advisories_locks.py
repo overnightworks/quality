@@ -46,7 +46,7 @@ def pnpm_lock(packages=(("lodash", "4.17.15"),), transitive=()) -> str:
 def test_a_pnpm_lock_is_judged_with_its_development_packages_and_names_the_folder(
     build_repo, publish_database, installed_scanners, run_gate
 ):
-    """ADVISORY-1, ADVISORY-31, O41, O43: a development package of a nested pnpm-lock.yaml is judged against the
+    """ADVISORY-1, ADVISORY-31, ROW-30, ROW-32: a development package of a nested pnpm-lock.yaml is judged against the
     npm database and is red with its fixed version and the pnpm fix naming the folder."""
     publish_database([LODASH_ADVISORY], ecosystem="npm")
     code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}))
@@ -72,7 +72,7 @@ def test_two_vulnerable_versions_of_one_package_in_a_pnpm_lock_are_two_findings(
 
 @pytest.mark.scanner
 def test_several_fixed_versions_keep_the_guidance_of_the_pnpm_lock(build_repo, publish_database, installed_scanners, run_gate):
-    """ADVISORY-25, O41: several fixed versions of an npm package are all listed, and the fix stays the pnpm hint."""
+    """ADVISORY-25, ROW-30: several fixed versions of an npm package are all listed, and the fix stays the pnpm hint."""
     publish_database([advisory(LODASH, fixed=("4.17.21", "5.0.0"), package="lodash", ecosystem="npm")], ecosystem="npm")
     code, output = run_gate(build_repo({FRONTEND_LOCK: pnpm_lock()}))
     assert code == 1, output

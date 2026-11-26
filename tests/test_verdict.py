@@ -641,7 +641,7 @@ LOOSENED_REASON = f"{LOOSENED} entry 1 needs a non-empty one-line reason"
     ],
 )
 def test_a_malformed_declaration_cannot_be_judged(capsys, run_env, entry, named):
-    """O10, VERDICT-39, VERDICT-40, VERDICT-57: a malformed declaration is exit 2, the pair: the fact, then the
+    """REFUSAL-24, VERDICT-39, VERDICT-40, VERDICT-57: a malformed declaration is exit 2, the pair: the fact, then the
     example's lines whole below `next:` and the head's step."""
     repo, _ = run_env
     (repo / CONFIG_PATH).write_text('[gate]\nmandatory_jobs = ["checks"]\n' + entry)

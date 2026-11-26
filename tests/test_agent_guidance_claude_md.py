@@ -82,7 +82,7 @@ def test_claude_md_that_is_absent_or_exactly_the_import_is_clean(build_repo, cap
     ],
 )
 def test_claude_md_that_is_not_the_import_is_one_finding_of_its_kind_at_the_file(build_repo, capsys, tracked, links, name, event):
-    """CLAUDE-1, CLAUDE-3, CLAUDE-5, CLAUDE-6, CLAUDE-7, CLAUDE-9, CLAUDE-11, O12: one finding of its kind at the file,
+    """CLAUDE-1, CLAUDE-3, CLAUDE-5, CLAUDE-6, CLAUDE-7, CLAUDE-9, CLAUDE-11, ROW-20: one finding of its kind at the file,
     its fact never names the file, and its fix is never a command.
     """
     finding = assert_prints_as_kind(capsys, claude_repo(build_repo, tracked, links), Rule.CLAUDE_MD, event)
