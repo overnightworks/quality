@@ -715,8 +715,8 @@ It applies these rules:
     app;
   - ROOT-21: `clusters/`, `infrastructure/` and `apps/`, where a tracked file lies under `clusters/<name>/flux-system/`,
     the directory Flux's bootstrap writes.
-  - ROOT-8: The base list belongs to quality and changes with a quality version; a repository extends it, never shortens it. Each
-    other entry that no case accepts is declared in `quality/config.toml`, one entry and one one-line reason, no
+  - ROOT-8: The base list belongs to quality and changes with a quality version; a repository extends it, never shortens
+    it. Each other entry that no case accepts is declared in `quality/config.toml`, one entry and one one-line reason, no
     pattern and no deeper path:
 
   ```toml
