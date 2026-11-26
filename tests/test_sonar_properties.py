@@ -357,7 +357,7 @@ def test_sonar_off_precedes_the_run_kind_so_the_config_needs_no_run_environment(
 
 
 def test_properties_refuses_a_malformed_sonar_key(monkeypatch, capsys, build_repo):
-    """VERDICT-17: A sonar value that is not a boolean is exit 2 naming the key, never a traceback."""
+    """VERDICT-17, SONAR-102: A sonar value that is not a boolean is exit 2 naming the key, never a traceback."""
     files = {"quality/config.toml": '[gate]\nmandatory_jobs = ["check"]\nsonar = "no"\n'}
     code, _, err = run_properties(monkeypatch, capsys, build_repo, extra_files=files)
     assert (code, err) == (
