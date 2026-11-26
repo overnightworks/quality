@@ -119,7 +119,7 @@ class LayoutAllowance(LayoutEntry):
     ruling: Ruling | None = None
 
 
-def declared_paths(allowances: Sequence[LayoutAllowance], rule: Rule) -> set[str]:
+def declared_paths(allowances: Sequence[LayoutEntry], rule: Rule) -> set[str]:
     return {allowance.path for allowance in allowances if allowance.rule is rule}
 
 

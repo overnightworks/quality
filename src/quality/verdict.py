@@ -180,8 +180,13 @@ class Verdict:
         return tuple(loosening.declaration for loosening in self.loosenings if loosening.declaration is not None)
 
     @property
+    def unruled(self) -> tuple[Loosening, ...]:
+        """The loosenings no declaration binds: what only a ruling lets in."""
+        return tuple(loosening for loosening in self.loosenings if loosening.declaration is None)
+
+    @property
     def undeclared(self) -> tuple[str, ...]:
-        return tuple(loosening.what for loosening in self.loosenings if loosening.declaration is None)
+        return tuple(loosening.what for loosening in self.unruled)
 
     @property
     def failed(self) -> tuple[JobOutcome, ...]:
@@ -211,7 +216,7 @@ def loosening_lines(verdict: Verdict) -> tuple[SubLine, ...]:
 def blocking_lines(verdict: Verdict) -> tuple[SubLine, ...]:
     """What blocks the door, in the verdict's words: each undeclared loosening, unmatched declaration and failed job."""
     failed = (_undeclared_line(SEPARATOR.join(filter(None, (f"{job.subject} {job.event}", job.fact)))) for job in verdict.failed)
-    unruled = (_undeclared_line(each.what, each.fix) for each in verdict.loosenings if each.declaration is None)
+    unruled = (_undeclared_line(each.what, each.fix) for each in verdict.unruled)
     return (*unruled, *map(declaration_line, verdict.stale), *failed)
 
 
