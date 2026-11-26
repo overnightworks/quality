@@ -1299,68 +1299,99 @@ It applies these rules:
     request's merge commit by the door, and only when a module is struck or a contract is removed; a read that fails, or
     a rename list that came with a warning, is exit `2`.
 
-The `secret` rule scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found
-(SECRET-1); other branches the checkout fetched are not scanned (SECRET-2)), always with quality's own config
-(`src/quality/gitleaks.toml`): the repository's `.gitleaks.toml`, `.gitleaksignore` and `gitleaks:allow` comments have
-no effect (SECRET-3). A repository with no commit has no history to scan, so it is exit `2` (SECRET-28).
-A known false positive is allowed by the value, not the place: the repository's
-`quality/config.toml` names the gitleaks rule, the file and the SHA-256 of the finding's secret (UTF-8, lowercase hex)
-with a reason (SECRET-16):
+- SECRET-1: The `secret` rule scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found;
+- SECRET-2: other branches the checkout fetched are not scanned),
+- SECRET-3: always with quality's own config
+  (`src/quality/gitleaks.toml`): the repository's `.gitleaks.toml`, `.gitleaksignore` and `gitleaks:allow` comments have
+  no effect.
+- SECRET-28: A repository with no commit has no history to scan, so it is exit `2`.
+- SECRET-16: A known false positive is allowed by the value, not the place: the repository's
+  `quality/config.toml` names the gitleaks rule, the file and the SHA-256 of the finding's secret (UTF-8, lowercase hex)
+  with a reason:
 
-    [[secrets.allow]]
-    rule = "aws-access-token"
-    file = "tests/fixture.py"
-    secret_sha256 = "<64 hex>"
-    reason = "fixture value"
+```toml
+[[secrets.allow]]
+rule = "aws-access-token"
+file = "tests/fixture.py"
+secret_sha256 = "<64 hex>"
+reason = "fixture value"
+```
 
-A file that lists `allow = [...]` inline reads the same (SECRET-17) and takes a new entry as one more inline table,
-because TOML refuses a `[[secrets.allow]]` block after an inline list.
+- SECRET-17: A file that lists `allow = [...]` inline reads the same and takes a new entry as one more inline table,
+  because TOML refuses a `[[secrets.allow]]` block after an inline list.
 
-One entry allows that value in that file at any line and in every commit that holds it (SECRET-18). Another value in
-the same place is red (SECRET-19), and the same value in another file is red (SECRET-20). A red finding is
+- SECRET-18: One entry allows that value in that file at any line and in every commit that holds it.
+- SECRET-19: Another value in
+  the same place is red,
+- SECRET-20: and the same value in another file is red.
+
+A red finding is
 [the row](output.md#rows) `! <path:line>  secret  gitleaks rule <rule> · commit <sha8> · value not shown` (in the
 staged change without the commit). Under it stands
 `fix: rotate it; if it is no secret, allow it in quality/config.toml with a reason:` and the entry's lines,
-[the sha256 whole on its line](output.md#length), so the entry is copied from the output with a reason added. An entry
-without a reason (SECRET-21), a hash that is not 64 lowercase hex (SECRET-22), a duplicate `(rule, file, secret_sha256)`
-(SECRET-23) and the old `fingerprint` form (SECRET-24) are exit `2`. [The clean row](output.md#area-rows) counts the
-commits reachable from `HEAD` that gitleaks scans (`✓ secrets  clean  412 commits`); a count git cannot give is exit
-`2` (SECRET-25).
+[the sha256 whole on its line](output.md#length), so the entry is copied from the output with a reason added.
 
-A missing `quality/config.toml` means no allowances: the scan still runs and its findings are red (SECRET-4). Only a
-file that exists and cannot be read or parsed (SECRET-5), or links out of the repository (SECRET-6), is exit `2`; a link
-that leads nowhere or loops exists, so it is exit `2` too (SECRET-7).
+- SECRET-21: An entry
+  without a reason,
+- SECRET-22: a hash that is not 64 lowercase hex,
+- SECRET-23: a duplicate `(rule, file, secret_sha256)`
+- SECRET-24: and the old `fingerprint` form are exit `2`.
+- SECRET-25: [The clean row](output.md#area-rows) counts the
+  commits reachable from `HEAD` that gitleaks scans (`✓ secrets  clean  412 commits`); a count git cannot give is exit
+  `2`.
 
-Secret handling: the secret scan runs gitleaks without `--redact` so the report carries each `Secret` to be hashed
-(SECRET-8). gitleaks writes that report to a `tempfile` scratch directory (mode 0700); quality reads it, keeps only the
-hash, and deletes the directory on every exit path (success, gitleaks failure, parse error) (SECRET-9). The value
-reaches no stdout, stderr, log, exception text or retained file (SECRET-10); gitleaks itself runs without its `-v`.
+- SECRET-4: A missing `quality/config.toml` means no allowances: the scan still runs and its findings are red.
+- SECRET-5: Only a
+  file that exists and cannot be read or parsed,
+- SECRET-6: or links out of the repository,
+- SECRET-7: is exit `2`; a link
+  that leads nowhere or loops exists, so it is exit `2` too.
+
+- SECRET-8: Secret handling: the secret scan runs gitleaks without `--redact` so the report carries each `Secret` to be hashed.
+- SECRET-9: gitleaks writes that report to a `tempfile` scratch directory (mode 0700); quality reads it, keeps only the
+  hash, and deletes the directory on every exit path (success, gitleaks failure, parse error).
+- SECRET-10: The value
+  reaches no stdout, stderr, log, exception text or retained file;
+
+gitleaks itself runs without its `-v`.
 While the scan runs, the value exists in that report file and in quality's process memory. The boundary is the deletion
 and the absence of any other sink, not memory-only handling. The hash is safe to print: it appears only where the
 history already shows the content, and a real secret must be rotated anyway. gitleaks' scan stderr may echo scanned
 values, so it is shown only as the vet allows ([the vet](output.md#the-vet)); the missing-report and unexpected-exit
 [refusals](output.md#the-vet) keep their exit code without those diagnostics.
 
-The scan runs git without any attributes (not the repository's `.gitattributes` (SECRET-11), not `info/attributes`
-(SECRET-12), not the system or global file (SECRET-13)), so a `-diff` or `binary` line cannot hide a key. That needs
-git 2.41 or newer; an older git, or one whose version cannot be read, is exit `2` (SECRET-14). The system file is
-excluded by `GIT_ATTR_NOSYSTEM`, git's documented switch; that is pinned as an environment contract, not by a root-only
-real-file test (SECRET-15).
+- SECRET-11: The scan runs git without any attributes (not the repository's `.gitattributes`,
+- SECRET-12: not `info/attributes`,
+- SECRET-13: not the system or global file), so a `-diff` or `binary` line cannot hide a key.
+- SECRET-14: That needs
+  git 2.41 or newer; an older git, or one whose version cannot be read, is exit `2`.
+- SECRET-15: The system file is
+  excluded by `GIT_ATTR_NOSYSTEM`, git's documented switch; that is pinned as an environment contract, not by a root-only
+  real-file test.
 
-Every allowed finding is a row `· <path:line>  allowed  <rule> · <reason>` (SECRET-26), and
-[the clean row](output.md#notes) counts them (`· 1 allowed`). An allowance that matched nothing is a row too, so a
-stale entry can be deleted:
-`· quality/config.toml  unused  [secrets] allow entry <n> matches no secret · <rule> in <file>` (SECRET-27).
+- SECRET-26: Every allowed finding is a row `· <path:line>  allowed  <rule> · <reason>`, and
+  [the clean row](output.md#notes) counts them (`· 1 allowed`).
+- SECRET-27: An allowance that matched nothing is a row too, so a
+  stale entry can be deleted:
+  `· quality/config.toml  unused  [secrets] allow entry <n> matches no secret · <rule> in <file>`.
+
 [`quality check secrets --staged`](commands.md#quality-check-secrets---staged) prints the allowed rows and no unused
 row: one change cannot tell a stale entry from one the history still needs.
 
-The `workflow-lint` rule (actionlint) and the `workflow-security` rule (zizmor, `--offline`) judge every tracked `.yml`
-and `.yaml` file directly under `.github/workflows/` that the tree holds (WORKFLOW-1), with quality's own configs: a
-repository's scanner config and ignore comments change nothing (WORKFLOW-2); quality's configuration adds the hosted
-runner labels `ubuntu-26.04` and `ubuntu-26.04-arm` (WORKFLOW-3), which actionlint does not know yet, and accepts
-GitHub's `uses: $/…` form of a local action (WORKFLOW-4) or reusable workflow (WORKFLOW-5), which actionlint does not
-know yet either. `workflow-security` also judges every tracked `action.yml` and `action.yaml`, wherever it lies
-(WORKFLOW-6); actionlint is never handed one (WORKFLOW-7), and the clean row counts the workflows alone (WORKFLOW-8).
+- WORKFLOW-1: The `workflow-lint` rule (actionlint) and the `workflow-security` rule (zizmor, `--offline`) judge every tracked `.yml`
+  and `.yaml` file directly under `.github/workflows/` that the tree holds,
+- WORKFLOW-2: with quality's own configs: a
+  repository's scanner config and ignore comments change nothing;
+- WORKFLOW-3: quality's configuration adds the hosted
+  runner labels `ubuntu-26.04` and `ubuntu-26.04-arm`, which actionlint does not know yet,
+- WORKFLOW-4: and accepts
+  GitHub's `uses: $/…` form of a local action
+- WORKFLOW-5: or reusable workflow, which actionlint does not
+  know yet either.
+- WORKFLOW-6: `workflow-security` also judges every tracked `action.yml` and `action.yaml`, wherever it lies;
+- WORKFLOW-7: actionlint is never handed one,
+- WORKFLOW-8: and the clean row counts the workflows alone.
+
 A lint finding is `! <path:line>  invalid  actionlint`, the message under it behind `| `, then
 `fix: correct the workflow as the message says`. A security finding is
 `! <path:line>  insecure  zizmor <audit> · <description>` with `fix: see <url>` ([rows](output.md#rows)).
@@ -1369,14 +1400,18 @@ Ruled by the operator: the clean row counts those files and says in the row itse
 offline audits ran (O38), so a workflow that only an online audit would flag is not read as fully audited:
 `✓ workflows  clean  5 workflows · offline audits only`.
 
-The `pr-concurrency` rule judges every tracked workflow that a pull request triggers: its `on:` is the string
-`pull_request`, `pull_request_target` or `pull_request_review`, a list that holds one of them, or a mapping with one as
-a key; the mapping's values are not read (CONCURRENCY-1). A workflow with none of them (`push` alone, `schedule`,
-`workflow_dispatch`, `merge_group`, `workflow_call` alone) is outside; a `workflow_call` file is no root, because its
-caller's `concurrency` governs. Only the top-level `concurrency` counts, never a job's (CONCURRENCY-2). The rule reads
-no expression: after trimming and collapsing the whitespace inside each `${{ }}` and setting `||`, `==` and `!=` off by
-one space, the `group` and `cancel-in-progress` values are compared with a closed list; a form outside it is a finding,
-however equivalent (CONCURRENCY-3). Only space, tab, carriage return and line feed fold inside an expression, so a
+- CONCURRENCY-1: The `pr-concurrency` rule judges every tracked workflow that a pull request triggers: its `on:` is the string
+  `pull_request`, `pull_request_target` or `pull_request_review`, a list that holds one of them, or a mapping with one as
+  a key; the mapping's values are not read. A workflow with none of them (`push` alone, `schedule`,
+  `workflow_dispatch`, `merge_group`, `workflow_call` alone) is outside; a `workflow_call` file is no root, because its
+  caller's `concurrency` governs.
+- CONCURRENCY-2: Only the top-level `concurrency` counts, never a job's.
+- CONCURRENCY-3: The rule reads
+  no expression: after trimming and collapsing the whitespace inside each `${{ }}` and setting `||`, `==` and `!=` off by
+  one space, the `group` and `cancel-in-progress` values are compared with a closed list; a form outside it is a finding,
+  however equivalent.
+
+Only space, tab, carriage return and line feed fold inside an expression, so a
 no-break space keeps a form outside the list, as actionlint refuses such an expression. A block scalar (`|`, `>`, any
 chomping) is read by its content, its final line breaks dropped; a quoted scalar with an escaped line break stays
 outside the list:
@@ -1391,8 +1426,10 @@ A pull-request run is grouped by its number and cancels; any other run gets its 
 always finishes. A group that falls back to the ref or the commit is shared by runs on main, and GitHub drops a pending
 run when a newer one queues in the same group, whatever `cancel-in-progress` says. G1 puts the runs of one pull request
 under two events of a workflow that names more than one pull-request trigger in one group, whichever two events they
-are, so one can cancel the other; G1 passes there and the fix names G2. The block every finding shows as its fix, and
-a repository copies (CONCURRENCY-4):
+are, so one can cancel the other; G1 passes there and the fix names G2.
+
+- CONCURRENCY-4: The block every finding shows as its fix, and
+  a repository copies:
 
 ```yaml
 concurrency:
@@ -1400,22 +1437,26 @@ concurrency:
   cancel-in-progress: ${{ github.event.pull_request.number != null }}
 ```
 
-A finding is `missing` (no `concurrency`, or none with a `cancel-in-progress`; a group alone, a string included),
-`shared group` (the `group` is not a listed form, naming `github.sha`, `github.ref`, `github.head_ref` or
-`github.ref_name` where it holds one; a `concurrency` mapping without a `group` is `no group`, at the `concurrency`
-key's line) or `cancels main` (the `cancel-in-progress` is not a listed form), each with the
-block as its fix (CONCURRENCY-5). A workflow whose YAML or file cannot be read, a `group` or `cancel-in-progress` that
-is no string, and an alias or a merge key where it can hide the top mapping, `on:`, the `concurrency` or either value
-are exit `2` naming the file (CONCURRENCY-6). The clean row of `workflows` keeps its words (CONCURRENCY-7).
+- CONCURRENCY-5: A finding is `missing` (no `concurrency`, or none with a `cancel-in-progress`; a group alone, a string included),
+  `shared group` (the `group` is not a listed form, naming `github.sha`, `github.ref`, `github.head_ref` or
+  `github.ref_name` where it holds one; a `concurrency` mapping without a `group` is `no group`, at the `concurrency`
+  key's line) or `cancels main` (the `cancel-in-progress` is not a listed form), each with the
+  block as its fix.
+- CONCURRENCY-6: A workflow whose YAML or file cannot be read, a `group` or `cancel-in-progress` that
+  is no string, and an alias or a merge key where it can hide the top mapping, `on:`, the `concurrency` or either value
+  are exit `2` naming the file.
+- CONCURRENCY-7: The clean row of `workflows` keeps its words.
+
 quality's own checkout carries the block in `ci.yml` and `code-scanning.yml`. No configuration
 switches the rule off.
 It first ships in v0.11.0, so a dependent meets it at its first bump to that release.
 
-The `pr-workflows` rule judges the same workflows as `pr-concurrency` (a `pull_request`, `pull_request_target` or
-`pull_request_review` trigger, read as CONCURRENCY-1 reads it): each is the gate's caller (a job whose `uses:` is the
-repository's own `gate.yml` or quality's pinned `gate.yml`), CodeQL's caller (the same for `codeql.yml`), or declared in
-`quality/config.toml` with its reason (PRWORKFLOW-1). A workflow that is none is `unlisted`, at the workflow with no
-line, and its fix names both ways out with the block to copy; the reason is the person's to write (PRWORKFLOW-2):
+- PRWORKFLOW-1: The `pr-workflows` rule judges the same workflows as `pr-concurrency` (a `pull_request`, `pull_request_target` or
+  `pull_request_review` trigger, read as CONCURRENCY-1 reads it): each is the gate's caller (a job whose `uses:` is the
+  repository's own `gate.yml` or quality's pinned `gate.yml`), CodeQL's caller (the same for `codeql.yml`), or declared in
+  `quality/config.toml` with its reason.
+- PRWORKFLOW-2: A workflow that is none is `unlisted`, at the workflow with no
+  line, and its fix names both ways out with the block to copy; the reason is the person's to write:
 
 ```toml
 [[workflow.allow]]
@@ -1423,182 +1464,215 @@ file = ".github/workflows/preview.yml"
 reason = "it deploys the pull request preview and no check belongs to it"
 ```
 
-`file` is the exact tracked path of one workflow, no folder, pattern, `..` or absolute path; `reason` is one non-empty
-line; one entry per file (PRWORKFLOW-3). A workflow no pull request triggers (`push` alone, `schedule`,
-`workflow_dispatch`, `merge_group`, `workflow_call` alone) is outside, so a workflow reached only through a reusable call
-is judged as its caller (PRWORKFLOW-4). A declaration whose file is no such workflow, is absent, or is the gate's or
-CodeQL's caller is `unused` (PRWORKFLOW-5). A declaration is no loosening: moving a mandatory job out of the gate's
+- PRWORKFLOW-3: `file` is the exact tracked path of one workflow, no folder, pattern, `..` or absolute path; `reason` is one non-empty
+  line; one entry per file.
+- PRWORKFLOW-4: A workflow no pull request triggers (`push` alone, `schedule`,
+  `workflow_dispatch`, `merge_group`, `workflow_call` alone) is outside, so a workflow reached only through a reusable call
+  is judged as its caller.
+- PRWORKFLOW-5: A declaration whose file is no such workflow, is absent, or is the gate's or
+  CodeQL's caller is `unused`.
+
+A declaration is no loosening: moving a mandatory job out of the gate's
 caller into a declared workflow leaves that job missing from the run (VERDICT-7), and dropping it from `mandatory_jobs`
-is a loosening (VERDICT-13). A workflow whose YAML or file cannot be read, and an alias or a merge key where it can hide
-the top mapping or `on:`, are exit `2` naming the file (PRWORKFLOW-6). The clean row of `workflows` keeps its words, and
+is a loosening (VERDICT-13).
+
+- PRWORKFLOW-6: A workflow whose YAML or file cannot be read, and an alias or a merge key where it can hide
+  the top mapping or `on:`, are exit `2` naming the file.
+
+The clean row of `workflows` keeps its words, and
 the rule's extent is the number of pull-request workflows. No configuration switches the rule off. It first ships in v0.23.0, so a gate pinned below that release shows
 `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `enforced` (FLEET-18).
 
-The `pytest-workers` rule judges every pytest call that runs tests in a `run:` step of every tracked workflow, whether or
-not a pull request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a composite
-action is not (PYTEST-1). The script is never run. The value is read line by line, as the shell reads it: a literal
-block scalar at each file line, a folded or quoted one with each line break kept at the scalar's first line; each `${{
-}}` on a line becomes one dynamic word; a line ending in a backslash joins the next, and one that ends the
-script joins nothing; a `#` that starts a word outside
-quotes ends the command text; a pair of backticks that no quote or backslash protects is read as `$(` and `)`, and a
-last backtick left without a partner on the line is read as `$(` when a word follows it (a substitution that spans
-lines) and dropped otherwise; the words are split by Python's `shlex`, and `&&`, `||`, `;`, `|`, `&`, `(` and `)`,
-also one glued to `<` or `>`, end a segment. A word that holds `$(` is split again the same way,
-so `"$(pytest -q)"` reads as `$(pytest -q)` (PYTEST-2). The string after the `-c` flag of `sh`, `bash`, `dash`, `zsh` or
-`ksh` is taken whole, substitutions included, before it is split, and is read as a script of its own by the same reader;
-its segments stand after the shell's. The shell's flags are read only before its first operand: a flag is a word that
-starts with a dash or a plus sign, and `-o`, `+o`, `-O`, `+O` and `--rcfile` and `--init-file` take the next word as their
-value (so does any flag that ends in `o` or `O`, as `-eo`).
-A lone `-` or `--` ends the flags, and the word after it is the first operand. A `-c` flag is a single-dash word that
-holds the letter `c`, so `-c`, `-ec` and `-lc` count, and the first operand after one is the string. A string the reader
-cannot split to its end is `invalid` where the run holds the word `pytest` (PYTEST-6); `bash run.sh -c 'pytest -q'`
-reads no code, since its first operand is the script's name, and `bash -- -c 'pytest -q'` reads none either, since its
-first operand is `-c` (PYTEST-2).
+- PYTEST-1: The `pytest-workers` rule judges every pytest call that runs tests in a `run:` step of every tracked workflow, whether or
+  not a pull request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a composite
+  action is not.
+- PYTEST-2: The script is never run. The value is read line by line, as the shell reads it: a literal
+  block scalar at each file line, a folded or quoted one with each line break kept at the scalar's first line; each `${{
+  }}` on a line becomes one dynamic word; a line ending in a backslash joins the next, and one that ends the
+  script joins nothing; a `#` that starts a word outside
+  quotes ends the command text; a pair of backticks that no quote or backslash protects is read as `$(` and `)`, and a
+  last backtick left without a partner on the line is read as `$(` when a word follows it (a substitution that spans
+  lines) and dropped otherwise; the words are split by Python's `shlex`, and `&&`, `||`, `;`, `|`, `&`, `(` and `)`,
+  also one glued to `<` or `>`, end a segment. A word that holds `$(` is split again the same way,
+  so `"$(pytest -q)"` reads as `$(pytest -q)`. The string after the `-c` flag of `sh`, `bash`, `dash`, `zsh` or
+  `ksh` is taken whole, substitutions included, before it is split, and is read as a script of its own by the same reader;
+  its segments stand after the shell's. The shell's flags are read only before its first operand: a flag is a word that
+  starts with a dash or a plus sign, and `-o`, `+o`, `-O`, `+O` and `--rcfile` and `--init-file` take the next word as their
+  value (so does any flag that ends in `o` or `O`, as `-eo`).
+  A lone `-` or `--` ends the flags, and the word after it is the first operand. A `-c` flag is a single-dash word that
+  holds the letter `c`, so `-c`, `-ec` and `-lc` count, and the first operand after one is the string. A string the reader
+  cannot split to its end is `invalid` where the run holds the word `pytest` (PYTEST-6); `bash run.sh -c 'pytest -q'`
+  reads no code, since its first operand is the script's name, and `bash -- -c 'pytest -q'` reads none either, since its
+  first operand is `-c`.
 
-A segment is a pytest call when its command word, after assignments (`VAR=value`), `env`, `sudo`, `timeout`, `nice` and
-`xargs` with their flags and operands, `time`, `exec`, `command`, `nohup` and the shell keywords `if`, `then`, `elif`,
-`else`, `do`, `while`, `until`, `!` and `{`, is `pytest` or `py.test`; a Python interpreter (`python`, `python3`,
-`python3.<n>`, `python3.<n>t`, `pypy`, `pypy3`, `pypy3.<n>`) with only flags before `-m pytest`, where `-W`, `-X` and
-`--check-hash-based-pycs` take a value; or a runner (`uv run`, `uvx`, `poetry run`, `pipenv run`, `pdm run`, `hatch
-run`, `coverage run`, `npx`, `bunx`, `pnpm exec`, `pnpm dlx`, `npm exec`, `yarn`) that starts either, past its flags and
-their values (PYTEST-3). `yarn dlx`, `yarn exec`, `pnpm <bin>` and `bun x` are named gaps. The flags that take a value
-are `env` `-u`, `--unset`, `-C`, `--chdir`, `-a` and `--argv0`, and `sudo` `-u`, `-g`, `-D`, `-C`, `-h`, `-p`, `-r`,
-`-t`, `-T`, `-U` and `-R`, when the value follows as its own word; a long `sudo` flag with its value after a space is a
-named gap. The wrappers `timeout`, `nice` and `xargs` are read through with their flags: `timeout` takes `-k`, `-s`,
-`--kill-after` and `--signal` with a value as the next word, then one duration word; `nice` takes `-n` and
-`--adjustment`; `xargs` takes `-I`, `-n`, `-P`, `-d`, `-E`, `-L`, `-s`, `-a` and the long forms `--replace`,
-`--max-args`, `--max-procs`, `--delimiter`, `--eof`, `--max-lines`, `--max-chars` and `--arg-file`, each with its value
-as the next word when that is separate. Only the words on the line are read: `echo x | xargs apt-get install` is a call
-of `apt-get install`, and `xargs` with no command word behind its flags is no call. The tool word after `uvx` loses a
-trailing `@version`, as does the tool word after `npx`, `bunx`, `pnpm exec`, `pnpm dlx`, `npm exec` and `yarn`, so `uvx
-pytest@8 -q` reads as `uvx pytest -q` (PYTEST-3). The value of `env -S` (also `-S'…'` and `--split-string=…`) is read as
-the words it splits into, in its place (PYTEST-3). The word `pytest` anywhere else is no call: `pip install pytest`,
-`echo "run pytest"`, a path, a comment. A script, `make`, `tox`, `nox`, `xvfb-run` or `docker run` starting pytest is
-the rule's named gap and reads as no call (PYTEST-4).
+- PYTEST-3: A segment is a pytest call when its command word, after assignments (`VAR=value`), `env`, `sudo`, `timeout`, `nice` and
+  `xargs` with their flags and operands, `time`, `exec`, `command`, `nohup` and the shell keywords `if`, `then`, `elif`,
+  `else`, `do`, `while`, `until`, `!` and `{`, is `pytest` or `py.test`; a Python interpreter (`python`, `python3`,
+  `python3.<n>`, `python3.<n>t`, `pypy`, `pypy3`, `pypy3.<n>`) with only flags before `-m pytest`, where `-W`, `-X` and
+  `--check-hash-based-pycs` take a value; or a runner (`uv run`, `uvx`, `poetry run`, `pipenv run`, `pdm run`, `hatch
+  run`, `coverage run`, `npx`, `bunx`, `pnpm exec`, `pnpm dlx`, `npm exec`, `yarn`) that starts either, past its flags and
+  their values. `yarn dlx`, `yarn exec`, `pnpm <bin>` and `bun x` are named gaps. The flags that take a value
+  are `env` `-u`, `--unset`, `-C`, `--chdir`, `-a` and `--argv0`, and `sudo` `-u`, `-g`, `-D`, `-C`, `-h`, `-p`, `-r`,
+  `-t`, `-T`, `-U` and `-R`, when the value follows as its own word; a long `sudo` flag with its value after a space is a
+  named gap. The wrappers `timeout`, `nice` and `xargs` are read through with their flags: `timeout` takes `-k`, `-s`,
+  `--kill-after` and `--signal` with a value as the next word, then one duration word; `nice` takes `-n` and
+  `--adjustment`; `xargs` takes `-I`, `-n`, `-P`, `-d`, `-E`, `-L`, `-s`, `-a` and the long forms `--replace`,
+  `--max-args`, `--max-procs`, `--delimiter`, `--eof`, `--max-lines`, `--max-chars` and `--arg-file`, each with its value
+  as the next word when that is separate. Only the words on the line are read: `echo x | xargs apt-get install` is a call
+  of `apt-get install`, and `xargs` with no command word behind its flags is no call. The tool word after `uvx` loses a
+  trailing `@version`, as does the tool word after `npx`, `bunx`, `pnpm exec`, `pnpm dlx`, `npm exec` and `yarn`, so `uvx
+  pytest@8 -q` reads as `uvx pytest -q`. The value of `env -S` (also `-S'…'` and `--split-string=…`) is read as
+  the words it splits into, in its place.
+- PYTEST-4: The word `pytest` anywhere else is no call: `pip install pytest`,
+  `echo "run pytest"`, a path, a comment. A script, `make`, `tox`, `nox`, `xvfb-run` or `docker run` starting pytest is
+  the rule's named gap and reads as no call.
 
-The options before the first `--` are read as pytest reads them, by the reader `pytest-random` shares (RANDOM-7): the
-last of `-n N`, `-nN`, `-n=N`, `--numprocesses N` and `--numprocesses=N` counts, as argparse reads repeated flags, also
-behind other short flags in one word (`-qn4`, `-qn 4`, `-qn=4`). `N` is `auto`, `logical` or a whole number above zero: the
-call passes. No such flag, `-n 0` (`00` too, `-qn0` too) or an abbreviated flag (`--numproc 4`, which pytest refuses) is
-`serial`; any other `N`, a missing one or a dynamic one (`$WORKERS`, `$(nproc)`, `${{ matrix.n }}`) is `invalid`. The
-words after the first `--` are paths for pytest, not its flags, so `pytest tests -- -n auto` is `serial`. A call that only
-lists tests, with any spelling pytest declares for `--collect-only` (`--collect-only`, `--collectonly`, `--co`) before the
-first `--`, runs none and is not judged (`pytest --collect-only` is clean, `pytest -- --collect-only` is `serial`)
-(PYTEST-5). A quoted lone `--` (`pytest -k "--" -n 4`) reads as that same word, because the reader does not keep the
-quote, so it is a false `serial` that the marker clears; pytest itself refuses `-k "--"`.
-`PYTEST_ADDOPTS` and a `-n` in `pyproject.toml` are not read. A line `shlex` refuses that holds the word `pytest`, and a
-command word built at run time (`eval`, or a word starting with `$`) in a `run:` that holds the word `pytest` outside
-comments, are `invalid`, because the rule sees a call it cannot read; without the word `pytest` in the `run:` they are
-no call. A command word that is a substitution (`$(which pytest) -q`, a backtick pair in its place, `"$(which pytest)"
--q`, `if $(which pytest) -q; then`) in such a `run:` is `invalid` with the same fact, while `$(pytest -q)` is its pytest
-call, judged once (PYTEST-6). A second substitution on a command line (`cp $(a) $(b) dest`, `echo "$(date)" "$(uname)"`)
+- PYTEST-5: The options before the first `--` are read as pytest reads them, by the reader `pytest-random` shares (RANDOM-7): the
+  last of `-n N`, `-nN`, `-n=N`, `--numprocesses N` and `--numprocesses=N` counts, as argparse reads repeated flags, also
+  behind other short flags in one word (`-qn4`, `-qn 4`, `-qn=4`). `N` is `auto`, `logical` or a whole number above zero: the
+  call passes. No such flag, `-n 0` (`00` too, `-qn0` too) or an abbreviated flag (`--numproc 4`, which pytest refuses) is
+  `serial`; any other `N`, a missing one or a dynamic one (`$WORKERS`, `$(nproc)`, `${{ matrix.n }}`) is `invalid`. The
+  words after the first `--` are paths for pytest, not its flags, so `pytest tests -- -n auto` is `serial`. A call that only
+  lists tests, with any spelling pytest declares for `--collect-only` (`--collect-only`, `--collectonly`, `--co`) before the
+  first `--`, runs none and is not judged (`pytest --collect-only` is clean, `pytest -- --collect-only` is `serial`). A quoted lone `--` (`pytest -k "--" -n 4`) reads as that same word, because the reader does not keep the
+  quote, so it is a false `serial` that the marker clears; pytest itself refuses `-k "--"`.
+  `PYTEST_ADDOPTS` and a `-n` in `pyproject.toml` are not read.
+- PYTEST-6: A line `shlex` refuses that holds the word `pytest`, and a
+  command word built at run time (`eval`, or a word starting with `$`) in a `run:` that holds the word `pytest` outside
+  comments, are `invalid`, because the rule sees a call it cannot read; without the word `pytest` in the `run:` they are
+  no call. A command word that is a substitution (`$(which pytest) -q`, a backtick pair in its place, `"$(which pytest)"
+  -q`, `if $(which pytest) -q; then`) in such a `run:` is `invalid` with the same fact, while `$(pytest -q)` is its pytest
+  call, judged once.
+
+A second substitution on a command line (`cp $(a) $(b) dest`, `echo "$(date)" "$(uname)"`)
 is no command word; the same `$(…)` after the `)` of a `case` pattern is read the same way, a named gap.
 
-A comment `# pytest-workers: <reason>`, with a reason that holds a letter, clears every call of the logical line it
-stands on, or that stands on any line of the unbroken run of comment-only lines directly above the call's first line (a
-plain comment inside the run does not break it, so two markers stand on two lines); the first line that is not
-comment-only ends the run, and so does a block scalar's `run:` line that carries a comment; a marker that trails another
-command's line is not in the run and clears that command only, so the unmarked call of the next line is reported. The
-marker stands, for a plain or quoted value, as a YAML comment above `run:` or after its value; for a block scalar (`|`,
-`>`), a YAML comment above the `run:` key clears nothing, so the marker goes on the `run: |` line (it covers the
-script's first line) or on a block line directly above the line it clears; for a command joined by backslashes, above
-its first line or on any of its lines. Without the id, without a reason, with a reason of no letter, or separated from
-the call by a line that is not comment-only, it clears nothing; a marker that clears no call is not reported (PYTEST-7).
-A pytest line in a heredoc body is read as a shell line, since the reader does not parse heredocs: without a readable flag it is `serial`,
-and a marker above it clears it (PYTEST-13). A finding is at the call's first line, `serial` with the fact `pytest runs
-without -n` or `pytest runs with -n 0`, or `invalid` with the fact `-n count is not a number above zero or auto`,
-`command cannot be read to its end` or `command is built at run time, pytest -n cannot be read`, its fix `pass -n auto,
-or explain on the line above: # pytest-workers: <reason>` (PYTEST-8). A workflow whose YAML or file cannot be read, a
-`run:` that is no string, a `jobs` or a job that is no mapping, and an alias or a merge key where it can hide `jobs`, a
-job, `steps`, a step or a `run:` are exit `2` naming the file; a step with no `run:` is skipped (PYTEST-9). The clean row of `workflows` keeps its words, and
-the rule's extent is the count of workflows it read (PYTEST-10). quality's own checkout needs no workflow edit
-(PYTEST-11). No configuration switches the rule off. It first ships in v0.11.0, so a dependent meets it
+- PYTEST-7: A comment `# pytest-workers: <reason>`, with a reason that holds a letter, clears every call of the logical line it
+  stands on, or that stands on any line of the unbroken run of comment-only lines directly above the call's first line (a
+  plain comment inside the run does not break it, so two markers stand on two lines); the first line that is not
+  comment-only ends the run, and so does a block scalar's `run:` line that carries a comment; a marker that trails another
+  command's line is not in the run and clears that command only, so the unmarked call of the next line is reported. The
+  marker stands, for a plain or quoted value, as a YAML comment above `run:` or after its value; for a block scalar (`|`,
+  `>`), a YAML comment above the `run:` key clears nothing, so the marker goes on the `run: |` line (it covers the
+  script's first line) or on a block line directly above the line it clears; for a command joined by backslashes, above
+  its first line or on any of its lines. Without the id, without a reason, with a reason of no letter, or separated from
+  the call by a line that is not comment-only, it clears nothing; a marker that clears no call is not reported.
+- PYTEST-13: A pytest line in a heredoc body is read as a shell line, since the reader does not parse heredocs: without a readable flag it is `serial`,
+  and a marker above it clears it.
+- PYTEST-8: A finding is at the call's first line, `serial` with the fact `pytest runs
+  without -n` or `pytest runs with -n 0`, or `invalid` with the fact `-n count is not a number above zero or auto`,
+  `command cannot be read to its end` or `command is built at run time, pytest -n cannot be read`, its fix `pass -n auto,
+  or explain on the line above: # pytest-workers: <reason>`.
+- PYTEST-9: A workflow whose YAML or file cannot be read, a
+  `run:` that is no string, a `jobs` or a job that is no mapping, and an alias or a merge key where it can hide `jobs`, a
+  job, `steps`, a step or a `run:` are exit `2` naming the file; a step with no `run:` is skipped.
+- PYTEST-10: The clean row of `workflows` keeps its words, and
+  the rule's extent is the count of workflows it read.
+- PYTEST-11: quality's own checkout needs no workflow edit.
+
+No configuration switches the rule off. It first ships in v0.11.0, so a dependent meets it
 at its first bump to that release.
 
-The `runtime-install` rule judges every `run:` step of every tracked workflow, whether or not a pull request triggers
-it: a step installs nothing through an operating-system package manager and pipes no download into a shell, or it
-carries the marker below. Only the `run:` of a step is read, as POSIX shell whatever its `shell:` says. Scripts a `run:`
-step calls, composite actions, the steps of `uses:` (an action that runs a command from an input, `with: command:`,
-included) and Dockerfiles are not read (RUNTIME-1). The script is read by the reader of `pytest-workers` (PYTEST-2), and
-every segment also keeps the separator that opened it: `|`, `|&`, `&&`, `||`, `;`, `&`, `(`, `-c` for the segments of a
-shell's `-c` string, or none at the line's start (RUNTIME-2). A segment's command word is found as `pytest-workers`
-finds it, behind assignments, `env`, `sudo`, `timeout`, `nice`, `xargs` and the prefix words, by the basename of a path,
-and a shell's `-c` string is read as a script of its own. `playwright` is read as `pytest` is: on its own, behind
-`python -m`, or behind a runner (`uv run`, `uvx`, `poetry run`, `pipenv run`, `pdm run`, `hatch run`, `coverage run`,
-`npx`, `bunx`, `pnpm exec`, `pnpm dlx`, `npm exec`, `yarn`), whose tool word loses a trailing `@version` (RUNTIME-3).
+- RUNTIME-1: The `runtime-install` rule judges every `run:` step of every tracked workflow, whether or not a pull request triggers
+  it: a step installs nothing through an operating-system package manager and pipes no download into a shell, or it
+  carries the marker below. Only the `run:` of a step is read, as POSIX shell whatever its `shell:` says. Scripts a `run:`
+  step calls, composite actions, the steps of `uses:` (an action that runs a command from an input, `with: command:`,
+  included) and Dockerfiles are not read.
+- RUNTIME-2: The script is read by the reader of `pytest-workers` (PYTEST-2), and
+  every segment also keeps the separator that opened it: `|`, `|&`, `&&`, `||`, `;`, `&`, `(`, `-c` for the segments of a
+  shell's `-c` string, or none at the line's start.
+- RUNTIME-3: A segment's command word is found as `pytest-workers`
+  finds it, behind assignments, `env`, `sudo`, `timeout`, `nice`, `xargs` and the prefix words, by the basename of a path,
+  and a shell's `-c` string is read as a script of its own. `playwright` is read as `pytest` is: on its own, behind
+  `python -m`, or behind a runner (`uv run`, `uvx`, `poetry run`, `pipenv run`, `pdm run`, `hatch run`, `coverage run`,
+  `npx`, `bunx`, `pnpm exec`, `pnpm dlx`, `npm exec`, `yarn`), whose tool word loses a trailing `@version`.
 
-A call is an install when its arguments, the words after its command word to the end of the segment, hold a word of its
-manager's row as an exact word: `apt-get` and `apt` (`install`, `reinstall`, `satisfy`, `build-dep`, `upgrade`,
-`dist-upgrade`, `full-upgrade`); `dpkg` (`-i`, `--install`); `dnf` and `yum` (`install`, `reinstall`, `localinstall`,
-`groupinstall`, `upgrade`, `update`); `apk` (`add`, `upgrade`); `brew` (`install`, `reinstall`, `bundle`, `upgrade`);
-`snap` (`install`, `refresh`); `playwright` (`install` together with `--with-deps`, in any order, or `install-deps`);
-and, as a closed reading of "an operating-system package manager", `pacman` (`-S`, `-Sy`, `-Syu`, `--sync`, `-U`),
-`zypper` (`install`, `in`, `update`, `up`, `dist-upgrade`, `dup`), `choco` and `winget` (`install`, `upgrade`) and
-`port` (`install`, `upgrade`). `update` of `apt-get`, `apt`, `apk` and `brew` refreshes an index and installs nothing,
-alone or before an install; an `update` alone still reaches the mirror at run time and reads green. Any other word is no
-install (`remove`, `purge`, `clean`, `list`, `playwright install chromium`, `playwright test`). The finding is
-`installs` with the command's basename and the matched word as its fact (`apt-get install`, `dpkg -i`, `playwright
-install --with-deps`), one per call, at its logical line's first line (RUNTIME-4). A segment is a download into a shell
-in these three forms and no other, a downloader being `curl` or `wget` and a shell `sh`, `bash`, `dash`, `zsh` or `ksh`,
-both by command word: the shell is opened by `|` or `|&` and an earlier segment of its pipeline is a downloader (`curl
-url | sh`, `wget -O- url | sudo bash -s -- -y`, `curl url | tee f | sh`); the shell holds the word `<(` directly
-followed by a downloader (`bash <(curl url)`); the shell's `-c` string is a command substitution whose first command is
-a downloader (`sh -c "$(curl url)"`). The shell's other arguments are not read. The finding is `installs` with the fact
-`a download runs as a shell script` (RUNTIME-5).
+- RUNTIME-4: A call is an install when its arguments, the words after its command word to the end of the segment, hold a word of its
+  manager's row as an exact word: `apt-get` and `apt` (`install`, `reinstall`, `satisfy`, `build-dep`, `upgrade`,
+  `dist-upgrade`, `full-upgrade`); `dpkg` (`-i`, `--install`); `dnf` and `yum` (`install`, `reinstall`, `localinstall`,
+  `groupinstall`, `upgrade`, `update`); `apk` (`add`, `upgrade`); `brew` (`install`, `reinstall`, `bundle`, `upgrade`);
+  `snap` (`install`, `refresh`); `playwright` (`install` together with `--with-deps`, in any order, or `install-deps`);
+  and, as a closed reading of "an operating-system package manager", `pacman` (`-S`, `-Sy`, `-Syu`, `--sync`, `-U`),
+  `zypper` (`install`, `in`, `update`, `up`, `dist-upgrade`, `dup`), `choco` and `winget` (`install`, `upgrade`) and
+  `port` (`install`, `upgrade`). `update` of `apt-get`, `apt`, `apk` and `brew` refreshes an index and installs nothing,
+  alone or before an install; an `update` alone still reaches the mirror at run time and reads green. Any other word is no
+  install (`remove`, `purge`, `clean`, `list`, `playwright install chromium`, `playwright test`). The finding is
+  `installs` with the command's basename and the matched word as its fact (`apt-get install`, `dpkg -i`, `playwright
+  install --with-deps`), one per call, at its logical line's first line.
+- RUNTIME-5: A segment is a download into a shell
+  in these three forms and no other, a downloader being `curl` or `wget` and a shell `sh`, `bash`, `dash`, `zsh` or `ksh`,
+  both by command word: the shell is opened by `|` or `|&` and an earlier segment of its pipeline is a downloader (`curl
+  url | sh`, `wget -O- url | sudo bash -s -- -y`, `curl url | tee f | sh`); the shell holds the word `<(` directly
+  followed by a downloader (`bash <(curl url)`); the shell's `-c` string is a command substitution whose first command is
+  a downloader (`sh -c "$(curl url)"`). The shell's other arguments are not read. The finding is `installs` with the fact
+  `a download runs as a shell script`.
 
-What the reader cannot read is `invalid`, narrowed so that it stays rare. A line `shlex` refuses, or a `-c` string it
-cannot split, is `invalid` with the fact `command cannot be read to its end` only when the line holds a manager's name
-and one of that manager's install words (for `playwright`, `--with-deps` or `install-deps`), each as a word of its own.
-A command word built at run time (`eval`, a word that starts with `$`, a substitution) is `invalid` with the fact
-`command is built at run time, an install cannot be read` only when the `run:` holds such a pair outside comments; when
-the substitution's first command is itself an install, that call is judged and there is no second finding. `curl` and
-`wget` are no manager names, so a downloader or shell built at run time is a named gap (RUNTIME-6).
+- RUNTIME-6: What the reader cannot read is `invalid`, narrowed so that it stays rare. A line `shlex` refuses, or a `-c` string it
+  cannot split, is `invalid` with the fact `command cannot be read to its end` only when the line holds a manager's name
+  and one of that manager's install words (for `playwright`, `--with-deps` or `install-deps`), each as a word of its own.
+  A command word built at run time (`eval`, a word that starts with `$`, a substitution) is `invalid` with the fact
+  `command is built at run time, an install cannot be read` only when the `run:` holds such a pair outside comments; when
+  the substitution's first command is itself an install, that call is judged and there is no second finding. `curl` and
+  `wget` are no manager names, so a downloader or shell built at run time is a named gap.
 
-A comment `# runtime-install: <reason>`, with a reason that holds a letter, clears findings in two places. The step
-form: the marker stands on the line directly above a step's first line, the line of its `-`, with its `#` in the
-column of that `-`, and clears every finding of the step's `run:`; a `#` in another column clears nothing, a comment
-in the `-` column that follows the previous step and stands directly above the next step clears the next step, and a
-step whose `-` stands alone on its line or that stands in a flow sequence (`steps: [{run: x}]`) has no step form. The
-per-line form is that of `pytest-workers`: the marker on a call's logical line, or on a line of the unbroken run of
-comment-only lines directly above its first line, clears that call (a marker trailing another command's line clears that
-command only), for a block scalar on the `run: |` line (it covers the first line) or on a block line directly above the
-call; the whole comment run above a step whose `run:` stands on the step's own first line (`- run: x`, a flow step) belongs
-to the step form alone, so that step takes a marker on its own line only, while a marker on the `-` line of a step
-whose `run:` stands on the next line (`- # runtime-install: reason`) clears that call; a marker between a step's
-`name:` and its `run: |` clears nothing. A marker that clears nothing is not reported (RUNTIME-7). A
-`pytest-workers` marker clears no `runtime-install` finding and a `runtime-install` marker clears no `pytest-workers`
-finding: each rule reads only its own id, and `pytest-workers` keeps its per-line placement. The marker is for a step
-that proves an install on a fresh system, and for nothing else: the reader cannot see a step's purpose, so the review of the dependent's diff judges it, and any other use is a deviation from
-the fleet standard, which only the operator rules. The findings stand in the `workflows` area, their fix `take the
-tool from the lockfile, the runner image or an image pinned by digest, or explain on the line above: #
-runtime-install: <reason>` (RUNTIME-8). A workflow whose YAML or file cannot be read, a `run:` that is no string, a
-`jobs` or a job that is no mapping, and an alias or a merge key where it can hide `jobs`, a job, `steps`, a step or a
-`run:` are exit `2` naming the file; a step with no `run:` is skipped and a tracked name gone from the tree is skipped (RUNTIME-9). The clean row of
-`workflows` keeps its words, the rule's extent is the count of workflows it read (RUNTIME-10). No configuration
+- RUNTIME-7: A comment `# runtime-install: <reason>`, with a reason that holds a letter, clears findings in two places. The step
+  form: the marker stands on the line directly above a step's first line, the line of its `-`, with its `#` in the
+  column of that `-`, and clears every finding of the step's `run:`; a `#` in another column clears nothing, a comment
+  in the `-` column that follows the previous step and stands directly above the next step clears the next step, and a
+  step whose `-` stands alone on its line or that stands in a flow sequence (`steps: [{run: x}]`) has no step form. The
+  per-line form is that of `pytest-workers`: the marker on a call's logical line, or on a line of the unbroken run of
+  comment-only lines directly above its first line, clears that call (a marker trailing another command's line clears that
+  command only), for a block scalar on the `run: |` line (it covers the first line) or on a block line directly above the
+  call; the whole comment run above a step whose `run:` stands on the step's own first line (`- run: x`, a flow step) belongs
+  to the step form alone, so that step takes a marker on its own line only, while a marker on the `-` line of a step
+  whose `run:` stands on the next line (`- # runtime-install: reason`) clears that call; a marker between a step's
+  `name:` and its `run: |` clears nothing. A marker that clears nothing is not reported.
+- RUNTIME-8: A
+  `pytest-workers` marker clears no `runtime-install` finding and a `runtime-install` marker clears no `pytest-workers`
+  finding: each rule reads only its own id, and `pytest-workers` keeps its per-line placement. The marker is for a step
+  that proves an install on a fresh system, and for nothing else: the reader cannot see a step's purpose, so the review of the dependent's diff judges it, and any other use is a deviation from
+  the fleet standard, which only the operator rules. The findings stand in the `workflows` area, their fix `take the
+  tool from the lockfile, the runner image or an image pinned by digest, or explain on the line above: #
+  runtime-install: <reason>`.
+- RUNTIME-9: A workflow whose YAML or file cannot be read, a `run:` that is no string, a
+  `jobs` or a job that is no mapping, and an alias or a merge key where it can hide `jobs`, a job, `steps`, a step or a
+  `run:` are exit `2` naming the file; a step with no `run:` is skipped and a tracked name gone from the tree is skipped.
+- RUNTIME-10: The clean row of
+  `workflows` keeps its words, the rule's extent is the count of workflows it read.
+
+No configuration
 switches the rule off. It first ships in v0.12.0, so a dependent meets it at its first bump to that release.
 quality's own checkout needs no workflow edit.
 
-The `live-layer` rule keeps the live layer out of CI. A repository that tracks a path under a `tests/e2e/live/` folder,
-at its root or in a judged project's `tests/`, has a live layer; without one the rule is clean with extent `0` and reads
-no workflow (LIVE-1). With one, every pytest call in a `run:` of every tracked workflow is judged, whatever triggers the
-workflow (a push or a schedule is CI too), read as `pytest-workers` reads it (PYTEST-2, PYTEST-3) and with its options
-as `pytest-random` reads them (RANDOM-7); a call that only lists tests (PYTEST-5) is not judged, and the extent is the
-number of workflows read (LIVE-2). A call passes when its last `-m` before the first `--` is an expression in pytest's
-marker grammar (`and`, `or`, `not`, parentheses, names) that is false whenever `live` is true, whatever any other marker
-is. `addopts` and `PYTEST_ADDOPTS` are not read: pytest reads them before the call's own words, so the call's own last
-`-m` wins. A `live(...)` with arguments counts as another name, and an empty `-m ""` selects every test (LIVE-3). A call
-with no `-m`, or with one that can select a test marked `live`, is `runs live` at the call's first line; its fact is
-`pytest can select tests marked live`, its fix `add -m "not live", or "and not live" to its -m expression` (LIVE-4). An
-`-m` built at run time (`${{ }}`, `$VAR`, `$(...)`) or not readable in pytest's grammar is `invalid` with the fact `-m
-expression cannot be read`; an unreadable shell line is `invalid` as `pytest-workers` reports it, and a command built at
-run time in a run holding the word `pytest` is `invalid` with the fact `command is built at run time, pytest -m cannot
-be read` (LIVE-5). A workflow that cannot be read is exit `2` as for `pytest-workers` (LIVE-6). No marker comment,
-configuration or declaration switches the rule off; only the operator rules a deviation ([proof](proof.md)). It first
-ships in v0.25.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column (LIVE-7,
-FLEET-18). Named gaps: a call behind a repository script, `make`, nox, tox or a mise task is not seen, since the live
-layer's own boundary covers it (a journey without platform's storage-state file fails loud, and CI never has that file);
-`-k`, `--deselect` and `--ignore` are not read as an exclusion, so a call that relies on them alone is `runs live`; a
-Playwright live layer under `frontend/e2e/live` is not read (LIVE-8). The marker grammar is read by `marker_expression`,
+- LIVE-1: The `live-layer` rule keeps the live layer out of CI. A repository that tracks a path under a `tests/e2e/live/` folder,
+  at its root or in a judged project's `tests/`, has a live layer; without one the rule is clean with extent `0` and reads
+  no workflow.
+- LIVE-2: With one, every pytest call in a `run:` of every tracked workflow is judged, whatever triggers the
+  workflow (a push or a schedule is CI too), read as `pytest-workers` reads it (PYTEST-2, PYTEST-3) and with its options
+  as `pytest-random` reads them (RANDOM-7); a call that only lists tests (PYTEST-5) is not judged, and the extent is the
+  number of workflows read.
+- LIVE-3: A call passes when its last `-m` before the first `--` is an expression in pytest's
+  marker grammar (`and`, `or`, `not`, parentheses, names) that is false whenever `live` is true, whatever any other marker
+  is. `addopts` and `PYTEST_ADDOPTS` are not read: pytest reads them before the call's own words, so the call's own last
+  `-m` wins. A `live(...)` with arguments counts as another name, and an empty `-m ""` selects every test.
+- LIVE-4: A call
+  with no `-m`, or with one that can select a test marked `live`, is `runs live` at the call's first line; its fact is
+  `pytest can select tests marked live`, its fix `add -m "not live", or "and not live" to its -m expression`.
+- LIVE-5: An
+  `-m` built at run time (`${{ }}`, `$VAR`, `$(...)`) or not readable in pytest's grammar is `invalid` with the fact `-m
+  expression cannot be read`; an unreadable shell line is `invalid` as `pytest-workers` reports it, and a command built at
+  run time in a run holding the word `pytest` is `invalid` with the fact `command is built at run time, pytest -m cannot
+  be read`.
+- LIVE-6: A workflow that cannot be read is exit `2` as for `pytest-workers`.
+- LIVE-7: No marker comment,
+  configuration or declaration switches the rule off; only the operator rules a deviation ([proof](proof.md)). It first
+  ships in v0.25.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column (FLEET-18).
+- LIVE-8: Named gaps: a call behind a repository script, `make`, nox, tox or a mise task is not seen, since the live
+  layer's own boundary covers it (a journey without platform's storage-state file fails loud, and CI never has that file);
+  `-k`, `--deselect` and `--ignore` are not read as an exclusion, so a call that relies on them alone is `runs live`; a
+  Playwright live layer under `frontend/e2e/live` is not read.
+
+The marker grammar is read by `marker_expression`,
 since pytest is no runtime dependency of quality; a test holds it against pytest's own parser.
 
 Named gaps, each reading as no call: `sudo` flags that combine and take a value (`sudo -nu ci apt-get install`) and a
@@ -1617,82 +1691,110 @@ is reported (its fix is a tracked Dockerfile), while a simple `RUN apt-get insta
 (`apt-get -s install`, `--simulate`, `--dry-run`, and `apt-get --print-uris`, which prints download addresses and
 installs nothing) reads as the real call.
 
-The `catalog-check` rule, in the `workflows` area, requires a covered repository's pull-request workflows to call the
-generator's check. A repository is covered when its tracked root `pyproject.toml` declares `overnightworks-design` with the
-extra `catalogs` in `[project] dependencies`, in a group of `[project.optional-dependencies]` or in a group of
-`[dependency-groups]`; the name and the extra are compared canonicalised, a version, a marker or a URL does not count, and
-an `{include-group}` entry is skipped (CATALOG-1). Only the root file counts, so a nested project is a named gap, and
-`[tool.design-catalogs]` without the declaration does not cover (CATALOG-6). A repository that is not covered sees no row
-and no workflow is read (CATALOG-3). A `pyproject.toml` that is not UTF-8 TOML, whose dependency list is no list,
-whose group table is no table or whose
-entry is neither a requirement string nor an `{include-group}` table is exit `2` naming the file (CATALOG-4). The whole
-`[tool.design-catalogs]` table is design's to judge: a covered repository whose table design's `catalog_directory` refuses
-(any key, not only `catalogs`) is exit `2` naming `pyproject.toml` for each rule that needs the directory, `render-pass`
-and `locator-text`, and for no other rule (CATALOG-4).
+- CATALOG-1: The `catalog-check` rule, in the `workflows` area, requires a covered repository's pull-request workflows to call the
+  generator's check. A repository is covered when its tracked root `pyproject.toml` declares `overnightworks-design` with the
+  extra `catalogs` in `[project] dependencies`, in a group of `[project.optional-dependencies]` or in a group of
+  `[dependency-groups]`; the name and the extra are compared canonicalised, a version, a marker or a URL does not count, and
+  an `{include-group}` entry is skipped.
+- CATALOG-2: Only the root file counts, so a nested project is a named gap,
+- CATALOG-6: and
+  `[tool.design-catalogs]` without the declaration does not cover.
+- CATALOG-3: A repository that is not covered sees no row
+  and no workflow is read.
+- CATALOG-4: A `pyproject.toml` that is not UTF-8 TOML, whose dependency list is no list,
+  whose group table is no table or whose
+  entry is neither a requirement string nor an `{include-group}` table is exit `2` naming the file. The whole
+  `[tool.design-catalogs]` table is design's to judge: a covered repository whose table design's `catalog_directory` refuses
+  (any key, not only `catalogs`) is exit `2` naming `pyproject.toml` for each rule that needs the directory, `render-pass`
+  and `locator-text`, and for no other rule.
 
-A covered repository's `run:` steps are read in every workflow a pull request triggers (CATALOG-8). A step counts when
-its script calls `design-catalogs` with `--check` in a form the shared shell reader reads as a call of a named tool, so
-the forms that `pytest-workers` reads stand (CATALOG-7). A call through `make` counts when the goal of a counted step reaches a
-recipe line of the tracked root `Makefile` that calls the check (CATALOG-12, CATALOG-21). The file is read only when no
-counted step calls the check directly and a counted step has a `make` goal, and only when it is a tracked file on disk; a
-tracked `GNUmakefile` or `makefile` makes the reading no call (CATALOG-13). A `make` call is followed only with literal
+- CATALOG-8: A covered repository's `run:` steps are read in every workflow a pull request triggers.
+- CATALOG-7: A step counts when
+  its script calls `design-catalogs` with `--check` in a form the shared shell reader reads as a call of a named tool, so
+  the forms that `pytest-workers` reads stand.
+- CATALOG-12: A call through `make` counts when the goal of a counted step
+- CATALOG-21: reaches a
+  recipe line of the tracked root `Makefile` that calls the check.
+- CATALOG-13: The file is read only when no
+  counted step calls the check directly and a counted step has a `make` goal, and only when it is a tracked file on disk; a
+  tracked `GNUmakefile` or `makefile` makes the reading no call.
+
+A `make` call is followed only with literal
 goal words (a `VAR=x` word is skipped), with no flag at all (so no `-C`, `-f` or `-j`), and with a goal (a `make` call
 with no goal, which builds the default goal, is not followed); target and prerequisite names are literal too, so a rule
-whose name or prerequisite holds `$(VAR)` or `%` defines nothing and is not followed. The recipe is followed as make
-reads a plain file: a goal's recipe, then its prerequisites' recipes, then the recipes of the `make` calls in them, each
-target once (CATALOG-14 to CATALOG-18). A `-` prefixed line, a line of a conditional or of a define block, a target
-whose recipe is given by two rules or by a double-colon rule, and a file with `.IGNORE`, `.RECIPEPREFIX`, `.ONESHELL`,
-an include or a `MAKEFLAGS` assignment are no call (CATALOG-16, CATALOG-17, CATALOG-19, CATALOG-20). A `Makefile` that
-is not UTF-8, or is a symlink that resolves outside the repository, is exit `2` naming the file, when a counted step has
-a `make` goal and no step calls the check directly (CATALOG-23). A word in an `echo`, a script, `tox`, `nox`, a
-composite action or a reusable workflow called through `uses:` is no call (CATALOG-9); every other form the reading does
-not follow is no call too (CATALOG-22). A step with `continue-on-error: true` or with a `working-directory` other than
-`.` does not count. An unreadable workflow, a `run:` that is no string, a `jobs` or a job that is no mapping, or an alias
-or a merge key where it can hide a step is exit `2` naming the workflow (CATALOG-11).
+whose name or prerequisite holds `$(VAR)` or `%` defines nothing and is not followed.
 
-A covered repository is judged in this order (CATALOG-24). Any counted step with a call, directly or through `make`, makes the
-rule clean: no row, whatever else the workflows hold. Otherwise each unreadable line and each command built at run time is an
-`invalid` finding. Otherwise the repository gets one `missing` finding, and exit 1 follows either:
+- CATALOG-15: The recipe is followed as make
+  reads a plain file:
+- CATALOG-14: a goal's recipe, then its prerequisites' recipes, then the recipes of the `make` calls in them,
+- CATALOG-18: each
+  target once.
+- CATALOG-17: A `-` prefixed line,
+- CATALOG-16: a line of a conditional or of a define block,
+- CATALOG-19: a target
+  whose recipe is given by two rules or by a double-colon rule,
+- CATALOG-20: and a file with `.IGNORE`, `.RECIPEPREFIX`, `.ONESHELL`,
+  an include or a `MAKEFLAGS` assignment are no call.
+- CATALOG-23: A `Makefile` that
+  is not UTF-8, or is a symlink that resolves outside the repository, is exit `2` naming the file, when a counted step has
+  a `make` goal and no step calls the check directly.
+- CATALOG-9: A word in an `echo`, a script, `tox`, `nox`, a
+  composite action or a reusable workflow called through `uses:` is no call;
+- CATALOG-22: every other form the reading does
+  not follow is no call too.
 
-- `! .github/workflows  missing  no workflow step runs design-catalogs --check on a pull request, directly or through make`,
-  at the folder with no line (CATALOG-5, CATALOG-25);
-- `! <workflow or Makefile>:<line>  invalid  command cannot be read to its end`, for a logical line of a counted step's script, or of a
-  recipe a counted `make` goal reaches, that the shared reader refuses to its end when the line's own text holds the word
-  `design-catalogs` or `design.catalogs.command` as a whole word, not inside a longer name; a refused line without the word
-  is no problem and reads as no call (CATALOG-26);
-- `! <workflow or Makefile>:<line>  invalid  command is built at run time, design-catalogs --check cannot be read`, for a command word
-  built at run time (a lone `$`, `eval`, a word starting with `$`) in a script, or in the reached recipes, whose text as a
-  whole holds either word. A make variable in the command word (`$(UV) run design-catalogs --check`) is such a command; the
-  `$(MAKE)` and `${MAKE}` substitutions are not. "The script" is a counted step's `run:`; the reached recipe lines are one
-  text, so once any of them names the word, every reached line whose command word is a make variable is its own row, even
-  one that does not mention the generator: this reading errs red and is no gap of the list below (CATALOG-27).
+A step with `continue-on-error: true` or with a `working-directory` other than
+`.` does not count.
 
-A workflow row stands at the workflow's path and the first line of the logical line; a recipe row at `Makefile` and the first
-physical line of the joined recipe line. Workflow rows come in the shared walk's order, then the `Makefile` rows in the order
-the scan reaches them (CATALOG-28). Every row has the fix `add a step to a pull-request workflow, or a make target that make
-lint runs: uv run design-catalogs --check, from the repository root` (CATALOG-10).
+- CATALOG-11: An unreadable workflow, a `run:` that is no string, a `jobs` or a job that is no mapping, or an alias
+  or a merge key where it can hide a step is exit `2` naming the workflow.
 
-The reading errs red in every form of the closed make reading that it does not follow: those read as `missing`, or as
-`invalid` when a command word is a make variable. These gaps err green, each reading as a counting call (CATALOG-31):
+- CATALOG-24: A covered repository is judged in this order. Any counted step with a call, directly or through `make`, makes the
+  rule clean: no row, whatever else the workflows hold. Otherwise each unreadable line and each command built at run time is an
+  `invalid` finding. Otherwise the repository gets one `missing` finding, and exit 1 follows either:
 
-- a here-document body line, a call inside `if false; then ... fi`, a call behind `cd sub &&`, and `design-catalogs` as an
-  option value of `uv run`, which are properties of the shared reader that `pytest-workers` and `runtime-install` share;
-- a step with an `if:`, a call ending in `|| true` in a step or in a recipe line, and a job that is not mandatory;
-- `pull_request_target` and `pull_request_review` as triggers, trigger filters (`types`, `branches`, `paths`), a job-level
-  `if:`, a step's or a default `shell:`, and `defaults.run.working-directory`;
-- `MAKEFLAGS` from the environment, and a `SHELL` or `.SHELLFLAGS` assignment in the `Makefile`;
-- a followed target that is not `.PHONY` while a file of its name is tracked, and a rule line with a `;` recipe after a tab
-  recipe of the same target.
-- `uv run --directory sub design-catalogs --check`, `uv run --project sub design-catalogs --check` and
-  `uvx design-catalogs --check`, which run in a subproject or without the locked dependency.
+  - CATALOG-5: `! .github/workflows  missing  no workflow step runs design-catalogs --check on a pull request, directly or through make`,
+  - CATALOG-25: at the folder with no line;
+  - CATALOG-26: `! <workflow or Makefile>:<line>  invalid  command cannot be read to its end`, for a logical line of a counted step's script, or of a
+    recipe a counted `make` goal reaches, that the shared reader refuses to its end when the line's own text holds the word
+    `design-catalogs` or `design.catalogs.command` as a whole word, not inside a longer name; a refused line without the word
+    is no problem and reads as no call;
+  - CATALOG-27: `! <workflow or Makefile>:<line>  invalid  command is built at run time, design-catalogs --check cannot be read`, for a command word
+    built at run time (a lone `$`, `eval`, a word starting with `$`) in a script, or in the reached recipes, whose text as a
+    whole holds either word. A make variable in the command word (`$(UV) run design-catalogs --check`) is such a command; the
+    `$(MAKE)` and `${MAKE}` substitutions are not. "The script" is a counted step's `run:`; the reached recipe lines are one
+    text, so once any of them names the word, every reached line whose command word is a make variable is its own row, even
+    one that does not mention the generator: this reading errs red and is no gap of the list below.
+
+- CATALOG-28: A workflow row stands at the workflow's path and the first line of the logical line; a recipe row at `Makefile` and the first
+  physical line of the joined recipe line. Workflow rows come in the shared walk's order, then the `Makefile` rows in the order
+  the scan reaches them.
+- CATALOG-10: Every row has the fix `add a step to a pull-request workflow, or a make target that make
+  lint runs: uv run design-catalogs --check, from the repository root`.
+
+- CATALOG-31: The reading errs red in every form of the closed make reading that it does not follow: those read as `missing`, or as
+  `invalid` when a command word is a make variable. These gaps err green, each reading as a counting call:
+
+  - a here-document body line, a call inside `if false; then ... fi`, a call behind `cd sub &&`, and `design-catalogs` as an
+    option value of `uv run`, which are properties of the shared reader that `pytest-workers` and `runtime-install` share;
+  - a step with an `if:`, a call ending in `|| true` in a step or in a recipe line, and a job that is not mandatory;
+  - `pull_request_target` and `pull_request_review` as triggers, trigger filters (`types`, `branches`, `paths`), a job-level
+    `if:`, a step's or a default `shell:`, and `defaults.run.working-directory`;
+  - `MAKEFLAGS` from the environment, and a `SHELL` or `.SHELLFLAGS` assignment in the `Makefile`;
+  - a followed target that is not `.PHONY` while a file of its name is tracked, and a rule line with a `;` recipe after a tab
+    recipe of the same target.
+  - `uv run --directory sub design-catalogs --check`, `uv run --project sub design-catalogs --check` and
+    `uvx design-catalogs --check`, which run in a subproject or without the locked dependency.
 
 A repository that runs the generator without declaring it (`uvx --from 'overnightworks-design[catalogs]' design-catalogs
 --check`, uv's legacy `[tool.uv] dev-dependencies`) is not covered and sees nothing; that is a named gap. No configuration
-switches the rule off. It first ships in v0.12.0, which only reports it: a dependent meets the enforcement at its first bump
-to v0.13.0, the release that names the switch, and its fleet cell reads `report-only` until then (a gate pinned at v0.12.0
-reads `report-only`; from v0.13.0 on the cell reads as on main). On main the cell of the gate's own
-clone reads `enforced` when the clone declares the dependency and `no catalogs declaration` when it does not (FLEET-98,
-FLEET-99).
+switches the rule off.
+
+- FLEET-98: It first ships in v0.12.0, which only reports it: a dependent meets the enforcement at its first bump
+  to v0.13.0, the release that names the switch, and its fleet cell reads `report-only` until then (a gate pinned at v0.12.0
+  reads `report-only`; from v0.13.0 on the cell reads as on main).
+- FLEET-99: On main the cell of the gate's own
+  clone reads `enforced` when the clone declares the dependency and `no catalogs declaration` when it does not.
 
 The `render-pass` rule, in the `workflows` area, requires a covered repository that tracks two or more catalogs to name the
 job that renders each page once per language. It judges presence and gating, never what the job does; the three assertions

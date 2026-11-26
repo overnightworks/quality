@@ -187,7 +187,7 @@ def allow_fake_key(repo: Path, file: str = "config.txt") -> None:
 @pytest.mark.integration
 @pytest.mark.scanner
 def test_an_allowed_value_stays_green_at_a_shifted_line_and_across_commits(build_repo, installed_scanners, capsys):
-    """SECRET-8, SECRET-18: an entry holding the hash of the key allows it at line 1, at a later line and in
+    """SECRET-8, SECRET-18, SECRET-26: an entry holding the hash of the key allows it at line 1, at a later line and in
     every commit that holds it, each as an allowed row."""
     repo = build_repo({"docs/config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
     (repo / "docs/config.txt").write_text("removed\n")
