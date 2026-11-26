@@ -645,7 +645,8 @@ zizmor (the `workflow-security` rule) and ruff (`python-security`, `python-print
   scanner or request still running when the time ends is stopped, gitleaks with its whole process group so the `git`
   it starts dies too, and its scratch directory and mirror are deleted.
 - SCANNER-20: Both make the rule `cannot judge` (exit `2`),
-  worded as in [Refusals](output.md#refusals), with no step of their own and the other rules' rows standing. The calls that locate a scanner (`mise which`) and ask it for its version run under the same deadline and
+  worded as in [Refusals](output.md#refusals), with no step of their own and the other rules' rows standing. The calls
+  that locate a scanner (`mise which`) and ask it for its version run under the same deadline and
   keep their own 30 seconds, taking the smaller of 30 seconds and the time left (SCANNER-19): with no time left they start
   nothing, and one still running when the run ends is stopped and cuts the rule the same way, `mise` or the scanner being
   its subject and no install or reinstall step following; with 30 seconds the smaller, the call ends at 30
@@ -726,7 +727,8 @@ Ruled by the operator:
   head sha, one commit per page. A head that lacks commits of the tip is `! base  behind  <n> commit(s)
   behind <base>` and `error: not merged · the head lacks <n> commit(s) of <base>, so its checks did not run on what
   would merge · nothing changed`, `next:` being `gh pr update-branch <pr> --repo <owner/repo>` (on a fork the author may
-  have to allow maintainer edits or update the branch himself), then waiting for the checks, then the door again. A head that contains the tip is `✓ base  up to date  <base> at <tip, 7 characters>`, the row after the
+  have to allow maintainer edits or update the branch himself), then waiting for the checks, then the door again. A head
+  that contains the tip is `✓ base  up to date  <base> at <tip, 7 characters>`, the row after the
   pull request's (MERGE-104).
 - MERGE-105: A comparison that cannot be read, or whose `behind_by` is no whole number of zero or
   more or whose `base_commit.sha` is no commit sha, is the `✗ base` row (exit `2`), never up to date.
@@ -888,7 +890,8 @@ it is named. Every line of this section above holds per pull request, because ea
   the next. `-P` keeps the working directory off the child's module path, so a `quality` package in a pull
   request's checkout never loads under the operator's login. A second pull request of a repository is
   judged from scratch, and after a merge moved its base it is refused as behind (MERGE-108).
-- MERGE-110: **Rows.** Before each child one `· <n> of <total>  judging  <name>` row names the pull request and its place. The run flushes its output and discards what the terminal holds typed ahead before each child, so a
+- MERGE-110: **Rows.** Before each child one `· <n> of <total>  judging  <name>` row names the pull request and its
+  place. The run flushes its output and discards what the terminal holds typed ahead before each child, so a
   line typed during one pull request never answers the next one's question; the run itself reads no line.
 - MERGE-111: Each child's own rows and closing line or pair stand as a run for it alone prints them. At the end one
   row per name says what that child came to, from its exit alone: `✓ merged` (exit `0`), `~ would merge` (exit `0` of
