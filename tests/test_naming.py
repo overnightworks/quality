@@ -183,7 +183,7 @@ def test_an_npm_name_is_a_stem_form_or_an_ecosystem_form(judge, name, accepted):
     ],
 )
 def test_a_package_json_in_node_modules_tests_or_a_fixture_is_not_judged(judge, path):
-    """NAMING-5."""
+    """NAMING-11."""
     files = {"pyproject.toml": pyproject(), path: package_json("foreign")}
     assert judge(files) == []
 
