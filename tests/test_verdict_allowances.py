@@ -86,6 +86,7 @@ def test_a_base_written_before_the_keys_is_read_by_identity(table):
 
 BASES_READ_BY_IDENTITY = {
     "written before the keys": lambda table: table.entry(table.first, reason="two\nlines", ends=None) + "unknown = 1\n",
+    "declaring one identity twice": lambda table: table.entry(table.first) * 2,
 }
 
 

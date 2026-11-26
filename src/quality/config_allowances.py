@@ -187,9 +187,10 @@ def _read_root_entry(entry: object, position: int) -> RootEntry:
 
 
 def layout_allowances(layout: dict, side: ConfigSide) -> tuple[LayoutEntry, ...]:
+    if side is ConfigSide.BASE:
+        return config_entries.distinct_entries(layout, "allow", LAYOUT_ALLOWANCE_HEADING, LAYOUT_ALLOWANCE_EXAMPLE, _read_layout_entry)
     return config_entries.unique_entries(
-        layout, "allow", LAYOUT_ALLOWANCE_HEADING, LAYOUT_ALLOWANCE_EXAMPLE,
-        _read_layout_allowance if side is ConfigSide.HEAD else _read_layout_entry,
+        layout, "allow", LAYOUT_ALLOWANCE_HEADING, LAYOUT_ALLOWANCE_EXAMPLE, _read_layout_allowance,
         lambda allowance: allowance.identity,
         lambda allowance: f"declares path = {config_entries.toml_string(allowance.path)} for rule = "
         f"{config_entries.toml_string(str(allowance.rule))} twice; one declaration per rule and path",
@@ -274,8 +275,9 @@ def _one_per_field[Allowance](
 
 
 def root_allowances(root: dict, side: ConfigSide) -> tuple[RootEntry, ...]:
-    read = _read_root_allowance if side is ConfigSide.HEAD else _read_root_entry
-    return _one_per_field(ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE, read, "entry", "root entry")(root)
+    if side is ConfigSide.BASE:
+        return config_entries.distinct_entries(root, "allow", ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE, _read_root_entry)
+    return _one_per_field(ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE, _read_root_allowance, "entry", "root entry")(root)
 
 
 python_allowances = _one_per_field(PYTHON_ALLOWANCE_HEADING, PYTHON_ALLOWANCE_EXAMPLE, _read_python_allowance, "path", "path")
