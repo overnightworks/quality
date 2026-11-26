@@ -300,6 +300,10 @@ reason = "the operator ruled the requirement shelf machinery out"
 Ruled by the operator:
 
 - A loosening is declared and stays red, and only the door merges it, on the operator's consent.
+- A declared removal of a mandatory job is no longer judged.
+- The door may merge legacy Sonar findings and a declared loosening in one run.
+- Only the door moves an allowance's `until` later, because that date is what brings the advisory back to red.
+- An allowance is its own declaration, with no second `[[gate.loosened]]` entry.
 - The door merges a pull request only on the operator's consent: an organisation owner's latest review on it at the head the door merges, submitted as a comment or an approval and not dismissed, carrying exactly the consent text the door prints for that head, one fenced block, line endings aside. It never reads the comment that shows the operator the text: it recomputes the text at that head and refuses any difference.
 - The consent check is a tripwire for cooperative agents: it holds the cases it lists (an organisation owner's latest review, submitted and not dismissed, at the merged head, carrying exactly that text). It cannot tell the operator's review from one written under his login, by an agent too; the boundary that stops a non-cooperative agent is agents acting on GitHub under their own identity, with the operator's credentials and the board's click out of their reach (platform#885).
 
