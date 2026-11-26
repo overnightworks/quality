@@ -85,8 +85,9 @@ GRIMP_WARNING_PREFIX = "Warning: "
 PANIC_MODULE = "pyo3_runtime"
 MAX_ECHOED_SOURCE = 200
 PACKAGE_INIT = "__init__.py"
-# Probed on grimp 3.17, whose Rust reader (not readable from Python) takes the raw lower-cased spelling of a coding
-# cookie: Python's own aliases such as utf_8, U8, cp65001 or utf-8-sig make it panic.
+# Probed on grimp 3.20, whose Rust reader (not readable from Python) never panics on a coding cookie: U8, cp65001 and
+# an unknown name raise a UnicodeError, and latin-1, utf_8 and utf-8-sig are read. The walk refuses every spelling
+# outside this set, the ones grimp reads included.
 GRIMP_ACCEPTED_COOKIES = frozenset({"utf-8", "utf8", "ascii", "us-ascii", "ansi_x3.4-1968"})
 NUL_IN_SOURCE = "source code cannot contain null bytes"
 CODING_COOKIE = re.compile(r"^[ \t\f]*#.*?coding[:=][ \t]*([-\w.]+)", re.ASCII)  # PEP 263
@@ -576,9 +577,10 @@ def _build_graph(repository: str, roots: Mapping[str, str], options: UserOptions
                 cache_dir=None,
             )
     except BaseException as error:
-        # last resort: _refuse_unreadable_source stops the known triggers. The panic type derives from
-        # BaseException and lives in `pyo3_runtime`, which cannot be imported; the Rust panic hook has already
-        # written its native diagnostic (with an absolute path) to fd 2 and redirecting fds would hide grimp's own output
+        # last resort for a source that changed after the walk: grimp 3.20 still panics on a FIFO and on a file name that
+        # is not UTF-8, which the walk refuses. The panic type derives from BaseException and lives in `pyo3_runtime`,
+        # which cannot be imported; the Rust panic hook has already written its native diagnostic (with an absolute
+        # path) to fd 2 and redirecting fds would hide grimp's own output
         if type(error).__module__ != PANIC_MODULE:
             raise
         raise ContractError("grimp panicked while reading the root packages;"
@@ -587,7 +589,8 @@ def _build_graph(repository: str, roots: Mapping[str, str], options: UserOptions
 
 def _refuse_links_out(repository: str, package_directory: str) -> None:
     """grimp walks a root package following symlinks, so this walks it the same way and refuses any directory or
-    file that resolves outside the repository, and any loop, before grimp reads anything."""
+    file that resolves outside the repository, any loop, and any .py file it cannot stat or read, before grimp reads
+    anything."""
     real_directories: dict[str, str] = {}
     def refuse_unexaminable(error: OSError) -> None:
         raise _cannot_be_examined(repository, error.filename, error.strerror) from error
@@ -601,14 +604,11 @@ def _refuse_links_out(repository: str, package_directory: str) -> None:
         for path in (parent, *(os.path.join(parent, name) for name in (*directories, *files))):
             if not Path(os.path.realpath(path)).is_relative_to(repository):
                 raise ContractError(f"{os.path.relpath(path, repository)} links outside the repository")
-        for name in files:
-            path = os.path.join(parent, name)
-            file_status = _stat_refusing_links(repository, path)
-            if file_status is not None:
-                _refuse_unreadable_source(repository, path, file_status)
+        for path in (os.path.join(parent, name) for name in files if name.endswith(".py")):
+            _refuse_unreadable_source(repository, path, _stat_refusing_links(repository, path))
 
 
-def _stat_refusing_links(repository: str, path: str) -> os.stat_result | None:
+def _stat_refusing_links(repository: str, path: str) -> os.stat_result:
     try:
         return os.stat(path)
     except OSError as error:
@@ -619,18 +619,13 @@ def _stat_refusing_links(repository: str, path: str) -> os.stat_result | None:
         if error.errno == errno.ENOENT and os.path.islink(path):
             raise ContractError(f"{os.path.relpath(path, repository)} links to nothing;"
                                 " a dangling link cannot be judged") from error
-        # a file that vanished mid-walk (a race, no link) is grimp's to report
-        if error.errno != errno.ENOENT:
-            raise _cannot_be_examined(repository, path, error.strerror) from error
-    return None
+        raise _cannot_be_examined(repository, path, error.strerror) from error
 
 
 def _refuse_unreadable_source(repository: str, path: str, file_status: os.stat_result) -> None:
     """grimp opens and decodes every .py file it finds and panics on a name or content it cannot take, and a stat
     succeeds on a file whose mode forbids the read or that blocks an open (a FIFO), so all refusals come here first,
-    in that order: file type, name, content. grimp reads UTF-8 only, even when a coding cookie declares another."""
-    if not path.endswith(".py"):
-        return
+    in that order: file type, name, content. A coding cookie outside GRIMP_ACCEPTED_COOKIES is refused."""
     if not stat.S_ISREG(file_status.st_mode):
         raise _cannot_be_examined(repository, path, "not a regular file")
     try:
@@ -643,8 +638,6 @@ def _refuse_unreadable_source(repository: str, path: str, file_status: os.stat_r
         _refuse_declared_encoding(repository, path, source)
     except UnicodeDecodeError as error:
         raise _cannot_be_examined(repository, path, "not valid UTF-8") from error
-    except FileNotFoundError:
-        pass  # vanished mid-walk: grimp's to report, as in _stat_refusing_links
     except OSError as error:
         raise _cannot_be_examined(repository, path, error.strerror) from error
 

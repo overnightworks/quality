@@ -406,28 +406,36 @@ It applies these rules:
   - IMPORT-12: invalid contract options,
   - IMPORT-13: a config value of the wrong type or
     any other error of import-linter or grimp (`contract <name> in pyproject.toml cannot be judged: ...` or
-    `the config pyproject.toml cannot be judged: ...`),
+    `the config pyproject.toml cannot be judged: ...`) or a panic of grimp at a source IMPORT-17 to IMPORT-23 do not refuse
+    (`grimp panicked while reading the root packages; ...`),
   - IMPORT-14: a dotted root
     package, because a root package is one tracked `<name>/__init__.py` and quality judges only top-level ones,
   - IMPORT-15: a root package with no or several such directories, or whose tracked `__init__.py` the checkout does
     not hold,
   - IMPORT-17: a symlink under a root package that leaves the repository, directly or through
     a link that stays inside,
-  - IMPORT-18: and a symlink loop,
-  - IMPORT-19: a dangling link,
-  - IMPORT-20: and a `.py` file
-    that "cannot be examined" (no regular file,
+  - IMPORT-18: and a symlink loop through directories or a `.py` name that loops,
+  - IMPORT-19: a dangling link named `.py`,
+  - IMPORT-20: and a `.py` file the walk lists and cannot stat or read, one gone since it was listed included, that
+    "cannot be examined" (no regular file,
   - IMPORT-21: a name or content that is not valid UTF-8,
   - IMPORT-22: a
     coding cookie in any spelling but utf-8, utf8, ascii, us-ascii or ansi_x3.4-1968 (accepted in any letter case),
-  - IMPORT-23: or one the system will not let it read).
+  - IMPORT-23: or one the system will not let it read or that is gone: `<path> cannot be examined: <the system's reason>`,
+    which does not say whether a rerun helps).
+  - IMPORT-33: A name that does not end in `.py` is neither stat'ed nor read, so a dangling link, a link loop or a file
+    under a directory without search permission that is no `.py` name is judged without refusal.
   - IMPORT-24: A module grimp cannot parse makes the `imports`
     row `✗ not checked` with the reason (exit `2`);
   - IMPORT-25: a warning grimp gives while building the graph is a
     [note row](output.md#notes) `· <config>  warning  <grimp's message>`, before the contracts' notes.
 
-  No
-  message names an absolute local path (IMPORT-26).
+  No message quality writes names an absolute local path (IMPORT-26); grimp's own panic text is the named gap below.
+
+  Named gaps, waiting for usage evidence: when grimp panics, its native panic text, which names an absolute path, reaches
+  stderr before quality's refusal; #1066 owns it, and it ends when quality captures that descriptor during the build
+  without hiding grimp's own output, or when grimp raises an error instead of panicking. Names ending in `.py` that grimp
+  skips (hidden ones, and ones with more than one dot) are still examined.
 
   - IMPORT-29: A `forbidden` contract whose own `ignore_imports` name a plain dotted submodule of an external package (one that is
     no root package), such as `skat.table.** -> agents.calling`, is checked on its own copy of the graph in which that
@@ -447,7 +455,7 @@ It applies these rules:
     copy an `ignore_imports` line naming the bare package matches only imports held at the package itself, and a line no
     import matches follows IMPORT-6.
   - IMPORT-32: A refining contract with `as_packages = false`, and a module grimp read
-    that Python cannot parse or git does not track, cannot be judged (exit `2`).
+    that Python cannot parse, git does not track or whose tracked file the checkout does not hold, cannot be judged (exit `2`).
 
   On a pull request `quality verdict` and the door also hold the head's import contracts against the base's (see
   "The import contracts only tighten" below).
