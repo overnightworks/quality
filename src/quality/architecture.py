@@ -85,10 +85,10 @@ GRIMP_WARNING_PREFIX = "Warning: "
 PANIC_MODULE = "pyo3_runtime"
 MAX_ECHOED_SOURCE = 200
 PACKAGE_INIT = "__init__.py"
-# Probed on grimp 3.20, whose Rust reader (not readable from Python) never panics on a coding cookie: U8, cp65001 and
-# an unknown name raise a UnicodeError, and latin-1, utf_8 and utf-8-sig are read. The walk refuses every spelling
-# outside this set, the ones grimp reads included.
-GRIMP_ACCEPTED_COOKIES = frozenset({"utf-8", "utf8", "ascii", "us-ascii", "ansi_x3.4-1968"})
+# quality reads every source as UTF-8 (the content check and the contract refinement), so the walk judges only a
+# source that it and grimp read alike. The set holds the spellings both read as UTF-8 or ASCII, so it stays a list of
+# probed spellings and every other spelling is refused.
+READABLE_COOKIES = frozenset({"utf-8", "utf8", "ascii", "us-ascii", "ansi_x3.4-1968"})
 NUL_IN_SOURCE = "source code cannot contain null bytes"
 CODING_COOKIE = re.compile(r"^[ \t\f]*#.*?coding[:=][ \t]*([-\w.]+)", re.ASCII)  # PEP 263
 
@@ -623,9 +623,9 @@ def _stat_refusing_links(repository: str, path: str) -> os.stat_result:
 
 
 def _refuse_unreadable_source(repository: str, path: str, file_status: os.stat_result) -> None:
-    """grimp opens and decodes every .py file it finds and panics on a name or content it cannot take, and a stat
-    succeeds on a file whose mode forbids the read or that blocks an open (a FIFO), so all refusals come here first,
-    in that order: file type, name, content. A coding cookie outside GRIMP_ACCEPTED_COOKIES is refused."""
+    """grimp opens and decodes every .py file it finds, and a stat succeeds on a file whose mode forbids the read or
+    that blocks an open (a FIFO), so all refusals come here first, in that order: file type, name, content.
+    A coding cookie outside READABLE_COOKIES is refused, because quality reads every source as UTF-8."""
     if not stat.S_ISREG(file_status.st_mode):
         raise _cannot_be_examined(repository, path, "not a regular file")
     try:
@@ -643,8 +643,9 @@ def _refuse_unreadable_source(repository: str, path: str, file_status: os.stat_r
 
 
 def _refuse_declared_encoding(repository: str, path: str, source: bytes) -> None:
-    """detect_encoding decides whether the cookie is an error; grimp's own rule decides which cookie it can read: a
-    cookie on either of the first two lines, even after code, where PEP 263 would ignore it."""
+    """detect_encoding decides whether the cookie is an error; READABLE_COOKIES decides which spelling quality reads, and
+    a cookie counts on either of the first two lines, even after code, where PEP 263 would ignore it, as grimp's
+    reader takes it."""
     try:
         tokenize.detect_encoding(io.BytesIO(source).readline)
     except SyntaxError as error:
@@ -653,14 +654,14 @@ def _refuse_declared_encoding(repository: str, path: str, source: bytes) -> None
     for line in source.removeprefix(codecs.BOM_UTF8).splitlines()[:2]:
         cookie = CODING_COOKIE.match(line.decode("utf-8"))
         if cookie:
-            _refuse_cookie_grimp_cannot_read(repository, path, cookie.group(1))
+            _refuse_cookie_quality_does_not_read(repository, path, cookie.group(1))
             return
 
 
-def _refuse_cookie_grimp_cannot_read(repository: str, path: str, spelling: str) -> None:
-    if spelling.lower() not in GRIMP_ACCEPTED_COOKIES:
-        accepted = ", ".join(sorted(GRIMP_ACCEPTED_COOKIES))
-        raise _cannot_be_examined(repository, path, f"declares {spelling}; grimp reads only {accepted}")
+def _refuse_cookie_quality_does_not_read(repository: str, path: str, spelling: str) -> None:
+    if spelling.lower() not in READABLE_COOKIES:
+        accepted = ", ".join(sorted(READABLE_COOKIES))
+        raise _cannot_be_examined(repository, path, f"declares {spelling}; quality reads only {accepted}")
 
 
 def _real_ancestors(real_directories: Mapping[str, str], package_directory: str, directory: str) -> set[str]:
