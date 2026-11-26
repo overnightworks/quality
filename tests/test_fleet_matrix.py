@@ -450,16 +450,11 @@ def test_the_adapter_contract_cells_follow_the_contract_the_config_holds(fleet_r
     assert cell(output, GATE_REPOSITORY, column) == cell_words
 
 
-def test_the_adapter_import_cell_says_not_in_the_tag_under_a_pin_below_its_release(fleet_report, public):
-    """FLEET-18, ADAPTERIMPORT-21: a gate pinned below the release that names the rule has no such rule."""
+@ADAPTER_CONTRACT_COLUMNS
+def test_the_adapter_contract_cells_say_not_in_the_tag_under_a_pin_below_their_release(fleet_report, public, column):
+    """FLEET-18, ADAPTERIMPORT-21, INTEGRATION-11: a gate pinned below the release that names the rule has no such rule."""
     _, output = fleet_report(public("tagged", pinned_gate(NEWEST)), tags=first_releases())
-    assert cell(output, "o/tagged", "adapter-import") == "not in v0.3.1"
-
-
-def test_the_integration_marker_cell_says_not_released_under_a_tag(fleet_report, public):
-    """FLEET-19, INTEGRATION-11: only main has the rule."""
-    _, output = fleet_report(public("tagged", pinned_gate(NEWEST)), tags=first_releases())
-    assert cell(output, "o/tagged", "integration-marker") == "not released"
+    assert cell(output, "o/tagged", column) == "not in v0.3.1"
 
 
 def test_without_a_gate_every_cell_that_needs_one_is_a_dash_and_an_unreadable_workflow_makes_each_unreadable(
