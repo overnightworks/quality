@@ -1,0 +1,8 @@
+claim_id = "191e72d656774265a3d059d1cb23eed8"
+agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
+role = "builder"
+base = "b8e4840a636b132cb407817c4c503a68268beca0"
+branch = "claude/issue-900-recursion-limit-named-like-unparsable"
+scope = ["docs/output.md", "docs/rules.md", "src/quality/ratchet.py", "src/quality/ratchet_scripts.py", "tests/test_ratchet.py", "tests/test_ratchet_scripts.py"]
+opened_commit = "6213c05b083aa33ddcbc3f78babd725074efb743"
+whole_reason = "One failure case of the size rule, named the same way in the two readers it has, with its two documents and tests."
