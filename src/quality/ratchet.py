@@ -224,7 +224,7 @@ def measure(sources: dict[str, bytes]) -> TreeMeasurement:
     return TreeMeasurement(measurements, unparsable)
 
 
-def _unreadable_errors(source: FunctionSource) -> tuple[type[Exception], ...]:
+def _unreadable_errors(source: FunctionSource | None) -> tuple[type[Exception], ...]:
     """A script file is unreadable only as non-UTF-8 text or as nested too deeply; any other error from it escapes."""
     if source is FunctionSource.SCRIPT:
         return (UnicodeDecodeError, RecursionError)
