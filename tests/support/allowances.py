@@ -26,6 +26,10 @@ class Table:
     def what(self, name: str, ends: str = "#2") -> str:
         return self.line.format(name=name, ends=ends)
 
+    def written_before_the_keys(self) -> str:
+        """The first name's entry as a base written before `ends` was: a multi-line reason and a key this release refuses."""
+        return self.entry(self.first, reason="two\nlines", ends=None) + "unknown = 1\n"
+
 
 TABLES = {
     "root": Table(root_declaring, "root allowance adds {name} until {ends}", "Makefile", "GNUmakefile"),

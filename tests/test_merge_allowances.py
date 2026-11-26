@@ -40,8 +40,7 @@ def test_the_door_stops_at_an_added_entry_without_a_ruling_and_shows_its_fix(tab
 def test_the_door_reads_a_base_written_before_the_keys_and_finds_no_loosening(table, capsys):
     """VERDICT-79: the pin move that writes `ends` is no loosening at the door, and no pull request file is fetched; the base's
     extra key and multi-line reason are not read."""
-    old = table.entry(table.first, reason="two\nlines", ends=None) + "unknown = 1\n"
-    gh = FakeGh(base_config=GATE_CONFIG + old, merge_config=GATE_CONFIG + table.entry(table.first))
+    gh = FakeGh(base_config=GATE_CONFIG + table.written_before_the_keys(), merge_config=GATE_CONFIG + table.entry(table.first))
     code, out, _, _ = run(gh, capsys)
     assert (code, "  ✓ loosenings    none\n" in out) == (0, True)
 

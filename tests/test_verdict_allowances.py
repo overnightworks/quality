@@ -77,15 +77,8 @@ def test_only_an_identity_the_base_lacks_loosens(table, change):
     assert judged(CHECKS + base, CHECKS + head) == expected
 
 
-@EACH_TABLE
-def test_a_base_written_before_the_keys_is_read_by_identity(table):
-    """VERDICT-79: the base entry's other keys and values, an unknown one and a multi-line reason included, are not read."""
-    old = table.entry(table.first, reason="two\nlines", ends=None) + "unknown = 1\n"
-    assert judged(CHECKS + old, CHECKS + table.entry(table.first)) == green()
-
-
 BASES_READ_BY_IDENTITY = {
-    "written before the keys": lambda table: table.entry(table.first, reason="two\nlines", ends=None) + "unknown = 1\n",
+    "written before the keys": Table.written_before_the_keys,
     "declaring one identity twice": lambda table: table.entry(table.first) * 2,
 }
 
