@@ -6,9 +6,10 @@ import pytest
 
 from quality.config_allowances import ConfigSide
 from quality.ratchet import NO_RENAMES, Renames
-from quality.sides import UnusableConfig, side_of
+from quality.sides import UnusableConfig, read_base, side_of
 from quality.verdict import judge, loosening_lines
 from tests.support.allowances import EACH_TABLE, FIX, RULED, RULING, TABLES, Table
+from tests.support.git_repositories import head_commit
 from tests.support.layout import declaring, root_declaring
 from tests.support.verdict import declaration, gate_config, job
 
@@ -81,6 +82,23 @@ def test_a_base_written_before_the_keys_is_read_by_identity(table):
     """VERDICT-79: the base entry's other keys and values, an unknown one and a multi-line reason included, are not read."""
     old = table.entry(table.first, reason="two\nlines", ends=None) + "unknown = 1\n"
     assert judged(CHECKS + old, CHECKS + table.entry(table.first)) == green()
+
+
+BASES_READ_BY_IDENTITY = {
+    "written before the keys": lambda table: table.entry(table.first, reason="two\nlines", ends=None) + "unknown = 1\n",
+}
+
+
+@EACH_TABLE
+@pytest.mark.integration
+@pytest.mark.parametrize("base", BASES_READ_BY_IDENTITY.values(), ids=BASES_READ_BY_IDENTITY.keys())
+def test_the_base_commit_is_read_by_identity_only(table, base, build_repo):
+    """VERDICT-79: the verdict's own base reader, `sides.read_base`, reads only each entry's identity, so a base this
+    release's head reading refuses is read, and the pull request that repairs it is green."""
+    repo = build_repo({"quality/config.toml": CHECKS + base(table)})
+    head = side_of(CHECKS + table.entry(table.first), None, "the head", side=ConfigSide.HEAD)
+    result = judge(head, read_base(repo, head_commit(repo)), [job()], {}, 1, NO_RENAMES)
+    assert (result.blocked, result.green) == (False, True)
 
 
 def test_a_layout_entry_for_another_rule_of_the_same_path_is_an_add():
