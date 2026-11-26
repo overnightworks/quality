@@ -65,20 +65,20 @@ def test_workflow_scanner_reports_become_findings(scanner, expected):
 
 @pytest.mark.parametrize(("scanner", "event"), [("actionlint", "INVALID"), ("zizmor", "INSECURE")])
 def test_a_workflow_finding_carries_the_event_of_its_kind_and_the_vocabulary(scanner, event):
-    """O36, ROW-7, ROW-14: one event word per kind, a fact and a fix that end in no full stop and name no rule id."""
+    """ROW-27, ROW-7, ROW-14: one event word per kind, a fact and a fix that end in no full stop and name no rule id."""
     (found,) = workflow_findings(scanner, recorded(f"{scanner}-finding.json"), FINDING_EXIT[scanner])
     assert found.event is FindingEvent[event]
     assert_finding_vocabulary(found)
 
 
 def test_an_actionlint_finding_names_the_scanner_and_holds_the_whole_message_as_its_one_detail_line():
-    """O37: the message of the recorded report stands whole as the finding's detail."""
+    """ROW-28: the message of the recorded report stands whole as the finding's detail."""
     (found,) = workflow_findings("actionlint", recorded("actionlint-finding.json"), FINDING_EXIT["actionlint"])
     assert (found.fact, found.detail) == (scanners.ACTIONLINT, (recorded_entry("actionlint")["message"],))
 
 
 def test_a_zizmor_finding_names_its_audit_and_description_and_its_fix_holds_the_audit_url():
-    """O36: the scenario's own values stand in the fact and the fix."""
+    """ROW-27: the scenario's own values stand in the fact and the fix."""
     (found,) = workflow_findings("zizmor", recorded("zizmor-finding.json"), FINDING_EXIT["zizmor"])
     entry = recorded_entry("zizmor")
     assert (entry["ident"] in found.fact, entry["desc"] in found.fact, entry["url"] in found.fix) == (True, True, True)

@@ -48,7 +48,7 @@ def refused_at_the_base_commit(repo, commit_base, config):
     ],
 )
 def test_a_config_the_verdict_cannot_read_is_its_fact_with_the_example_and_the_sides_step(capsys, run_env, pull_request, refuse, config):
-    """O10, VERDICT-35, VERDICT-39, VERDICT-40, VERDICT-41."""
+    """REFUSAL-24, VERDICT-35, VERDICT-39, VERDICT-40, VERDICT-41."""
     (repo, summary), (_, commit_base) = run_env, pull_request
     text, pair = config
     pair = pair.format(step=refuse(repo, commit_base, text))

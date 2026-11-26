@@ -216,7 +216,7 @@ PYTHON_PATH_NEED = f"{PYTHON} entry 1 needs path as the exact tracked path of on
     ids=["duplicate", "folder", "folder without slash", "pattern", "dotdot", "empty reason", "multi-line reason", "unknown key"],
 )
 def test_a_malformed_python_allowance_cannot_be_judged_by_any_rule_that_reads_the_config(build_repo, capsys, config, fact):
-    """FLOOR-15, FLOOR-16, FLOOR-17, O10: a malformed allowance refuses python-floor and root-layout alike, and its
+    """FLOOR-15, FLOOR-16, FLOOR-17, REFUSAL-24: a malformed allowance refuses python-floor and root-layout alike, and its
     example stands once under next:."""
     repo = build_repo({"src/a/pyproject.toml": project(), CONFIG_PATH: config})
     code, output = run(capsys, repo)
@@ -321,7 +321,7 @@ def files_row_and_rows_below(printed: str) -> tuple[str, list[str]]:
 
 
 def test_an_allowed_file_stands_as_a_note_row_under_the_files_row_and_no_line_before_the_area_rows_names_the_rule(build_repo, capsys):
-    """FLOOR-19, O15: an allowed file stands as a note row under the files row, and no line before the area rows
+    """FLOOR-19, ROW-42: an allowed file stands as a note row under the files row, and no line before the area rows
     names the rule."""
     tracked = {"pyproject.toml": project(), "src/s/pyproject.toml": project(">=3.12"), CONFIG_PATH: allow("src/s/pyproject.toml")}
     repo = build_repo(tracked)
@@ -334,7 +334,7 @@ def test_an_allowed_file_stands_as_a_note_row_under_the_files_row_and_no_line_be
 
 
 def test_a_clean_files_row_counts_its_rules_its_tracked_paths_and_its_allowed_files(build_repo, capsys):
-    """O15, O16: the clean files row ends in the rule count (for a repository that is not covered), the tracked-path count and the allowed files."""
+    """ROW-42, ROW-36: the clean files row ends in the rule count (for a repository that is not covered), the tracked-path count and the allowed files."""
     tracked = {"pyproject.toml": project(), "src/s/pyproject.toml": project(">=3.12"), CONFIG_PATH: allow("src/s/pyproject.toml")}
     _, output = run(capsys, build_repo(tracked))
     row, _ = files_row_and_rows_below(output)
@@ -345,7 +345,7 @@ def test_a_clean_files_row_counts_its_rules_its_tracked_paths_and_its_allowed_fi
 
 
 def test_a_tracked_env_file_and_an_allowed_file_give_a_files_row_without_a_fact_and_the_note_after_the_fix(build_repo, capsys):
-    """FLOOR-19, O15: the area with findings keeps its row without a fact; the note follows the last fix."""
+    """FLOOR-19, ROW-42: the area with findings keeps its row without a fact; the note follows the last fix."""
     tracked = {".env": "A=1\n", "pyproject.toml": project(">=3.12"), CONFIG_PATH: allow("pyproject.toml")}
     repo = build_repo(tracked)
     _, output = run(capsys, repo)

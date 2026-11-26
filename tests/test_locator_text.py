@@ -378,7 +378,7 @@ def test_a_very_long_operator_chain_is_read_and_the_sites_after_it_are_found(bui
     ],
 )
 def test_a_catalog_text_in_a_locator_position_of_a_script_test_is_a_finding(build_repo, scenario, source, text, key):
-    """LOCATOR-1 to LOCATOR-5: the same positions as Python's, in TypeScript and JavaScript syntax."""
+    """LOCATOR-1, LOCATOR-2, LOCATOR-3: the same positions as Python's, in TypeScript and JavaScript syntax."""
     repo = build_repo(scenario.only_script(source))
     ((path, line, fact),) = found(repo)
     assert (path, line, fact) == (scenario.script_file, source.count("\n"), f"'{text}' is the catalog text of {key}")

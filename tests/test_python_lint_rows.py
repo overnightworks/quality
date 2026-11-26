@@ -155,7 +155,7 @@ def test_equal_fixes_in_the_code_area_print_once(drive_code, files, fix_follows)
     ids=["one file", "two files"],
 )
 def test_the_security_rows_stand_before_the_print_rows(drive_code, files, rows):
-    """O14: an area's findings stand in the rule runner's order, the security rows before the print rows."""
+    """ROW-19: an area's findings stand in the rule runner's order, the security rows before the print rows."""
     run = drive_code(files)
     assert [(location, row.event) for location, row in area_finding_rows(run.out, Area.CODE)] == rows
     assert run.err == ""
@@ -207,7 +207,7 @@ def test_a_clean_code_row_counts_its_rules_and_every_python_file_ruff_judged(dri
     ids=["line noqa", "one owner", "two directives in one file", "an owner in each of two files"],
 )
 def test_a_clean_code_row_counts_each_honoured_owner_as_allowed(drive_code, files, python_files, locations):
-    """PRINT-14, O15: each honoured owner stands as an `allowed` note on its own line and a clean row counts it; a
+    """PRINT-14, ROW-42: each honoured owner stands as an `allowed` note on its own line and a clean row counts it; a
     reasoned line noqa is no owner."""
     run = drive_code(files)
     row = area_row(run.out, Area.CODE)

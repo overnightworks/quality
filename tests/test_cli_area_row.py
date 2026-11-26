@@ -58,7 +58,7 @@ def test_a_clean_row_carries_the_extent():
 
 @pytest.mark.parametrize("count", [1, 2])
 def test_a_clean_row_ends_with_the_count_of_its_allowed_notes(count):
-    """O15: a clean row ends with the count of its allowed notes."""
+    """ROW-42: a clean row ends with the count of its allowed notes."""
     notes = tuple(allowed_note(f"{number}.toml") for number in range(count))
     *extent, allowed = cli.area_row(files_area(*notes), "an extent").fact.split(SEPARATOR)
     assert (extent, allowed.split()) == (["an extent"], [str(count), NoteEvent.ALLOWED])
@@ -78,7 +78,7 @@ def debt_area(*, size_measured_only: bool) -> check.AreaVerdict:
 
 @pytest.mark.parametrize("size_measured_only", [True, False], ids=["measured only", "partly measured only"])
 def test_a_measured_only_row_names_the_extent_then_the_mode(size_measured_only):
-    """O21: a debt row that only measured is a `not recorded` row naming its extent, then its mode."""
+    """ROW-40: a debt row that only measured is a `not recorded` row naming its extent, then its mode."""
     row = cli.area_row(debt_area(size_measured_only=size_measured_only), "an extent")
     extent, mode = row.fact.split(SEPARATOR)
     assert (row.event, extent) == (cli.AreaEvent.NOT_RECORDED, "an extent")
@@ -86,7 +86,7 @@ def test_a_measured_only_row_names_the_extent_then_the_mode(size_measured_only):
 
 
 def test_the_partly_mode_contains_the_mode_of_a_row_measured_only_throughout():
-    """O21: the mode of a debt row that measured partly contains the mode of one that measured throughout."""
+    """ROW-40: the mode of a debt row that measured partly contains the mode of one that measured throughout."""
     full = cli.area_row(debt_area(size_measured_only=True), "").fact
     partly = cli.area_row(debt_area(size_measured_only=False), "").fact
     assert (full in partly, full == partly) == (True, False)
@@ -114,7 +114,7 @@ def secrets_area(extent: int | None, refusal: CannotJudge | None = None) -> chec
 
 @pytest.mark.parametrize("extent", [0, 1, 412])
 def test_a_judged_secrets_area_opens_its_extent_with_the_verdicts_extent(extent):
-    """O30: a judged secrets area opens its extent with the commit count of its verdict."""
+    """ROW-37: a judged secrets area opens its extent with the commit count of its verdict."""
     assert leading_count(cli.area_extent(secrets_area(extent), 0)) == extent
 
 
@@ -147,7 +147,7 @@ def workflows_area(lint: int | None, security: int | None) -> check.AreaVerdict:
 
 @pytest.mark.parametrize("extent", [0, 1, 5])
 def test_a_judged_workflows_area_opens_its_extent_with_the_verdicts_extent_and_ends_with_the_offline_audits(extent):
-    """O38: a judged workflows area opens its extent with the workflow count and ends with the offline audits."""
+    """ROW-38: a judged workflows area opens its extent with the workflow count and ends with the offline audits."""
     fact = cli.area_extent(workflows_area(extent, extent), 0)
     assert (leading_count(fact), fact.endswith(cli.OFFLINE_AUDITS)) == (extent, True)
 
@@ -170,7 +170,7 @@ def dependencies_area(extent: LockExtent | None, refusal: CannotJudge | None = N
 
 @pytest.mark.parametrize("extent", [LockExtent(0, 0), LockExtent(1, 1), LockExtent(2, 63)])
 def test_a_judged_dependencies_area_counts_its_lockfiles_and_packages(extent):
-    """O48: a judged dependencies area counts its lockfiles, then its packages."""
+    """ROW-39: a judged dependencies area counts its lockfiles, then its packages."""
     assert extent_counts(cli.area_extent(dependencies_area(extent), 0)) == [extent.lockfiles, extent.packages]
 
 

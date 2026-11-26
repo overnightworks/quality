@@ -28,7 +28,7 @@ Ruled by the operator:
   row pads its subject and event the same way: an East Asian wide character takes two cells and a combining mark none;
   spacing marks, Hangul conjoining letters, skin-tone modifiers and emoji sequences are not measured.
 
-The findings of an area stand in run order (O14).
+- ROW-19: The findings of an area stand in run order.
 
 - ROW-5: A finding's lines from another tool's rendering (import-linter's broken
   contract chain and guidance, actionlint's message) stand under its row behind the marker `| `, six spaces deep, before
@@ -80,9 +80,13 @@ One event word stands per kind of finding, shared across rules (`report.FindingE
 The events, facts and fixes of the
 rows, by area:
 
-- `files`: a fact never restates the path its row shows (O12); a path allowed under two rules and no longer tracked is
-  one `unused` row per rule, each fix deleting every entry of the path (O18); `script-name` says `misnamed` where the
-  shape breaks, its fact then holding the place too, and `misplaced` where only the place does (O19).
+- `files`:
+  - ROW-20: a fact never restates the path its row shows;
+  - ROW-21: a path allowed under two rules and no longer tracked is
+    one `unused` row per rule, each fix deleting every entry of the path;
+  - ROW-22: `script-name` says `misnamed` where the
+    shape breaks, its fact then holding the place too, and `misplaced` where only the place does.
+
   A `literal-text` finding is `literal text` at the page and line, its fact the text in single quotes, its fix to read it
   through the generated module and keep it in the catalog (LITERAL-14); a covered repository's row counts the rule among
   its `N rules` ([rules](rules.md)). A `locator-text` finding is `catalog text` at the test file and line, its fact
@@ -101,13 +105,21 @@ rows, by area:
   none is `unused` at its `pytestmark` line, and the held counts of marked modules are `grew`, `new debt` or `can
   fall` (ADAPTERIMPORT-25, ADAPTERIMPORT-26); a non-core test module that reaches an adapter without the `integration`
   mark is an `unmarked` finding at its first red statement, as in `imports shop.adapters · module not marked
-  integration` (INTEGRATION-6); a broken contract is a `broken` finding; an unmatched ignore is an
-  `unused` finding at `error` and an `unused` note at `warn`; a grimp or import-linter warning is a `warning` note
-  (O23); a `broken` finding's detail lines are import-linter's own rendering of the contract ([Rows](#rows)).
-- `secrets`: a key is a `secret` finding whose fact names gitleaks' rule and, in history, the commit's first eight
-  characters, never the value (O28); a staged key names no commit (O32); its fix is lines to copy (O33).
-- `workflows`: actionlint's finding is `invalid` and zizmor's `insecure`, zizmor's fact naming its audit and its fix
-  holding the audit's URL (O36); a `pr-concurrency` finding is `missing` (`no concurrency`, `no cancel-in-progress`),
+  integration` (INTEGRATION-6);
+  - ROW-23: a broken contract is a `broken` finding; an unmatched ignore is an
+    `unused` finding at `error` and an `unused` note at `warn`; a grimp or import-linter warning is a `warning` note;
+
+  a `broken` finding's detail lines are import-linter's own rendering of the contract ([Rows](#rows)).
+- `secrets`:
+  - ROW-24: a key is a `secret` finding whose fact names gitleaks' rule and, in history, the commit's first eight
+    characters, never the value;
+  - ROW-25: a staged key names no commit;
+  - ROW-26: its fix is lines to copy.
+- `workflows`:
+  - ROW-27: actionlint's finding is `invalid` and zizmor's `insecure`, zizmor's fact naming its audit and its fix
+    holding the audit's URL;
+
+  a `pr-concurrency` finding is `missing` (`no concurrency`, `no cancel-in-progress`),
   `shared group` (`group is not a listed form`, adding `(falls back to <token>)` where the group holds the commit or a
   ref; `no group` for a `concurrency` without one) or `cancels main` (`cancel-in-progress is not a listed form`), its
   fix the block to copy ([rules](rules.md)); a `pytest-workers` finding is `serial` (`pytest runs without -n`, `pytest
@@ -118,9 +130,12 @@ rows, by area:
   expression and no marker ([rules](rules.md)); a `runtime-install`
   finding is `installs` (the manager and the install word, as `apt-get install`, or `a download runs as a shell script`)
   or `invalid` (`command cannot be read to its end`, `command is built at run time, an install cannot be read`), its fix
-  naming the routes (the lockfile, the runner image, an image pinned by digest) and the marker ([rules](rules.md)); an
-  actionlint finding names the scanner and holds its message whole as its one detail line (O37); a row with a finding or
-  a refusal does not say `offline audits only` (O39); a `catalog-check` finding is `missing`
+  naming the routes (the lockfile, the runner image, an image pinned by digest) and the marker ([rules](rules.md));
+  - ROW-28: an actionlint finding names the scanner and holds its message whole as its one detail line;
+  - ROW-29: a row with a finding or
+    a refusal does not say `offline audits only`;
+
+  a `catalog-check` finding is `missing`
   at `.github/workflows` with no line (`no workflow step runs design-catalogs --check on a pull request, directly or through
   make`) or `invalid` at a workflow or the `Makefile` and a line (`command cannot be read to its end`, `command is built at
   run time, design-catalogs --check cannot be read`), its fix naming the step or the make target ([rules](rules.md)); a
@@ -130,12 +145,18 @@ rows, by area:
   is `unlisted` at a workflow a pull request triggers that is neither the gate's caller nor CodeQL's (`a pull request
   triggers it, and it is neither the gate's caller nor CodeQL's`), its fix the `[[workflow.allow]]` block to copy, or
   `unused` at a declaration that names no other such workflow, its fix deleting the entry ([rules](rules.md)).
-- `dependencies`: an advisory is an `affected` row, its fact the package and version, the group's id and where it
-  lists them the versions that fix it, its fix per lock kind (O41); the id is the group's first, never an alias (O42);
-  a nested lock's fix names its folder (O43); the fix of a pnpm or requirements lock is the same hint for every
-  package, so rows of one folder share one `fix:` (O44); an allowance that ran out leaves the row `affected` and says
-  so (O45); two allowances on one group are a `conflict` finding at the config, an allowance no advisory matches an
-  `unused` finding there (O46).
+- `dependencies`:
+  - ROW-30: an advisory is an `affected` row, its fact the package and version, the group's id and where it
+    lists them the versions that fix it, its fix per lock kind;
+  - ROW-31: the id is the group's first, never an alias;
+  - ROW-32: a nested lock's fix names its folder;
+  - ROW-33: the fix of a pnpm or requirements lock is the same hint for every
+    package, so rows of one folder share one `fix:`;
+  - ROW-34: an allowance that ran out leaves the row `affected` and says
+    so;
+  - ROW-35: two allowances on one group are a `conflict` finding at the config, an allowance no advisory matches an
+    `unused` finding there.
+
   A fleet package a `uv.lock` resolves from an index is a `from index` finding at the lock, its fact the package, its
   version and the index ([rules](rules.md)).
   A `pytest-random` finding is `missing` at a `uv.lock` that locks pytest without pytest-randomly (`pytest <version> is
@@ -166,8 +187,8 @@ Ruled by the operator:
 
 - Rule names only in an allowance fix (ROW-7): a `fix:` line that asks for an `[[….allow]]` entry names the rule
   (SUFFIX-17), because the entry needs it.
-- A config refusal's fact may name the values a config key takes, rule ids included, and the example to copy may hold
-  the entry's rule line (REFUSAL-15); this is the one exception to the rule that no rule name stands outside an
+- REFUSAL-23: A config refusal's fact may name the values a config key takes, rule ids included, and the example to copy may hold
+  the entry's rule line; this is the one exception to the rule that no rule name stands outside an
   allowance's `fix:`.
 
 - ROW-7: No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The areas replace the
@@ -185,23 +206,27 @@ Ruled by the operator:
 
 The extent of a clean row is:
 
-- `files`: `N rules · M files`, M the distinct paths git tracks (O16).
+- ROW-36: `files`: `N rules · M files`, M the distinct paths git tracks.
 - ROW-18: `debt`: `ceiling held · N entries, M clone pairs`, what the ceiling file holds; a `[job_minutes]` table holding a job
   adds `, K job limits` after the pairs (TIMEOUT-34), and a `[spec_citations]` table holding an ID adds `, K uncited spec IDs`
   after them (CITE-8).
 - ROW-11: `imports`: `N contracts`.
-- `secrets`: `N commits` (O30), because gitleaks reads committed history only; `staged change · N files` for a staged
+- ROW-37: `secrets`: `N commits`, because gitleaks reads committed history only; `staged change · N files` for a staged
   run.
-- `workflows`: `N workflows · offline audits only`, the workflow files the tree holds, said in the row and in no note
-  of its own (O38).
-- `dependencies`: `N lockfiles · M packages`, `0 lockfiles · 0 packages` with none (O48).
+- ROW-38: `workflows`: `N workflows · offline audits only`, the workflow files the tree holds, said in the row and in no note
+  of its own.
+- ROW-39: `dependencies`: `N lockfiles · M packages`, `0 lockfiles · 0 packages` with none.
 - ROW-12: `code`: `2 rules · N Python files`, the tracked regular `.py` files ruff judged, `0 Python files` with none; `3 rules`
   where the repository declares logline (LOGGING-1).
 
 With ` · K allowed` appended where files were allowed, leaks were allowed (secrets), advisories were allowed
-(dependencies) or output owners were honoured (code). Without a ceiling file the debt row is `· debt  not recorded  N
-entries over the thresholds · measured only` (`M clone pairs · partly measured only` when the ceiling file has no
-`[clones]` table, O21, with `, K uncited spec IDs` after the pairs where a `[spec_citations]` table holds an ID, CITE-8), with `fix: quality check --fix` under it. Under `quality check debt --fix` it is `✓
+(dependencies) or output owners were honoured (code).
+
+- ROW-40: Without a ceiling file the debt row is `· debt  not recorded  N
+  entries over the thresholds · measured only` (`M clone pairs · partly measured only` when the ceiling file has no
+  `[clones]` table, with `, K uncited spec IDs` after the pairs where a `[spec_citations]` table holds an ID, CITE-8), with `fix: quality check --fix` under it.
+
+Under `quality check debt --fix` it is `✓
 debt  lowered  N entries · quality/baseline.toml` with a `✓` row per lowered or dropped entry, `✓ debt  moved  N entries
 · quality/baseline.toml` where it moves entries and lowers none, `✓ debt  recorded  N entries, M clone pairs ·
 quality/baseline.toml is new` (`, K job limits` after the pairs where it records the job table, `, K uncited spec IDs` after them where it records the spec table, `, K adapter import exceptions` after those where it records the adapter table), `✓ debt  recorded  K job limits · quality/baseline.toml` with a `✓` row `recorded  K job limits` under
@@ -222,10 +247,10 @@ that cannot check is `✗ <area>  not checked  <reason>` ([Refusals](#refusals))
   `· <path[:line]>  <event>  <fact>`,
 - ROW-16: with no `fix:` of its own.
 
-Its events are `allowed` (file rules, dependencies, secrets and python-print), `open` (logging, test-twin,
-spec-citation), `not measured` (a Python file the size rule cannot parse or a script file that is not UTF-8 or nested
-too deeply to read, without a ceiling file; O22), `unused` and `warning` (import-contract) and `unused` (secret). An
-allowed advisory and an honoured output owner stand as notes, and the clean row counts them (O15, O49):
+- ROW-41: Its events are `allowed` (file rules, dependencies, secrets and python-print), `open` (logging, test-twin,
+  spec-citation), `not measured` (a Python file the size rule cannot parse or a script file that is not UTF-8 or nested
+  too deeply to read, without a ceiling file), `unused` and `warning` (import-contract) and `unused` (secret).
+- ROW-42: An allowed advisory and an honoured output owner stand as notes, and the clean row counts them:
 
 ```text
   ✓ dependencies  clean          1 lockfile · 63 packages · 1 allowed
@@ -392,7 +417,7 @@ error: 1 of 7 areas could not check · 1 finding, 1 of them in those areas
 next: fix what the ✗ rows name, then run quality check again
 ```
 
-A config refusal names its fact on each `✗` row it reaches and shows the example to copy once under `next:` (O10):
+- REFUSAL-24: A config refusal names its fact on each `✗` row it reaches and shows the example to copy once under `next:`:
 
 - REFUSAL-15: the
   label `write it in quality/config.toml like this:`
@@ -402,7 +427,7 @@ A config refusal names its fact on each `✗` row it reaches and shows the examp
 - REFUSAL-19: A config refusal that has no example shows no label.
 - REFUSAL-20: The fact names an entry by its table
   and 1-based position (`[[size.generated]] entry 1 needs …`) and quotes a repeated value as a TOML string,
-  never as a Python repr (O11), so the printed value, copied into a TOML file, reads back as the value.
+  never as a Python repr, so the printed value, copied into a TOML file, reads back as the value.
 - REFUSAL-21: An unknown key
   stands bare when it is a non-empty name of ASCII letters, digits, `_` and `-`, else as a TOML string.
 
@@ -530,7 +555,7 @@ At 60 columns:
     ! .env          tracked         an env file carries con…
 ```
 
-A sha256 stands whole on its own line, because you copy it into the entry. The entry is the four lines a reader takes, whole and never shortened; the person adds `reason` (O31). It holds no `sha256` key, a key no reader takes.
+- LENGTH-15: A sha256 stands whole on its own line, because you copy it into the entry. The entry is the four lines a reader takes, whole and never shortened; the person adds `reason`. It holds no `sha256` key, a key no reader takes.
 
 ## Masking
 
