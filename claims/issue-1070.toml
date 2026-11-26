@@ -1,0 +1,8 @@
+claim_id = "686b226850e1416e810f141283872577"
+agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
+role = "builder"
+base = "dbccd05897b170399f3640e103752efc32fc7639"
+branch = "claude/issue-1070-rules-md-secret-scan-to-catalog-check"
+scope = ["docs/rules.md", "tests"]
+opened_commit = "5c801720d6245616cf37b17de6c38f278c95cd81"
+whole_reason = "One range of one document converted to one form, plus at most the test docstrings that already prove their uncited IDs."
