@@ -14,6 +14,7 @@ from quality.baseline_file import BASELINE_PATH, Key, Metric, render_baseline
 from quality.config_entries import CONFIG_PATH
 from quality.ratchet import Renames, renames_of
 from quality.report import CannotJudge
+from tests.support.allowances import EACH_TABLE
 from tests.support.baselines import ceiling
 from tests.support.door import RELEASE_ROW
 from tests.support.git_repositories import head_commit, put
@@ -30,7 +31,15 @@ from tests.support.merge import (
 )
 from tests.support.processes import process_is_gone
 from tests.support.verdict import ONLY_DECLARED, declaration, declared, gate_config, verdict_of, verdict_streams, viewed
-from tests.support.verdict_renames import MOVABLE_FILE, OLD_ENTRY, commit_all, entry, moved_in_head, pulled
+from tests.support.verdict_renames import (
+    MOVABLE_FILE,
+    OLD_ENTRY,
+    commit_all,
+    entry,
+    moved_in_head,
+    moves_in_head,
+    pulled,
+)
 
 OTHER_FILE = "".join(f"nothing like the movable file, row {number}\n" for number in range(30))
 
@@ -738,3 +747,17 @@ def test_the_door_refuses_an_undeclared_job_limit_loosening_and_merges_a_declare
     gh = pulled(tmp_path, base, head, **options)
     assert drive(gh)[0] == (0 if is_declared else 1)
     assert (f"    ! {what}" in capsys.readouterr().out, len(gh.merge_calls)) == (True, int(is_declared))
+
+
+@pytest.mark.integration
+@EACH_TABLE
+def test_the_verdict_reads_a_file_git_moved_as_the_move_of_its_allow_entry(capsys, pull_request, table):
+    """VERDICT-81: the head entry at the path git moved a declared file to is inherited, so the verdict finds no loosening."""
+    repo, _ = pull_request
+    put(repo / CONFIG_PATH, gate_config("checks") + table.entry(table.first))
+    moves_in_head(
+        pull_request, None, None, [(table.first, table.second)],
+        head_files={CONFIG_PATH: gate_config("checks") + table.entry(table.second)},
+    )
+    code, output = verdict_of(repo, capsys)
+    assert (code, "allowance adds" in output) == (0, False)

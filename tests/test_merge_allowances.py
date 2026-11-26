@@ -44,6 +44,17 @@ def test_the_door_reads_a_base_written_before_the_keys_and_finds_no_loosening(ta
     assert (code, "  ✓ loosenings    none\n" in out) == (0, True)
 
 
+@EACH_TABLE
+def test_the_door_reads_a_file_git_moved_as_the_move_of_its_allow_entry(table, tmp_path, capsys):
+    """VERDICT-81: the head entry at the path git moved a declared file to is inherited, so the door finds no loosening."""
+    gh = pulled(
+        tmp_path, None, None, [(table.first, table.second)],
+        base_config=GATE_CONFIG + table.entry(table.first), merge_config=GATE_CONFIG + table.entry(table.second),
+    )
+    code, out, _, _ = run(gh, capsys)
+    assert (code, "  ✓ loosenings    none\n" in out) == (0, True)
+
+
 @pytest.mark.parametrize("entry", ["[[root.allow]]\nreason = 'r'\n", "[[layout.allow]]\npath = 'tests/a.py'\n"], ids=["root", "layout"])
 def test_the_door_refuses_a_base_entry_without_its_identity_naming_the_base(entry, capsys):
     """VERDICT-79: the refusal sends the fix to the base branch."""
