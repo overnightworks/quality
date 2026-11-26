@@ -689,7 +689,7 @@ def test_the_secrets_example_holds_a_placeholder_hash_a_person_fills():
 
 
 def test_the_array_of_tables_form_and_the_inline_form_of_the_same_entries_read_equal_allowances():
-    """O31, SECRET-17: quality prints the block form; a file that holds the inline list reads the same."""
+    """SECRET-17, O31: quality prints the block form; a file that holds the inline list reads the same."""
     fields = [("aws-access-token", "a.py", "first"), ("generic-api-key", "b.py", "second")]
     inline = secrets_text(*(secret_entry(rule=rule, file=file, reason=reason) for rule, file, reason in fields))
     blocks = "".join(

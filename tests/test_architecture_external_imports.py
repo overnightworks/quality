@@ -152,15 +152,21 @@ def test_a_refining_contract_with_as_packages_false_cannot_be_judged(tmp_path):
     assert str(tmp_path) not in str(refused.value)
 
 
-@pytest.mark.parametrize(("core", "untracked", "refusal"), [
-    ("import agents.calling\nimport agents.member\nx = 1" + "0" * 5000 + "\n", (), "src/skat/table/core.py is not valid Python"),
-    ("import agents.turn\n", (skat_core_path(),), "module skat.table.core cannot be examined"),
-], ids=["a module grimp reads and Python does not parse", "a module the checkout does not track"])
-def test_a_module_that_cannot_be_read_is_refused_without_a_local_path(tmp_path, core, untracked, refusal):
-    """IMPORT-32: the statements of a module that Python cannot parse, or that git does not track, cannot be judged."""
-    files = skat_files(core)
+@pytest.mark.parametrize(("files", "untracked", "tracked_absent", "refusal"), [
+    (skat_files("import agents.calling\nimport agents.member\nx = 1" + "0" * 5000 + "\n"), (), (),
+     "src/skat/table/core.py is not valid Python"),
+    (skat_files("import agents.turn\n"), (skat_core_path(),), (), "module skat.table.core cannot be examined"),
+    ({**{name: content for name, content in skat_files().items() if name != skat_core_path()},
+      "src/skat/table/core/__init__.py": "import agents.turn\n"},
+     ("src/skat/table/core/__init__.py",), (skat_core_path(),),
+     "module skat.table.core cannot be examined: the checkout holds nothing at src/skat/table/core.py"),
+], ids=["a module grimp reads and Python does not parse", "a module the checkout does not track",
+        "a module git tracks as a file and the checkout holds as a package"])
+def test_a_module_that_cannot_be_read_is_refused_without_a_local_path(tmp_path, files, untracked, tracked_absent, refusal):
+    """IMPORT-32: the statements of a module that Python cannot parse, that git does not track or whose tracked file the
+    checkout does not hold cannot be judged."""
     contracts = one(unmatched_ignored())
     with pytest.raises(architecture.ContractError) as refused:
-        judged_in(tmp_path, files, contracts, untracked)
+        judged_in(tmp_path, files, contracts, untracked, tracked_absent)
     assert refusal in str(refused.value)
     assert str(tmp_path) not in str(refused.value)

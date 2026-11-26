@@ -378,7 +378,7 @@ def test_literal_text_reads_the_pin_against_the_rules_first_release(fleet_report
     ids=["a catalogs declaration", "the dependency without the extra", "no pyproject.toml"],
 )
 def test_the_gates_own_clone_reads_the_catalog_cell_from_its_pyproject(fleet_report, gate_clone, files, words):
-    """CATALOG-29, FLEET-98, FLEET-99: the clone's tracked `pyproject.toml` decides the cell, on the gate's own repository."""
+    """FLEET-98, FLEET-99: the clone's tracked `pyproject.toml` decides the cell, on the gate's own repository."""
     result, output = fleet_report(gate_clone({**caller("./.github/workflows/gate.yml"), **files}), tags=first_releases())
     assert (result, cell(output, GATE_REPOSITORY, "catalog-check")) == (0, words), output
 
@@ -400,7 +400,7 @@ def test_the_gates_own_clone_reads_the_literal_text_cell_from_its_pyproject_on_m
 
 
 def test_a_malformed_pyproject_makes_the_gates_own_clone_cell_unreadable_and_the_run_red(fleet_report, gate_clone):
-    """CATALOG-29, FLEET-24, FLEET-26, FLEET-100: the cell owns the failure, as for the baseline."""
+    """FLEET-24, FLEET-26, FLEET-100: the cell owns the failure, as for the baseline."""
     broken = {**caller("./.github/workflows/gate.yml"), "pyproject.toml": "[project\n"}
     result, output = fleet_report(gate_clone(broken), tags=first_releases())
     assert result == 2, output

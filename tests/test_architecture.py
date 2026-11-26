@@ -318,8 +318,9 @@ def test_a_config_linked_out_of_the_repository_cannot_be_judged(build_repo, else
 @pytest.mark.parametrize(
     ("link", "target", "refused"),
     [("src/shop/ext", "{elsewhere}", "src/shop/ext"),
-     ("src/shop/ext", "../../vendor", "src/shop/ext/out")],
-    ids=["a direct link", "a chain through a link inside the repository"],
+     ("src/shop/ext", "../../vendor", "src/shop/ext/out"),
+     ("src/shop/data.txt", "{elsewhere}/leak.py", "src/shop/data.txt")],
+    ids=["a direct link", "a chain through a link inside the repository", "a file link that is no .py name"],
 )
 def test_a_symlink_out_of_a_root_package_is_refused_before_grimp_reads(build_repo, elsewhere, capsys, monkeypatch,
                                                                        link, target, refused):
@@ -379,6 +380,44 @@ def test_a_dangling_file_link_under_a_root_package_is_named_not_blamed_on_the_co
     assert code == 2, output
     assert f"{REFUSED}src/shop/dangling.py links to nothing; a dangling link cannot be judged" in output
     assert "the config" not in output
+
+
+def _dangling_link_that_is_no_python_file(package):
+    (package / "notes.txt").symlink_to("missing.txt")
+    return ()
+
+
+def _link_loop_that_is_no_python_file(package):
+    (package / "loop.txt").symlink_to("loop.txt")
+    return ()
+
+
+def _file_that_is_no_python_file_in_a_directory_without_search_permission(package):
+    (package / "data").mkdir()
+    (package / "data" / "notes.txt").write_text("")
+    (package / "data").chmod(0o444)
+    return (package / "data",)
+
+
+@pytest.mark.parametrize("arrange", [
+    pytest.param(_dangling_link_that_is_no_python_file, id="a dangling link that is no .py file"),
+    pytest.param(_link_loop_that_is_no_python_file, id="a link loop that is no .py file"),
+    pytest.param(_file_that_is_no_python_file_in_a_directory_without_search_permission,
+                 marks=pytest.mark.skipif(os.geteuid() == 0, reason="root searches a 0o444 directory"),
+                 id="a file that is no .py file in a directory without search permission"),
+])
+def test_a_place_grimp_reads_no_source_from_is_judged_without_refusal(build_repo, capsys, arrange):
+    """IMPORT-33: only a .py file is stat'ed and read, so a link or a file that is no .py file
+    and cannot be examined leaves the run judged on the tree, exit 0."""
+    repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
+    sealed = arrange(repo / "src" / "shop")
+    try:
+        code, output = run(capsys, repo)
+    finally:
+        for directory in sealed:
+            directory.chmod(0o755)
+    assert code == 0, output
+    assert REFUSED not in output
 
 
 def _unreadable_file(root):
@@ -567,6 +606,23 @@ def test_an_error_inside_a_contract_check_names_the_contract_without_a_traceback
     code, output = run(capsys, build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)}))
     assert code == 2, output
     assert f"{REFUSED}contract guarded in .importlinter cannot be judged: RuntimeError: boom" in output
+    assert "Traceback" not in output
+
+
+def test_a_grimp_panic_at_a_source_that_changed_after_the_walk_is_refused_without_a_traceback(build_repo, capfd, bounded, monkeypatch):
+    """IMPORT-13: a panic of grimp at a source nothing before the build refuses is exit 2 naming no Python traceback,
+    where the panic itself would leave an uncaught exception that reads as findings."""
+    repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
+    build_graph = grimp.build_graph
+
+    def building_after_a_pipe_replaced_a_source(*roots, **options):
+        os.mkfifo(repo / "src" / "shop" / "pipe.py")
+        return build_graph(*roots, **options)
+
+    monkeypatch.setattr(grimp, "build_graph", building_after_a_pipe_replaced_a_source)
+    code, output = run(capfd, repo)
+    assert code == 2, output
+    assert f"{REFUSED}grimp panicked while reading the root packages; a source file it cannot read or decode cannot be judged" in output
     assert "Traceback" not in output
 
 
