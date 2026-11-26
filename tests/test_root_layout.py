@@ -81,7 +81,7 @@ ROOT_NAME_NEED = "entry as one name directly in the root, a directory with a tra
     ids=["inner slash", "slash only", "dot", "dot dot", "dot git", "dot slash", "empty", "blank", "deeper path", "leading slash"],
 )
 def test_an_invalid_declaration_cannot_be_judged_and_shows_an_example(build_repo, capsys, entry):
-    """ROOT-15, O10."""
+    """ROOT-15, REFUSAL-24."""
     repo = build_repo({**GUIDANCE, CONFIG: declaring(entry)})
     code, output = check_output(capsys, repo)
     assert code == 2
@@ -102,7 +102,7 @@ def test_an_invalid_declaration_cannot_be_judged_and_shows_an_example(build_repo
     ids=["multi-line reason", "unknown key", "no reason", "entry not text", "unknown table key", "allow not a list"],
 )
 def test_a_malformed_root_table_cannot_be_judged(build_repo, capsys, config, fact):
-    """ROOT-15, O10."""
+    """ROOT-15, REFUSAL-24."""
     code, output = check_output(capsys, build_repo({**GUIDANCE, CONFIG: config}))
     assert code == 2
     assert fact in output
@@ -140,7 +140,7 @@ def test_a_root_symlink_counts_by_its_own_name(build_repo):
 
 
 def test_the_same_entry_declared_twice_cannot_be_judged_and_is_named(build_repo, capsys):
-    """ROOT-15, O10."""
+    """ROOT-15, REFUSAL-24."""
     repo = build_repo({**GUIDANCE, "plans/a.md": "x", CONFIG: declaring("plans/") + declaring("plans/", "again")})
     code, output = check_output(capsys, repo)
     assert code == 2

@@ -97,7 +97,7 @@ def test_a_secret_finding_is_allowed_only_by_rule_file_and_value(build_repo, ser
 
 @pytest.mark.integration
 def test_a_recorded_leak_is_one_secret_finding_naming_its_rule_and_commit_and_never_its_value(build_repo, served_scanners):
-    """O28: the finding carries the secret event, a fact with the rule and the commit's first eight characters."""
+    """ROW-24: the finding carries the secret event, a fact with the rule and the commit's first eight characters."""
     (finding,) = rule_findings(recorded_leak_repo(build_repo, served_scanners, None), Rule.LEAK)
     assert finding.event is FindingEvent.SECRET
     assert (RECORDED_RULE in finding.fact, RECORDED_COMMIT[:8] in finding.fact) == (True, True)
@@ -107,7 +107,7 @@ def test_a_recorded_leak_is_one_secret_finding_naming_its_rule_and_commit_and_ne
 
 @pytest.mark.integration
 def test_the_entry_to_copy_is_lines_that_read_as_one_allowance_once_a_reason_is_added(build_repo, served_scanners):
-    """O31, O33: the fix is an example, not a sentence; its lines are TOML that holds one secrets allowance."""
+    """LENGTH-15, ROW-26: the fix is an example, not a sentence; its lines are TOML that holds one secrets allowance."""
     (finding,) = rule_findings(recorded_leak_repo(build_repo, served_scanners, None), Rule.LEAK)
     assert isinstance(finding.fix, Example)
     entries = tomllib.loads("\n".join(finding.fix.lines))["secrets"]["allow"]
@@ -338,7 +338,7 @@ def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_rep
 @pytest.mark.scanner
 @pytest.mark.parametrize("name", ["docs/config.txt", f"docs/{HOSTILE_FILE}"], ids=["plain-path", "esc-quote-and-bidi-path"])
 def test_the_printed_entry_with_a_reason_allows_exactly_that_finding(build_repo, installed_scanners, capsys, name):
-    """O31: the lines under `fix:`, with a reason added and committed, turn the finding into one allowed
+    """LENGTH-15: the lines under `fix:`, with a reason added and committed, turn the finding into one allowed
     row."""
     repo = build_repo({name: f"aws_access_key_id = {FAKE_KEY}\n", config_entries.CONFIG_PATH: GATE_ONLY})
     assert scan(repo) == 1
@@ -357,7 +357,7 @@ def test_the_printed_entry_with_a_reason_allows_exactly_that_finding(build_repo,
 @pytest.mark.integration
 @pytest.mark.scanner
 def test_the_clean_secrets_row_counts_the_commits_the_scenario_made(build_repo, installed_scanners, capsys):
-    """O30: one commit reads as one."""
+    """ROW-37: one commit reads as one."""
     assert scan(build_repo({"docs/notes.txt": "nothing here\n"})) == 0
     assert leading_count(area_fact(capsys.readouterr().out, "secrets")) == 1
 
@@ -365,7 +365,7 @@ def test_the_clean_secrets_row_counts_the_commits_the_scenario_made(build_repo, 
 @pytest.mark.integration
 @pytest.mark.scanner
 def test_the_clean_secrets_row_counts_every_commit_and_every_allowed_leak(build_repo, installed_scanners, capsys):
-    """O15, O30: three commits with a key removed in the second; the clean row counts them and ends with the allowed
+    """ROW-42, ROW-37: three commits with a key removed in the second; the clean row counts them and ends with the allowed
     count."""
     repo = build_repo({"docs/config.txt": f"aws_access_key_id = {FAKE_KEY}\n"})
     (repo / "docs/config.txt").write_text("removed\n")
@@ -379,7 +379,7 @@ def test_the_clean_secrets_row_counts_every_commit_and_every_allowed_leak(build_
 @pytest.mark.integration
 @pytest.mark.scanner
 def test_nothing_about_secrets_prints_before_the_area_rows(build_repo, installed_scanners, capsys):
-    """O15, SECRET-26, SECRET-27: an allowed row with its rule and reason, an unused row and a red key print as rows
+    """ROW-42, SECRET-26, SECRET-27: an allowed row with its rule and reason, an unused row and a red key print as rows
     under the secrets row, none before the first area row."""
     entries = (("aws-access-token", "config.txt", FAKE_KEY, "test key"), ("aws-access-token", "nothere.txt", FAKE_KEY, "stale entry"))
     repo = build_repo({

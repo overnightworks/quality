@@ -395,7 +395,7 @@ It applies these rules:
     [note row](output.md#notes) `· <config>  unused  contract <name> ignores a -> b`, `none` nothing.
   - IMPORT-7: Each root
     package is the one tracked `<dir>/<name>/__init__.py` outside the tests,
-  - IMPORT-26: and grimp reads it from there
+    and grimp reads it from there
     even when quality itself has imported a package of that name or an untracked copy comes first on `sys.path` (IMPORT-7).
   - IMPORT-8: The rule cannot judge (exit `2`,
     before any caller code runs or any file outside is read)
@@ -432,7 +432,7 @@ It applies these rules:
   - IMPORT-25: a warning grimp gives while building the graph is a
     [note row](output.md#notes) `· <config>  warning  <grimp's message>`, before the contracts' notes.
 
-  No message quality writes names an absolute local path (IMPORT-26); grimp's own panic text is the named gap below.
+  - IMPORT-26: No message quality writes names an absolute local path; grimp's own panic text is the named gap below.
 
   Named gaps, waiting for usage evidence: when grimp panics, its native panic text, which names an absolute path, reaches
   stderr before quality's refusal; #1066 owns it, and it ends when quality captures that descriptor during the build
@@ -1415,7 +1415,7 @@ A lint finding is `! <path:line>  invalid  actionlint`, the message under it beh
 `! <path:line>  insecure  zizmor <audit> · <description>` with `fix: see <url>` ([rows](output.md#rows)).
 
 Ruled by the operator: the clean row counts those files and says in the row itself, and in no note of its own, that only
-offline audits ran (O38), so a workflow that only an online audit would flag is not read as fully audited:
+offline audits ran (ROW-38), so a workflow that only an online audit would flag is not read as fully audited:
 `✓ workflows  clean  5 workflows · offline audits only`.
 
 - CONCURRENCY-1: The `pr-concurrency` rule judges every tracked workflow that a pull request triggers: its `on:` is the string
@@ -2688,32 +2688,35 @@ The `logging` rule, in the `code` area, judges a repository against the machine 
 logline's own checker, `logline.check.check` of the logline release quality pins. quality holds no copy of the standard's
 values and runs no logging analysis of its own; a rule's wording and its gaps are logline's README's.
 
-- **Who is judged (LOGGING-1).** A repository whose tracked root `pyproject.toml` declares `overnightworks-logline` in
+- LOGGING-1: **Who is judged.** A repository whose tracked root `pyproject.toml` declares `overnightworks-logline` in
   `[project] dependencies`, a group of `[project.optional-dependencies]` or a group of `[dependency-groups]`, the name
   compared canonicalised. A repository that does not declare it sees no row, and no file of it is judged. This is the
   declaration, not the standard's "Who is covered": a deployed process that has not adopted logline is not judged, and
   quality, which declares logline, is, although the standard excludes a pure command-line tool.
   The declaration is checked before logline judges any file, so a root `pyproject.toml` that cannot be read or parsed
   refuses the rule, and the `code` area with it, in every repository.
-- **Files (LOGGING-2).** Every tracked regular `.py` file that `Language.is_test_file` does not call a test file, the
+- LOGGING-2: **Files.** Every tracked regular `.py` file that `Language.is_test_file` does not call a test file, the
   definition `size` uses; the texts are the ones the `code` area's lint read, so no file is read twice and a text that is not
   valid Python is the lint's refusal.
-- **Notes (LOGGING-3).** Each finding is one `open` [note](output.md#notes) at `<path>:<line>` whose fact is the logline rule
+- LOGGING-3: **Notes.** Each finding is one `open` [note](output.md#notes) at `<path>:<line>` whose fact is the logline rule
   value (`event_name_shape`), in path and source order; no finding row stands and the exit stays `0`. The row's extent is
   the files judged.
-- **Exit 2 (LOGGING-4).** A text logline cannot parse (`SyntaxError`) or exhausts the interpreter on (`RecursionError`),
+- LOGGING-4: **Exit 2.** A text logline cannot parse (`SyntaxError`) or exhausts the interpreter on (`RecursionError`),
   named with the file. Any other exception of the check is not caught. The check runs in quality's process without a time
   limit.
-- **The pin (LOGGING-5).** quality depends on logline by the full commit of a release tag, the tag named in a comment, as
+- LOGGING-5: **The pin.** quality depends on logline by the full commit of a release tag, the tag named in a comment, as
   [the fleet standard](release.md#depending-on-a-fleet-package) says for a tool installed without a lock. logline's own
   dependencies, structlog and opentelemetry-api, enter quality's lock with it, and an advisory against either turns
   quality's own gate red although quality never runs their code.
-- **Report only (LOGGING-6).** The rule is `report-only`: it changes no verdict. It first ships in v0.23.0, so a gate
+- LOGGING-6: **Report only.** The rule is `report-only`: it changes no verdict. It first ships in v0.23.0, so a gate
   pinned below that release shows `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `report-only` (FLEET-18).
   The matrix has no coverage signal for it: every repository whose pin has the rule reads `report-only`, covered or not.
 
 Not judged: the standard's "a released logline tag" (`fleet-source` tells no tag from a branch, SOURCE-2).
 
-Every rule is judged, even when another cannot be (CHECK-4), and gives one verdict: clean, findings, unparsable, or
-cannot judge (CHECK-5). Each finding names the file, a fact and a fix. What `quality check` prints, its frame, the
+- CHECK-4: Every rule is judged, even when another cannot be,
+- CHECK-5: and gives one verdict: clean, findings, unparsable, or
+  cannot judge.
+
+Each finding names the file, a fact and a fix. What `quality check` prints, its frame, the
 masking, `-v` and the vet, is [the output contract](output.md).

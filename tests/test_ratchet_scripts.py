@@ -225,7 +225,7 @@ UNREADABLE_SCRIPTS = pytest.mark.parametrize(
 @pytest.mark.integration
 @UNREADABLE_SCRIPTS
 def test_without_a_baseline_the_size_rule_notes_an_unreadable_script_file(build_repo, capsys, name, source, reason):
-    """C4, SIZE-9: with no baseline a script file that is not UTF-8 or nested too deeply to read is a note naming the
+    """SIZE-9: with no baseline a script file that is not UTF-8 or nested too deeply to read is a note naming the
     reason; the verdict is unchanged."""
     repo = build_repo_with_source(build_repo, {"src/ok.py": "x = 1\n"}, name, source)
     code, output = run(capsys, repo)
@@ -236,7 +236,7 @@ def test_without_a_baseline_the_size_rule_notes_an_unreadable_script_file(build_
 @pytest.mark.integration
 @UNREADABLE_SCRIPTS
 def test_against_a_baseline_an_unreadable_script_file_is_unparsable(build_repo, capsys, name, source, reason):
-    """C4, SIZE-10: with a baseline such a file makes the debt row `✗ not checked`, naming it, exit 2."""
+    """SIZE-10: with a baseline such a file makes the debt row `✗ not checked`, naming it, exit 2."""
     repo = build_repo_with_source(build_repo, {BASELINE_PATH: EMPTY_BASELINE}, name, source)
     code, output = run(capsys, repo)
     assert code == 2
@@ -246,7 +246,7 @@ def test_against_a_baseline_an_unreadable_script_file_is_unparsable(build_repo, 
 @pytest.mark.integration
 @UNREADABLE_SCRIPTS
 def test_a_fix_refuses_an_unreadable_script_file_and_writes_nothing(build_repo, capsys, name, source, reason):
-    """C4, SIZE-11: a fix refuses such a file with `✗ not fixed`, exit 2, writing no baseline."""
+    """SIZE-11: a fix refuses such a file with `✗ not fixed`, exit 2, writing no baseline."""
     repo = build_repo_with_source(build_repo, {}, name, source)
     assert door_in(repo, *FIX_WORDS) == 2
     assert f"{refusal_row('debt', 'not fixed')}{name} is {reason}" in capsys.readouterr().out

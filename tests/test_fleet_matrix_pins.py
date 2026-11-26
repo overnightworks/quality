@@ -303,7 +303,7 @@ def test_a_rule_first_shipped_in_a_release_reads_its_switch_under_that_release(r
 
 @pytest.mark.parametrize("rule_release", REPORT_ONLY_RULES_FIRST_RELEASED_IN_V0_23_OR_LATER, ids=lambda release: release.rule)
 def test_a_report_only_rule_first_shipped_in_a_release_reads_report_only_under_that_release(rule_release):
-    """FLEET-18: a gate pinned at the release that names a report-only rule reads `report-only`."""
+    """FLEET-18, LOGGING-6: a gate pinned at the release that names a report-only rule reads `report-only`."""
     tags = {**FIRST_RELEASES, rule_release.first_release: FIRST_RELEASE_COMMIT}
     release = gate_release((gate_call(FIRST_RELEASE_COMMIT),), False, tags)
     assert rule_cell(rule_release, release, declared(declares_catalogs=True)) == "report-only"

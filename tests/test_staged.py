@@ -69,7 +69,7 @@ def test_a_staged_door_prints_its_finding_row_and_verdict_whole_at_a_narrow_term
 
 @pytest.mark.scanner
 def test_a_staged_key_is_one_secret_row_with_its_entry_and_its_value_is_not_printed(build_repo, installed_scanners, capsys):
-    """O32: a staged key is one secret row that names no commit, and its value is never printed."""
+    """ROW-25: a staged key is one secret row that names no commit, and its value is never printed."""
     repo = build_repo({"README": "hello\n"})
     stage(repo, {"src/a.py": KEY_LINE})
     assert staged_door(repo) == 1

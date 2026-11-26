@@ -331,7 +331,7 @@ KINDS = [
     ids=["port beyond loopback", "unreadable port", "ports no list", "host network", "interpolated network", "stale declaration"],
 )
 def test_each_kind_of_finding_has_its_event_a_short_fact_and_a_fix_the_door_prints(build_repo, capsys, files, declaration, event):
-    """COMPOSE-4, O12: one event per kind, a fact naming the service, neither fact nor fix ending in a period, the row equal to the finding."""
+    """COMPOSE-4, ROW-20: one event per kind, a fact naming the service, neither fact nor fix ending in a period, the row equal to the finding."""
     config = {"quality/config.toml": ONE_JOB + declaration} if declaration else {}
     repo = build_repo({**files, **config})
     _, output = run(capsys, repo)
@@ -349,7 +349,7 @@ LOOPBACK_EXAMPLE = re.compile(r'"([^"]+)"')
 
 @pytest.mark.integration
 def test_the_loopback_fix_example_bound_to_the_services_own_ports_clears_the_finding(build_repo, capsys):
-    """COMPOSE-1, O12: the printed example, its address kept and bound to the scenario's own ports, is what the rule accepts."""
+    """COMPOSE-1, ROW-20: the printed example, its address kept and bound to the scenario's own ports, is what the rule accepts."""
     repo = build_repo(compose('- "8080:80"'))
     output = run(capsys, repo)[1]
     (finding,) = rule_findings(repo, Rule.COMPOSE_PORT)

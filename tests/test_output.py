@@ -509,7 +509,7 @@ def test_an_event_prints_escaped_and_its_column_holds(on_a_note):
 
 
 def test_a_note_row_follows_the_last_fix_and_has_no_fix_of_its_own():
-    """O15, ROW-16: a note row follows the last `fix:` and has no `fix:` of its own."""
+    """ROW-42, ROW-16: a note row follows the last `fix:` and has no `fix:` of its own."""
     printed = findings_written([finding("a.env", FindingEvent.TRACKED)], notes=[note("b.toml"), note("c.toml")])
     lines = printed.splitlines()
     note_numbers = [number for number, line in enumerate(lines) if line.lstrip().startswith(Glyph.NOTE)]

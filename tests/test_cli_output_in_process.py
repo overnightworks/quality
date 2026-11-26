@@ -234,7 +234,7 @@ REFUSED_CONFIG = {"quality/config.toml": '[gate]\nmandatory_jobs = ["checks"]\n[
     ids=["terminal", "NO_COLOR", "dumb", "pipe"],
 )
 def test_the_real_door_prints_every_config_example_line_whole_in_each_stderr_form(build_repo, environment, coloured):
-    """COLOUR-1, COLOUR-6, REFUSAL-15, REFUSAL-16, REFUSAL-17, O10: after removing quality's SGR, the label and each
+    """COLOUR-1, COLOUR-6, REFUSAL-15, REFUSAL-16, REFUSAL-17, REFUSAL-24: after removing quality's SGR, the label and each
     example line stand whole on their own lines, one level deeper, in all four forms; colour only at a terminal."""
     repo = build_repo(REFUSED_CONFIG)
     base = door_environment()

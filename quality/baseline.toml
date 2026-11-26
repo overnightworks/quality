@@ -1,3 +1,22 @@
 # Measured by `quality check --fix`. Entries only ever go down.
 
 [clones]
+
+[spec_citations]
+uncited = [
+    "LOGGING-5",
+    "NAMING-1",
+    "NAMING-10",
+    "NAMING-15",
+    "NAMING-17",
+    "NAMING-18",
+    "NAMING-20",
+    "NAMING-21",
+    "NAMING-9",
+    "PRWORKFLOW-3",
+    "RELEASE-22",
+    "RELEASE-23",
+    "RELEASE-24",
+    "RELEASE-25",
+    "VITEST-5",
+]

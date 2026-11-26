@@ -143,7 +143,7 @@ COMPOSE_KEYS = f"{COMPOSE} entry 1 needs exactly a file, a service and a reason"
     ],
 )
 def test_a_malformed_compose_table_cannot_be_judged(build_repo, capsys, config, fact):
-    """COMPOSE-19, O10: each malformed entry is exit 2, names its fact on the files row and shows the example once."""
+    """COMPOSE-19, REFUSAL-24: each malformed entry is exit 2, names its fact on the files row and shows the example once."""
     code, output = check_output(capsys, build_repo({"compose.yaml": service_file("host"), CONFIG: ONE_JOB + config}))
     assert code == 2
     assert refused(output, "files")
