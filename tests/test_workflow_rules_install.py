@@ -9,6 +9,8 @@ from quality.workflow_rules import check_runtime_install
 from tests.support.check import check_output as run
 from tests.support.check import finding_rows, is_clean, rule_findings
 
+pytestmark = pytest.mark.integration
+
 INSTALLS, INVALID = FindingEvent.INSTALLS, FindingEvent.INVALID
 WORKFLOW = ".github/workflows/w.yml"
 DOWNLOAD = "a download runs as a shell script"

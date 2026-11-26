@@ -16,6 +16,8 @@ from tests.support.check import (
 )
 from tests.support.door import CHECK_WORD, door_in
 
+pytestmark = pytest.mark.integration
+
 COVERED = {
     "pyproject.toml": '[project]\nname = "overnightworks-app"\nversion = "0.1"\nrequires-python = ">=3.14"\ndependencies = ["overnightworks-design[catalogs]>=1"]\n'
 }

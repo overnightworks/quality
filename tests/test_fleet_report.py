@@ -3,78 +3,38 @@ tables alone on stdout and in the step summary."""
 
 import json
 import subprocess
-import threading
-import urllib.error
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from email.message import Message
-from pathlib import Path
 
 import pytest
 
-from quality import __version__, cli, fleet, fleet_ci_time, web
-from quality.fleet import ListingFetch, ReleaseTagsError, TagReader
-from quality.report import CannotJudge
+from quality import __version__, fleet, fleet_ci_time
+from quality.fleet import ReleaseTagsError
 from tests.support.clones import function
-from tests.support.fleet import NEWEST, RELEASES, row, write_fleet
+from tests.support.fleet import (
+    NEWEST,
+    RERUN_NEXT,
+    Answer,
+    Listing,
+    Printed,
+    listed,
+    report_in,
+    row,
+    ticks,
+    write_fleet,
+    write_organizations,
+)
 from tests.support.git_repositories import head_commit
 
-
-@dataclass(frozen=True)
-class Printed:
-    code: int
-    out: str
-    err: str
+pytestmark = pytest.mark.integration
 
 
-def ticks(*seconds: float) -> Callable[[], float]:
-    """A clock that reads each of `seconds` once on the test's thread, one read too many a StopIteration; the CI-time
-    worker's reads see the latest value and use none."""
-    readings, owner, latest = iter(seconds), threading.get_ident(), [0.0]
-
-    def read() -> float:
-        if threading.get_ident() == owner:
-            latest[0] = next(readings)
-        return latest[0]
-
-    return read
 
 
-def report_in(
-    folder: Path,
-    capsys,
-    monkeypatch,
-    clock: Callable[[], float],
-    words: tuple[str, ...] = (),
-    tags: TagReader = lambda: RELEASES,
-    environment: Mapping[str, str] | None = None,
-    fetch_listing: ListingFetch | None = None,
-) -> Printed:
-    monkeypatch.chdir(folder)
-    code = cli.main(
-        ["report", *words],
-        release_tags=tags,
-        fetch_listing=fetch_listing or Listing({}),
-        clock=clock,
-        now=lambda: datetime(2026, 11, 6, 12, tzinfo=UTC),
-        environment=environment or {},
-    )
-    printed = capsys.readouterr()
-    return Printed(code, printed.out, printed.err)
 
 
-@dataclass(frozen=True)
-class Answer:
-    """What the fake GitHub says to one organization's listing: a body and a Link header, or a failure of the request."""
-
-    body: bytes = b"[]"
-    link: str | None = None
-    failure: Exception | None = None
 
 
-JOB = {"name": "tests", "conclusion": "success", "created_at": "2026-11-05T10:00:00Z", "started_at": "2026-11-05T10:00:07Z", "completed_at": "2026-11-05T10:01:00Z"}
-NO_RUNS = b'{"total_count": 0, "workflow_runs": []}'
+
+
 
 
 def runs_of(*runs: tuple[str, str, str, str], attempt: int = 1) -> Answer:
@@ -86,64 +46,14 @@ def runs_of(*runs: tuple[str, str, str, str], attempt: int = 1) -> Answer:
     return Answer(json.dumps({"total_count": len(entries), "workflow_runs": entries}).encode())
 
 
-@dataclass
-class Listing:
-    """A fake listing fetch: one answer per organization, and the url and headers of every request it got."""
-
-    answers: dict[str, Answer]
-    runs: dict[str, Answer] = field(default_factory=dict)
-    requests: list[tuple[str, dict[str, str]]] = field(default_factory=list)
-    runs_requests: list[tuple[str, dict[str, str]]] = field(default_factory=list)
-
-    def __call__(self, url: str, headers: Mapping[str, str], unreadable: Callable[[Exception], CannotJudge]) -> tuple[bytes, Message]:
-        if "/jobs?" in url:
-            return json.dumps({"total_count": 1, "jobs": [JOB]}).encode(), Message()
-        if "/repos/" in url:
-            self.runs_requests.append((url, dict(headers)))
-            return self._runs_answer(url, unreadable)
-        self.requests.append((url, dict(headers)))
-        answer = self.answers[url.split("/orgs/")[1].split("/")[0]]
-        if answer.failure is not None:
-            raise unreadable(answer.failure)
-        headers_answered = Message()
-        if answer.link is not None:
-            headers_answered["Link"] = answer.link
-        return answer.body, headers_answered
-
-    def _runs_answer(self, url: str, unreadable: Callable[[Exception], CannotJudge]) -> tuple[bytes, Message]:
-        answer = self.runs.get(url.split("/repos/")[1].split("/actions")[0], Answer(NO_RUNS))
-        if answer.failure is not None:
-            raise unreadable(answer.failure)
-        return answer.body, Message()
 
 
-def listed(*entries: tuple[str, ...]) -> Answer:
-    """The listing of `entries` as GitHub answers it; each entry is `(full_name, *flags set)`."""
-    return Answer(json.dumps([
-        {"full_name": name, "private": "private" in set_flags, "archived": "archived" in set_flags, "fork": "fork" in set_flags}
-        for name, *set_flags in entries
-    ]).encode())
 
 
-def http_error(status: int) -> Answer:
-    return Answer(failure=urllib.error.HTTPError("https://api.github.com", status, "", Message(), None))
 
 
-SHAPE_NEXT = 'next: write it in quality/fleet.toml like this:\n    organizations = ["overnightworks"]\n'
-RERUN_NEXT = "next: fix what the error names, then run quality report again\n"
 
 
-def write_organizations(
-    directory: Path, organizations: list[str], repositories: list[str] | None = None, exclude: list[str] | None = None
-) -> Path:
-    (directory / "quality").mkdir(parents=True)
-    lines = [
-        f"organizations = {json.dumps(organizations)}",
-        *([f"repositories = {json.dumps(repositories)}"] if repositories else []),
-        *([f"exclude = {json.dumps(exclude)}"] if exclude else []),
-    ]
-    (directory / "quality" / "fleet.toml").write_text("\n".join(lines) + "\n")
-    return directory
 
 
 def gate_caller(ref: str) -> dict[str, str]:
@@ -384,71 +294,12 @@ def test_the_listing_carries_the_job_token_only_when_there_is_one(capsys, monkey
     assert runs_headers.get("Authorization") == authorization
 
 
-@pytest.mark.parametrize(
-    ("answer", "fact", "steps"),
-    [
-        (http_error(404), "quality/fleet.toml organizations[0] is no GitHub organization", SHAPE_NEXT),
-        (http_error(503), "GitHub did not list o · HTTP 503", RERUN_NEXT),
-        (Answer(link='<https://api.github.com/next>; rel="next"'), "o has more than 100 public repositories · quality reads one page", RERUN_NEXT),
-        (Answer(failure=TimeoutError()), f"GitHub did not answer the listing of o within {web.REQUEST_TIMEOUT_SECONDS}s", RERUN_NEXT),
-        (Answer(failure=urllib.error.URLError(ConnectionRefusedError("secret-host"))), "GitHub could not be reached for the listing of o", RERUN_NEXT),
-        (Answer(body=b"not json"), "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
-        (Answer(body=b"[" * 100_000 + b"]" * 100_000), "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
-        (Answer(body=b'{"full_name": "o/a"}'), "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
-        (listed(("--upload-pack=x/y",)), "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
-        (listed(("o/..",)), "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
-        (Answer(body=b'[{"full_name": "o/a", "private": "no", "archived": false, "fork": false}]'),
-         "GitHub's listing of o is not a list of repositories", RERUN_NEXT),
-    ],
-    ids=["404", "503", "more pages", "timeout", "unreachable", "not JSON", "deeply nested", "not a list", "option", "dots", "flag not boolean"],
-)
-def test_a_listing_that_cannot_be_used_is_exit_2_before_any_clone(capsys, monkeypatch, tmp_path, public, answer, fact, steps):
-    """FLEET-60, FLEET-61, FLEET-62, FLEET-63, FLEET-64, FLEET-65, FLEET-70, FLEET-71: a listing that cannot be used is
-    one pair with nothing measured, the rerun under `next:` unless the file is at fault, and no text of the answer in
-    it."""
-    printed = report_in(
-        write_organizations(tmp_path / "fleet", ["o"]), capsys, monkeypatch, ticks(0), fetch_listing=Listing({"o": answer})
-    )
-    assert (printed.code, printed.out) == (2, "")
-    assert printed.err == f"error: {fact} · nothing measured\n{steps}"
-    assert not any(word in printed.err for word in ("upload-pack", "secret-host", "fleet  "))
 
 
-def test_every_organization_problem_stands_in_one_pair_with_the_shape_before_the_rerun(capsys, monkeypatch, tmp_path, public):
-    """FLEET-61, FLEET-62, FLEET-63, FLEET-70: the problems of two organizations stand in one pair, the shape before the
-    rerun."""
-    listing = Listing({"a": http_error(404), "b": http_error(503)})
-    printed = report_in(write_organizations(tmp_path / "fleet", ["a", "b"]), capsys, monkeypatch, ticks(0), fetch_listing=listing)
-    assert (printed.code, printed.out, printed.err) == (
-        2,
-        "",
-        ("error: quality/fleet.toml organizations[0] is no GitHub organization · GitHub did not list b · HTTP 503"
-        " · nothing measured\n"
-        "next:\n"
-        "    write it in quality/fleet.toml like this:\n"
-        '        organizations = ["overnightworks"]\n'
-        "    fix what the error names, then run quality report again\n"),
-    )
 
 
-def test_an_organization_name_that_is_no_name_sends_no_request(capsys, monkeypatch, tmp_path, public):
-    """FLEET-56, FLEET-57, FLEET-59: an organization name that is no name is named by its place and sends no request."""
-    listing = Listing({})
-    printed = report_in(write_organizations(tmp_path / "fleet", ["a/b"]), capsys, monkeypatch, ticks(0), fetch_listing=listing)
-    assert (printed.code, listing.requests) == (2, [])
-    assert printed.err == (
-        "error: quality/fleet.toml organizations[0] is no organization name\n"
-        "next: write it in quality/fleet.toml like this:\n"
-        '    organizations = ["overnightworks"]\n'
-    )
 
 
-def test_a_named_repository_that_the_organization_already_lists_is_refused_by_its_place(capsys, monkeypatch, tmp_path, public):
-    """FLEET-67: a named repository the organization already lists, in any case, is refused by its place."""
-    listing = Listing({"o": listed(("o/alpha",))})
-    printed = report_in(write_organizations(tmp_path / "fleet", ["o"], ["O/Alpha"]), capsys, monkeypatch, ticks(0), fetch_listing=listing)
-    assert (printed.code, printed.out) == (2, "")
-    assert printed.err == f"error: quality/fleet.toml repositories[0] is already in o · nothing measured\n{SHAPE_NEXT}"
 
 
 def test_a_fork_named_in_the_file_is_measured(capsys, monkeypatch, tmp_path, public):
@@ -463,17 +314,6 @@ def test_a_fork_named_in_the_file_is_measured(capsys, monkeypatch, tmp_path, pub
     assert [cells[0] for cells in (row(printed.out, "o/alpha", 1), row(printed.out, "o/copy", 1))] == ["o/alpha", "o/copy"]
 
 
-@pytest.mark.parametrize(
-    ("answer", "exclude"),
-    [(listed(("o/old", "archived")), []), (listed(("o/alpha",)), ["o/alpha"])],
-    ids=["all archived", "all excluded"],
-)
-def test_organizations_that_select_nothing_are_refused(capsys, monkeypatch, tmp_path, public, answer, exclude):
-    """FLEET-66: organizations whose listing leaves nothing to measure are refused after the listing."""
-    listing = Listing({"o": answer})
-    printed = report_in(write_organizations(tmp_path / "fleet", ["o"], exclude=exclude), capsys, monkeypatch, ticks(0), fetch_listing=listing)
-    assert (printed.code, printed.out) == (2, "")
-    assert printed.err == f"error: quality/fleet.toml selects no repository · nothing measured\n{SHAPE_NEXT}"
 
 
 def test_an_excluded_repository_is_left_out_and_the_fleet_line_counts_the_rest(capsys, monkeypatch, tmp_path, public):
@@ -490,60 +330,10 @@ def test_an_excluded_repository_is_left_out_and_the_fleet_line_counts_the_rest(c
     assert printed.err.endswith("✓ 1 of 1 repository measured · 3s\n")
 
 
-@pytest.mark.parametrize(
-    "answers",
-    [
-        {"o": listed(("o/alpha",)), "p": listed(("p/other",))},
-        {"o": listed(("o/alpha",)), "p": listed(("p/hidden-name", "private"))},
-        {"o": listed(("o/alpha",)), "p": listed(("p/hidden-name", "archived"))},
-        {"o": listed(("o/alpha",)), "p": listed(("p/hidden-name", "fork"))},
-        {"o": listed(("o/alpha",)), "p": listed(("o/other",))},
-    ],
-    ids=["not listed", "private", "archived", "fork", "another owner"],
-)
-def test_an_exclude_entry_that_matches_no_found_repository_is_one_pair_whatever_github_holds(capsys, monkeypatch, tmp_path, public, answers):
-    """FLEET-68: an `exclude` entry that matches no found repository is one pair, whether GitHub does not list it or it
-    is private, archived or a fork."""
-    organizations = ["o", "p"] if "p" in answers else ["o"]
-    printed = report_in(
-        write_organizations(tmp_path / "fleet", organizations, exclude=["p/hidden-name"]), capsys, monkeypatch, ticks(0),
-        fetch_listing=Listing(answers),
-    )
-    assert (printed.code, printed.out) == (2, "")
-    assert printed.err == f"error: quality/fleet.toml exclude[0] matches no repository found · nothing measured\n{SHAPE_NEXT}"
 
 
-@pytest.mark.parametrize(
-    ("repositories", "exclude", "fact"),
-    [(["o/a", "o/b"], ["O/B"], "exclude[0] repeats repositories[1]"), (None, ["o/b", "O/B"], "exclude[1] repeats exclude[0]")],
-    ids=["in repositories too", "twice in exclude"],
-)
-def test_an_exclude_entry_that_repeats_is_refused_by_its_place_before_any_request(capsys, monkeypatch, tmp_path, public, repositories, exclude, fact):
-    """FLEET-54, FLEET-57, FLEET-59: an entry that repeats another, in any case or across the two lists, is refused by
-    its place before any request."""
-    listing = Listing({})
-    printed = report_in(
-        write_organizations(tmp_path / "fleet", ["o"], repositories, exclude), capsys, monkeypatch, ticks(0), fetch_listing=listing
-    )
-    assert (printed.code, printed.out, listing.requests) == (2, "", [])
-    assert printed.err == f"error: quality/fleet.toml {fact}\nnext: write it in quality/fleet.toml like this:\n    organizations = [\"overnightworks\"]\n"
 
 
-def test_an_exclude_entry_of_an_organization_github_did_not_list_waits_for_the_rerun(capsys, monkeypatch, tmp_path, public):
-    """FLEET-69, FLEET-70: an `exclude` entry of an organization whose listing failed waits for the rerun, which the
-    pair adds after the shape."""
-    listing = Listing({"a": listed(("a/x",)), "b": http_error(503)})
-    printed = report_in(
-        write_organizations(tmp_path / "fleet", ["a", "b"], exclude=["b/y", "a/z"]), capsys, monkeypatch, ticks(0), fetch_listing=listing
-    )
-    assert (printed.code, printed.out) == (2, "")
-    assert printed.err == (
-        "error: GitHub did not list b · HTTP 503 · quality/fleet.toml exclude[1] matches no repository found · nothing measured\n"
-        "next:\n"
-        "    write it in quality/fleet.toml like this:\n"
-        '        organizations = ["overnightworks"]\n'
-        "    fix what the error names, then run quality report again\n"
-    )
 
 
 def test_the_weekly_ci_time_is_a_third_table_and_leaves_the_exit_as_it_is(capsys, monkeypatch, tmp_path, public):

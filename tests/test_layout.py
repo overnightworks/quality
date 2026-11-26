@@ -24,6 +24,8 @@ from tests.support.layout import (
 )
 from tests.support.merge import ONE_JOB
 
+pytestmark = pytest.mark.integration
+
 
 def test_a_file_without_a_suffix_is_red(build_repo, capsys):
     """SUFFIX-1: a tracked file without a suffix is a finding."""

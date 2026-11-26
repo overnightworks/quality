@@ -26,6 +26,7 @@ def test_a_literal_text_table_loads_as_no_table_whatever_it_holds(table):
     assert (load_baseline(table), render_baseline(load_baseline(table))) == (load_baseline(""), render_baseline(load_baseline("")))
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("table", TABLES.values(), ids=TABLES.keys())
 def test_a_run_over_a_ceiling_file_holding_the_table_judges_as_without_it(build_repo, capsys, table):
     """LITERAL-16: the table is no exit 2 and no finding, and the debt verdict is the one of the file without it."""
@@ -35,6 +36,7 @@ def test_a_run_over_a_ceiling_file_holding_the_table_judges_as_without_it(build_
     assert (held, plain) == (0, 0)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("table", TABLES.values(), ids=TABLES.keys())
 def test_the_fix_rewrites_the_ceiling_file_without_the_table_and_a_second_fix_changes_nothing(build_repo, capsys, table):
     """LITERAL-16, FIX-16: `--fix` writes the file as it renders without the table; the same command again leaves it."""

@@ -92,6 +92,7 @@ def test_helpers_equal_with_names_and_literals_kept_in_two_files_form_one_group(
     assert helper_groups == expected
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "note"),
     [
@@ -117,11 +118,13 @@ def test_the_debt_area_gets_one_open_note_at_the_repository(build_repo, capsys, 
     assert [(row.event, row.fact) for row in note_rows(output, ".")] == [("open", note)]
 
 
+@pytest.mark.integration
 def test_no_note_prints_when_both_counts_are_zero(build_repo):
     """TWIN-4."""
     assert rule_notes(build_repo({"tests/test_a.py": twin_test("test_one")}), Rule.TEST_TWIN) == []
 
 
+@pytest.mark.integration
 def test_the_rule_stands_in_the_debt_area_after_the_job_timeouts_and_only_reports(build_repo):
     """TWIN-4, TWIN-6: the rule's result holds no finding and is not measured only; its release switch is report-only."""
     result = check_result(build_repo({"tests/test_a.py": joined(twin_test("test_one"), twin_test("test_two"))}))
@@ -146,6 +149,7 @@ def test_every_other_line_and_the_exit_stay_as_the_same_run_without_the_rule(tmp
     assert with_rule == without_rule
 
 
+@pytest.mark.integration
 def test_a_baseline_that_cannot_be_read_refuses_size_and_clone_and_the_note_still_prints(build_repo):
     """TWIN-5, CLONE-9."""
     repo = build_repo({"tests/test_a.py": joined(twin_test("test_one"), twin_test("test_two")), BASELINE_PATH: "[size\n"})
@@ -153,6 +157,7 @@ def test_a_baseline_that_cannot_be_read_refuses_size_and_clone_and_the_note_stil
     assert len(rule_notes(repo, Rule.TEST_TWIN)) == 1
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads every file")
 def test_sources_that_cannot_be_read_refuse_the_area_and_print_no_note(build_repo):
     """TWIN-5."""

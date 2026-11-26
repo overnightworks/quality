@@ -4,6 +4,8 @@ from quality.report import FindingEvent
 from quality.rules import Rule
 from tests.support.check import check_output, rule_findings
 
+pytestmark = pytest.mark.integration
+
 CONFIG = "quality/config.toml"
 WORKFLOW = ".github/workflows/ci.yml"
 DEFAULT_DIRECTORY = "frontend/src/lib/catalogs"

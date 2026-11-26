@@ -28,3 +28,7 @@ def minified_bundle(characters: int = 46_106) -> str:
 def typescript_branchy_function(ccn: int) -> str:
     branches = "".join(f"  if (x === {value}) return {value};\n" for value in range(ccn - 1))
     return f"export function branchy(x: number): number {{\n{branches}  return -1;\n}}\n"
+
+
+def method(lines: int) -> str:
+    return "class Holder:\n" + "".join(f"    {line}\n" for line in long_function(lines).splitlines())

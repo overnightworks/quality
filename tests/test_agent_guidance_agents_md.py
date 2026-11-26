@@ -10,6 +10,8 @@ from tests.support.check import env_row_stands, is_clean, refusal_row, refusals,
 from tests.support.git_repositories import git
 from tests.support.github_remote import HTTPS, SCP, SSH_URL, with_github_remote
 
+pytestmark = pytest.mark.integration
+
 HEAD = "# guidance\n## Commands\n"
 NOT_A_TITLE = "line 1 is not a title"
 NOT_THE_NAME = "the title is not the repository's name"

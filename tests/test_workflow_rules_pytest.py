@@ -11,6 +11,8 @@ from quality.workflow_rules import check_pytest_workers
 from tests.support.check import check_output as run
 from tests.support.check import env_row_stands, finding_rows, is_clean, refusal_row, refusals, rule_findings
 
+pytestmark = pytest.mark.integration
+
 SERIAL, INVALID = FindingEvent.SERIAL, FindingEvent.INVALID
 WORKFLOW = ".github/workflows/w.yml"
 WITHOUT_N = "pytest runs without -n"

@@ -25,8 +25,6 @@ from tests.support.baselines import adapter_table, spec_table
 from tests.support.generated_files import generated_config
 from tests.support.verdict import declaration, gate_config, job
 
-pytestmark = pytest.mark.unit
-
 CHECKS = gate_config("checks")
 GUARDED = contracts_ini({"guarded": FORBIDDEN})
 QWEN = "GHSA-462x-pgg6-55fp in speech/providers/qwen/uv.lock"

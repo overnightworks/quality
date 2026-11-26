@@ -18,6 +18,8 @@ from tests.support.layout import (
 )
 from tests.support.merge import ONE_JOB
 
+pytestmark = pytest.mark.integration
+
 RULE = Rule.TEST_LAYOUT
 
 

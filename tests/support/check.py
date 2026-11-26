@@ -1,3 +1,4 @@
+import json
 import re
 import string
 import time
@@ -19,6 +20,7 @@ from quality.rules import Area, Rule
 from tests.support.baselines import DEBT_BASELINE_STATES
 from tests.support.door import FIX_WORDS, PinnedJudging, check_door, door_in
 from tests.support.git_repositories import make_repo
+from tests.support.merge import ONE_JOB
 
 installed_ruff = cli.INSTALLED_RUFF
 
@@ -490,3 +492,32 @@ def heard(capsys: pytest.CaptureFixture[str]) -> str:
     """Everything the door printed since the last read, stdout then stderr."""
     captured = capsys.readouterr()
     return captured.out + captured.err
+
+
+STOP_LINE = re.compile(r"::stop-commands::([0-9a-f]{32})")
+
+
+def stop_token(stream: str) -> str:
+    first_line = stream.splitlines()[0]
+    match = STOP_LINE.fullmatch(first_line)
+    assert match, first_line
+    return match.group(1)
+
+
+def compose_services(*services: tuple[str, str]) -> dict[str, str]:
+    body = "".join(f"  {json.dumps(name)}:\n    image: x\n    ports: [{json.dumps(port)}]\n" for name, port in services)
+    return {"compose.yaml": "services:\n" + body}
+
+
+def frame_run(capsys, path: Path, **keywords) -> tuple[int, list[str], list[str]]:
+    """The exit, the stdout lines after the release row and the stderr lines of the check over `path`."""
+    judging = PinnedJudging()
+    code = check_door(path, clock=lambda: 0.0, **{"judging": judging, **keywords})
+    captured = capsys.readouterr()
+    return code, judging.frame(captured.out).splitlines(), captured.err.splitlines()
+
+
+CASE_TWO = {**compose_services(("web", "8080:80"), ("db", "5432")), ".env": "A=1\n"}
+
+
+ROOT_ALLOWS_ENV = {"quality/config.toml": ONE_JOB + '[[root.allow]]\nentry = ".env"\nreason = "r"\n'}

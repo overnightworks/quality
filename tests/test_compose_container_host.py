@@ -12,6 +12,8 @@ from tests.support.check import check_output, copy_block, refused, rule_findings
 from tests.support.config_refusals import KNOWN_KEYS, ONE_LINE_NEED
 from tests.support.merge import ONE_JOB
 
+pytestmark = pytest.mark.integration
+
 CONFIG = "quality/config.toml"
 EDGE_STACK = (Path(__file__).parent / "fixtures" / "edge_stack.yml").read_text(encoding="utf-8")
 

@@ -10,6 +10,8 @@ from tests.support.git_repositories import put
 from tests.support.layout import CONFIG, GUIDANCE, assert_prints_as_kind, case, declaring, in_index, red
 from tests.support.merge import ONE_JOB
 
+pytestmark = pytest.mark.integration
+
 RULE = Rule.TEST_IMPORT
 
 

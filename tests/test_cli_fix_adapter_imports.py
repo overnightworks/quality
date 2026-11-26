@@ -23,6 +23,8 @@ from tests.support.door import (
 )
 from tests.support.git_repositories import git, put
 
+pytestmark = pytest.mark.integration
+
 REGISTERED = ("imports_adapter: reads a real service",)
 MARKED = "import pytest\n\npytestmark = pytest.mark.imports_adapter\nimport shop.adapters.db\n"
 UNUSED = "import pytest\n\npytestmark = pytest.mark.imports_adapter\nimport shop.core.config\n"

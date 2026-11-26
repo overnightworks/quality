@@ -7,6 +7,8 @@ import pytest
 
 from quality import cli
 
+pytestmark = pytest.mark.integration
+
 
 def timed_entry(job_id, name, attempt, created, started, completed):
     """A finished job of the run's listing whose moments are seconds after 10:00:00 UTC; None leaves the stamp out."""

@@ -6,6 +6,8 @@ import pytest
 from tests.support.check import refusal_pair
 from tests.support.terminal import Terminal, run_on, without_sgr
 
+pytestmark = pytest.mark.integration
+
 
 class TurnsPlain(Terminal):
     """A terminal that answers as one the first time it is asked and as a pipe ever after."""

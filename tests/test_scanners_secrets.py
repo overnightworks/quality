@@ -66,6 +66,7 @@ def allowed_locations(repo: Path) -> list[str]:
     return [note.location for note in rule_notes(repo, Rule.LEAK) if note.event is NoteEvent.ALLOWED]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("config_text", "code", "found", "allowed"),
     [
@@ -94,6 +95,7 @@ def test_a_secret_finding_is_allowed_only_by_rule_file_and_value(build_repo, ser
     assert RECORDED_SECRET not in heard(capsys)
 
 
+@pytest.mark.integration
 def test_a_recorded_leak_is_one_secret_finding_naming_its_rule_and_commit_and_never_its_value(build_repo, served_scanners):
     """O28: the finding carries the secret event, a fact with the rule and the commit's first eight characters."""
     (finding,) = rule_findings(recorded_leak_repo(build_repo, served_scanners, None), Rule.LEAK)
@@ -103,6 +105,7 @@ def test_a_recorded_leak_is_one_secret_finding_naming_its_rule_and_commit_and_ne
     assert_finding_vocabulary(finding)
 
 
+@pytest.mark.integration
 def test_the_entry_to_copy_is_lines_that_read_as_one_allowance_once_a_reason_is_added(build_repo, served_scanners):
     """O31, O33: the fix is an example, not a sentence; its lines are TOML that holds one secrets allowance."""
     (finding,) = rule_findings(recorded_leak_repo(build_repo, served_scanners, None), Rule.LEAK)
@@ -111,6 +114,7 @@ def test_the_entry_to_copy_is_lines_that_read_as_one_allowance_once_a_reason_is_
     assert len(entries) == 1
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 def test_one_value_on_two_lines_is_two_rows_and_one_fix(build_repo, installed_scanners, capsys):
     """ROW-3: one value on two lines of one file is two rows under one `fix:` and one entry."""
@@ -124,6 +128,7 @@ def test_one_value_on_two_lines_is_two_rows_and_one_fix(build_repo, installed_sc
     assert sum(isinstance(line, CopyLine) for line in block) == len(findings[0].fix.lines)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "entry", ['""', "{ fingerprint = \"x\" }", '{ fingerprint = "x", reason = "reason" }', '"x"'],
     ids=["empty", "no-reason", "fingerprint-form", "bare-string"],
@@ -135,6 +140,7 @@ def test_an_invalid_allow_entry_is_exit_2(build_repo, capsys, entry):
     assert "[secrets] allow entry" in check_exit_2(build_repo({"quality/config.toml": config}), capsys)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "report",
     ['[{"File": "a", "StartLine": 1, "RuleID": "r", "Commit": "c"}]',
@@ -147,6 +153,7 @@ def test_a_report_entry_without_a_string_secret_is_exit_2(build_repo, served_sca
     check_exit_2(build_repo({}), capsys)
 
 
+@pytest.mark.integration
 def test_the_scan_passes_the_gates_own_config(build_repo, served_scanners):
     """SECRET-3: gitleaks is told to use quality's config, not the repository's."""
     fake_gitleaks(served_scanners, on_scan='echo "[]" > "$report"; exit 0')
@@ -156,6 +163,7 @@ def test_the_scan_passes_the_gates_own_config(build_repo, served_scanners):
     assert given[given.index("--config") + 1] == str(scanners.GITLEAKS_CONFIG)
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 def test_a_repository_config_and_ignore_file_do_not_silence_the_scan(build_repo, installed_scanners, capsys):
     """SECRET-3: a committed .gitleaks.toml, a .gitleaksignore holding the real fingerprint and gitleaks:allow have no
@@ -176,6 +184,7 @@ def allow_fake_key(repo: Path, file: str = "config.txt") -> None:
     commit(repo, "allow the fixture key")
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 def test_an_allowed_value_stays_green_at_a_shifted_line_and_across_commits(build_repo, installed_scanners, capsys):
     """SECRET-8, SECRET-18: an entry holding the hash of the key allows it at line 1, at a later line and in
@@ -193,6 +202,7 @@ def test_an_allowed_value_stays_green_at_a_shifted_line_and_across_commits(build
     assert extent_counts(area_fact(printed, "secrets"))[-1] == len(allowed)
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 @pytest.mark.parametrize(
     ("write", "placed"),
@@ -213,6 +223,7 @@ def test_an_allowance_never_spreads_to_another_value_or_file(build_repo, install
     assert FAKE_KEY not in heard(capsys)
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 def test_a_key_on_an_allowance_line_of_the_config_stays_red(build_repo, installed_scanners, capsys):
     """A real key on the same line as an allowance in quality/config.toml is still found: that file has no exemption."""
@@ -223,6 +234,7 @@ def test_a_key_on_an_allowance_line_of_the_config_stays_red(build_repo, installe
     assert FAKE_KEY not in heard(capsys)
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 def test_a_repository_without_quality_config_is_scanned_and_its_key_is_red(build_repo, installed_scanners, capsys):
     """SECRET-4: no quality/config.toml means no allowances, and the scan still judges."""
@@ -253,6 +265,7 @@ def leak_scan_words(words: tuple[str, ...], repo: Path) -> list[str]:
 SECRET_COMMANDS = [pytest.param((CHECK_WORD,), id="check"), pytest.param(STAGED_WORDS, id="staged")]
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 @pytest.mark.parametrize("words", SECRET_COMMANDS)
 @pytest.mark.parametrize("failure", ["none", *FAILING_REPORTS])
@@ -303,6 +316,7 @@ def test_a_sigterm_mid_scan_leaves_no_scratch_directory(keyed_repo, served_scann
 STALE_FILE = "no\x1bthere.txt"
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_repo, installed_scanners, capsys):
     """SECRET-27: an entry that matches nothing is one unused row at the config, naming its rule and file."""
@@ -320,6 +334,7 @@ def test_an_allowance_no_finding_used_is_one_unused_note_at_the_config(build_rep
     assert_every_line_starts_with_the_door(printed.splitlines())
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 @pytest.mark.parametrize("name", ["docs/config.txt", f"docs/{HOSTILE_FILE}"], ids=["plain-path", "esc-quote-and-bidi-path"])
 def test_the_printed_entry_with_a_reason_allows_exactly_that_finding(build_repo, installed_scanners, capsys, name):
@@ -339,6 +354,7 @@ def test_the_printed_entry_with_a_reason_allows_exactly_that_finding(build_repo,
     assert FAKE_KEY not in first.out + first.err + second.out + second.err
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 def test_the_clean_secrets_row_counts_the_commits_the_scenario_made(build_repo, installed_scanners, capsys):
     """O30: one commit reads as one."""
@@ -346,6 +362,7 @@ def test_the_clean_secrets_row_counts_the_commits_the_scenario_made(build_repo, 
     assert leading_count(area_fact(capsys.readouterr().out, "secrets")) == 1
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 def test_the_clean_secrets_row_counts_every_commit_and_every_allowed_leak(build_repo, installed_scanners, capsys):
     """O15, O30: three commits with a key removed in the second; the clean row counts them and ends with the allowed
@@ -359,6 +376,7 @@ def test_the_clean_secrets_row_counts_every_commit_and_every_allowed_leak(build_
     assert (counts[0], counts[-1]) == (3, len(allowed_locations(repo)))
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 def test_nothing_about_secrets_prints_before_the_area_rows(build_repo, installed_scanners, capsys):
     """O15, SECRET-26, SECRET-27: an allowed row with its rule and reason, an unused row and a red key print as rows
@@ -382,6 +400,7 @@ def test_nothing_about_secrets_prints_before_the_area_rows(build_repo, installed
     assert_block_prints(area_block("\n".join(lines), "secrets"), found, notes)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "answer", ["echo 'fatal: refused' >&2; exit 1", "echo many; exit 0"], ids=["git-fails", "git-prints-no-number"]
 )
@@ -415,6 +434,7 @@ def leak_with_stderr(report: Path, *lines: str) -> str:
     return f"cp '{report}' \"$report\"; printf '%s\\n' {shlex.join(lines)} >&2; exit {scanners.GITLEAKS_LEAKS_FOUND}"
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("id_", "allowed", "expected", "vetted"),
     [
@@ -455,6 +475,7 @@ def test_a_planted_value_reaches_no_stream_of_a_verbose_run(
     assert (served_scanners / "gitleaks.vetted").exists() == vetted
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("flags", [(), ("-v",)], ids=["plain", "-v"])
 @pytest.mark.parametrize(
     ("id_", "allowed", "code", "fragment"),
@@ -498,6 +519,7 @@ def test_a_planted_value_reaches_no_stream_of_the_staged_door(
         assert gitleaks_exit_rows(printed.out) == [(scanners.GITLEAKS, "7 · 2 stderr lines withheld · not cleared by gitleaks")]
 
 
+@pytest.mark.integration
 def test_a_value_in_a_file_name_stands_no_more_often_under_v(build_repo, served_scanners, edited_report, capsys):
     """A file's name in a finding's row is a route older than `-v`; a stderr line naming the file adds none."""
     name = f"docs/{FAKE_KEY}.txt"
@@ -510,6 +532,7 @@ def test_a_value_in_a_file_name_stands_no_more_often_under_v(build_repo, served_
     assert capsys.readouterr().out.count(FAKE_KEY) == plain.count(FAKE_KEY)
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 @pytest.mark.parametrize(
     ("words", "files", "fact", "said"),

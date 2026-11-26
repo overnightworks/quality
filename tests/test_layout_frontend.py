@@ -22,6 +22,8 @@ from tests.support.layout import (
 )
 from tests.support.merge import ONE_JOB
 
+pytestmark = pytest.mark.integration
+
 RULE = Rule.TEST_LAYOUT
 PACKAGE_JSON = {"package.json": "{}\n"}
 PYTHON_PROJECT = {"pyproject.toml": "", "src/p/x.py": ""}

@@ -5,6 +5,8 @@ from quality.rules import Rule
 from tests.support.check import check_output as run
 from tests.support.check import check_result, refusals, rule_findings
 
+pytestmark = pytest.mark.integration
+
 RULE = Rule.NODE_TEST_RANDOM
 UNSHUFFLED, UNSEEDED, INVALID = FindingEvent.UNSHUFFLED, FindingEvent.UNSEEDED, FindingEvent.INVALID
 WORKFLOW = ".github/workflows/w.yml"

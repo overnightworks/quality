@@ -597,6 +597,7 @@ def test_the_version_line_names_the_installed_version_and_what_the_gate_pins(bui
     assert (code, printed.out, printed.err) == (0, f"quality {quality.__version__} · {words}\n", "")
 
 
+@pytest.mark.integration
 def test_the_version_line_escapes_a_workflow_name(build_repo, monkeypatch, capsys):
     """HELP-5, HELP-6, MASK-7: an unreadable workflow's name stands escaped in the reason the pin is unknown."""
     monkeypatch.chdir(build_repo({f".github/workflows/ci{chr(0x202E)}.yml": "jobs: [\n"}))

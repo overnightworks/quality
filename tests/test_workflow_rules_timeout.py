@@ -19,6 +19,8 @@ from tests.support.check import check_output as run
 from tests.support.door import FIX_WORDS, PinnedJudging, door_in
 from tests.support.job_workflows import ON_PULL_REQUEST, STEPS, first_job_line, job, workflow
 
+pytestmark = pytest.mark.integration
+
 MISSING, INVALID, NEW_DEBT = FindingEvent.MISSING, FindingEvent.INVALID, FindingEvent.NEW_DEBT
 GREW, CAN_FALL = FindingEvent.GREW, FindingEvent.CAN_FALL
 WORKFLOW = ".github/workflows/w.yml"

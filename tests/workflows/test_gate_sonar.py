@@ -139,6 +139,7 @@ def test_the_sonar_job_and_its_properties_step_run_for_every_actor(gate, sonar_s
     assert "if" not in step_named(sonar_steps, "Refuse a token")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("properties", "environment", "files"),
     [
@@ -169,6 +170,7 @@ def test_quality_wires_the_secret_by_name_into_the_gate():
     assert caller["uses"].endswith("/.github/workflows/gate.yml")
 
 
+@pytest.mark.integration
 def test_quality_binds_its_own_scan_to_its_own_project(build_repo):
     """SONAR-59, SONAR-91: quality's own sonar-project.properties passes its own properties check once the tests job's report is there"""
     checkout = build_repo({sonar_properties.PROPERTIES_FILE: (ROOT / sonar_properties.PROPERTIES_FILE).read_text(encoding="utf-8"), "coverage.xml": "<coverage/>"})

@@ -94,6 +94,7 @@ def tag_head(repo: Path, *tags: str) -> None:
         git(repo, "tag", tag)
 
 
+@pytest.mark.integration
 def test_the_script_names_the_release_tag_it_judges(release_checkout):
     """RELEASE-13."""
     tag_head(release_checkout, "v0.0.1")
@@ -103,6 +104,7 @@ def test_the_script_names_the_release_tag_it_judges(release_checkout):
     assert "ok   one release tag at HEAD (found: v0.0.1)" in done.stdout
 
 
+@pytest.mark.integration
 def test_the_script_ignores_a_tag_that_is_not_of_the_release_form(release_checkout):
     """RELEASE-13."""
     tag_head(release_checkout, "v0.0.1", "v0.0.2-rc1", "latest")
@@ -110,6 +112,7 @@ def test_the_script_ignores_a_tag_that_is_not_of_the_release_form(release_checko
     assert "ok   one release tag at HEAD (found: v0.0.1)" in done.stdout
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("tags", "found"),
     [(("latest",), "none"), (("v0.0.1", "v0.0.2"), "v0.0.1, v0.0.2")],
@@ -123,6 +126,7 @@ def test_the_script_refuses_a_head_without_exactly_one_release_tag(release_check
     assert f"FAIL one release tag at HEAD (found: {found})" in done.stdout
 
 
+@pytest.mark.integration
 def test_the_script_exits_2_for_an_unexpected_command_line_argument(release_checkout):
     done = run_script(release_checkout, "v0.0.1")
     assert done.returncode == 2

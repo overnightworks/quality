@@ -6,6 +6,8 @@ from quality.rules import Rule
 from tests.support.check import check_output as run
 from tests.support.check import check_result, refusals, rule_findings
 
+pytestmark = pytest.mark.integration
+
 RULE = Rule.LIVE_LAYER
 RUNS_LIVE, INVALID = FindingEvent.RUNS_LIVE, FindingEvent.INVALID
 WORKFLOW = ".github/workflows/w.yml"
