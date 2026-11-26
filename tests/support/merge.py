@@ -114,6 +114,12 @@ def consenting(**arguments):
     return [review(consent_block(**arguments))]
 
 
+def consenting_to(*whats, legacy_branch=None):
+    """The reviews of a pull request whose owner consented to the declarations `declaring` writes for `whats`; Sonar
+    green unless `legacy_branch` names the branch it failed on."""
+    return consenting(declared=tuple(loosened(what) for what in whats), legacy_branch=legacy_branch)
+
+
 def loosened(what, reason="ruled", item="overnightworks/songmaker#1345", day=date(2026, 10, 20)):
     """The declaration a `[[gate.loosened]]` entry of `declaring` and the door's consent text carry."""
     return Declaration(what, item, day, reason)

@@ -38,7 +38,7 @@ from tests.support.check import (
 from tests.support.clones import function as clone_function
 from tests.support.door import FIX_WORDS, door_in
 from tests.support.git_repositories import head_commit, put
-from tests.support.merge import ONE_JOB, SONAR_GREEN, closing_line, declaring, drive
+from tests.support.merge import ONE_JOB, SONAR_GREEN, closing_line, consenting_to, declaring, drive
 from tests.support.source_code import long_function
 from tests.support.verdict import ONLY_DECLARED, declaration, declared, verdict_of
 from tests.support.verdict_renames import OLD_ENTRY, commit_all, entry, file_text, moved_in_head, moves_in_head, pulled
@@ -236,9 +236,10 @@ def test_a_declared_clone_add_merges_through_the_door(capsys, tmp_path):
     it declared and merges."""
     what = f"clone baseline adds {SECOND_LABEL}"
     gh = pulled(
-        tmp_path, FIRST, FIRST + SECOND, checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + declaring(what)
+        tmp_path, FIRST, FIRST + SECOND, checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + declaring(what),
+        reviews=consenting_to(what),
     )
-    assert drive(gh)[0] == 0
+    assert drive(gh) == 0
     assert closing_line() in capsys.readouterr().out
     assert len(gh.merge_calls) == 1
 
@@ -649,8 +650,8 @@ def test_the_door_judges_a_new_pair_beside_a_move_as_the_verdict_does(capsys, tm
     does: the moved pair is the same pair, the new one needs its own declaration."""
     gh = pulled(
         tmp_path, FIRST, pairs_text(MOVED_PAIR, SECOND_PAIR), ONE_MOVE, checks=SONAR_GREEN, base_config=ONE_JOB,
-        merge_config=merge_config,
+        merge_config=merge_config, reviews=consenting_to(f"clone baseline adds {SECOND_LABEL}"),
     )
-    assert drive(gh)[0] == code
+    assert drive(gh) == code
     assert expected.replace(UNDECLARED, "") in capsys.readouterr().out
     assert (len(gh.merge_calls) == 1) == (code == 0)

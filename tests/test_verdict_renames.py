@@ -24,6 +24,7 @@ from tests.support.merge import (
     base_row,
     changed_nothing,
     closing_line,
+    consenting_to,
     declaring,
     drive,
     not_judged_pair,
@@ -108,6 +109,7 @@ def test_a_commit_that_renames_the_baseline_file_removes_it(capsys, pull_request
 
 
 NEW_ENTRY = OLD_ENTRY.replace("old", "new")
+RAISE = "size baseline raises function_lines src/new.py f 70 -> 90"
 
 
 @pytest.mark.integration
@@ -154,7 +156,7 @@ def test_the_door_refuses_a_rename_from_a_path_that_is_not_utf8_as_the_verdict_d
         tmp_path, STALE_LEFTOVER, RAISED_LEFTOVER, [(UNNAMEABLE_SOURCE, "src/new.py")],
         base_config=GATE_CONFIG, merge_config=GATE_CONFIG,
     )
-    assert drive(gh)[0] == 1
+    assert drive(gh) == 1
     assert "size baseline adds function_lines src/new.py f 150" in capsys.readouterr().out
     assert gh.merge_calls == []
 
@@ -314,7 +316,7 @@ def new_entry(size, path="src/new.py"):
         (OLD_ENTRY, new_entry(90), {}, 1, "size baseline raises function_lines src/new.py f 70 -> 90"),
         (new_entry(200, "src/old.py") + new_entry(300), new_entry(250), {}, 1, "size baseline raises function_lines src/new.py f 200 -> 250"),
         (new_entry(100, "src/old.py") + new_entry(80), new_entry(100), {}, 0, closing_line()),
-        (OLD_ENTRY, new_entry(90), {"checks": SONAR_GREEN, "base_config": ONE_JOB, "merge_config": ONE_JOB + declaring("size baseline raises function_lines src/new.py f 70 -> 90")}, 0, closing_line()),
+        (OLD_ENTRY, new_entry(90), {"checks": SONAR_GREEN, "base_config": ONE_JOB, "merge_config": ONE_JOB + declaring(RAISE), "reviews": consenting_to(RAISE)}, 0, closing_line()),
     ],
     ids=["a pure move", "a raise", "a leftover is no allowance", "a lower leftover", "a declared raise"],
 )
@@ -322,7 +324,7 @@ def test_the_door_reads_a_move_as_the_verdict_does(capsys, tmp_path, base, head,
     """BASELINE-12, BASELINE-13, BASELINE-19, MERGE-84, MERGE-87: the door judges a move as the verdict does, from the
     pull request's own two commits: a pure move merges, a raise is refused, a declared raise merges."""
     gh = pulled(tmp_path, base, head, MOVE, **{"base_config": GATE_CONFIG, "merge_config": GATE_CONFIG, **options})
-    assert drive(gh)[0] == code
+    assert drive(gh) == code
     assert expected in capsys.readouterr().out
     assert (len(gh.merge_calls) == 1) == (code == 0)
 
@@ -347,7 +349,7 @@ def test_a_fetch_that_fails_cannot_be_judged_before_anything_is_touched(capsys, 
     own words that it could not check (exit 2), shows none of git's, and changes nothing."""
     gh = failing_fetch(tmp_path)
     gh.remote = str(tmp_path / "missing.git")
-    code, _ = drive(gh)
+    code = drive(gh)
     streams = capsys.readouterr()
     assert (code, streams.out, streams.err) == (
         2, loosenings_not_judged("cannot fetch the pull request's commits to compare renamed files (git exited 128)", gh.base_sha), not_judged_pair(),
@@ -375,7 +377,7 @@ def test_a_fetch_that_needs_a_password_never_asks_for_one(capsys, tmp_path, monk
     (no_credentials / "gh").write_text("#!/bin/sh\nexit 1\n")
     (no_credentials / "gh").chmod(0o755)
     monkeypatch.setenv("PATH", f"{no_credentials}:{os.environ['PATH']}")
-    assert drive(gh)[0] == 2
+    assert drive(gh) == 2
     assert "cannot fetch the pull request's commits" in capsys.readouterr().out
     assert heard
     assert not asked.exists()
@@ -389,7 +391,7 @@ def test_the_door_fetches_exactly_the_pull_requests_base_and_merge_commits(tmp_p
     gh = pulled(tmp_path, OLD_ENTRY, NEW_ENTRY, MOVE, pull_base_sha="c" * 40)
     calls = tmp_path / "git-calls"
     fake_git(f'echo "$@" >> "{calls}"')
-    assert drive(gh)[0] == 0
+    assert drive(gh) == 0
     (fetch,) = [line for line in calls.read_text().splitlines() if " fetch " in line]
     assert fetch.endswith(f"-- {gh.remote} {gh.base_sha} {gh.merge_sha}")
     assert "credential.helper=!gh auth git-credential" in fetch
@@ -426,7 +428,7 @@ def test_a_step_that_does_not_finish_in_time_cannot_be_judged_and_leaves_no_chil
     child = tmp_path / "child-pid"
     gh = failing_fetch(tmp_path)
     fake_git(f'case "$*" in *" {stalls} "*) sleep 300 & echo $! > "{child}"; wait;; esac')
-    code, _ = drive(gh)
+    code = drive(gh)
     streams = capsys.readouterr()
     assert (code, streams.out, streams.err) == (2, loosenings_not_judged(refusal, gh.base_sha), not_judged_pair())
     assert process_is_gone(int(child.read_text()))
@@ -438,7 +440,7 @@ def test_git_output_of_a_failed_rename_list_never_reaches_the_operator(capsys, t
     """MERGE-100, MERGE-101: the door says in its own words that the rename list failed and prints none of git's."""
     gh = failing_fetch(tmp_path)
     fake_git('case "$*" in *" diff "*) echo STDERR_SENTINEL >&2; exit 1;; esac')
-    assert drive(gh)[0] == 2
+    assert drive(gh) == 2
     output = capsys.readouterr().out
     assert ("cannot list the files git renamed" in output, "STDERR_SENTINEL" in output) == (True, False)
     changed_nothing(gh)
@@ -454,7 +456,7 @@ def test_inherited_git_routing_and_configuration_do_not_reach_the_diff(capsys, t
         "GIT_CONFIG_VALUE_0": "/dev/stdin",
     }.items():
         monkeypatch.setenv(name, value)
-    assert drive(gh)[0] == 0
+    assert drive(gh) == 0
     assert closing_line() in capsys.readouterr().out
 
 
@@ -500,7 +502,7 @@ def test_a_netrc_in_the_home_is_never_sent_and_gh_finds_its_login_from_the_empty
         monkeypatch.delenv(name, raising=False)
     gh = failing_fetch(tmp_path)
     gh.remote = f"{origin}/acme/widgets.git"
-    assert drive(gh)[0] == 2
+    assert drive(gh) == 2
     assert heard
     assert all("Authorization" not in headers for headers in heard)
     configuration, helper_home = helper_saw.read_text().split()
@@ -602,7 +604,7 @@ def test_a_rename_list_git_did_not_finish_cannot_be_judged_at_the_door(capsys, t
     the door's own words, nothing changed."""
     gh = pulled(tmp_path, OLD_ENTRY, NEW_ENTRY, MOVE)
     fake_git(listing_script(printed))
-    code, _ = drive(gh)
+    code = drive(gh)
     streams = capsys.readouterr()
     assert (code, streams.out, streams.err) == (
         2, loosenings_not_judged("cannot list the files git renamed between the pull request's commits", gh.base_sha), not_judged_pair(),
@@ -734,7 +736,10 @@ def test_a_declared_job_limit_loosening_is_the_declared_red_of_the_verdict_and_a
 def test_the_door_refuses_an_undeclared_job_limit_loosening_and_merges_a_declared_one(capsys, tmp_path, base, head, what, is_declared):
     """TIMEOUT-18, MERGE-84: the door judges the job limits as the verdict does: undeclared they are refused with the
     line, declared they merge."""
-    options = {"checks": SONAR_GREEN, "base_config": ONE_JOB, "merge_config": ONE_JOB + (declaring(what) if is_declared else "")}
+    options = {
+        "checks": SONAR_GREEN, "base_config": ONE_JOB, "merge_config": ONE_JOB + (declaring(what) if is_declared else ""),
+        "reviews": consenting_to(what),
+    }
     gh = pulled(tmp_path, base, head, **options)
-    assert drive(gh)[0] == (0 if is_declared else 1)
+    assert drive(gh) == (0 if is_declared else 1)
     assert (f"    ! {what}" in capsys.readouterr().out, len(gh.merge_calls)) == (True, int(is_declared))

@@ -163,7 +163,7 @@ def test_the_next_command_parses_back_to_the_pull_request_the_run_names(frame, b
     based(gate_config("checks", "B"), gate_config("checks", declared=(declaration('mandatory job "B" removed'),)))
     _, _, err, _ = frame()
     program, *words = shlex.split(err.removeprefix("next: "))
-    (named,) = cli.read_invocation(words).pull_requests
+    named = cli.read_invocation(words).pull_request
     assert (program, named.repository, named.number) == ("quality", "acme/gadgets", 12)
 
 
