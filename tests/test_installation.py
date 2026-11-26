@@ -70,7 +70,7 @@ def install_distribution(site: Path, record: str, name: str = "scanner") -> None
 @pytest.mark.parametrize(
     "record",
     [None, "", "scanner-1.0.dist-info/METADATA,,\n", "scanner-1.0.dist-info/METADATA,,\n../bin/scanner,,\n"],
-    ids=["not installed", "no RECORD", "RECORD without the executable", "recorded file gone"],
+    ids=["not installed", "no RECORD", "RECORD without the executable", "recorded file missing from disk"],
 )
 def test_an_executable_the_installation_does_not_hold_is_not_found(tmp_path, monkeypatch, record):
     """SCANNER-16: an executable the installation does not hold, or does not record, is not found."""
@@ -80,6 +80,16 @@ def test_an_executable_the_installation_does_not_hold_is_not_found(tmp_path, mon
     site.mkdir(exist_ok=True)
     monkeypatch.syspath_prepend(str(site))
     with pytest.raises(FileNotFoundError):
+        installation.installed_executable("scanner")
+
+
+def test_a_recorded_executable_that_is_a_directory_is_not_found(tmp_path, monkeypatch):
+    """SCANNER-16: an executable the installation does not hold is not found, a recorded path that is no file included."""
+    site = tmp_path / "site"
+    install_distribution(site, "scanner-1.0.dist-info/METADATA,,\nbin/scanner,,\n")
+    (site / "bin" / "scanner").mkdir(parents=True)
+    monkeypatch.syspath_prepend(str(site))
+    with pytest.raises(FileNotFoundError, match="is not a file"):
         installation.installed_executable("scanner")
 
 
@@ -109,6 +119,7 @@ def recorded(tmp_path: Path, record: str | None) -> importlib.metadata.Distribut
         pytest.param('{"url": "https://example.invalid/tool.tar.gz", "archive_info": {}}', None, id="an archive URL"),
         pytest.param('{"url": "https://hg.example.invalid/tool", "vcs_info": {"vcs": "hg", "commit_id": "abc"}}', None, id="another vcs"),
         pytest.param("{not json", None, id="not JSON"),
+        pytest.param('["a", "list"]', None, id="JSON that is no record"),
     ],
 )
 def test_the_origin_is_what_the_installer_recorded(tmp_path, record, expected):

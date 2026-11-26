@@ -2179,7 +2179,7 @@ changed, and trusts no file in the cache directory, its name, its time stamp or 
   `overnightworks-quality` below `$XDG_CACHE_HOME` where that is an absolute path, else below `~/.cache`; with neither
   there is no copy. The door finds `<cache>` once from the environment it is given. quality creates each missing level
   with mode 0700. One archive stays per ecosystem a tracked lock names, replaced in place and never pruned. The copy is
-  read once, only as a regular file (a directory, a FIFO or a file that cannot be opened counts as no copy)
+  read once, only as a regular file (a directory, a FIFO or a file that cannot be opened or read counts as no copy)
   (ADVISORY-43).
 - With a copy, the request is one conditional GET with the md5 of the copy's own bytes as `If-None-Match`; without one,
   a plain GET. The copy is used only on a `304` whose ETag is that md5. A `304` that names another md5 costs one of the

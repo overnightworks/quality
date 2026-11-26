@@ -128,6 +128,8 @@ def test_a_contract_that_does_not_hold_is_one_finding_at_its_config(build_repo, 
            " (forbidden, layers, independence, protected, acyclic_siblings)")]),
         ({**SHOP, ".importlinter": ini({"type": "forbidden", "source_modules": ["shop.db"]})}, 2,
          [f"{REFUSED}contract guarded in .importlinter has invalid options (forbidden_modules: This is a required field.)"]),
+        ({**SHOP, "pyproject.toml": toml(FORBIDDEN).replace('name = "guarded"\n', "")}, 2,
+         [f"{REFUSED}contract 1 in pyproject.toml has no name"]),
     ],
     ids=[
         "a kept forbidden contract",
@@ -139,6 +141,7 @@ def test_a_contract_that_does_not_hold_is_one_finding_at_its_config(build_repo, 
         "a root package also under tests",
         "an unknown contract type",
         "a required field missing",
+        "a contract without a name",
     ],
 )
 def test_the_import_contract_rule_judges_the_contracts(build_repo, capsys, files, expected_code, expected_lines):

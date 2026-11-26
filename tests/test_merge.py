@@ -240,6 +240,7 @@ def test_shows_repository_head_and_legacy_count_before_asking(capsys):
         ({}, {"legacy": 0}, "not legacy findings"),
         ({}, {"main_analysed": False}, "legacy unknown"),
         ({}, {"analysed": "c" * 40}, f"Sonar analysed {'c' * 40}, head is {SHA}"),
+        ({}, {"pull_requests": [{"key": "6", "commit": {"sha": SHA}}]}, f"Sonar analysed nothing, head is {SHA}"),
     ],
     ids=[
         "new finding", "other red check", "other skipped check", "pending check", "failing status", "pending status",
@@ -248,7 +249,7 @@ def test_shows_repository_head_and_legacy_count_before_asking(capsys):
         "a stale declaration", "the removed job still runs red", "only the head sha declares",
         "a gate.loosened entry for an allowance",
         "loosened legacy", "report on both sides", "head fail but merge commit report", "report and Sonar unreachable", "no config at either sha", "report mode and a new finding", "removed mandatory job",
-        "closed", "no legacy", "legacy unknown", "stale analysis",
+        "closed", "no legacy", "legacy unknown", "stale analysis", "no analysis of the pull request",
     ],
 )
 def test_refuses_unless_the_door_is_the_only_way(gh_kwargs, sonar_kwargs, message, capsys):
@@ -263,10 +264,13 @@ def test_refuses_unless_the_door_is_the_only_way(gh_kwargs, sonar_kwargs, messag
     assert answers == []
 
 
-def test_cannot_judge_when_sonar_is_unreachable_under_legacy_fail(capsys):
-    """MERGE-16: a SonarCloud that cannot be reached under legacy fail is not judged: exit 2, nothing changed."""
+@pytest.mark.parametrize(
+    "sonar_kwargs", [{"unreachable": True}, {"pull_requests": [{"key": "7"}]}], ids=["unreachable", "analysis without a commit"]
+)
+def test_cannot_judge_when_sonar_cannot_be_read_under_legacy_fail(sonar_kwargs, capsys):
+    """MERGE-16: a SonarCloud that cannot be reached or read under legacy fail is not judged: exit 2, nothing changed."""
     gh = FakeGh()
-    code, _ = drive(gh, sonar(unreachable=True))
+    code, _ = drive(gh, sonar(**sonar_kwargs))
     assert code == 2
     assert "not judged" in capsys.readouterr().out
     changed_nothing(gh)

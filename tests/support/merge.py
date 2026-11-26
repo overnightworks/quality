@@ -283,15 +283,17 @@ def no_network(repository):
     raise AssertionError(f"the door reached for {repository}'s remote")
 
 
-def sonar(new=0, legacy=4, main_analysed=True, analysed=SHA, unreachable=False, added=None):
-    """`added` lists the pull request's open issues (`new` makes that many alike)."""
+def sonar(new=0, legacy=4, main_analysed=True, analysed=SHA, unreachable=False, added=None, pull_requests=None):
+    """`added` lists the pull request's open issues (`new` makes that many alike); `pull_requests` replaces the analyses
+    SonarCloud lists for the project."""
     def transport(url, authorization):
         if unreachable:
             raise CannotJudge("SonarCloud is down")
         if "project_branches" in url:
             return {"branches": [{"name": "main", "isMain": True, **({"analysisDate": "x"} if main_analysed else {})}]}
         if "project_pull_requests" in url:
-            return {"pullRequests": [{"key": "6", "commit": {"sha": "0" * 40}}, {"key": "7", "commit": {"sha": analysed}}]}
+            return {"pullRequests": pull_requests if pull_requests is not None else [
+                {"key": "6", "commit": {"sha": "0" * 40}}, {"key": "7", "commit": {"sha": analysed}}]}
         if "measures" in url:
             return {}
         if "pullRequest=" in url:

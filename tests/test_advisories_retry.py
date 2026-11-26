@@ -242,12 +242,17 @@ def test_a_run_that_ends_during_a_failed_attempt_cuts_the_wait_and_sends_no_furt
 
 
 @pytest.mark.integration
-def test_a_not_modified_for_another_copy_and_the_failures_after_it_share_the_four_attempts(scan, scripted_server):
-    """ADVISORY-9: the plain request after a 304 that does not name the copy is one of the four attempts of the
-    database, not a fresh budget."""
+@pytest.mark.parametrize(
+    "script",
+    [[NOT_MODIFIED, GATEWAY_TIMEOUT], [GATEWAY_TIMEOUT, GATEWAY_TIMEOUT, GATEWAY_TIMEOUT, NOT_MODIFIED]],
+    ids=["the failures after it", "as the last attempt"],
+)
+def test_a_not_modified_for_another_copy_and_the_failures_after_it_share_the_four_attempts(scan, scripted_server, script):
+    """ADVISORY-9: a 304 that does not name the copy costs one of the four attempts of the database, as the plain
+    request after it does; as the last attempt it ends the download."""
     scan.copy.parent.mkdir(parents=True)
     scan.copy.write_bytes(DATABASE)
-    scripted_server.script = [NOT_MODIFIED, GATEWAY_TIMEOUT]
+    scripted_server.script = script
     scripted_server.open()
     refusal = scan()
     assert isinstance(refusal, ScannerError)
