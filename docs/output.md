@@ -340,7 +340,13 @@ The line of `quality check debt --fix --dry-run` when nothing is left to lower (
 `✓ consent  given  review <id> at <commit>` where an organisation owner's review carries the text, and `! consent  missing`
 where none does; below the missing row the consent text stands as a block (MERGE-119, MERGE-121): each line escaped as
 [Masking](#masking) says, printed whole with no row prefix and no padding, so a reader pastes the fenced text as a review.
-Every line of the block starts with the door's own text (MASK-11).
+Every line of the block starts with the door's own text (MASK-11). The refusal ends in the pair of MERGE-121, with the
+state `not merged` and its reason `no consent review at <head>`:
+
+```text
+error: not merged · no consent review at <head> · nothing changed
+next: the operator leaves the text above as his review at <head>, then quality merge <owner/repo>#<pr> runs again
+```
 
 ## Refusals
 
