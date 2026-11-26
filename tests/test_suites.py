@@ -68,7 +68,7 @@ def test_a_test_is_counted_in_the_layer_its_path_names(path, manifest, source, l
         ("test.skip(browserName === 'x', 'why');", 0),
         ("test.describe.configure({ mode: 'serial' });", 0),
         ("test(name, () => {});", 0),
-        ("const run = test;", 0),
+        ("const run = test; 'x';", 0),
         ("it.each([1, 2", 0),
     ],
     ids=[
