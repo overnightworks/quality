@@ -1,8 +1,0 @@
-claim_id = "a8a850b7a7224f84a2dad385294e2ad2"
-agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
-role = "builder"
-base = "d92262c2db165b8b145b64f4427d3cd91f9dd4e7"
-branch = "claude/issue-1059-cover-filesystem-configuration-remote"
-scope = ["docs/commands.md", "docs/rules.md", "pyproject.toml", "src/quality/advisories.py", "src/quality/agent_guidance.py", "src/quality/architecture.py", "src/quality/installation.py", "src/quality/repository.py", "src/quality/sonar.py", "tests"]
-opened_commit = "f2a312c89c5c970f6150d345340c32cb8344531d"
-whole_reason = "One class of site (filesystem, configuration and remote answers) with one kind of answer per site and one floor value; each module alone is a few lines."
