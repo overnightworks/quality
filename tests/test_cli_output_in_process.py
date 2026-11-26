@@ -94,13 +94,15 @@ def test_run_writes_and_flushes_the_stop_on_stderr_then_stdout_before_the_door_i
     assert stdout_stop == stderr_stop
 
 
-def test_ctrl_c_in_the_door_ends_the_run_as_interrupted_through_the_injected_sender(capsys):
-    """CLOSING-31, CLOSING-32: an interrupt ends the run by SIGINT sent to its own process, with exit 130 where that
-    signal does not end it, and prints nothing."""
-    sent = []
+def raising_interrupt() -> int:
+    raise KeyboardInterrupt
 
-    def interrupted_door() -> int:
-        raise KeyboardInterrupt
+
+@pytest.mark.parametrize("interrupted_door", [raising_interrupt, lambda: 128 + signal.SIGINT], ids=["a Ctrl-C", "an exit of 130"])
+def test_an_interrupt_in_the_door_ends_the_run_as_interrupted_through_the_injected_sender(capsys, interrupted_door):
+    """CLOSING-31, CLOSING-32, MERGE-113: an interrupt, or a merge run over several names that ends interrupted, ends the
+    run by SIGINT sent to its own process, with exit 130 where that signal does not end it, and prints nothing."""
+    sent = []
 
     saved = signal.getsignal(signal.SIGINT)
     try:

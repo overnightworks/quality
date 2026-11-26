@@ -43,7 +43,7 @@ from quality.check import (
     judge_repository,
     judge_staged_change,
 )
-from quality.checkout import GatePin, NoGatePin, OutsideWorkTree, OwnGate, UnknownGatePin, gate_pin
+from quality.checkout import OutsideWorkTree, gate_pin
 from quality.cli_help import (
     CHECK_HELP,
     MERGE_HELP,
@@ -249,15 +249,7 @@ def _gate_pin_words(folder: Path) -> str:
         return "not inside a repository"
     except CannotJudge as refusal:
         return refusal.reason.fact
-    match pin:
-        case NoGatePin():
-            return "no workflow here calls quality's gate.yml"
-        case OwnGate():
-            return "this checkout of quality judges itself"
-        case GatePin(release=release):
-            return f"this repository's gate pins {release}"
-        case UnknownGatePin(reason=reason):
-            return reason.fact
+    return pin.version_words()
 
 
 class DoorParser(argparse.ArgumentParser):
@@ -562,17 +554,28 @@ def _dependencies_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | N
     return SEPARATOR.join((counted(judged.lockfiles, "lockfile"), counted(judged.packages, "package")))
 
 
+@dataclass(frozen=True)
+class _DebtCounts:
+    entries: str
+    pairs: str
+    limits: list[str]
+    held_ids: list[str]
+
+
+_DEBT_EXTENT: dict[Measurement, Callable[[_DebtCounts], str]] = {
+    Measurement.MEASURED_ONLY: lambda counts: f"{counts.entries} over the thresholds",
+    Measurement.PARTLY_MEASURED_ONLY: lambda counts: ", ".join([counts.pairs, *counts.held_ids]),
+    Measurement.ENFORCED: lambda counts: (
+        f"{CEILING_HELD}{SEPARATOR}{', '.join([counts.entries, counts.pairs, *counts.limits, *counts.held_ids])}"
+    ),
+}
+
+
 def _debt_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
     entries, pairs = counted(extents[Rule.SIZE], "entry", "entries"), counted(extents[Rule.CLONE], CLONE_PAIR)
     limits = [counted(extents[Rule.JOB_TIMEOUT], baseline_file.JOB_LIMIT)] if extents[Rule.JOB_TIMEOUT] else []
     held_ids = [counted(extents[Rule.SPEC_CITATION], baseline_file.UNCITED_SPEC_ID)] if extents[Rule.SPEC_CITATION] else []
-    match verdict.measurement:
-        case Measurement.MEASURED_ONLY:
-            return f"{entries} over the thresholds"
-        case Measurement.PARTLY_MEASURED_ONLY:
-            return ", ".join([pairs, *held_ids])
-        case Measurement.ENFORCED:
-            return f"{CEILING_HELD}{SEPARATOR}{', '.join([entries, pairs, *limits, *held_ids])}"
+    return _DEBT_EXTENT[verdict.measurement](_DebtCounts(entries, pairs, limits, held_ids))
 
 
 def _workflows_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:

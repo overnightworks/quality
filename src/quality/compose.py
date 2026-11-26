@@ -149,9 +149,7 @@ def _yaml_error_reason(error: Exception) -> str:
         mark = error.problem_mark
         said = ", ".join(part for part in (error.context, error.problem) if part)
         return f"line {mark.line + 1}, column {mark.column + 1}: {said}"
-    if isinstance(error, (ValueError, KeyError, IndexError)):
-        return "a value does not fit its tag"
-    return "not valid YAML"
+    return "a value does not fit its tag"
 
 
 def _port_findings(name: str, service_name: object, ports: list) -> list[Finding]:

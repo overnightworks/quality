@@ -47,11 +47,6 @@ def is_git_ref_name(ref: str) -> bool:
     return not (broken_name or broken_component)
 
 
-def _require_safe_ref(ref: str, role: str) -> None:
-    if not is_git_ref_name(ref):
-        raise CannotJudge(f"the {role} {ref!r} is not a ref name or a SHA")
-
-
 class UnusableConfig(CannotJudge):
     """A side's config that cannot be read: `where` names the side and `error` keeps the config's fact and example
     apart; the callers print `error` as the refusal pair."""
@@ -151,8 +146,6 @@ def read_renames(
     `marks`; the verdict and the door read the same pair.
 
     A `bound` in seconds runs git in its own process group, for the door inside its scratch directory."""
-    _require_safe_ref(base, "base")
-    _require_safe_ref(head, "head")
     try:
         listed = process.git(
             ["-C", str(repo.resolve()), "diff", *checkout.RENAME_LISTING, "--end-of-options", base, head, "--"],
@@ -191,8 +184,6 @@ def read_pull_tree(
     """The files git tracks at two commits, the head's empty ones, and the renames between them; the verdict and the
     door read the same. A rename list git finished with anything on its standard error may miss renames (past `-l1000`
     git skips its search and only warns), so it cannot be judged. Only names and sizes are read."""
-    _require_safe_ref(base, "base")
-    _require_safe_ref(head, "head")
     in_repository = ["git", "-C", str(repo.resolve())]
     base_paths, _ = _tracked_at(in_repository, base, env, bound, words)
     head_paths, head_empty = _tracked_at(in_repository, head, env, bound, words)
@@ -201,10 +192,7 @@ def read_pull_tree(
                       words.unrenamed.format(**words_of))
     if listed.stderr:
         raise CannotJudge(words.warned.format(**words_of))
-    try:
-        renames = renames_of(listed.stdout)
-    except CannotJudge:
-        raise CannotJudge(words.unrenamed.format(**words_of)) from None
+    renames = renames_of(listed.stdout)
     return architecture.PullTree(base_paths, head_paths, head_empty, _marked_at(renames, repo, head, env, head_paths) if marks else renames)
 
 
