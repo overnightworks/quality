@@ -559,37 +559,41 @@ It applies these rules:
   (a core module that reaches an adapter is in the reach set, so its own test is red for importing its subject), and a
   test-side fake, which is caught only through a forbidden module it imports.
 - `integration-marker`: a test module outside the core that reaches an adapter carries the `integration` mark in its
-  module `pytestmark`. It judges where `adapter-import` judges, from the same contract read, and without the contract
-  that carries the id it judges nothing and reads no file (INTEGRATION-1). It judges the test modules of
-  ADAPTERIMPORT-4 and 8 that are no core test (ADAPTERIMPORT-5 to 7); a core test belongs to `adapter-import` alone
-  (INTEGRATION-2). A module is adapter-bound when one of its own imports, or one in a support module it imports, is red
-  as ADAPTERIMPORT-9 to 15 say, through the one reach, so a support module that imports an adapter binds every non-core
-  test that uses it (INTEGRATION-3).
+  module `pytestmark`.
+  - INTEGRATION-1: It judges where `adapter-import` judges, from the same contract read, and without the contract that
+    carries the id it judges nothing and reads no file.
+  - INTEGRATION-2: It judges the test modules of ADAPTERIMPORT-4 and 8 that are no core test (ADAPTERIMPORT-5 to 7); a
+    core test belongs to `adapter-import` alone.
+  - INTEGRATION-3: A module is adapter-bound when one of its own imports, or one in a support module it imports, is red
+    as ADAPTERIMPORT-9 to 15 say, through the one reach, so a support module that imports an adapter binds every
+    non-core test that uses it.
 
-  An adapter-bound module is clean only when its one direct module-level `pytestmark` binding, as `pytest_marks` reads
-  it (`docs/commands.md`, FLEET-121), carries `integration`: bare, called, in a list or tuple, or through a module-level
-  alias. pytest applies that mark to every item it collects under the module, so its own tests, inherited and
-  `unittest` suites under any name, and tests it imports, star-imports or binds count with no reading of their own. A
-  mark on a test, on a class or in a class `pytestmark`, and a mark that only a `conftest.py` hook,
-  `pytest.param(marks=…)` or `-m` sets, does not clean the module; a module with no test is judged the same way
-  (INTEGRATION-4). The mark counts only where the project's `pyproject.toml` registers it, as ADAPTERIMPORT-23 reads
-  `imports_adapter`; without the registration every adapter-bound module is unclean, marked or not, its fact ends
-  `integration is not registered` and its fix is `register integration in [tool.pytest.ini_options] markers`
-  (INTEGRATION-5).
+  - INTEGRATION-4: An adapter-bound module is clean only when its one direct module-level `pytestmark` binding, as
+    `pytest_marks` reads it (`docs/commands.md`, FLEET-121), carries `integration`: bare, called, in a list or tuple, or
+    through a module-level alias. pytest applies that mark to every item it collects under the module, so its own tests,
+    inherited and `unittest` suites under any name, and tests it imports, star-imports or binds count with no reading of
+    their own. A mark on a test, on a class or in a class `pytestmark`, and a mark that only a `conftest.py` hook,
+    `pytest.param(marks=…)` or `-m` sets, does not clean the module; a module with no test is judged the same way.
+  - INTEGRATION-5: The mark counts only where the project's `pyproject.toml` registers it, as ADAPTERIMPORT-23 reads
+    `imports_adapter`; without the registration every adapter-bound module is unclean, marked or not, its fact ends
+    `integration is not registered` and its fix is `register integration in [tool.pytest.ini_options] markers`.
 
-  One finding per unclean module, at the line of its first red statement, is an `unmarked` row whose fact names each
-  forbidden module the module's red statements are or reach as ADAPTERIMPORT-16 words them, then `module not marked
-  integration`, as in `imports shop.adapters · module not marked integration`; its fix is `put pytest.mark.integration
-  in the module's one direct pytestmark binding`, which also tells the author of a module that marks its tests one by
-  one, or binds its marks twice or under a condition, what the rule reads (INTEGRATION-6). An `integration` mark on a
-  module that is not adapter-bound is no finding (INTEGRATION-7). A module that does not parse refuses the rules that
-  judge it or are carried by it, and only those: a non-core test refuses `integration-marker`, a core test
-  `adapter-import`, and a support module both rules reach both. The one read serves both rules and carries each rule's
-  refusal, so one rule's refusal never silences the other (INTEGRATION-8). The rule holds no baseline table and knows
-  no exception mark, and a `[[layout.allow]]` entry naming it is refused (INTEGRATION-9). The `integration` mark
-  exempts nothing from `adapter-import`, and `imports_adapter` exempts nothing here (INTEGRATION-10). The
-  [fleet matrix](commands.md#quality-report) cell reads `enforced` when the repository's config holds the contract with
-  the id, `no adapter contract` otherwise (INTEGRATION-11).
+  - INTEGRATION-6: One finding per unclean module, at the line of its first red statement, is an `unmarked` row whose
+    fact names each forbidden module the module's red statements are or reach as ADAPTERIMPORT-16 words them, then
+    `module not marked integration`, as in `imports shop.adapters · module not marked integration`; its fix is `put
+    pytest.mark.integration in the module's one direct pytestmark binding`, which also tells the author of a module that
+    marks its tests one by one, or binds its marks twice or under a condition, what the rule reads.
+  - INTEGRATION-7: An `integration` mark on a module that is not adapter-bound is no finding.
+  - INTEGRATION-8: A module that does not parse refuses the rules that judge it or are carried by it, and only those: a
+    non-core test refuses `integration-marker`, a core test `adapter-import`, and a support module both rules reach
+    both. The one read serves both rules and carries each rule's refusal, so one rule's refusal never silences the
+    other.
+  - INTEGRATION-9: The rule holds no baseline table and knows no exception mark, and a `[[layout.allow]]` entry naming
+    it is refused.
+  - INTEGRATION-10: The `integration` mark exempts nothing from `adapter-import`, and `imports_adapter` exempts nothing
+    here.
+  - INTEGRATION-11: The [fleet matrix](commands.md#quality-report) cell reads `enforced` when the repository's config
+    holds the contract with the id, `no adapter contract` otherwise.
 
   Named gaps, waiting for usage evidence: fixtures a `conftest.py` injects, string imports, `allow_indirect_imports`
   (each red or outside what a static read sees); a `conftest.py` hook or plugin that adds or removes marks or builds
@@ -597,79 +601,100 @@ It applies these rules:
   module's marks that no second binding shows (a star import after the binding that brings a `pytestmark`,
   `globals()`, `global pytestmark` in a nested body, a write through the value), which reads clean while pytest runs
   the tests unmarked. Any other shape of the mark reads as unmarked, so the module is red.
-- `claude-md`: a tracked `CLAUDE.md`, in any case (`claude.md` is named as it is) (CLAUDE-1), holds exactly `@AGENTS.md`
-  with or without a final line feed (CLAUDE-2), so Claude, Codex and Grok read the same guidance, and the repository
-  tracks an `AGENTS.md` beside it (CLAUDE-3). No `CLAUDE.md` is clean, with or without an `AGENTS.md` (CLAUDE-4). A
-  symlink is a finding (a dangling one too) (CLAUDE-5), and so is a tracked `.claude/CLAUDE.md` (CLAUDE-6), which
-  Claude Code reads as project memory and Codex and Grok never read. Any other bytes are a finding, a Windows line
-  ending included (CLAUDE-7); a nested `docs/CLAUDE.md` is not judged (CLAUDE-8). A finding's row names the file and
-  says `claude only` (`.claude/CLAUDE.md`), `symlink`, `diverges` or `no AGENTS.md` (CLAUDE-9), with a fixed fact and a
-  fix in prose that never show its content (CLAUDE-10); every fix is prose with no command (CLAUDE-11), and for a
-  file's own text it says to move the lines into `AGENTS.md`. A tracked file missing from disk is skipped (CLAUDE-12);
-  one the filesystem refuses to read makes the `files` row `✗ not checked` with the reason (exit `2`) (CLAUDE-13). No
-  configuration switches the rule off.
+- `claude-md`:
+  - CLAUDE-1: a tracked `CLAUDE.md`, in any case (`claude.md` is named as it is),
+  - CLAUDE-2: holds exactly `@AGENTS.md` with or without a final line feed,
+  - CLAUDE-3: so Claude, Codex and Grok read the same guidance, and the repository tracks an `AGENTS.md` beside it.
+  - CLAUDE-4: No `CLAUDE.md` is clean, with or without an `AGENTS.md`.
+  - CLAUDE-5: A symlink is a finding (a dangling one too),
+  - CLAUDE-6: and so is a tracked `.claude/CLAUDE.md`, which Claude Code reads as project memory and Codex and Grok
+    never read.
+  - CLAUDE-7: Any other bytes are a finding, a Windows line ending included;
+  - CLAUDE-8: a nested `docs/CLAUDE.md` is not judged.
+  - CLAUDE-9: A finding's row names the file and says `claude only` (`.claude/CLAUDE.md`), `symlink`, `diverges` or `no
+    AGENTS.md`,
+  - CLAUDE-10: with a fixed fact and a fix in prose that never show its content;
+  - CLAUDE-11: every fix is prose with no command, and for a file's own text it says to move the lines into `AGENTS.md`.
+  - CLAUDE-12: A tracked file missing from disk is skipped;
+  - CLAUDE-13: one the filesystem refuses to read makes the `files` row `✗ not checked` with the reason (exit `2`).
+
+  No configuration switches the rule off.
 
   Ruled by the operator: `CLAUDE.md` and `AGENTS.md` never diverge (CLAUDE-7). A finding names only the file
   (CLAUDE-9, CLAUDE-10), and its fix is a sentence, never a command (CLAUDE-11).
 - `agents-md`: the tracked file named exactly `AGENTS.md` at the root has the shape of the document set (write-docs'
-  "Repository document set", which owns it). Line 1 is a title, `# ` and the name of a GitHub repository a configured
-  remote points at; any other first line, an empty file included, is a `title` finding at line 1 (AGENTS-1), and a
-  title that is well formed but equals no such name is one too (AGENTS-12). Between the title and the first
-  `## ` heading only blank lines stand; anything else is a `section` finding at its first line, and a file with a title
-  and no section is clean (AGENTS-2). Every `## ` heading outside a fenced code block (backticks or tildes) is one of
-  `Commands`, `Rules`, `Owners`, `Documents`, exactly spelled, at most once, in that order; another name, a repeat, a
-  heading out of order and a second `# ` heading are `section` findings at their line, and each section may be missing.
-  Headings of level 3 and deeper are no sections (AGENTS-3). The file has at most 100 lines (the last one counts without
-  a line feed; `\n` alone separates lines) and at most 4096 bytes; each limit crossed is a `too long` finding at line 1
-  (AGENTS-4). No root `AGENTS.md` has no shape finding, and a tracked one missing from disk is skipped (AGENTS-5). A
-  finding names fixed words, line numbers, counts, for `missing` the path text of the span, for `title` the repository
-  name a remote gives and, for `misplaced`, `misnamed` and `unused`, the path, never the title or a heading, and its fix
-  is prose with no command (AGENTS-6). A link that leaves the repository, text that is not UTF-8 and a read the
-  filesystem refuses make the `files` row `✗ not checked` with the reason (exit `2`) (AGENTS-7). In `## Documents`, the
-  first backticked span of each line is that document's path; later spans, lines without a span and other sections'
-  backticks are never judged. The section runs to the next `# ` or `## ` heading or the end of the file; a line in a
-  fence is no document line; a second `## Documents` heading starts another run (AGENTS-8). A path passes if it is a
-  tracked file, or a directory with at least one tracked file below it, spelled in exact case; one trailing `/` of a
-  directory is optional and nothing else is normalised. A tracked file missing from disk passes (AGENTS-9). Any other
-  path is a `missing` finding at its line, whatever its form (absolute, `~`, `..`, a scheme, an `@` span, an anchor,
-  an untracked file, a wrong case): fact `<path> is not tracked`, fix "point at a tracked document or delete the line"
-  (AGENTS-10).
-  The check compares text with the tracked listing alone, so no filesystem probe follows text from the file and
-  nothing outside the repository is opened. It accepts any tracked directory; whether that is a directory of the
-  document set whose files are named by their task or contract stays the reviewer's call (AGENTS-11). The title,
-  with blanks around it removed, equals the name part (after `owner/`) of any configured remote's GitHub repository,
-  case ignored; otherwise the `title` finding's fix is "make line 1 `# <name>`" with each such name, joined by "or"
-  (AGENTS-12). A remote counts when its URL, as configured and before any `insteadOf`, is
-  `https://github.com/<owner>/<name>`, `ssh://git@github.com/<owner>/<name>` or `git@github.com:<owner>/<name>`, with
-  at most one trailing `/` and then `.git`, in any case. When `AGENTS.md` is tracked and on disk and no remote counts,
-  the `files` row is `✗ not checked` ("no GitHub remote names this repository", next step "add the repository's GitHub
-  remote", exit `2`) before any finding, so the findings above show once a remote counts; no file, or a tracked one
-  missing from disk, stays clean (AGENTS-13). No printed line holds a remote URL; a URL with credentials counts as no
-  remote (AGENTS-14). The file sits at the root only: a tracked path whose last component is `AGENTS.md` in any case
-  and that is not the root path is a `misplaced` finding at that path, fact "guidance outside the root file", fix "move
-  what an agent needs into the root AGENTS.md or delete it, or declare it in quality/config.toml with
-  [[layout.allow]], its path, the rule agents-md and a reason" (AGENTS-15). A tracked root file named `AGENTS.md` in
-  another case is a `misnamed` finding, fact "the document set's path is exact", fix "rename it to AGENTS.md", and its
-  content is not judged (AGENTS-16). A `[[layout.allow]]` entry with the rule `agents-md` and a nested path stops
-  AGENTS-15 for that path only; an entry for the root `AGENTS.md` is no finding and exempts nothing, and an entry for
-  a root file in another case leaves AGENTS-16 standing (AGENTS-17). An entry with the rule `agents-md` whose path no
-  tracked file has is an `unused` finding as SUFFIX-12 says (AGENTS-18). Placement reads no file and needs no root file
-  or remote: a nested file that is a symlink, gone from disk or not UTF-8 is `misplaced` all the same; when the root
-  file is tracked and on disk and no remote counts, AGENTS-13's refusal covers nested findings too (AGENTS-19). The
-  rule is a layout rule, so its entry is accepted with `rule = "agents-md"`, and a malformed `[layout]` table or entry
-  makes its row `✗ not checked` with the reason and the example, with or without a tracked `AGENTS.md` (AGENTS-20). No
-  configuration switches the rule off.
-- `root-layout`: every entry directly in the root of the tracked tree is on quality's base list or declared (ROOT-1). An
-  entry is a file or a directory (written `frontend/`); a directory with many files is one entry (ROOT-2). Names
-  compare in exact case, and the finding for a name that differs only in case names the base-list spelling (ROOT-3). A
-  file and a directory of one name are two entries (ROOT-4), and a root symlink counts by its own name (ROOT-5). Only
-  tracked files count; a stray left on disk is not judged (ROOT-6). The base list: `README.md AGENTS.md CLAUDE.md
-  HEART.md LICENSE .gitignore .gitattributes .gitmodules pyproject.toml uv.lock .python-version package.json
-  pnpm-lock.yaml package-lock.json Cargo.toml Cargo.lock rust-toolchain.toml Dockerfile .dockerignore compose.yaml
-  compose.yml docker-compose.yaml docker-compose.yml sonar-project.properties .importlinter .pre-commit-config.yaml` and
-  the directories `.github/ .aco/ quality/ src/ tests/ docs/ scripts/` (ROOT-7). It belongs to quality and changes with
-  a quality version; a repository extends it, never shortens it. Each other entry is declared in `quality/config.toml`,
-  one entry and one one-line reason, no pattern and no deeper path (ROOT-8):
+  "Repository document set", which owns it).
+  - AGENTS-1: Line 1 is a title, `# ` and the name of a GitHub repository a configured remote points at; any other first
+    line, an empty file included, is a `title` finding at line 1,
+  - AGENTS-12: and a title that is well formed but equals no such name is one too.
+  - AGENTS-2: Between the title and the first `## ` heading only blank lines stand; anything else is a `section` finding
+    at its first line, and a file with a title and no section is clean.
+  - AGENTS-3: Every `## ` heading outside a fenced code block (backticks or tildes) is one of `Commands`, `Rules`,
+    `Owners`, `Documents`, exactly spelled, at most once, in that order; another name, a repeat, a heading out of order
+    and a second `# ` heading are `section` findings at their line, and each section may be missing. Headings of level 3
+    and deeper are no sections.
+  - AGENTS-4: The file has at most 100 lines (the last one counts without a line feed; `\n` alone separates lines) and
+    at most 4096 bytes; each limit crossed is a `too long` finding at line 1.
+  - AGENTS-5: No root `AGENTS.md` has no shape finding, and a tracked one missing from disk is skipped.
+  - AGENTS-6: A finding names fixed words, line numbers, counts, for `missing` the path text of the span, for `title`
+    the repository name a remote gives and, for `misplaced`, `misnamed` and `unused`, the path, never the title or a
+    heading, and its fix is prose with no command.
+  - AGENTS-7: A link that leaves the repository, text that is not UTF-8 and a read the filesystem refuses make the
+    `files` row `✗ not checked` with the reason (exit `2`).
+  - AGENTS-8: In `## Documents`, the first backticked span of each line is that document's path; later spans, lines
+    without a span and other sections' backticks are never judged. The section runs to the next `# ` or `## ` heading or
+    the end of the file; a line in a fence is no document line; a second `## Documents` heading starts another run.
+  - AGENTS-9: A path passes if it is a tracked file, or a directory with at least one tracked file below it, spelled in
+    exact case; one trailing `/` of a directory is optional and nothing else is normalised. A tracked file missing from
+    disk passes.
+  - AGENTS-10: Any other path is a `missing` finding at its line, whatever its form (absolute, `~`, `..`, a scheme, an
+    `@` span, an anchor, an untracked file, a wrong case): fact `<path> is not tracked`, fix "point at a tracked
+    document or delete the line".
+  - AGENTS-11: The check compares text with the tracked listing alone, so no filesystem probe follows text from the file
+    and nothing outside the repository is opened. It accepts any tracked directory; whether that is a directory of the
+    document set whose files are named by their task or contract stays the reviewer's call.
+  - AGENTS-13: The title, with blanks around it removed, equals the name part (after `owner/`) of any configured
+    remote's GitHub repository, case ignored; otherwise the `title` finding's fix is "make line 1 `# <name>`" with each
+    such name, joined by "or" (AGENTS-12). A remote counts when its URL, as configured and before any `insteadOf`, is
+    `https://github.com/<owner>/<name>`, `ssh://git@github.com/<owner>/<name>` or `git@github.com:<owner>/<name>`, with
+    at most one trailing `/` and then `.git`, in any case. When `AGENTS.md` is tracked and on disk and no remote counts,
+    the `files` row is `✗ not checked` ("no GitHub remote names this repository", next step "add the repository's GitHub
+    remote", exit `2`) before any finding, so the findings above show once a remote counts; no file, or a tracked one
+    missing from disk, stays clean.
+  - AGENTS-14: No printed line holds a remote URL; a URL with credentials counts as no remote.
+  - AGENTS-15: The file sits at the root only: a tracked path whose last component is `AGENTS.md` in any case and that
+    is not the root path is a `misplaced` finding at that path, fact "guidance outside the root file", fix "move what an
+    agent needs into the root AGENTS.md or delete it, or declare it in quality/config.toml with [[layout.allow]], its
+    path, the rule agents-md and a reason".
+  - AGENTS-16: A tracked root file named `AGENTS.md` in another case is a `misnamed` finding, fact "the document set's
+    path is exact", fix "rename it to AGENTS.md", and its content is not judged.
+  - AGENTS-17: A `[[layout.allow]]` entry with the rule `agents-md` and a nested path stops AGENTS-15 for that path
+    only; an entry for the root `AGENTS.md` is no finding and exempts nothing, and an entry for a root file in another
+    case leaves AGENTS-16 standing.
+  - AGENTS-18: An entry with the rule `agents-md` whose path no tracked file has is an `unused` finding as SUFFIX-12
+    says.
+  - AGENTS-19: Placement reads no file and needs no root file or remote: a nested file that is a symlink, gone from disk
+    or not UTF-8 is `misplaced` all the same; when the root file is tracked and on disk and no remote counts,
+    AGENTS-13's refusal covers nested findings too.
+  - AGENTS-20: The rule is a layout rule, so its entry is accepted with `rule = "agents-md"`, and a malformed `[layout]`
+    table or entry makes its row `✗ not checked` with the reason and the example, with or without a tracked `AGENTS.md`.
+
+  No configuration switches the rule off.
+- `root-layout`:
+  - ROOT-1: every entry directly in the root of the tracked tree is on quality's base list or declared.
+  - ROOT-2: An entry is a file or a directory (written `frontend/`); a directory with many files is one entry.
+  - ROOT-3: Names compare in exact case, and the finding for a name that differs only in case names the base-list
+    spelling.
+  - ROOT-4: A file and a directory of one name are two entries,
+  - ROOT-5: and a root symlink counts by its own name.
+  - ROOT-6: Only tracked files count; a stray left on disk is not judged.
+  - ROOT-7: The base list: `README.md AGENTS.md CLAUDE.md HEART.md LICENSE .gitignore .gitattributes .gitmodules
+    pyproject.toml uv.lock .python-version package.json pnpm-lock.yaml package-lock.json Cargo.toml Cargo.lock
+    rust-toolchain.toml Dockerfile .dockerignore compose.yaml compose.yml docker-compose.yaml docker-compose.yml
+    sonar-project.properties .importlinter .pre-commit-config.yaml` and the directories `.github/ .aco/ quality/ src/
+    tests/ docs/ scripts/`.
+  - ROOT-8: It belongs to quality and changes with a quality version; a repository extends it, never shortens it. Each
+    other entry is declared in `quality/config.toml`, one entry and one one-line reason, no pattern and no deeper path:
 
   ```toml
   [[root.allow]]
@@ -677,30 +702,42 @@ It applies these rules:
   reason = "the web client, built apart from the Python package"
   ```
 
-  A declaration that matches no tracked root entry is a finding (ROOT-9); a declaration of a base-list entry that is
-  tracked is clean (ROOT-10). A finding's row names the entry and says `unlisted` (its fact adds the base list's
-  spelling for a name that differs only in case) (ROOT-11) with both ways out in the fix, move it to its owner's
-  directory or declare it with a reason, in prose with no command and no local path (ROOT-12); a declaration that
-  matches no tracked root entry says `unused` (its fact adds the tracked directory for an entry written without its
-  slash) (ROOT-13). Findings are sorted by entry and all printed (ROOT-14). An invalid declaration (a `/` inside the
-  entry, `.`, `..`, `.git`, an empty entry, a multi-line reason, an unknown key, a missing key, an entry that is not
-  text, a `[root]` key other than `allow`, `allow` that is not an array of tables, or one entry declared twice) makes
-  the `files` row `✗ not checked` with the reason, and `next:` shows a `[[root.allow]]` example (ROOT-15).
+  - ROOT-9: A declaration that matches no tracked root entry is a finding;
+  - ROOT-10: a declaration of a base-list entry that is tracked is clean.
+  - ROOT-11: A finding's row names the entry and says `unlisted` (its fact adds the base list's spelling for a name that
+    differs only in case)
+  - ROOT-12: with both ways out in the fix, move it to its owner's directory or declare it with a reason, in prose with
+    no command and no local path;
+  - ROOT-13: a declaration that matches no tracked root entry says `unused` (its fact adds the tracked directory for an
+    entry written without its slash).
+  - ROOT-14: Findings are sorted by entry and all printed.
+  - ROOT-15: An invalid declaration (a `/` inside the entry, `.`, `..`, `.git`, an empty entry, a multi-line reason, an
+    unknown key, a missing key, an entry that is not text, a `[root]` key other than `allow`, `allow` that is not an
+    array of tables, or one entry declared twice) makes the `files` row `✗ not checked` with the reason, and `next:`
+    shows a `[[root.allow]]` example.
 
   Ruled by the operator: any pull request may add a declaration with a reason (ROOT-8); the review judges whether the
   reason holds. A declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry.
 
-  The rule reads names, never content, and writes nothing (ROOT-16). No configuration switches it off (ROOT-17).
-  Named gaps: a submodule in the root counts as a file entry
-  and no case of it is tested; marketplace's refusal of every symlink in the tree stays that repository's own check.
-- `file-suffix`: a tracked file whose basename has no suffix is a finding (SUFFIX-1), unless it is executable (index
-  mode 100755), a symlink (120000) or a gitlink (160000) (SUFFIX-2), its basename is a dotfile, its basename is on
-  quality's list of tool-mandated names (`LICENSE Dockerfile Makefile CODEOWNERS`) (SUFFIX-3), or it is declared
-  (SUFFIX-4). The index (`git ls-files -s`) is the only source of a path's mode and a link is never followed (SUFFIX-5);
-  index data that cannot be read makes the `files` row `✗ not checked` with the reason (exit `2`) (SUFFIX-6). Names
-  compare in exact case, in any folder (SUFFIX-7). The list belongs to quality and changes with a quality version. A
-  file is declared in `quality/config.toml`, a table of its own beside `[[root.allow]]` (SUFFIX-8), one exact tracked
-  path (SUFFIX-9), the rule and a one-line reason:
+  - ROOT-16: The rule reads names, never content, and writes nothing.
+  - ROOT-17: No configuration switches it off.
+
+  Named gaps: a submodule in the root counts as a file entry and no case of it is tested; marketplace's refusal of every
+  symlink in the tree stays that repository's own check.
+- `file-suffix`:
+  - SUFFIX-1: a tracked file whose basename has no suffix is a finding,
+  - SUFFIX-2: unless it is executable (index mode 100755), a symlink (120000) or a gitlink (160000),
+  - SUFFIX-3: its basename is a dotfile, its basename is on quality's list of tool-mandated names (`LICENSE Dockerfile
+    Makefile CODEOWNERS`),
+  - SUFFIX-4: or it is declared.
+  - SUFFIX-5: The index (`git ls-files -s`) is the only source of a path's mode and a link is never followed;
+  - SUFFIX-6: index data that cannot be read makes the `files` row `✗ not checked` with the reason (exit `2`).
+  - SUFFIX-7: Names compare in exact case, in any folder.
+  - SUFFIX-8: The list belongs to quality and changes with a quality version. A file is declared in
+    `quality/config.toml`, a table of its own beside `[[root.allow]]`,
+  - SUFFIX-9: one exact tracked path,
+
+  the rule and a one-line reason:
 
   ```toml
   [[layout.allow]]
@@ -709,194 +746,270 @@ It applies these rules:
   reason = "the deploy script reads it by this name"
   ```
 
-  The rule is `agents-md`, `file-suffix`, `script-name`, `script-header`, `test-layout` or `test-import`; a
-  declaration covers only its own rule (SUFFIX-10), and one `script-name` entry
-  covers both the shape and the location of its path (SUFFIX-11).
-  A declared path that is not tracked is a finding of the declared rule, `unused` (SUFFIX-12), whose fix deletes every
-  `[[layout.allow]]` entry of that path (an untracked path makes each of its entries stale; the fix names no rule); a
-  declaration for a file that already complies is clean (SUFFIX-13). A suffixless file says `tracked` (SUFFIX-14) with
-  both ways out, give it a suffix or declare it, in prose with no command (SUFFIX-15); findings are sorted by path and
-  all printed (SUFFIX-16). The six rules' fixes that ask for an entry end with one clause naming the finding's own rule
-  (SUFFIX-17). A duplicate `(rule, path)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, a leading `./`,
-  an empty component, a blank path, an absolute path, a path that is not text, an unknown rule, an unknown key, a
-  missing key or a reason that is not one-line text makes the `files` row `✗ not checked` with the reason, and `next:`
-  shows a `[[layout.allow]]` example; a malformed `[layout]` table is the same (SUFFIX-18). The rule writes nothing and
-  no configuration switches it off (SUFFIX-19).
+  - SUFFIX-10: The rule is `agents-md`, `file-suffix`, `script-name`, `script-header`, `test-layout` or `test-import`; a
+    declaration covers only its own rule,
+  - SUFFIX-11: and one `script-name` entry covers both the shape and the location of its path.
+  - SUFFIX-12: A declared path that is not tracked is a finding of the declared rule, `unused`,
+  - SUFFIX-13: whose fix deletes every `[[layout.allow]]` entry of that path (an untracked path makes each of its
+    entries stale; the fix names no rule); a declaration for a file that already complies is clean.
+  - SUFFIX-14: A suffixless file says `tracked`
+  - SUFFIX-15: with both ways out, give it a suffix or declare it, in prose with no command;
+  - SUFFIX-16: findings are sorted by path and all printed.
+  - SUFFIX-17: The six rules' fixes that ask for an entry end with one clause naming the finding's own rule.
+  - SUFFIX-18: A duplicate `(rule, path)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, a leading `./`,
+    an empty component, a blank path, an absolute path, a path that is not text, an unknown rule, an unknown key, a
+    missing key or a reason that is not one-line text makes the `files` row `✗ not checked` with the reason, and `next:`
+    shows a `[[layout.allow]]` example; a malformed `[layout]` table is the same.
+  - SUFFIX-19: The rule writes nothing and no configuration switches it off.
 
   Ruled by the operator: quality checks in CI where files sit below the root (`tests/`, `scripts/`, file names).
-- `script-name` and `script-header` judge a script: a tracked file with index mode 100755, whose content starts with
-  `#!`, or that is a `.sh`, `.py` or `.mjs` file under a `scripts/` folder at any depth (`frontend/scripts/` too)
-  (SCRIPT-1). A path with a `tests/` component is never a script (SCRIPT-2), nor is a link (120000, 160000) (SCRIPT-3),
-  nor data beside a script such as `scripts/BACKUP.md` (SCRIPT-4). The mode comes from the index only; the content is
-  read through the repository reader, and a file that cannot be read makes the `files` row `✗ not checked` with the
-  reason (exit 2) (SCRIPT-5). Both rules compare names in exact case, print all findings sorted by path (SCRIPT-6) and
-  have no off switch. A row says `misnamed` where the name's shape breaks the rule (its fact adds the place, when that
-  breaks too), `misplaced` where only the place does, and `no header` for a script without a header (its fact names
-  the window it checks) (SCRIPT-7). A declaration is a `[[layout.allow]]` entry as for `file-suffix`.
-  - `script-name`: a script's basename without its extension is snake_case with at least two words
-    (`run_static_checks.sh`, `verify_release.py`; `check.sh` and `prove-x.py` are red), lower-case letters and digits
-    only (SCRIPT-8), and the script lies under a `scripts/` folder (SCRIPT-9). Tool-mandated basenames and dotfiles are
-    exempt from both (SCRIPT-10). There is no verb list: whether the verb fits stays a judgement for the structure
-    audit.
-  - `script-header`: a comment or docstring stands within the first three non-blank lines (SCRIPT-11) after the shebang
-    and a PEP 723 block (SCRIPT-12); blank lines do not count. Comments are `#`, and `//` or `/*` for `.mjs`
-    (SCRIPT-13). A tool directive (`# shellcheck`, `# -*-`, `# noqa`, `# type:`, `# pyright:`, `# ruff:`, `// eslint`)
-    and code such as `set -euo pipefail` do not count (SCRIPT-14). Presence only, never content (SCRIPT-15).
-- `test-layout` judges what may lie under a Python project's `tests/` and where a frontend test lies. A project is the
-  directory of any tracked `pyproject.toml`, the root or a member at any depth (LAYOUT-1); the file's content is never
-  read, and one inside the `tests/` of another project, of either kind, makes no project (LAYOUT-2). A project is judged
-  when it has a package: a directory directly under `<project>/src/` that holds a tracked `.py` at any depth, with or
-  without `__init__.py` (LAYOUT-3). A project without one, and a `tests/` folder that belongs to no project, are not
-  judged (LAYOUT-4). Under a judged `<project>/tests/` every tracked path is a `test_*.py` (placed and named by the
-  mapping below), a `conftest.py` at any depth, a file in a `support/` or `fixtures/` folder at any depth, or a file in
-  the top-level `tests/e2e/` (LAYOUT-5). An `__init__.py` under `tests/` is red anywhere, `support/` and `e2e/`
-  included, and is data only inside a `fixtures/` folder (LAYOUT-6). A finding names its case, as a `stray` row: an
-  `__init__.py` (delete it, or declare it) or any other file (move it to a `support/` helper folder or a `fixtures/`
-  data folder, or declare it) (LAYOUT-7). A declaration is a `[[layout.allow]]` entry with the rule `test-layout` on an
-  exact tracked path. Paths come from the index and nothing is read from disk; a link or gitlink is judged by its own
-  name and never followed (LAYOUT-8); an index record that cannot be read makes the `files` row `✗ not checked` (exit
-  `2`). Names compare in exact case (LAYOUT-9), all findings print sorted by path (LAYOUT-10) and no configuration
-  switches the rule off. Named gaps, waiting for usage evidence: a `tests/` folder elsewhere (`src/p/tests/`), a project
-  with only `setup.py`, a project whose `src/` holds only modules, and a package named `support` or `fixtures`.
-  Every `test_*.py` outside `fixtures/` and the top-level `e2e/` mirrors the module it tests, one direction
-  (LAYOUT-11). Its folder mirrors a folder of `src/<package>/` (`tests/api/` is `src/<package>/api/` (LAYOUT-12); with
-  several packages `tests/<package>/api/` is `src/<package>/api/` (LAYOUT-13)), and that folder holds a tracked `.py`
-  at any depth (LAYOUT-14). `tests/scripts/` mirrors `<project>/scripts/` (LAYOUT-15) and `tests/workflows/` mirrors
-  the root's `.github/workflows/` (LAYOUT-16), directly and only in the root project (LAYOUT-17); both come before any
-  package name (LAYOUT-18). Each candidate of the mirrored folder has a key: `__x__` reads as `x`, otherwise one
-  leading `_` is dropped (LAYOUT-19); candidates are the `.py` files and the subfolders that hold a `.py` (LAYOUT-20)
-  (in `scripts/` any file and subfolder (LAYOUT-21), in `.github/workflows/` the `.yml` and `.yaml` stems with `-`
-  read as `_` (LAYOUT-22)), and in the top folder of a package also its own name (LAYOUT-23). The test's name,
-  `test_<name>.py`, splits at `_` into words and a word prefix of it, ending at a word boundary, must equal a key
-  exactly (LAYOUT-24); the rest is the aspect, and a name whose first word is empty (`test_.py`, `test__x.py`) has no
-  prefix (LAYOUT-25). A `test_*.py` in a `support/` folder is red (LAYOUT-26). A member's tests map only into the
-  member's own `src/` and `scripts/` (LAYOUT-27). Each case has its own fact and fix (LAYOUT-28), a file that breaks
-  the folder and the name condition together gets one finding with both facts (LAYOUT-29), and every fix ends with
-  declaring the path. A test module that mirrors nothing says `misplaced` (LAYOUT-30), its fact joining the facts by
-  `; ` (LAYOUT-31).
+- `script-name` and `script-header` judge a script:
+  - SCRIPT-1: a tracked file with index mode 100755, whose content starts with `#!`, or that is a `.sh`, `.py` or `.mjs`
+    file under a `scripts/` folder at any depth (`frontend/scripts/` too).
+  - SCRIPT-2: A path with a `tests/` component is never a script,
+  - SCRIPT-3: nor is a link (120000, 160000),
+  - SCRIPT-4: nor data beside a script such as `scripts/BACKUP.md`.
+  - SCRIPT-5: The mode comes from the index only; the content is read through the repository reader, and a file that
+    cannot be read makes the `files` row `✗ not checked` with the reason (exit 2).
+  - SCRIPT-6: Both rules compare names in exact case, print all findings sorted by path and have no off switch.
+  - SCRIPT-7: A row says `misnamed` where the name's shape breaks the rule (its fact adds the place, when that breaks
+    too), `misplaced` where only the place does, and `no header` for a script without a header (its fact names the
+    window it checks).
+
+  A declaration is a `[[layout.allow]]` entry as for `file-suffix`.
+  - `script-name`:
+    - SCRIPT-8: a script's basename without its extension is snake_case with at least two words (`run_static_checks.sh`,
+      `verify_release.py`; `check.sh` and `prove-x.py` are red), lower-case letters and digits only,
+    - SCRIPT-9: and the script lies under a `scripts/` folder.
+    - SCRIPT-10: Tool-mandated basenames and dotfiles are exempt from both.
+
+    There is no verb list: whether the verb fits stays a judgement for the structure audit.
+  - `script-header`:
+    - SCRIPT-11: a comment or docstring stands within the first three non-blank lines
+    - SCRIPT-12: after the shebang and a PEP 723 block; blank lines do not count.
+    - SCRIPT-13: Comments are `#`, and `//` or `/*` for `.mjs`.
+    - SCRIPT-14: A tool directive (`# shellcheck`, `# -*-`, `# noqa`, `# type:`, `# pyright:`, `# ruff:`, `// eslint`)
+      and code such as `set -euo pipefail` do not count.
+    - SCRIPT-15: Presence only, never content.
+- `test-layout` judges what may lie under a Python project's `tests/` and where a frontend test lies.
+  - LAYOUT-1: A project is the directory of any tracked `pyproject.toml`, the root or a member at any depth;
+  - LAYOUT-2: the file's content is never read, and one inside the `tests/` of another project, of either kind, makes no
+    project.
+  - LAYOUT-3: A project is judged when it has a package: a directory directly under `<project>/src/` that holds a
+    tracked `.py` at any depth, with or without `__init__.py`.
+  - LAYOUT-4: A project without one, and a `tests/` folder that belongs to no project, are not judged.
+  - LAYOUT-5: Under a judged `<project>/tests/` every tracked path is a `test_*.py` (placed and named by the mapping
+    below), a `conftest.py` at any depth, a file in a `support/` or `fixtures/` folder at any depth, or a file in the
+    top-level `tests/e2e/`.
+  - LAYOUT-6: An `__init__.py` under `tests/` is red anywhere, `support/` and `e2e/` included, and is data only inside a
+    `fixtures/` folder.
+  - LAYOUT-7: A finding names its case, as a `stray` row: an `__init__.py` (delete it, or declare it) or any other file
+    (move it to a `support/` helper folder or a `fixtures/` data folder, or declare it).
+  - LAYOUT-8: A declaration is a `[[layout.allow]]` entry with the rule `test-layout` on an exact tracked path. Paths
+    come from the index and nothing is read from disk; a link or gitlink is judged by its own name and never followed;
+    an index record that cannot be read makes the `files` row `✗ not checked` (exit `2`).
+  - LAYOUT-9: Names compare in exact case,
+  - LAYOUT-10: all findings print sorted by path and no configuration switches the rule off.
+
+  Named gaps, waiting for usage evidence: a `tests/` folder elsewhere (`src/p/tests/`), a project with only `setup.py`,
+  a project whose `src/` holds only modules, and a package named `support` or `fixtures`.
+
+  - LAYOUT-11: Every `test_*.py` outside `fixtures/` and the top-level `e2e/` mirrors the module it tests, one
+    direction.
+  - LAYOUT-12: Its folder mirrors a folder of `src/<package>/` (`tests/api/` is `src/<package>/api/`;
+  - LAYOUT-13: with several packages `tests/<package>/api/` is `src/<package>/api/`),
+  - LAYOUT-14: and that folder holds a tracked `.py` at any depth.
+  - LAYOUT-15: `tests/scripts/` mirrors `<project>/scripts/`
+  - LAYOUT-16: and `tests/workflows/` mirrors the root's `.github/workflows/`,
+  - LAYOUT-17: directly and only in the root project;
+  - LAYOUT-18: both come before any package name.
+  - LAYOUT-19: Each candidate of the mirrored folder has a key: `__x__` reads as `x`, otherwise one leading `_` is
+    dropped;
+  - LAYOUT-20: candidates are the `.py` files and the subfolders that hold a `.py`
+  - LAYOUT-21: (in `scripts/` any file and subfolder,
+  - LAYOUT-22: in `.github/workflows/` the `.yml` and `.yaml` stems with `-` read as `_`),
+  - LAYOUT-23: and in the top folder of a package also its own name.
+  - LAYOUT-24: The test's name, `test_<name>.py`, splits at `_` into words and a word prefix of it, ending at a word
+    boundary, must equal a key exactly;
+  - LAYOUT-25: the rest is the aspect, and a name whose first word is empty (`test_.py`, `test__x.py`) has no prefix.
+  - LAYOUT-26: A `test_*.py` in a `support/` folder is red.
+  - LAYOUT-27: A member's tests map only into the member's own `src/` and `scripts/`.
+  - LAYOUT-28: Each case has its own fact and fix,
+  - LAYOUT-29: a file that breaks the folder and the name condition together gets one finding with both facts, and every
+    fix ends with declaring the path.
+  - LAYOUT-30: A test module that mirrors nothing says `misplaced`,
+  - LAYOUT-31: its fact joining the facts by `; `.
 
   Ruled by the operator: `tests/` mirrors `src/<package>/` by path (LAYOUT-12, LAYOUT-24), unit and integration tests
   are told apart by a pytest marker, and only `e2e` has its own folder (LAYOUT-5).
 
-  Frontend tests. A frontend project is the directory of any tracked `package.json`, the root or a member at any depth
-  (LAYOUT-32); its content (`workspaces` included) is never read, a `package.json` inside the `tests/` of a project of
-  either kind makes no project, and a test file belongs to its nearest enclosing frontend project (LAYOUT-33). A
-  repository without one is not judged by these rules (LAYOUT-34). Judged files are tracked TypeScript and JavaScript
-  files (the suffixes `size` counts, `.mjs`, `.js` and `.tsx` included) (LAYOUT-35) with a word between the first and
-  the last `.` that is `test`, `spec`, `test-d` or `spec-d` (LAYOUT-36); only the name decides, no `tests/` or
-  `__tests__/` folder does, a link is judged by its name and a gitlink is a folder and never judged (LAYOUT-37). A path
-  under the `tests/` of a Python project with a package is judged by the Python cases only (LAYOUT-38). Sibling: a
-  judged file with no word `spec` is a test, and its base, its name up to the first `.` (LAYOUT-39), or a non-empty
-  prefix of the base that ends before a `-` or `_` or between a lower-case letter or digit and an upper-case letter
-  (LAYOUT-40), must equal the key of a subject in the same folder (LAYOUT-41). A subject is any tracked file there that
-  is no gitlink and carries no test word, whatever its suffix (a symlink counts by its name, a folder never)
-  (LAYOUT-42); its key is its base without a leading `+`, so `page.test.ts` maps to `+page.svelte` (LAYOUT-43). An
-  empty base never matches, and `.test.ts` is red (LAYOUT-44). Spec: a judged file with the word `spec` lies under its
-  project's top-level `e2e/` folder at any depth (LAYOUT-45); other files there are not judged as specs, and a
-  `.test.*` there needs its sibling (LAYOUT-46). A declaration exempts its path from every case (LAYOUT-47). Each case
-  has its own fact and fix: a test with no sibling (move it beside the file it tests and name it `<subject>[<Aspect>]`
-  plus its own tail) and a spec outside `e2e/` (move it into the project's `e2e/`, or name a Vitest test
-  `<subject>.test.<suffix>`); every fix ends with declaring the path; both say `misplaced` (LAYOUT-48), and a test in
-  the repository root names it as the repository root, and one in a nested project's root folder names that folder
-  (LAYOUT-49). `test-layout` judges no `.rs` file and reads no `Cargo.toml`, and Cargo's own layout stands (other rules
-  still read tracked files for a shebang); a `package.json` or `pyproject.toml` inside a Cargo tree makes a project
-  like any other. Named gaps, waiting for usage evidence: a subject that is a
-  folder, an acronym run read as one word (`HTMLParser.test.ts` beside `HTML.ts` is red), a name holding both `test`
-  and `spec` (judged as a spec), a test-named file outside any frontend project, where helpers, setup files and
-  fixtures lie, a test whose subject lies outside its project (declare it), an `e2e/` folder that is its own
-  workspace package (its specs are red), a `package.json` under a `fixtures/` folder outside any `tests/` (a project)
-  and a judged file in a frontend `fixtures/` folder (it needs a sibling).
-- `test-import` judges every Python project, with or without a package, as `test-layout` finds projects (TESTIMPORT-1).
-  The importers are the tracked `.py` files under its `tests/` (TESTIMPORT-2) that are no link (TESTIMPORT-3) and lie in
-  no `fixtures/` folder (TESTIMPORT-4), `support/` modules and `e2e/` drivers included. The targets are the tracked
-  `test_*.py` and `conftest.py` files there, outside `fixtures/` (TESTIMPORT-5) (a link is a target by its name
-  (TESTIMPORT-6)), including a member's or the root's own (TESTIMPORT-7). Every `import` and `from ... import` statement
-  is read, inside a function or under `if TYPE_CHECKING:` too (TESTIMPORT-8). An absolute name is red when its
-  components equal the trailing components of a target's path without `.py`, which covers every `pythonpath` spelling
-  without reading pytest's configuration (`import conftest`, `from tests.test_x import y`, `from e2e.conftest import z`)
-  (TESTIMPORT-9); a `from M import a` checks `M` and `M.a`, so `from tests import conftest` is red and
-  `from tests.support.x import test_helper` is not (TESTIMPORT-10). A relative name resolves against the importer's
-  folder and must equal a target's path (TESTIMPORT-11). A plain `e2e/` driver may import another (TESTIMPORT-12). One
-  finding per statement, at `path:line` (TESTIMPORT-13), says `test import` and names each target it imports
-  (TESTIMPORT-14); the fix is a `support/` module or a fixture in `conftest.py`, or a `[[layout.allow]]` entry with the
-  rule `test-import` on the importer's path, which exempts all its imports (TESTIMPORT-15) (an untracked declared path
-  is a finding; a `test-layout` declaration does not cover it). Importers are decoded as Python 3.14 reads source and
-  parsed (TESTIMPORT-16): a file that does not parse (`<path> is not valid Python (...)`) (TESTIMPORT-17) or cannot be
-  read (TESTIMPORT-18) makes the `files` row `✗ not checked` with the reason (exit 2); no other file is read
-  (TESTIMPORT-19). All findings print sorted by path and line (TESTIMPORT-20) and no configuration switches the rule
-  off. Not read, and waiting for usage evidence: string imports (`importlib.import_module`, `__import__`,
+  Frontend tests.
+
+  - LAYOUT-32: A frontend project is the directory of any tracked `package.json`, the root or a member at any depth;
+  - LAYOUT-33: its content (`workspaces` included) is never read, a `package.json` inside the `tests/` of a project of
+    either kind makes no project, and a test file belongs to its nearest enclosing frontend project.
+  - LAYOUT-34: A repository without one is not judged by these rules.
+  - LAYOUT-35: Judged files are tracked TypeScript and JavaScript files (the suffixes `size` counts, `.mjs`, `.js` and
+    `.tsx` included)
+  - LAYOUT-36: with a word between the first and the last `.` that is `test`, `spec`, `test-d` or `spec-d`;
+  - LAYOUT-37: only the name decides, no `tests/` or `__tests__/` folder does, a link is judged by its name and a
+    gitlink is a folder and never judged.
+  - LAYOUT-38: A path under the `tests/` of a Python project with a package is judged by the Python cases only.
+  - LAYOUT-39: Sibling: a judged file with no word `spec` is a test, and its base, its name up to the first `.`,
+  - LAYOUT-40: or a non-empty prefix of the base that ends before a `-` or `_` or between a lower-case letter or digit
+    and an upper-case letter,
+  - LAYOUT-41: must equal the key of a subject in the same folder.
+  - LAYOUT-42: A subject is any tracked file there that is no gitlink and carries no test word, whatever its suffix (a
+    symlink counts by its name, a folder never);
+  - LAYOUT-43: its key is its base without a leading `+`, so `page.test.ts` maps to `+page.svelte`.
+  - LAYOUT-44: An empty base never matches, and `.test.ts` is red.
+  - LAYOUT-45: Spec: a judged file with the word `spec` lies under its project's top-level `e2e/` folder at any depth;
+  - LAYOUT-46: other files there are not judged as specs, and a `.test.*` there needs its sibling.
+  - LAYOUT-47: A declaration exempts its path from every case.
+  - LAYOUT-48: Each case has its own fact and fix: a test with no sibling (move it beside the file it tests and name it
+    `<subject>[<Aspect>]` plus its own tail) and a spec outside `e2e/` (move it into the project's `e2e/`, or name a
+    Vitest test `<subject>.test.<suffix>`); every fix ends with declaring the path; both say `misplaced`,
+  - LAYOUT-49: and a test in the repository root names it as the repository root, and one in a nested project's root
+    folder names that folder.
+
+  `test-layout` judges no `.rs` file and reads no `Cargo.toml`, and Cargo's own layout stands (other rules still read
+  tracked files for a shebang); a `package.json` or `pyproject.toml` inside a Cargo tree makes a project like any other.
+  Named gaps, waiting for usage evidence: a subject that is a folder, an acronym run read as one word
+  (`HTMLParser.test.ts` beside `HTML.ts` is red), a name holding both `test` and `spec` (judged as a spec), a test-named
+  file outside any frontend project, where helpers, setup files and fixtures lie, a test whose subject lies outside its
+  project (declare it), an `e2e/` folder that is its own workspace package (its specs are red), a `package.json` under a
+  `fixtures/` folder outside any `tests/` (a project) and a judged file in a frontend `fixtures/` folder (it needs a
+  sibling).
+- `test-import` judges:
+  - TESTIMPORT-1: every Python project, with or without a package, as `test-layout` finds projects.
+  - TESTIMPORT-2: The importers are the tracked `.py` files under its `tests/`
+  - TESTIMPORT-3: that are no link
+  - TESTIMPORT-4: and lie in no `fixtures/` folder,
+  - TESTIMPORT-5: `support/` modules and `e2e/` drivers included. The targets are the tracked `test_*.py` and
+    `conftest.py` files there, outside `fixtures/`
+  - TESTIMPORT-6: (a link is a target by its name),
+  - TESTIMPORT-7: including a member's or the root's own.
+  - TESTIMPORT-8: Every `import` and `from ... import` statement is read, inside a function or under `if TYPE_CHECKING:`
+    too.
+  - TESTIMPORT-9: An absolute name is red when its components equal the trailing components of a target's path without
+    `.py`, which covers every `pythonpath` spelling without reading pytest's configuration (`import conftest`, `from
+    tests.test_x import y`, `from e2e.conftest import z`);
+  - TESTIMPORT-10: a `from M import a` checks `M` and `M.a`, so `from tests import conftest` is red and `from
+    tests.support.x import test_helper` is not.
+  - TESTIMPORT-11: A relative name resolves against the importer's folder and must equal a target's path.
+  - TESTIMPORT-12: A plain `e2e/` driver may import another.
+  - TESTIMPORT-13: One finding per statement, at `path:line`,
+  - TESTIMPORT-14: says `test import` and names each target it imports;
+  - TESTIMPORT-15: the fix is a `support/` module or a fixture in `conftest.py`, or a `[[layout.allow]]` entry with the
+    rule `test-import` on the importer's path, which exempts all its imports
+  - TESTIMPORT-16: (an untracked declared path is a finding; a `test-layout` declaration does not cover it). Importers
+    are decoded as Python 3.14 reads source and parsed:
+  - TESTIMPORT-17: a file that does not parse (`<path> is not valid Python (...)`)
+  - TESTIMPORT-18: or cannot be read
+  - TESTIMPORT-19: makes the `files` row `✗ not checked` with the reason (exit 2); no other file is read.
+  - TESTIMPORT-20: All findings print sorted by path and line and no configuration switches the rule off.
+
+  Not read, and waiting for usage evidence: string imports (`importlib.import_module`, `__import__`,
   `pytest.importorskip`), `pytest_plugins`, `sys.path` edits, `runpy`, source passed to a subprocess with `-c`, and
   `*_test.py` as a target. An import whose name matches a tracked test module is reported even when it means a
   third-party module; rename the test module or declare the importer.
-- `python-floor` judges every tracked `pyproject.toml` that `test-layout` finds as a project (the root or a member at
-  any depth, none inside another project's `tests/`) (FLOOR-1) and that holds a `[project]` table; one with only
-  `[tool.*]` tables, or with `project` as a value, is not judged (FLOOR-2), and a gitlink is never entered (FLOOR-3).
-  The floor is the highest lower bound among the `requires-python` clauses `>=`, `>`, `~=`, `==` and `===`, read with
-  `packaging` (FLOOR-4); a trailing `.*` is dropped (`==3.14.*` is 3.14, `==3.*` is 3) (FLOOR-5), `!=`, `<` and `<=` set
-  none (FLOOR-6), and `>3.13` counts as 3.13 (FLOOR-7). The file is clean from a floor of 3.14: `>=3.14`,
-  `>=3.14,<3.15`, `~=3.14`, `==3.14.*` and `>=3.15` pass (FLOOR-8); `>=3.12`, `>=3.11,<3.15`, `>3.13`, `>=3.14.0rc1`,
-  `<3.15`, an empty value, `dynamic = ["requires-python"]` and a missing `requires-python` are red (FLOOR-9) (the last
-  four name no floor (FLOOR-10)). One finding per file, at its path (FLOOR-11), says `below floor` (its fact names the
-  value and the floor) (FLOOR-12) or `no floor` (the value, which sets no lower bound) (FLOOR-13), with the fix: raise
-  `requires-python` to `>=3.14` (FLOOR-14) and move CI, `.python-version`, Dockerfiles and ruff's `target-version` with
-  it, or declare the file.
-  A `[[python.allow]]` entry with exactly a `path` (the exact tracked path of the `pyproject.toml`, no folder, pattern
-  or `..` (FLOOR-15)) and a one-line `reason` (FLOOR-16), one per path (FLOOR-17), makes that file clean (FLOOR-18); its
-  own table, because the exception is meant to end. Each allowed file stands as a `· <path>  allowed  <fact> · <reason>`
-  [row](output.md#notes) under the files row, after the area's findings (FLOOR-19). An entry whose path is no judged
-  file (untracked, gone, without `[project]`) or whose file is already at the floor says `unused` (FLOOR-20); its fix is
-  to delete the entry (FLOOR-21). A candidate that is not UTF-8
-  TOML, or whose `requires-python` is no string, makes the `files` row [`✗ not checked`](output.md#refusals) (exit 2)
-  with its own reason (FLOOR-22). A `requires-python` that is no PEP 440 specifier set or holds a `===` clause with a
-  version that is not PEP 440 (`===foobar`) makes it `✗ not checked` with
-  `<path> has a requires-python quality cannot read` (exit 2) (FLOOR-23); that reason holds no part of the value
-  (FLOOR-24). No configuration switches the rule off. Only `requires-python` is read, because uv and pip refuse an
-  interpreter outside it, so a
-  leftover setter cannot install the project on old Python. Not read, and waiting for usage evidence: workflows,
-  `.python-version`, Dockerfiles, ruff's `target-version`, `setup.py`, `setup.cfg` and Poetry's `[tool.poetry]`; `!=` as
-  a floor (`>=3.13,!=3.13.*` is red although it admits only 3.14 and up); a job that never installs the project, which
-  runs old Python unnoticed; `uv sync` behind an older setup-python, which fetches 3.14 and leaves a stale setter; and a
-  Python project without a `pyproject.toml`.
+- `python-floor` judges:
+  - FLOOR-1: every tracked `pyproject.toml` that `test-layout` finds as a project (the root or a member at any depth,
+    none inside another project's `tests/`)
+  - FLOOR-2: and that holds a `[project]` table; one with only `[tool.*]` tables, or with `project` as a value, is not
+    judged,
+  - FLOOR-3: and a gitlink is never entered.
+  - FLOOR-4: The floor is the highest lower bound among the `requires-python` clauses `>=`, `>`, `~=`, `==` and `===`,
+    read with `packaging`;
+  - FLOOR-5: a trailing `.*` is dropped (`==3.14.*` is 3.14, `==3.*` is 3),
+  - FLOOR-6: `!=`, `<` and `<=` set none,
+  - FLOOR-7: and `>3.13` counts as 3.13.
+  - FLOOR-8: The file is clean from a floor of 3.14: `>=3.14`, `>=3.14,<3.15`, `~=3.14`, `==3.14.*` and `>=3.15` pass;
+  - FLOOR-9: `>=3.12`, `>=3.11,<3.15`, `>3.13`, `>=3.14.0rc1`, `<3.15`, an empty value, `dynamic = ["requires-python"]`
+    and a missing `requires-python` are red
+  - FLOOR-10: (the last four name no floor).
+  - FLOOR-11: One finding per file, at its path,
+  - FLOOR-12: says `below floor` (its fact names the value and the floor)
+  - FLOOR-13: or `no floor` (the value, which sets no lower bound),
+  - FLOOR-14: with the fix: raise `requires-python` to `>=3.14` and move CI, `.python-version`, Dockerfiles and ruff's
+    `target-version` with it, or declare the file.
+  - FLOOR-15: A `[[python.allow]]` entry with exactly a `path` (the exact tracked path of the `pyproject.toml`, no
+    folder, pattern or `..`)
+  - FLOOR-16: and a one-line `reason`,
+  - FLOOR-17: one per path,
+  - FLOOR-18: makes that file clean; its own table, because the exception is meant to end.
+  - FLOOR-19: Each allowed file stands as a `· <path> allowed <fact> · <reason>` [row](output.md#notes) under the files
+    row, after the area's findings.
+  - FLOOR-20: An entry whose path is no judged file (untracked, gone, without `[project]`) or whose file is already at
+    the floor says `unused`;
+  - FLOOR-21: its fix is to delete the entry.
+  - FLOOR-22: A candidate that is not UTF-8 TOML, or whose `requires-python` is no string, makes the `files` row [`✗ not
+    checked`](output.md#refusals) (exit 2) with its own reason.
+  - FLOOR-23: A `requires-python` that is no PEP 440 specifier set or holds a `===` clause with a version that is not
+    PEP 440 (`===foobar`) makes it `✗ not checked` with `<path> has a requires-python quality cannot read` (exit 2);
+  - FLOOR-24: that reason holds no part of the value.
+
+  No configuration switches the rule off. Only `requires-python` is read, because uv and pip refuse an interpreter
+  outside it, so a leftover setter cannot install the project on old Python. Not read, and waiting for usage evidence:
+  workflows, `.python-version`, Dockerfiles, ruff's `target-version`, `setup.py`, `setup.cfg` and Poetry's
+  `[tool.poetry]`; `!=` as a floor (`>=3.13,!=3.13.*` is red although it admits only 3.14 and up); a job that never
+  installs the project, which runs old Python unnoticed; `uv sync` behind an older setup-python, which fetches 3.14 and
+  leaves a stale setter; and a Python project without a `pyproject.toml`.
 
   Ruled by the operator: every tracked `pyproject.toml` that `test-layout` finds as a project is judged, the root and
   each member alike (FLOOR-1).
-- `naming` judges the names a repository writes itself against its stem, the repository name of the remote called
-  `origin`, as [naming.md](naming.md) rules (NAMING-1). Only `origin` gives the stem, while `agents-md` keeps reading
-  every remote; a remote counts as AGENTS-13 says (NAMING-2). Every finding's fact says `read from remote origin` after
-  the stem, so a clone that a rename left behind shows it; re-pointing `origin` is its fix (NAMING-3). A checkout with
-  no GitHub `origin`, whatever files it tracks, makes the `files` row [`✗ not checked`](output.md#refusals) ("no GitHub
-  remote called origin names this repository", next step "add the repository's GitHub remote as origin", exit `2`),
-  because the repository's own name is always judged (NAMING-4).
-  Every tracked `pyproject.toml` that `test-layout` finds as a project (the root or a member at any depth) and that
-  holds a `[project]` table is judged, a gitlink never entered; a file with `tests`, `fixtures` or `node_modules` among its
-  folders is no project's own and is not judged (NAMING-5). Its `name`, after PEP 503 normalisation, is
-  `overnightworks-<stem>` or `overnightworks-<stem>-<component>`; under `[tool.uv] package = false` the bare `<stem>` or
-  `<stem>-<component>` is also accepted (NAMING-6). Each import package under its `src/` is `<stem>` or
-  `<stem>_<component>`, each `-` of the stem written `_` (NAMING-7); each name in `[project.scripts]` is `<stem>` or
-  `<stem>-<component>` (NAMING-8). A component is one or more words of lower-case letters and digits, joined by `-` or,
-  for an import, `_` (NAMING-9); imports, commands and npm names compare exactly (NAMING-10). The `name` of each tracked
-  `package.json` outside those folders is
-  `overnightworks-<stem>[-<component>]`, `<stem>[-<component>]` or `slidev-addon-<stem>` (NAMING-11); a manifest with
-  no name has nothing to judge (NAMING-12). The repository's own name is red with a capital or with a role suffix
-  (`-runtime`, `-service`, `-client`, `-server`, `-lib`, `-sdk`, `-api`), at `.git/config`, whatever files it tracks
-  (NAMING-13). `sonar.projectKey` stays SONAR-59's.
-  One finding per name, `misnamed`, at its file, says the kind (`distribution`, `import`, `CLI`, `npm` or `repository`),
-  the name found and the stem, and its fix names the accepted forms (NAMING-14); they print sorted by path (NAMING-15).
-  A deviation is an entry of `src/quality/naming_deviations.toml` (repository, kind, name, the item holding the
-  operator's ruling) and covers exactly that name of that kind in that repository, a distribution compared after PEP 503
-  (NAMING-16). The file is quality's: no `quality/config.toml` table, `[[layout.allow]]` or `[[gate.loosened]]` declares
-  one, and a new entry takes effect with a quality release (NAMING-17); [naming.md](naming.md) lists the entries
-  (NAMING-18). A `pyproject.toml` that is not UTF-8 TOML, a `package.json` that is not UTF-8 JSON and a `name` that is no
-  string make the `files` row `✗ not checked` with the file and its reason (exit `2`) (NAMING-19). Not read, and waiting
-  for usage evidence: import clashes with a third party's package, plugin manifests, a Dockerfile's or a workflow's
-  names; forks and archived repositories are outside the coverage and the rule detects neither, so a fork that calls
-  the gate carries a deviation (NAMING-20). No configuration switches the rule off. It first ships in v0.23.0, so a gate pinned
-  below that release shows `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `enforced` (FLEET-18).
+- `naming` judges:
+  - NAMING-1: the names a repository writes itself against its stem, the repository name of the remote called `origin`,
+    as [naming.md](naming.md) rules.
+  - NAMING-2: Only `origin` gives the stem, while `agents-md` keeps reading every remote; a remote counts as AGENTS-13
+    says.
+  - NAMING-3: Every finding's fact says `read from remote origin` after the stem, so a clone that a rename left behind
+    shows it; re-pointing `origin` is its fix.
+  - NAMING-4: A checkout with no GitHub `origin`, whatever files it tracks, makes the `files` row [`✗ not
+    checked`](output.md#refusals) ("no GitHub remote called origin names this repository", next step "add the
+    repository's GitHub remote as origin", exit `2`), because the repository's own name is always judged.
+  - NAMING-5: Every tracked `pyproject.toml` that `test-layout` finds as a project (the root or a member at any depth)
+    and that holds a `[project]` table is judged, a gitlink never entered; a file with `tests`, `fixtures` or
+    `node_modules` among its folders is no project's own and is not judged.
+  - NAMING-6: Its `name`, after PEP 503 normalisation, is `overnightworks-<stem>` or
+    `overnightworks-<stem>-<component>`; under `[tool.uv] package = false` the bare `<stem>` or `<stem>-<component>` is
+    also accepted.
+  - NAMING-7: Each import package under its `src/` is `<stem>` or `<stem>_<component>`, each `-` of the stem written
+    `_`;
+  - NAMING-8: each name in `[project.scripts]` is `<stem>` or `<stem>-<component>`.
+  - NAMING-9: A component is one or more words of lower-case letters and digits, joined by `-` or, for an import, `_`;
+  - NAMING-10: imports, commands and npm names compare exactly.
+  - NAMING-11: The `name` of each tracked `package.json` outside those folders is `overnightworks-<stem>[-<component>]`,
+    `<stem>[-<component>]` or `slidev-addon-<stem>`;
+  - NAMING-12: a manifest with no name has nothing to judge.
+  - NAMING-13: The repository's own name is red with a capital or with a role suffix (`-runtime`, `-service`, `-client`,
+    `-server`, `-lib`, `-sdk`, `-api`), at `.git/config`, whatever files it tracks.
+
+  `sonar.projectKey` stays SONAR-59's.
+
+  - NAMING-14: One finding per name, `misnamed`, at its file, says the kind (`distribution`, `import`, `CLI`, `npm` or
+    `repository`), the name found and the stem, and its fix names the accepted forms;
+  - NAMING-15: they print sorted by path.
+  - NAMING-16: A deviation is an entry of `src/quality/naming_deviations.toml` (repository, kind, name, the item holding
+    the operator's ruling) and covers exactly that name of that kind in that repository, a distribution compared after
+    PEP 503.
+  - NAMING-17: The file is quality's: no `quality/config.toml` table, `[[layout.allow]]` or `[[gate.loosened]]` declares
+    one, and a new entry takes effect with a quality release;
+  - NAMING-18: [naming.md](naming.md) lists the entries.
+  - NAMING-19: A `pyproject.toml` that is not UTF-8 TOML, a `package.json` that is not UTF-8 JSON and a `name` that is
+    no string make the `files` row `✗ not checked` with the file and its reason (exit `2`).
+  - NAMING-20: Not read, and waiting for usage evidence: import clashes with a third party's package, plugin manifests,
+    a Dockerfile's or a workflow's names; forks and archived repositories are outside the coverage and the rule detects
+    neither, so a fork that calls the gate carries a deviation.
+
+  No configuration switches the rule off. It first ships in v0.23.0, so a gate pinned below that release shows `not in
+  <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `enforced` (FLEET-18).
 
   Ruled by the operator: coverage is every non-archived repository of the organisation except forks, private ones
-  included, and a new repository conforms from its first pull request. The rule ships as `Switch.ALWAYS` in its first
-  release with no report-only phase, and no deviation entry, held baseline table or `[[gate.loosened]]` entry covers a
-  name red when it ships (NAMING-21).
+  included, and a new repository conforms from its first pull request.
+
+  - NAMING-21: The rule ships as `Switch.ALWAYS` in its first release with no report-only phase, and no deviation entry,
+    held baseline table or `[[gate.loosened]]` entry covers a name red when it ships.
 - `python-security` judges every tracked regular `.py` file in any directory with the `S` codes of quality's own ruff
   (SECURITY-1) (an exact pin in quality's `pyproject.toml` that serves its own lint too): the ruff binary of quality's
   installation, never one on `PATH` (SECURITY-2), at [the pinned version](commands.md#scanners), runs `ruff check
