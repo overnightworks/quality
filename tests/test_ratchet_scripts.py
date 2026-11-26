@@ -208,31 +208,46 @@ def test_a_css_file_of_800_lines_is_new_debt_with_no_function_entry(build_repo, 
     assert (code, finding.path, finding.event, finding.line) == (1, "src/app.css", FindingEvent.NEW_DEBT, None), output
 
 
-NOT_UTF8_SCRIPT = b"export const a = '\xe9';\n"
+NESTED = "(" * 5_000 + "1" + ")" * 5_000
+UNREADABLE_SCRIPTS = pytest.mark.parametrize(
+    ("name", "source", "reason"),
+    [
+        ("src/api.ts", b"export const a = '\xe9';\n", "not UTF-8"),
+        ("src/api.ts", f"export function f() {{\n  return {NESTED};\n}}\n".encode(), "nested too deeply to read"),
+        ("src/api.js", f"function f() {{\n  return {NESTED};\n}}\n".encode(), "nested too deeply to read"),
+        ("src/Page.vue", f"<script>\nfunction f() {{\n  return {NESTED};\n}}\n</script>\n".encode(), "nested too deeply to read"),
+        ("src/Page.svelte", f"<script>\nfunction f() {{\n  return {NESTED};\n}}\n</script>\n".encode(), "nested too deeply to read"),
+    ],
+    ids=["not-utf-8", "typescript-nested", "javascript-nested", "vue-nested", "svelte-nested"],
+)
 
 
 @pytest.mark.integration
-def test_without_a_baseline_the_size_rule_notes_a_script_file_that_is_not_utf8(build_repo, capsys):
-    """C4, SIZE-9: with no baseline a script file that is not UTF-8 is a note `not UTF-8`; the verdict is unchanged."""
-    repo = build_repo_with_source(build_repo, {"src/ok.py": "x = 1\n"}, "src/api.ts", NOT_UTF8_SCRIPT)
+@UNREADABLE_SCRIPTS
+def test_without_a_baseline_the_size_rule_notes_an_unreadable_script_file(build_repo, capsys, name, source, reason):
+    """C4, SIZE-9: with no baseline a script file that is not UTF-8 or nested too deeply to read is a note naming the
+    reason; the verdict is unchanged."""
+    repo = build_repo_with_source(build_repo, {"src/ok.py": "x = 1\n"}, name, source)
     code, output = run(capsys, repo)
     (note,) = rule_notes(repo, Rule.SIZE)
-    assert (code, note.path, note.event, note.fact) == (0, "src/api.ts", NoteEvent.NOT_MEASURED, "not UTF-8"), output
+    assert (code, note.path, note.event, note.fact) == (0, name, NoteEvent.NOT_MEASURED, reason), output
 
 
 @pytest.mark.integration
-def test_against_a_baseline_a_script_file_that_is_not_utf8_is_unparsable(build_repo, capsys):
+@UNREADABLE_SCRIPTS
+def test_against_a_baseline_an_unreadable_script_file_is_unparsable(build_repo, capsys, name, source, reason):
     """C4, SIZE-10: with a baseline such a file makes the debt row `✗ not checked`, naming it, exit 2."""
-    repo = build_repo_with_source(build_repo, {BASELINE_PATH: EMPTY_BASELINE}, "src/api.ts", NOT_UTF8_SCRIPT)
+    repo = build_repo_with_source(build_repo, {BASELINE_PATH: EMPTY_BASELINE}, name, source)
     code, output = run(capsys, repo)
     assert code == 2
-    assert f"{refusal_row('debt')}src/api.ts is not UTF-8" in output
+    assert f"{refusal_row('debt')}{name} is {reason}" in output
 
 
 @pytest.mark.integration
-def test_a_fix_refuses_a_script_file_that_is_not_utf8_and_writes_nothing(build_repo, capsys):
+@UNREADABLE_SCRIPTS
+def test_a_fix_refuses_an_unreadable_script_file_and_writes_nothing(build_repo, capsys, name, source, reason):
     """C4, SIZE-11: a fix refuses such a file with `✗ not fixed`, exit 2, writing no baseline."""
-    repo = build_repo_with_source(build_repo, {}, "src/api.ts", NOT_UTF8_SCRIPT)
+    repo = build_repo_with_source(build_repo, {}, name, source)
     assert door_in(repo, *FIX_WORDS) == 2
-    assert f"{refusal_row('debt', 'not fixed')}src/api.ts is not UTF-8" in capsys.readouterr().out
+    assert f"{refusal_row('debt', 'not fixed')}{name} is {reason}" in capsys.readouterr().out
     assert not (repo / BASELINE_PATH).exists()

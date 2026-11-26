@@ -140,14 +140,15 @@ It applies these rules:
   Without `quality/baseline.toml` the [debt row](output.md#area-rows) is
   `· debt  not recorded  N entries over the thresholds · measured only`, N the size entries over the thresholds that
   quality measured (a declared file left out); it equals what a first `quality check --fix` records only when every
-  Python file parses and every script file is UTF-8, otherwise that fix refuses (SIZE-6). The size debt leaves the exit unchanged (SIZE-7). The
+  Python file parses and every script file is UTF-8 and not nested too deeply to read, otherwise that fix refuses (SIZE-6). The size debt leaves the exit unchanged (SIZE-7). The
   per-class and language counts leave `check`; the report keeps them.
   A `.py` file is read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding)
-  (SIZE-8). One Python 3.14 cannot decode or parse is named as not valid Python, and a script file that is not UTF-8
-  as `not UTF-8`: without a baseline it stands as a
+  (SIZE-8). One Python 3.14 cannot decode or parse (nesting past the interpreter's recursion limit included) is named as not valid
+  Python, and a script file that is not UTF-8 as `not UTF-8` or that lizard cannot read for its nesting as
+  `nested too deeply to read`: without a baseline it stands as a
   [note row](output.md#notes) under the debt row (`· bad.py  not measured  not valid Python`) and the size verdict is
   unchanged (SIZE-9), while `python-security` judges the file unparsable or cannot judge it (exit `2`); with a baseline
-  the `debt` row is `✗ not checked` with `bad.py is not valid Python (...)` or `bad.ts is not UTF-8` (SIZE-10), and `quality check --fix`
+  the `debt` row is `✗ not checked` with `bad.py is not valid Python (...)`, `bad.ts is not UTF-8` or `bad.ts is nested too deeply to read` (SIZE-10), and `quality check --fix`
   refuses the same way, writing nothing; both exit `2`. Only where no baseline is held does `--fix` refuse with
   `✗ not fixed`, since only recording the first ceiling is refused (SIZE-11). A tracked file the operating system
   refuses to read makes the `debt` row `✗ not checked` with or without a baseline, and `quality check --fix` refuses

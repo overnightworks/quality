@@ -223,7 +223,7 @@ that cannot check is `✗ <area>  not checked  <reason>` ([Refusals](#refusals))
 - ROW-16: with no `fix:` of its own.
 
 Its events are `allowed` (file rules,
-dependencies, secrets and python-print), `open` (logging, test-twin, spec-citation), `not measured` (a Python file the size rule cannot parse or a script file that is not UTF-8, without a ceiling
+dependencies, secrets and python-print), `open` (logging, test-twin, spec-citation), `not measured` (a Python file the size rule cannot parse or a script file that is not UTF-8 or nested too deeply to read, without a ceiling
 file; O22), `unused` and `warning` (import-contract) and `unused` (secret). An allowed advisory and an honoured output
 owner stand as notes, and the clean row counts them (O15, O49):
 
