@@ -7,7 +7,7 @@ nested deeper than the interpreter recurses raises `RecursionError`, which lizar
 and swallow, returning the functions read so far.
 """
 
-from collections import Counter
+from collections import Counter, deque
 from dataclasses import dataclass
 
 import lizard
@@ -32,8 +32,7 @@ class _StrictFileAnalyzer(FileAnalyzer):
         tokens = reader.generate_tokens(code)
         for processor in self.processors:
             tokens = processor(tokens, reader)
-        for _ in reader(tokens, reader):
-            pass
+        deque(reader(tokens, reader), maxlen=0)
         return context.fileinfo
 
 
