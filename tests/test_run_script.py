@@ -1,6 +1,15 @@
 import pytest
 
-from quality.run_script import ScriptLine, Tool, logical_lines, segments, tool_arguments, with_env_strings_split
+from quality.run_script import (
+    LineReading,
+    ScriptLine,
+    Tool,
+    command_words,
+    line_problems,
+    logical_lines,
+    segments,
+    tool_arguments,
+)
 
 PYTEST = Tool(commands=frozenset({"pytest", "py.test"}), module="pytest")
 PLAYWRIGHT = Tool(commands=frozenset({"playwright"}), module="playwright")
@@ -132,13 +141,20 @@ def test_a_line_ending_in_a_backslash_is_one_command_from_its_first_line(physica
 
 
 @pytest.mark.parametrize(
-    ("words", "expected"),
+    ("text", "expected"),
     [
-        (["env", "-S", "a b", "c"], ["env", "a", "b", "c"]),
-        (["env", "-S"], ["env"]),
+        ("env -S 'pytest -q' tests", [("-q", "tests")]),
+        ("env -S", []),
     ],
     ids=["the value is split in place", "a flag without a value"],
 )
-def test_the_value_of_env_s_is_read_as_the_words_it_splits_into(words, expected):
+def test_the_value_of_env_s_is_read_as_the_words_it_splits_into(text, expected):
     """PYTEST-3."""
-    assert with_env_strings_split(words) == expected
+    reading = LineReading(
+        judge=lambda parts, index: tool_arguments(command_words(parts[index]), PYTEST),
+        starts_call=lambda words: False,
+        holds_hidden_word=lambda text: False,
+        unreadable=(),
+        built_at_run_time=(),
+    )
+    assert list(line_problems(text, reading, False)) == expected

@@ -429,8 +429,9 @@ def test_a_failed_unzip_leaves_neither_the_scanner_nor_the_marker(scene, drive):
         ((), ((f"{FOLDER}/l", "x"), (f"{FOLDER}/l", "../../outside"))),
         (((f"{FOLDER}/bin/sonar-scanner", "x"),), ()),
         ((), ((f"{FOLDER}/lib/dotted", "./../../x"),)),
+        ((), ((f"{FOLDER}/lib/blank", "..//../x"),)),
     ],
-    ids=["symlink out of the folder", "symlink out through a link to the parent", "symlink out through two links", "symlink under a linked folder", "links that loop", "link to itself", "chain of two links", "entry through a link to the parent", "entry with a dot component", "absolute symlink", "absolute symlink that starts with the folder name", "entry with a parent component", "absolute entry", "entry beside the folder", "entry with a backslash", "link name twice, the first target outside", "link name twice, the last target outside", "file name twice", "symlink out behind a dot component"],
+    ids=["symlink out of the folder", "symlink out through a link to the parent", "symlink out through two links", "symlink under a linked folder", "links that loop", "link to itself", "chain of two links", "entry through a link to the parent", "entry with a dot component", "absolute symlink", "absolute symlink that starts with the folder name", "entry with a parent component", "absolute entry", "entry beside the folder", "entry with a backslash", "link name twice, the first target outside", "link name twice, the last target outside", "file name twice", "symlink out behind a dot component", "symlink out behind an empty component"],
 )
 def test_an_archive_with_an_entry_that_leaves_its_folder_is_refused_before_unzip_runs(scene, drive, entries, links):
     """SONAR-118: a signed zip may still hold a path or a symbolic link that reaches outside the scanner's folder; nothing is unpacked or installed"""
