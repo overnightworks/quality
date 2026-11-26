@@ -33,7 +33,7 @@ class Mark(Enum):
     INTEGRATION = auto()
 
 
-PYTEST_MARKS = {"skip": Mark.SKIPPED, "skipif": Mark.SKIPPED, "xfail": Mark.FIXME, "integration": Mark.INTEGRATION}
+PYTEST_MARKS = {"skip": Mark.SKIPPED, "skipif": Mark.SKIPPED, "xfail": Mark.FIXME, pytest_marks.INTEGRATION: Mark.INTEGRATION}
 SCRIPT_MARKS = {"skip": Mark.SKIPPED, "skipIf": Mark.SKIPPED, "fixme": Mark.FIXME}
 Marks = frozenset[Mark]
 NO_MARKS: Marks = frozenset()

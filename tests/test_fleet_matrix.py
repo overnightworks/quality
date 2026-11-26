@@ -683,6 +683,10 @@ def test_the_import_contract_cell_follows_the_import_linter_config(fleet_report,
     assert cell(output, "o/layered", "import-contract") == cell_words
 
 
+ADAPTER_CONTRACT_COLUMNS = pytest.mark.parametrize("column", ["adapter-import", "integration-marker"])
+
+
+@ADAPTER_CONTRACT_COLUMNS
 @pytest.mark.parametrize(
     ("files", "code", "cell_words"),
     [
@@ -694,17 +698,23 @@ def test_the_import_contract_cell_follows_the_import_linter_config(fleet_report,
     ],
     ids=["the contract with the id", "a contract without it", "no config", "two configs", "two contracts with the id"],
 )
-def test_the_adapter_import_cell_follows_the_contract_the_config_holds(fleet_report, gate_clone, files, code, cell_words):
-    """FLEET-13, ADAPTERIMPORT-21: on main the cell reads enforced when the config holds the contract with the id."""
+def test_the_adapter_contract_cells_follow_the_contract_the_config_holds(fleet_report, gate_clone, files, code, cell_words, column):
+    """FLEET-13, ADAPTERIMPORT-21, INTEGRATION-11: on main the cell reads enforced when the config holds the contract with the id."""
     result, output = fleet_report(gate_clone({**caller("./.github/workflows/gate.yml"), **files}), tags=first_releases())
     assert result == code, output
-    assert cell(output, GATE_REPOSITORY, "adapter-import") == cell_words
+    assert cell(output, GATE_REPOSITORY, column) == cell_words
 
 
 def test_the_adapter_import_cell_says_not_in_the_tag_under_a_pin_below_its_release(fleet_report, public):
     """FLEET-18, ADAPTERIMPORT-21: a gate pinned below the release that names the rule has no such rule."""
     _, output = fleet_report(public("tagged", pinned_gate(NEWEST)), tags=first_releases())
     assert cell(output, "o/tagged", "adapter-import") == "not in v0.3.1"
+
+
+def test_the_integration_marker_cell_says_not_released_under_a_tag(fleet_report, public):
+    """FLEET-19, INTEGRATION-11: only main has the rule."""
+    _, output = fleet_report(public("tagged", pinned_gate(NEWEST)), tags=first_releases())
+    assert cell(output, "o/tagged", "integration-marker") == "not released"
 
 
 def test_without_a_gate_every_cell_that_needs_one_is_a_dash_and_an_unreadable_workflow_makes_each_unreadable(
@@ -773,7 +783,7 @@ def test_the_heading_sentence_names_the_rules_the_oldest_release_always_enforces
     _, output = fleet_report(public("any", {}), tags=first_releases())
     assert "Every gate release enforces env-file, compose-port, secret, workflow-lint and workflow-security." in output
     assert MATRIX_COLUMNS[5:] == (
-        "size", "clone", "job-timeout", "test-twin", "spec-citation", "import-contract", "adapter-import", "claude-md", "agents-md", "root-layout", "file-suffix",
+        "size", "clone", "job-timeout", "test-twin", "spec-citation", "import-contract", "adapter-import", "integration-marker", "claude-md", "agents-md", "root-layout", "file-suffix",
         "script-name", "script-header", "test-layout", "test-import", "literal-text", "locator-text", "python-floor",
         "naming", "python-security", "python-print", "logging", "pr-concurrency", "pr-workflows", "pytest-workers", "runtime-install", "live-layer", "catalog-check", "render-pass", "advisory", "fleet-source", "pytest-random", "vitest-random", "node-test-random",
     )
