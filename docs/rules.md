@@ -754,8 +754,8 @@ It applies these rules:
   (SECURITY-25), two tracked files whose names ruff's report prints alike, as names that differ only in bytes that are
   not UTF-8 do (SECURITY-30), or a file with a finding whose comments Python's tokenizer cannot read (SECURITY-26) is
   `cannot judge` (exit 2). One such file makes the whole rule `cannot judge` or `unparsable`, so the S findings of the
-  other files are not printed in that run (SECURITY-27); everything here but the tokenizer refuses the shared run, so `python-print`
-  refuses with it (SECURITY-28). The other rules are judged either way. A deliberately invalid Python fixture takes
+  other files are not printed in that run (SECURITY-27); everything here but the tokenizer refuses the shared run, so
+  `python-print` refuses with it (SECURITY-28). The other rules are judged either way. A deliberately invalid Python fixture takes
   another suffix, since a `.py` file is Python. No configuration switches the rule off, and a reasoned noqa asks
   `quality verdict` for no `[[gate.loosened]]` entry. Not judged, and waiting for usage evidence: notebooks, `.pyi`
   files and suffixless Python; judging a non-UTF-8 source (a latin-1 file with non-ASCII bytes stays `cannot judge`)
