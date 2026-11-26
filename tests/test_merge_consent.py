@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from tests.support.merge import (
@@ -29,46 +31,38 @@ def reviewed(*reviews, memberships=MEMBERS):
     return {"reviews": list(reviews), "memberships": memberships}
 
 
-def owner_review(body=BLOCK, **fields):
-    return review(body, **fields)
-
-
-def a_later_review(body=BLOCK, **fields):
-    return review(body, review_id=REVIEW_ID + 1, **fields)
-
-
 MERGES = [
-    pytest.param(reviewed(owner_review()), REVIEW_ID, id="an owner's latest review, a comment at the head with the printed text"),
-    pytest.param(reviewed(owner_review(state="APPROVED")), REVIEW_ID, id="the same as an approval"),
-    pytest.param(reviewed(owner_review(BLOCK.replace("\n", "\r\n"))), REVIEW_ID, id="the text with CRLF line endings"),
-    pytest.param(reviewed(owner_review(BLOCK + "\n")), REVIEW_ID, id="the text with a trailing line end"),
-    pytest.param(reviewed(owner_review(BLOCK + "\r\n")), REVIEW_ID, id="the text with a trailing CRLF"),
+    pytest.param(reviewed(review(BLOCK)), REVIEW_ID, id="an owner's latest review, a comment at the head with the printed text"),
+    pytest.param(reviewed(review(BLOCK, state="APPROVED")), REVIEW_ID, id="the same as an approval"),
+    pytest.param(reviewed(review(BLOCK.replace("\n", "\r\n"))), REVIEW_ID, id="the text with CRLF line endings"),
+    pytest.param(reviewed(review(BLOCK + "\n")), REVIEW_ID, id="the text with a trailing line end"),
+    pytest.param(reviewed(review(BLOCK + "\r\n")), REVIEW_ID, id="the text with a trailing CRLF"),
     pytest.param(
-        reviewed(owner_review(commit_id=EARLIER_COMMIT), a_later_review()), REVIEW_ID + 1,
+        reviewed(review(BLOCK, commit_id=EARLIER_COMMIT), review(BLOCK, review_id=REVIEW_ID + 1)), REVIEW_ID + 1,
         id="a push after the first review and a new review at the head",
     ),
     pytest.param(
-        reviewed(owner_review(), review("fine", OTHER, "APPROVED", review_id=9)), REVIEW_ID,
+        reviewed(review(BLOCK), review("fine", OTHER, "APPROVED", review_id=9)), REVIEW_ID,
         id="a later review by a member who is no owner leaves the owner's standing",
     ),
 ]
 REFUSALS = [
     pytest.param(reviewed(), id="no review at all"),
-    pytest.param(reviewed(owner_review(login=OTHER)), id="the latest review by a member who is no owner"),
-    pytest.param(reviewed(owner_review(login="stranger")), id="a review by a login that is no member"),
-    pytest.param(reviewed(owner_review(), a_later_review(body="LGTM")), id="an earlier owner review matches and the latest differs"),
-    pytest.param(reviewed(owner_review(state="PENDING")), id="the owner's review pending"),
-    pytest.param(reviewed(owner_review(state="DISMISSED")), id="the owner's review dismissed"),
-    pytest.param(reviewed(owner_review(state="CHANGES_REQUESTED")), id="the owner's review requesting changes"),
-    pytest.param(reviewed(owner_review(commit_id=EARLIER_COMMIT)), id="the review at an earlier commit"),
-    pytest.param(reviewed(owner_review(BLOCK.replace("main", "trunk"))), id="the text differs in one value"),
-    pytest.param(reviewed(owner_review(BLOCK.strip("`\n"))), id="the text without its fence"),
-    pytest.param(reviewed(owner_review(f"Please merge.\n{BLOCK}")), id="content before the block"),
-    pytest.param(reviewed(owner_review(f"{BLOCK}\nThanks.")), id="content after the block"),
-    pytest.param(reviewed(owner_review(consent_block(legacy_branch=None))), id="the block without the legacy line where Sonar failed"),
-    pytest.param(reviewed(owner_review(None)), id="a review without a body"),
+    pytest.param(reviewed(review(BLOCK, login=OTHER)), id="the latest review by a member who is no owner"),
+    pytest.param(reviewed(review(BLOCK, login="stranger")), id="a review by a login that is no member"),
+    pytest.param(reviewed(review(BLOCK), review("LGTM", review_id=REVIEW_ID + 1)), id="an earlier owner review matches and the latest differs"),
+    pytest.param(reviewed(review(BLOCK, state="PENDING")), id="the owner's review pending"),
+    pytest.param(reviewed(review(BLOCK, state="DISMISSED")), id="the owner's review dismissed"),
+    pytest.param(reviewed(review(BLOCK, state="CHANGES_REQUESTED")), id="the owner's review requesting changes"),
+    pytest.param(reviewed(review(BLOCK, commit_id=EARLIER_COMMIT)), id="the review at an earlier commit"),
+    pytest.param(reviewed(review(BLOCK.replace("main", "trunk"))), id="the text differs in one value"),
+    pytest.param(reviewed(review(BLOCK.strip("`\n"))), id="the text without its fence"),
+    pytest.param(reviewed(review(f"Please merge.\n{BLOCK}")), id="content before the block"),
+    pytest.param(reviewed(review(f"{BLOCK}\nThanks.")), id="content after the block"),
+    pytest.param(reviewed(review(consent_block(legacy_branch=None))), id="the block without the legacy line where Sonar failed"),
+    pytest.param(reviewed(review(None)), id="a review without a body"),
     pytest.param(
-        reviewed(owner_review(), memberships={OWNER: ("admin", "pending")}), id="the latest review by an owner whose membership is pending",
+        reviewed(review(BLOCK), memberships={OWNER: ("admin", "pending")}), id="the latest review by an owner whose membership is pending",
     ),
 ]
 
@@ -134,7 +128,7 @@ def test_a_reason_with_fences_a_mention_and_a_control_character_stays_inside_the
 
 def test_the_log_comment_stays_one_line_that_names_the_review_and_its_commit(capsys):
     """MERGE-123: the log comment names the consent review and the commit it was written at."""
-    gh = FakeGh(reviews=[owner_review(review_id=77)], memberships=MEMBERS)
+    gh = FakeGh(reviews=[review(BLOCK, review_id=77)], memberships=MEMBERS)
     assert run(gh, capsys)[0] == 0
     assert gh.comments == [log_body(review_id=77)]
 
@@ -159,6 +153,19 @@ def test_a_consent_that_cannot_be_read_is_not_judged_and_changes_nothing(moment,
 def test_a_reviews_answer_of_the_wrong_shape_is_not_judged_and_changes_nothing(malformed, capsys):
     """MERGE-121: reviews GitHub answers in a shape the door does not read are no consent and no refusal: the `✗ consent` row, exit 2."""
     gh = FakeGh(reviews=[malformed])
+    code, out, _ = run(gh, capsys)
+    assert (code, "  ✗ consent       not judged     " in out) == (2, True)
+    changed_nothing(gh)
+
+
+def test_a_membership_answer_that_is_no_object_is_not_judged_and_changes_nothing(capsys):
+    """MERGE-121: a membership GitHub answers in a shape the door does not read is no consent and no refusal: the `✗ consent` row, exit 2."""
+
+    class ListMembership(FakeGh):
+        def membership_answer(self, login):
+            return json.dumps(["admin"])
+
+    gh = ListMembership()
     code, out, _ = run(gh, capsys)
     assert (code, "  ✗ consent       not judged     " in out) == (2, True)
     changed_nothing(gh)

@@ -55,6 +55,8 @@ def is_organisation_owner(gh: GhRunner, repository: str, login: str) -> bool:
         if error.not_found:
             return False
         raise
+    if not isinstance(membership, dict):
+        raise CannotJudge("GitHub's answer for the organisation membership is not a membership")
     return membership["role"] == OWNER_ROLE and membership["state"] == "active"
 
 
