@@ -303,11 +303,11 @@ reason = "the operator ruled the requirement shelf machinery out"
 - VERDICT-78: An inherited entry, a changed `reason`, `ends` or ruling and a deleted entry loosen nothing; a layout entry
   whose `rule` changes is a new entry.
 - VERDICT-79: The base side of the two tables is read by identity only, `entry` for root and `rule` and `path` for
-  layout, and every other key and value is ignored, so a base written before `ends` existed, or with a reason or a key
-  this release refuses, is read, and the pull request that writes `ends` is no loosening. A base entry without its
-  identity keys, or with one that is not text, is exit `2` naming the base. The head side is read strictly: an entry
-  without `ends`, with an `ends` that is no item reference, or with only one of `item` and `date` is a config it cannot
-  read (VERDICT-39 to VERDICT-41), and `next:` shows the table's example.
+  layout, and every other key and value is ignored, a repeated identity included, so a base written before `ends`
+  existed, or with a reason or a key this release refuses, is read, and the pull request that writes `ends` is no
+  loosening. A base entry without its identity keys, or with one that is not text, is exit `2` naming the base. The head
+  side is read strictly: an entry without `ends`, with an `ends` that is no item reference, or with only one of `item`
+  and `date` is a config it cannot read (VERDICT-39 to VERDICT-41), and `next:` shows the table's example.
 - VERDICT-80: A `[[gate.loosened]]` entry whose `what` is the text of such a line matches nothing and is red.
 - VERDICT-81: A layout `path`, and a root entry that names a file, moves when git's rename listing (BASELINE-11) maps the
   base path to the head path: the head entry at the new path is inherited, not added. While the head still declares the

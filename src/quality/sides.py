@@ -302,7 +302,7 @@ def side_of(
 
     `import_configs` holds the text of each import-linter config file the side may have."""
     try:
-        settings = NO_BASE_SETTINGS if config is None else load_gate_settings(config, side)
+        settings = NO_BASE_SETTINGS if config is None else load_gate_settings(config, side=side)
     except ConfigError as error:
         raise UnusableConfig(where, error) from error
     try:

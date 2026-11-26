@@ -477,9 +477,9 @@ def _sonar(gate: dict, legacy: LegacyMode) -> bool:
     return value
 
 
-def load_gate_settings(text: str | None, side: ConfigSide = ConfigSide.HEAD) -> GateSettings:
-    """mandatory_jobs is judged before legacy, so a config wrong in both is refused for mandatory_jobs. A `quality check`
-    never reads a base, so the head side is the default."""
+def load_gate_settings(text: str | None, *, side: ConfigSide) -> GateSettings:
+    """mandatory_jobs is judged before legacy, so a config wrong in both is refused for mandatory_jobs. `side` says whose text it is: the base is read by
+    identity only, so a caller names it and none reads a base strictly by leaving it out."""
     if text is None:
         raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} is missing", EXAMPLE)
     document = _validated_document(text, side)
@@ -502,13 +502,13 @@ def _read_config_text(repo: Path) -> str | None:
 
 
 def read_gate_settings(repo: Path) -> GateSettings:
-    return load_gate_settings(_read_config_text(repo))
+    return load_gate_settings(_read_config_text(repo), side=ConfigSide.HEAD)
 
 
 def runs_sonar(repo: Path) -> bool:
     """A repository without the config scans, and the findings step refuses the missing file."""
     text = _read_config_text(repo)
-    return True if text is None else load_gate_settings(text).sonar
+    return True if text is None else load_gate_settings(text, side=ConfigSide.HEAD).sonar
 
 
 def load_declarations(text: str | None) -> Declarations:

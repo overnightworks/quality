@@ -88,12 +88,12 @@ def unique_entries[Entry](
         entries[identity(entry)] = entry
     return tuple(entries.values())
 
-def distinct_entries[Entry: Hashable](
+def distinct_entries[Entry](
     table: dict, key: str, heading: str, example: ExampleLines, read: Callable[[object, int], Entry]
 ) -> tuple[Entry, ...]:
-    """The entries of a list in `table`, each read by `read`, a repeated one kept once: a reading by identity alone has
-    no say on how often an entry is declared."""
-    return tuple(dict.fromkeys(read(raw, position) for position, raw in numbered_entries(table, key, heading, example)))
+    """The entries of a list in `table`, each read by `read`, a repeated one kept as declared: a reading by identity
+    alone has no say on how often an entry is declared, and the base's entries are only looked up."""
+    return tuple(read(raw, position) for position, raw in numbered_entries(table, key, heading, example))
 
 def entry_name(heading: str, position: int) -> str:
     """How a message names one entry of a list: its heading and 1-based position."""
