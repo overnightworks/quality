@@ -1,0 +1,7 @@
+claim_id = "1e11b6192b764981b5b6488c4e3d96c5"
+agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
+role = "builder"
+base = "9bd82fa5b93c3e83c1b29587681e3ec7dd2760c0"
+branch = "claude/issue-1042-reexecution-coverage-same-every-run"
+scope = ["pyproject.toml", "tests/test_pin_reexecution.py"]
+opened_commit = "3298162986fda647ac48af8be61884ce2b58e239"
