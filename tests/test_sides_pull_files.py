@@ -3,6 +3,7 @@
 import pytest
 
 from quality.config_allowances import ConfigSide
+from quality.loosenings import renames_can_change
 from quality.ratchet import NO_RENAMES, Renames
 from quality.sides import pull_files, side_of
 from tests.support.layout import declaring, root_declaring
@@ -36,5 +37,7 @@ def test_the_renames_are_read_only_where_the_head_holds_an_added_entry(base, hea
     """VERDICT-81: a pull request that adds no root or layout entry reads and fetches nothing more than before."""
     base_side = side_of(base, None, "the base", side=ConfigSide.BASE)
     head_side = side_of(head, None, "the head", side=ConfigSide.HEAD)
-    tree, renames = pull_files(base_side, head_side, never_read, lambda marks: LISTED if listed else never_read(marks))
+    tree, renames = pull_files(
+        base_side, head_side, never_read, lambda marks: LISTED if listed else never_read(marks), renames_can_change(base_side, head_side)
+    )
     assert (tree, renames) == (None, LISTED if listed else NO_RENAMES)

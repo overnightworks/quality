@@ -16,6 +16,7 @@ from quality.config_allowances import ConfigSide
 from quality.config_entries import CONFIG_PATH
 from quality.gh import GhFailed, GhRunner, file_at, workflow_texts_at
 from quality.landing import Landing, LandingKind, LandingRefused, landing_of
+from quality.loosenings import renames_can_change
 from quality.output import (
     DRY_RUN,
     SEPARATOR,
@@ -548,6 +549,7 @@ def read_pull_files(
         base, head,
         lambda marks: read_pull_tree_of_pull(remote_for(repository), *commits, environment, marks),
         lambda marks: read_renames_of_pull(remote_for(repository), *commits, environment, marks),
+        renames_can_change(base, head),
     )
 
 

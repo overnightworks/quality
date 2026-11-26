@@ -101,16 +101,16 @@ def _reads_tree(base: Side | None, head: Side) -> bool:
 
 def pull_files(
     base: Side | None, head: Side, read_tree: Callable[[bool], architecture.PullTree],
-    read_renames_listing: Callable[[bool], Renames],
+    read_renames_listing: Callable[[bool], Renames], renames_can_change_entries: bool,
 ) -> tuple[architecture.PullTree | None, Renames]:
     """What the pull request's two commits add to the judgement, read by the caller's readers: the tree when a module is
-    struck (its renames serve the baselines), else the renames when two baselines are compared or the head adds a root or
-    layout entry, else nothing. A reader is told whether to read the test modules' marks, which only a base that holds
-    `[adapter_imports]` carries."""
+    struck (its renames serve the baselines), else the renames when two baselines are compared or the caller says they can
+    change the head's allow entries (`loosenings.renames_can_change`), else nothing. A reader is told whether to read the
+    test modules' marks, which only a base that holds `[adapter_imports]` carries."""
     carries_marks = base is not None and base.baseline is not None and base.baseline.adapter_imports is not None
     if _reads_tree(base, head):
         return read_tree(carries_marks), NO_RENAMES
-    if compares_baselines(base, head) or adds_allow_entry(base, head):
+    if compares_baselines(base, head) or renames_can_change_entries:
         return None, read_renames_listing(carries_marks)
     return None, NO_RENAMES
 
@@ -119,18 +119,6 @@ def compares_baselines(base: Side | None, head: Side) -> bool:
     """Whether the renames can change the judgement: only a comparison of two baselines reads them. Any other pair is
     judged without them, so a pull request that renames nothing the baselines name is never held up by the diff."""
     return base is not None and base.baseline is not None and head.baseline is not None
-
-
-def adds_allow_entry(base: Side | None, head: Side) -> bool:
-    """Whether the head holds a root or layout entry whose identity the base lacks, the one case where the renames can
-    change the judgement of those two tables."""
-    if base is None:
-        return False
-    tables = (
-        (base.settings.root_allowances, head.settings.root_allowances),
-        (base.settings.layout_allowances, head.settings.layout_allowances),
-    )
-    return any({entry.identity for entry in head_entries} - {entry.identity for entry in base_entries} for base_entries, head_entries in tables)
 
 
 @dataclass(frozen=True)

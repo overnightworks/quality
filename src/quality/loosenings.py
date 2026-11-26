@@ -17,6 +17,7 @@ from quality.config_allowances import LayoutAllowance, RootAllowance
 from quality.config_entries import Ruling
 from quality.output import SEPARATOR
 from quality.ratchet import (
+    NO_RENAMES,
     Renames,
     added_pairs,
     carried_base,
@@ -144,6 +145,15 @@ def _added(kind: _SelfDeclaring, base: GateSettings, head: GateSettings, renames
         kept = {kind.identity(entry)[0] for entry in entries}
         held |= {(moved, qualifier) for path, qualifier in held if (moved := moved_path(path, renames, kept)) is not None}
     return [entry for entry in entries if kind.identity(entry) not in held]
+
+
+def renames_can_change(base: Side | None, head: Side) -> bool:
+    """Whether the head holds an entry of a rename-carrying table whose identity the base lacks, the one case where the
+    renames can change the judgement of those tables: a rename only moves a base entry, so an entry the base holds
+    stays held."""
+    return base is not None and any(
+        _added(kind, base.settings, head.settings, NO_RENAMES) for kind in _SELF_DECLARING if kind.carries_renames
+    )
 
 
 def _self_declared_loosenings(base: GateSettings, head: GateSettings, renames: Renames) -> list[Loosening]:

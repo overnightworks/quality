@@ -14,7 +14,7 @@ from quality.architecture import PullTree
 from quality.checkout import COMMIT_SHA
 from quality.config import Declaration
 from quality.config_entries import REPOSITORY_NAME
-from quality.loosenings import Loosening, collect_loosenings, removal
+from quality.loosenings import Loosening, collect_loosenings, removal, renames_can_change
 from quality.output import SEPARATOR, Glyph, Row, SubLine, counted, format_duration
 from quality.ratchet import Renames
 from quality.report import (
@@ -514,6 +514,7 @@ def run_verdict(
             base, head,
             lambda marks: read_pull_tree(Path("."), run.pull_request.base_sha, "HEAD", marks=marks),
             lambda marks: read_renames(Path("."), run.pull_request.base_sha, "HEAD", marks=marks),
+            renames_can_change(base, head),
         )
         fetch = fetcher_for(run.token)
         settled = read_settled(
