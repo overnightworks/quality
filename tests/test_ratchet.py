@@ -112,7 +112,7 @@ NOT_PYTHON = pytest.mark.parametrize(
         b'print "py2"\n',
         b"# coding: rot13\nx = 1\n",
         b"# coding: base64_codec\nx = 1\n",
-        b"x = " + b" + ".join([b"1"] * 50_000) + b"\n",
+        b"x = " + b" + ".join([b"1"] * 200_000) + b"\n",
     ],
     ids=[
         "undecodable-utf-8",
