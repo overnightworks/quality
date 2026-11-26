@@ -132,17 +132,27 @@ def shop_with_adapters(
     }
 
 
+def imports_verdict(repo: Path, rule: Rule):
+    """The verdict of `rule` over the imports area of `repo`."""
+    (verdict,) = (verdict for verdict in check_result(repo, named=[Area.IMPORTS]).verdicts if verdict.rule is rule)
+    return verdict
+
+
 def adapter_verdict(repo: Path):
     """The verdict of the adapter-import rule over the imports area of `repo`."""
-    (verdict,) = (verdict for verdict in check_result(repo, named=[Area.IMPORTS]).verdicts if verdict.rule is Rule.ADAPTER_IMPORT)
-    return verdict
+    return imports_verdict(repo, Rule.ADAPTER_IMPORT)
+
+
+def imports_findings(repo: Path, rule: Rule) -> list[Finding]:
+    """The findings of `rule` over the imports area of `repo`; a rule that cannot judge fails the test."""
+    verdict = imports_verdict(repo, rule)
+    assert verdict.refusal is None, verdict.refusal
+    return list(verdict.findings)
 
 
 def adapter_findings(repo: Path) -> list[Finding]:
     """The findings of the adapter-import rule over `repo`; a rule that cannot judge fails the test."""
-    verdict = adapter_verdict(repo)
-    assert verdict.refusal is None, verdict.refusal
-    return list(verdict.findings)
+    return imports_findings(repo, Rule.ADAPTER_IMPORT)
 
 
 def adapter_refusal(repo: Path) -> CannotJudge:

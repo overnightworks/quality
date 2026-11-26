@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from quality import clones, repository
 
 IMPORTS_ADAPTER = "imports_adapter"
+INTEGRATION = "integration"
 MARK_PREFIX = "pytest.mark."
 MODULE_MARKS = "pytestmark"
 NO_MARKS: frozenset[str] = frozenset()

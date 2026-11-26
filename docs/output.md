@@ -86,7 +86,9 @@ rows, by area:
 - `imports`: a core test that imports an adapter is an `adapter import` finding at `path:line` that names each
   forbidden module once, as in `imports shop.adapters (through tests/support/stores.py)`, a marked module that imports
   none is `unused` at its `pytestmark` line, and the held counts of marked modules are `grew`, `new debt` or `can
-  fall` (ADAPTERIMPORT-25, ADAPTERIMPORT-26); a broken contract is a `broken` finding; an unmatched ignore is an
+  fall` (ADAPTERIMPORT-25, ADAPTERIMPORT-26); a non-core test module that reaches an adapter without the `integration`
+  mark is an `unmarked` finding at its first red statement, as in `imports shop.adapters · module not marked
+  integration` (INTEGRATION-6); a broken contract is a `broken` finding; an unmatched ignore is an
   `unused` finding at `error` and an `unused` note at `warn`; a grimp or import-linter warning is a `warning` note
   (O23); a `broken` finding's detail lines are import-linter's own rendering of the contract ([Rows](#rows)).
 - `secrets`: a key is a `secret` finding whose fact names gitleaks' rule and, in history, the commit's first eight

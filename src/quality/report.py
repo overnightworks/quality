@@ -179,6 +179,7 @@ class FindingEvent(StrEnum):
     STRAY = "stray"
     TEST_IMPORT = "test import"
     ADAPTER_IMPORT = "adapter import"
+    UNMARKED = "unmarked"
     LITERAL_TEXT = "literal text"
     CATALOG_TEXT = "catalog text"
     BELOW_FLOOR = "below floor"
