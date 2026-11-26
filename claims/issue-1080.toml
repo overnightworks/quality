@@ -1,0 +1,8 @@
+claim_id = "3428acb73e75477083fced92dc69543a"
+agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
+role = "builder"
+base = "53d96df2f29eaeb18f326e3b4259c203f3c25791"
+branch = "claude/issue-1080-record-spec-citations"
+scope = ["docs", "quality/baseline.toml", "tests"]
+opened_commit = "8b7f5aebf0e7081d3a42f0c3f43a6bac18494e5d"
+whole_reason = "One recording of the citation list and the conversions and citation fixes it needs: the rules.md rest, the older O<n> markers, two IDs that carry two sentences, and the test docstrings whose tokens or ranges hide their citations."
