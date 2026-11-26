@@ -588,51 +588,69 @@ Pages source (GitHub Actions) is a repository setting that no code owns.
 
 gitleaks, actionlint and osv-scanner are not quality's to install: they come through
 [mise](https://mise.jdx.dev/installing-mise.html) from the manifest and lock inside quality's installation.
-`quality/mise/mise.toml` holds the one version of each scanner (SCANNER-1), `quality/mise/mise.lock` the sha256 of its
-release asset (linux x64 only, written by `mise lock --platform linux-x64`, never by hand). The command that installs
+
+- SCANNER-1: `quality/mise/mise.toml` holds the one version of each scanner, `quality/mise/mise.lock` the sha256 of its
+  release asset (linux x64 only, written by `mise lock --platform linux-x64`, never by hand).
+
+The command that installs
 them from the lock (SCANNER-2) is
 
     mise --cd <quality's installation>/quality/mise install --locked
 
 and `check` names it once in its `next:` step, however many rules lack a scanner ([Refusals](output.md#refusals)), the
-path filled in. A path with a control character is shown escaped, on one line (SCANNER-3). A scan finds a scanner by
-asking `mise which` in that directory, for exactly the manifest's version (SCANNER-4), and runs it only when it reports
-that version (SCANNER-5). A scanner on `PATH` is never used (SCANNER-6). mise reads only the manifest directory and the
-operator's own user and system configuration: it starts in that directory under `MISE_CEILING_PATHS` set to the
-directory above it (SCANNER-7), so a `mise.toml` or `.miserc.toml` in the scanned repository (or in the checkout the
-gate holds the manifest in) takes no part in which binary runs (SCANNER-8).
+path filled in.
+
+- SCANNER-3: A path with a control character is shown escaped, on one line.
+- SCANNER-4: A scan finds a scanner by
+  asking `mise which` in that directory, for exactly the manifest's version,
+- SCANNER-5: and runs it only when it reports
+  that version.
+- SCANNER-6: A scanner on `PATH` is never used.
+- SCANNER-7: mise reads only the manifest directory and the
+  operator's own user and system configuration: it starts in that directory under `MISE_CEILING_PATHS` set to the
+  directory above it,
+- SCANNER-8: so a `mise.toml` or `.miserc.toml` in the scanned repository (or in the checkout the
+  gate holds the manifest in) takes no part in which binary runs.
 
 Ruled by the operator:
 
-- The command that installs a scanner: `mise --cd <quality's installation>/quality/mise install --locked` (SCANNER-2),
+- SCANNER-2: The command that installs a scanner: `mise --cd <quality's installation>/quality/mise install --locked`,
   the release's own manifest and lock; the path is quality's installation, shown as the example shows it.
 
-`check` and `check secrets --staged` exit `2` for a scanner mise cannot locate (SCANNER-9), that is at another version
-or cannot report one (SCANNER-10), or whose answer names no executable (SCANNER-11), and for a machine without mise,
-which names mise's install page and the command (SCANNER-12); only the rule that needs the scanner cannot judge
-([rules](rules.md)). A repository with no workflow needs no actionlint and one with no lock file no osv-scanner
-(SCANNER-13).
+- SCANNER-9: `check` and `check secrets --staged` exit `2` for a scanner mise cannot locate,
+- SCANNER-10: that is at another version
+  or cannot report one,
+- SCANNER-11: or whose answer names no executable,
+- SCANNER-12: and for a machine without mise,
+  which names mise's install page and the command; only the rule that needs the scanner cannot judge
+  ([rules](rules.md)).
+- SCANNER-13: A repository with no workflow needs no actionlint and one with no lock file no osv-scanner.
 
-zizmor (the `workflow-security` rule) and ruff (`python-security`, `python-print`) are not mise's. They are pinned
-dependencies of quality's package (`pyproject.toml`, hashed in `uv.lock`), so installing quality installs them
-(SCANNER-14). quality runs the executable its own installation recorded, never one on `PATH` (SCANNER-15). A missing one
-(SCANNER-16), or one at another version or that cannot report one (SCANNER-17), makes its rules `cannot judge` (exit
-`2`) with the two commands that reinstall quality, one in its checkout and one for a tool install, as alternatives under
-`next:` ([Refusals](output.md#refusals)); a scanner quality's own metadata does not pin exactly makes them
-`cannot judge` as a defect in quality's release (SCANNER-18).
+zizmor (the `workflow-security` rule) and ruff (`python-security`, `python-print`) are not mise's.
 
-One `check` run and one `check secrets --staged` run each have one deadline of 540 seconds, started when the run's
-inputs are built, after the release row (SCANNER-19). gitleaks (in both), zizmor, actionlint, osv-scanner and ruff
-have it as their only time bound (SCANNER-19), and the advisory database requests end at the earlier of their own
-deadline and the run's. A rule that would start one of them, or a request, with no time left starts nothing, and a
-scanner or request still running when the time ends is stopped, gitleaks with its whole process group so the `git`
-it starts dies too, and its scratch directory and mirror are deleted. Both make the rule `cannot judge` (exit `2`),
-worded as in [Refusals](output.md#refusals), with no step of their own and the other rules' rows standing
-(SCANNER-20). The calls that locate a scanner (`mise which`) and ask it for its version run under the same deadline and
-keep their own 30 seconds, taking the smaller of 30 seconds and the time left (SCANNER-19): with no time left they start
-nothing, and one still running when the run ends is stopped and cuts the rule the same way, `mise` or the scanner being
-its subject and no install or reinstall step following (SCANNER-20); with 30 seconds the smaller, the call ends at 30
-seconds with its step (SCANNER-9, SCANNER-10, SCANNER-17). [The vet](output.md#the-vet) stays outside the clock.
+- SCANNER-14: They are pinned
+  dependencies of quality's package (`pyproject.toml`, hashed in `uv.lock`), so installing quality installs them.
+- SCANNER-15: quality runs the executable its own installation recorded, never one on `PATH`.
+- SCANNER-16: A missing one,
+- SCANNER-17: or one at another version or that cannot report one,
+- SCANNER-18: makes its rules `cannot judge` (exit
+  `2`) with the two commands that reinstall quality, one in its checkout and one for a tool install, as alternatives under
+  `next:` ([Refusals](output.md#refusals)); a scanner quality's own metadata does not pin exactly makes them
+  `cannot judge` as a defect in quality's release.
+
+- SCANNER-19: One `check` run and one `check secrets --staged` run each have one deadline of 540 seconds, started when the run's
+  inputs are built, after the release row. gitleaks (in both), zizmor, actionlint, osv-scanner and ruff
+  have it as their only time bound, and the advisory database requests end at the earlier of their own
+  deadline and the run's. A rule that would start one of them, or a request, with no time left starts nothing, and a
+  scanner or request still running when the time ends is stopped, gitleaks with its whole process group so the `git`
+  it starts dies too, and its scratch directory and mirror are deleted.
+- SCANNER-20: Both make the rule `cannot judge` (exit `2`),
+  worded as in [Refusals](output.md#refusals), with no step of their own and the other rules' rows standing. The calls
+  that locate a scanner (`mise which`) and ask it for its version run under the same deadline and
+  keep their own 30 seconds, taking the smaller of 30 seconds and the time left (SCANNER-19): with no time left they start
+  nothing, and one still running when the run ends is stopped and cuts the rule the same way, `mise` or the scanner being
+  its subject and no install or reinstall step following; with 30 seconds the smaller, the call ends at 30
+  seconds with its step (SCANNER-9, SCANNER-10, SCANNER-17). [The vet](output.md#the-vet) stays outside the clock.
 
 Ruled by the operator: quality builds the logic and the process itself and never a specialist scanner (language
 linters and test runners, gitleaks, osv-scanner, mutation tools); the scanners it uses run pinned underneath the one
@@ -640,11 +658,11 @@ door (SCANNER-5).
 
 ## `quality merge`
 
-`quality merge <owner/repo>#<pr> [<owner/repo>#<pr> ...] [--dry-run] [-v]` (MERGE-53) is the operator's door past a red
-gate: it merges the pull requests that the gate keeps red only for legacy Sonar findings or for
-[declared loosenings](gate.md#declared-loosenings), each on the operator's own `yes`. The steps to take are in
-[the runbook](runbooks/merge.md); this is what the command does, and [the lines on several names](#several-names)
-say what a run over more than one pull request adds.
+- MERGE-53: `quality merge <owner/repo>#<pr> [<owner/repo>#<pr> ...] [--dry-run] [-v]` is the operator's door past a red
+  gate: it merges the pull requests that the gate keeps red only for legacy Sonar findings or for
+  [declared loosenings](gate.md#declared-loosenings), each on the operator's own `yes`. The steps to take are in
+  [the runbook](runbooks/merge.md); this is what the command does, and [the lines on several names](#several-names)
+  say what a run over more than one pull request adds.
 
 Ruled by the operator:
 
@@ -652,180 +670,258 @@ Ruled by the operator:
   the same row as the last one before the question (MERGE-5).
 - `merge` names no aco step; that step belongs in the head's instructions.
 
-- **Operator only.** It runs under the operator's own `gh` login, which needs admin permission on the repository
-  (checked first: exit `2`, nothing changed (MERGE-54), the missing right named (MERGE-55)). Agents never run it; it
+- MERGE-54: **Operator only.** It runs under the operator's own `gh` login, which needs admin permission on the repository
+  (checked first: exit `2`, nothing changed,
+- MERGE-55: the missing right named). Agents never run it; it
   refuses when stdin is not a terminal. This is the agent contract, not a lock: agents on the operator's machine share
   his `gh` login, so to an agent the terminal is a hurdle, and that login could switch `quality_gate` directly. A real
   lock (agents with a token without admin rights) belongs to the machine's setup, owned by
   [overnightworks/platform](https://github.com/overnightworks/platform), not to quality; it is a known residual risk.
-- **It refuses unless the door is the only way** (exit `1`, nothing changed): the pull request is open (MERGE-56) and
-  no draft (a draft is refused before its body or any check is read (MERGE-57),
-  `next:` naming `gh pr ready` (MERGE-58)); no check is still running (MERGE-59); every check run and commit status
-  other than `quality / sonar` and `quality / verdict` is green (MERGE-60); `quality / verdict` has failed (MERGE-61);
-  and `quality / sonar` is green or has failed (it did not run, or it ended `timed_out`, `cancelled` or anything else:
-  refused) (MERGE-62).
-  The verdict is then judged again by its own decider, with the config, baseline and import-linter configs read at the
-  pull request's current merge commit and at the tip the base comparison named (MERGE-82, MERGE-106) and the Sonar job
-  taken as green (MERGE-83): an
-  undeclared loosening (MERGE-84), a declaration that matches nothing (MERGE-85), or a missing (MERGE-86) or red
-  mandatory job is refused, naming the verdict's lines. When both sides hold a baseline, or a contract list
+- MERGE-56: **It refuses unless the door is the only way** (exit `1`, nothing changed): the pull request is open
+- MERGE-57: and
+  no draft (a draft is refused before its body or any check is read,
+- MERGE-58: `next:` naming `gh pr ready`);
+- MERGE-59: no check is still running;
+- MERGE-60: every check run and commit status
+  other than `quality / sonar` and `quality / verdict` is green;
+- MERGE-61: `quality / verdict` has failed;
+- MERGE-62: and `quality / sonar` is green or has failed (it did not run, or it ended `timed_out`, `cancelled` or anything else:
+  refused).
+- MERGE-82: The verdict is then judged again by its own decider, with the config, baseline and import-linter configs read at the
+  pull request's current merge commit and at the tip the base comparison named (MERGE-106)
+- MERGE-83: and the Sonar job
+  taken as green:
+- MERGE-84: an
+  undeclared loosening,
+- MERGE-85: a declaration that matches nothing,
+- MERGE-86: or a missing or red
+  mandatory job is refused, naming the verdict's lines.
+- MERGE-89: When both sides hold a baseline, or a contract list
   drops a module or a contract is removed, the files git renamed between the two commits count as they do in the
   verdict and the files each commit holds are listed as the verdict lists them, so the door fetches the pull request's
-  compared tip and merge commit (MERGE-89) (`git fetch --depth=1` from `https://github.com/<owner>/<repo>.git`) into a
-  temporary bare repository that is removed afterwards (MERGE-90), also when the command is interrupted (MERGE-91). This
-  needs `git` and `gh` on the path. git runs with an empty home (MERGE-92) and no inherited `GIT_*` variable (MERGE-93),
-  so `.netrc` and git's own configuration count for nothing; `gh` is the only credential source (MERGE-94), told where
-  its login lives (`GH_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gh`, else `~/.config/gh`) (MERGE-95), and reaches a private
-  repository through git's credential helper (MERGE-96). git never prompts and an askpass program is never run
-  (MERGE-97). The fetch, the file listing and the rename list share one limit of 120 seconds each (MERGE-98), and
-  each of these git commands runs in its own process group, which is killed with it at that limit (MERGE-99) or when
-  the command is interrupted. git's own output is never printed (MERGE-100): a fetch, file listing or rename list
+  compared tip and merge commit
+- MERGE-90: (`git fetch --depth=1` from `https://github.com/<owner>/<repo>.git`) into a
+  temporary bare repository that is removed afterwards,
+- MERGE-91: also when the command is interrupted.
+- MERGE-92: This
+  needs `git` and `gh` on the path. git runs with an empty home
+- MERGE-93: and no inherited `GIT_*` variable,
+- MERGE-94: so `.netrc` and git's own configuration count for nothing; `gh` is the only credential source,
+- MERGE-95: told where
+  its login lives (`GH_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gh`, else `~/.config/gh`),
+- MERGE-96: and reaches a private
+  repository through git's credential helper.
+- MERGE-97: git never prompts and an askpass program is never run.
+- MERGE-98: The fetch, the file listing and the rename list share one limit of 120 seconds each,
+- MERGE-99: and
+  each of these git commands runs in its own process group, which is killed with it at that limit
+- MERGE-100: or when
+  the command is interrupted. git's own output is never printed:
+- MERGE-101: a fetch, file listing or rename list
   that fails, or a rename list that came with a warning, could not be checked, and its `✗ loosenings` row says so in
-  the door's words (exit `2`) (MERGE-101), never an empty file or rename list (MERGE-102).
-- **The head holds the base's tip** (exit `1`, nothing changed, no log comment): after the landing line and before the
-  checks (MERGE-104) the door reads GitHub's comparison of `refs/heads/<base>`, the live tip, with the pull request's
-  head sha, one commit per page (MERGE-103). A head that lacks commits of the tip is `! base  behind  <n> commit(s)
+  the door's words (exit `2`),
+- MERGE-102: never an empty file or rename list.
+- MERGE-104: **The head holds the base's tip** (exit `1`, nothing changed, no log comment): after the landing line and before the
+  checks
+- MERGE-103: the door reads GitHub's comparison of `refs/heads/<base>`, the live tip, with the pull request's
+  head sha, one commit per page. A head that lacks commits of the tip is `! base  behind  <n> commit(s)
   behind <base>` and `error: not merged · the head lacks <n> commit(s) of <base>, so its checks did not run on what
   would merge · nothing changed`, `next:` being `gh pr update-branch <pr> --repo <owner/repo>` (on a fork the author may
-  have to allow maintainer edits or update the branch himself), then waiting for the checks, then the door again
-  (MERGE-103). A head that contains the tip is `✓ base  up to date  <base> at <tip, 7 characters>`, the row after the
-  pull request's (MERGE-104). A comparison that cannot be read, or whose `behind_by` is no whole number of zero or
-  more or whose `base_commit.sha` is no commit sha, is the `✗ base` row (exit `2`), never up to date (MERGE-105). The
+  have to allow maintainer edits or update the branch himself), then waiting for the checks, then the door again. A head
+  that contains the tip is `✓ base  up to date  <base> at <tip, 7 characters>`, the row after the
+  pull request's (MERGE-104).
+- MERGE-105: A comparison that cannot be read, or whose `behind_by` is no whole number of zero or
+  more or whose `base_commit.sha` is no commit sha, is the `✗ base` row (exit `2`), never up to date.
+- MERGE-106: The
   verdict's base side and the fetch of the base commit use the compared tip, never the `base.sha` the pull request
-  names (MERGE-106). After `yes` and before the gate is touched the comparison is read again, outside the gate's
+  names.
+- MERGE-107: After `yes` and before the gate is touched the comparison is read again, outside the gate's
   restore: another tip than the one shown is `! base  moved` with `error: not merged · <base> moved since the rows
   were shown · nothing changed` (exit `1`, no log comment), `next:` being the update step where the head is now behind,
-  else the door again; Ctrl-C during that read ends the run interrupted (exit `130`) with nothing changed (MERGE-107).
+  else the door again; Ctrl-C during that read ends the run interrupted (exit `130`) with nothing changed.
   Because the head contains the tip and the default branch only moves forward (`non_fast_forward`), every check run on
   the head tested the tree that merges. A non-default base that is rewound can leave a head tested against commits
   since removed, and the few seconds between the gate request and the merge request stay open, since GitHub pins only
   the head.
-- **The landing line.** The pull request body carries exactly one `Work-Item:` or `No-Item:` line (MERGE-63) outside a
-  fenced code block (MERGE-64), as the fleet's landings read it: `Work-Item: #<n>` or `Work-Item: <owner>/<repo>#<n>` of
-  this repository (MERGE-65), or `No-Item: docs`, `fix` or `deps` (MERGE-66). Otherwise its `! landing` row names why
-  (MERGE-67) and `next:` asks for the one line (MERGE-68) (exit `1`, nothing changed). The merge commit's message is the
+- MERGE-63: **The landing line.** The pull request body carries exactly one `Work-Item:` or `No-Item:` line
+- MERGE-64: outside a
+  fenced code block,
+- MERGE-65: as the fleet's landings read it: `Work-Item: #<n>` or `Work-Item: <owner>/<repo>#<n>` of
+  this repository,
+- MERGE-66: or `No-Item: docs`, `fix` or `deps`.
+- MERGE-67: Otherwise its `! landing` row names why
+- MERGE-68: and `next:` asks for the one line (exit `1`, nothing changed).
+- MERGE-69: The merge commit's message is the
   body without that line, a blank line, then the line as `Work-Item: #<n>` or `No-Item: <kind>`, the last paragraph (a
-  body that holds only the line gives the line alone) (MERGE-69), the trailer a landing is read from. The body is the
-  one read with the head (MERGE-70).
-- **Sonar green: declared loosenings.** The re-derived verdict must hold at least one declared loosening (otherwise
-  `re-run the verdict`) (MERGE-87). SonarCloud is not asked and `SONAR_TOKEN` is not needed (MERGE-88).
-- **Sonar failed: legacy findings,** with or without a declared loosening (MERGE-71): `[gate] legacy` is `fail` at the
-  merge commit (MERGE-72) (under `report` the Sonar job cannot be red on legacy findings, and a missing config reads as
-  `report` (MERGE-73)), SonarCloud's analysis of the pull request is of the head being merged (MERGE-74) and adds no
-  finding (the findings are named otherwise) (MERGE-75), and the default branch has legacy findings (MERGE-76).
-  `SONAR_TOKEN` is read from the environment and sent when set (MERGE-77), never shown in a row (MERGE-78): without it
-  the door reads a public project anonymously, with no Authorization header (MERGE-79), and an anonymous read that
-  SonarCloud refuses (a private project answers 404) is exit `2`, naming `SONAR_TOKEN` (MERGE-80); with a token, a 401
-  (MERGE-81) or 403 says the token was rejected.
-- **It shows, then asks:** on stdout the [release](#which-release-judges) that judges first, then a row as each step
-  passes (MERGE-1): the pull request (`open`, head, base), the `base` row, the checks, the declared loosenings, each
-  [whole](output.md#length) with its `item` and `date` and its `reason` on the line below (MERGE-2), the legacy count
-  where Sonar failed (MERGE-3), the merge method (`allowed on <base>`) (MERGE-4), and last the `landing` row naming the
-  line the merge commit ends with (MERGE-5) (`work item` and `#<n>`, or `no item` and its kind); then, on stderr,
-  `Switch quality_gate off, merge #<pr>, switch it on? Type yes: ` (MERGE-6). Only `yes` in lower case, ended with
-  Enter, merges (MERGE-7) (whitespace around it counts for nothing (MERGE-8); `Yes` or `y` change nothing (MERGE-9));
-  any other line, or the end of input (Ctrl-D) before Enter, prints `error: not confirmed · nothing changed` and
-  `next:` naming the command again (exit `1`) (MERGE-10); Ctrl-C at the question ends the run interrupted
-  (exit `130`) (MERGE-11); nothing has changed in either case (MERGE-12). With stderr closed the question and the
-  pairs print nowhere; nothing moves to stdout (MERGE-13). A refusal is its `!` row and the `error:`/`next:` pair on
-  stderr (exit `1`) (MERGE-14), each blocking line of the verdict [whole](output.md#length) below the `loosenings`
-  row (MERGE-15); a step that cannot be judged is its `✗` row and the pair (exit `2`) (MERGE-16); a
+  body that holds only the line gives the line alone), the trailer a landing is read from.
+- MERGE-70: The body is the
+  one read with the head.
+- MERGE-87: **Sonar green: declared loosenings.** The re-derived verdict must hold at least one declared loosening (otherwise
+  `re-run the verdict`).
+- MERGE-88: SonarCloud is not asked and `SONAR_TOKEN` is not needed.
+- MERGE-71: **Sonar failed: legacy findings,** with or without a declared loosening:
+- MERGE-72: `[gate] legacy` is `fail` at the
+  merge commit
+- MERGE-73: (under `report` the Sonar job cannot be red on legacy findings, and a missing config reads as
+  `report`),
+- MERGE-74: SonarCloud's analysis of the pull request is of the head being merged
+- MERGE-75: and adds no
+  finding (the findings are named otherwise),
+- MERGE-76: and the default branch has legacy findings.
+- MERGE-77: `SONAR_TOKEN` is read from the environment and sent when set,
+- MERGE-78: never shown in a row:
+- MERGE-79: without it
+  the door reads a public project anonymously, with no Authorization header,
+- MERGE-80: and an anonymous read that
+  SonarCloud refuses (a private project answers 404) is exit `2`, naming `SONAR_TOKEN`;
+- MERGE-81: with a token, a 401 or 403 says the token was rejected.
+- MERGE-1: **It shows, then asks:** on stdout the [release](#which-release-judges) that judges first, then a row as each step
+  passes:
+- MERGE-2: the pull request (`open`, head, base), the `base` row, the checks, the declared loosenings, each
+  [whole](output.md#length) with its `item` and `date` and its `reason` on the line below,
+- MERGE-3: the legacy count
+  where Sonar failed,
+- MERGE-4: the merge method (`allowed on <base>`),
+- MERGE-5: and last the `landing` row naming the
+  line the merge commit ends with
+- MERGE-6: (`work item` and `#<n>`, or `no item` and its kind); then, on stderr,
+  `Switch quality_gate off, merge #<pr>, switch it on? Type yes: `.
+- MERGE-7: Only `yes` in lower case, ended with
+  Enter, merges
+- MERGE-8: (whitespace around it counts for nothing;
+- MERGE-9: `Yes` or `y` change nothing);
+- MERGE-10: any other line, or the end of input (Ctrl-D) before Enter, prints `error: not confirmed · nothing changed` and
+  `next:` naming the command again (exit `1`);
+- MERGE-11: Ctrl-C at the question ends the run interrupted
+  (exit `130`);
+- MERGE-12: nothing has changed in either case.
+- MERGE-13: With stderr closed the question and the
+  pairs print nowhere; nothing moves to stdout.
+- MERGE-14: A refusal is its `!` row and the `error:`/`next:` pair on
+  stderr (exit `1`),
+- MERGE-15: each blocking line of the verdict [whole](output.md#length) below the `loosenings`
+  row;
+- MERGE-16: a step that cannot be judged is its `✗` row and the pair (exit `2`);
+- MERGE-17: a
   `quality/config.toml` it cannot read at the base or at the merge commit is the `✗ loosenings` row with the config's
-  fact, and under `next:` [the example to copy](output.md#refusals) where the fact has one (MERGE-17), then the step
-  for that commit: `fix it on <base branch> first` for the base (MERGE-18), which is read first (MERGE-19), or
-  `push the fix to the pull request's branch, then run quality merge <owner/repo>#<pr> again` for the merge commit
-  (MERGE-20); no terminal on stdin is the pair alone (exit `1`) (MERGE-21); a name not of the form
-  `<owner>/<repo>#<pr>` is [a wrong invocation](#help-and-wrong-invocations) (exit `2`). Every line it prints is
+  fact, and under `next:` [the example to copy](output.md#refusals) where the fact has one,
+- MERGE-18: then the step
+  for that commit: `fix it on <base branch> first` for the base,
+- MERGE-19: which is read first,
+- MERGE-20: or
+  `push the fix to the pull request's branch, then run quality merge <owner/repo>#<pr> again` for the merge commit;
+- MERGE-21: no terminal on stdin is the pair alone (exit `1`); a name not of the form
+  `<owner>/<repo>#<pr>` is [a wrong invocation](#help-and-wrong-invocations) (exit `2`).
+- MERGE-22: Every line it prints is
   escaped as [the other doors' lines are](output.md#masking), so a `reason` cannot hide anything before `yes` or forge
-  a line (MERGE-22).
-- **Dry run:** `--dry-run` reads and shows every row the door shows (MERGE-23), refuses where it refuses before the question (MERGE-24; the read after `yes` it cannot make),
-  and in place of the question ends with
-  `~ dry run · would switch quality_gate off, merge #<pr>, switch it on · nothing changed` on stdout (exit `0`)
-  (MERGE-25); it reads no answer (MERGE-26) and sends no request that changes anything (no `gh api -X`)
-  (MERGE-27), and it needs a terminal on stdin like the door. `-v` is taken and adds nothing (MERGE-28):
+  a line.
+- MERGE-23: **Dry run:** `--dry-run` reads and shows every row the door shows,
+- MERGE-24: refuses where it refuses before the question (the read after `yes` it cannot make),
+- MERGE-25: and in place of the question ends with
+  `~ dry run · would switch quality_gate off, merge #<pr>, switch it on · nothing changed` on stdout (exit `0`);
+- MERGE-26: it reads no answer
+- MERGE-27: and sends no request that changes anything (no `gh api -X`), and it needs a terminal on stdin like the door.
+- MERGE-28: `-v` is taken and adds nothing:
   the door runs no scanner.
-- **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this takes the fleet's ruleset off
-  it) (MERGE-29), runs `gh api -X PUT repos/<owner/repo>/pulls/<pr>/merge --input -`, the JSON on its stdin
+- MERGE-29: **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this takes the fleet's ruleset off
+  it), runs `gh api -X PUT repos/<owner/repo>/pulls/<pr>/merge --input -`, the JSON on its stdin
   holding `sha` (the head sha), `merge_method` and `commit_message` (the message of MERGE-69, sent as it is; no
-  `commit_title`, so a squash takes its headline from the repository's squash title setting). The request merges or
+  `commit_title`, so a squash takes its headline from the repository's squash title setting).
+- MERGE-30: The request merges or
   fails and has no merge queue or auto-merge path; `#<pr> merged` is shown only on an answer with `merged: true`, and
   anything else (a refused or failed request, no answer, Ctrl-C, an answer without `merged: true`) is read back as
-  below (MERGE-30) (`merge_method` is `squash` where the repository settings or a rule on the pull request's base
-  branch exclude a merge commit but allow a squash, else `merge` (MERGE-31); when neither is allowed, or the settings or rules cannot be read
+  below
+- MERGE-31: (`merge_method` is `squash` where the repository settings or a rule on the pull request's base
+  branch exclude a merge commit but allow a squash, else `merge`;
+- MERGE-32: when neither is allowed, or the settings or rules cannot be read
   or are malformed (an answer or a page that is no array, a rule that is no object, or whose `parameters` are present
-  but no object), its `✗ merge` row ends the run before the gate is touched (exit `2`) (MERGE-32);
-  the shown text and the log comment name the method (MERGE-33)), and sets the property back to `true`
-  in every case: merged, merge failed, Ctrl-C (MERGE-34). After `yes` each step is a row on stdout as GitHub answers it
-  (`quality_gate  off`, `#<pr>  merged` with the method, `quality_gate  on`, `log comment  posted`) (MERGE-35), ending
-  `✓ merged #<pr> · quality_gate on again · <duration>` (counted from `yes`) (exit `0`) (MERGE-36). A step
+  but no object), its `✗ merge` row ends the run before the gate is touched (exit `2`);
+- MERGE-33: the shown text and the log comment name the method),
+- MERGE-34: and sets the property back to `true`
+  in every case: merged, merge failed, Ctrl-C.
+- MERGE-35: After `yes` each step is a row on stdout as GitHub answers it
+  (`quality_gate  off`, `#<pr>  merged` with the method, `quality_gate  on`, `log comment  posted`),
+- MERGE-36: ending
+  `✓ merged #<pr> · quality_gate on again · <duration>` (counted from `yes`) (exit `0`).
+- MERGE-37: A step
   not done is a `✗` row (`off failed`, `not merged`, `state unknown`, `not restored`, `not posted`) and one pair on
-  stderr, exit `2` (MERGE-37), the gate first (`quality_gate MAY STILL BE OFF on <owner/repo>` where it is not on)
-  (MERGE-38), `next:` the commands that finish it, the gate's first, alone on its line and
-  [never shortened](output.md#length) (MERGE-39). A gate not switched on is its row before any further request
-  (MERGE-40). After Ctrl-C the next line starts on a line of its own (MERGE-41). A merge whose outcome GitHub does not
-  confirm (Ctrl-C, a lost answer) is read back after the gate is on, its row below the gate's (MERGE-42); if that does
-  not settle it, the row is `state unknown` and the pair says `#<pr> may be merged` with `gh pr view` (MERGE-43). Before
-  the question a stdout that refuses a row stops the door (exit `2`, nothing changed) (MERGE-44); after `yes` such a
-  stdout takes no further row and no closing line, and the run does every step and keeps its exit (MERGE-45).
-- **Logged:** one comment on the pull request, opening `quality merge run by @<login>` (MERGE-46) (who, when
-  (MERGE-47), the legacy count (MERGE-48) and each declaration (MERGE-49), `quality_gate off → <outcome> → on`
-  (`<outcome>` is `merge`, `merge failed` or `merge state unknown`) (MERGE-50), or
-  `quality_gate not switched off → no merge → on` when switching off failed (MERGE-51)), also when the restore failed,
-  the comment then ending `NOT restored, it may still be off` in place of `on` (MERGE-52). A comment not posted is its
+  stderr, exit `2`,
+- MERGE-38: the gate first (`quality_gate MAY STILL BE OFF on <owner/repo>` where it is not on),
+- MERGE-39: `next:` the commands that finish it, the gate's first, alone on its line and
+  [never shortened](output.md#length).
+- MERGE-40: A gate not switched on is its row before any further request.
+- MERGE-41: After Ctrl-C the next line starts on a line of its own.
+- MERGE-42: A merge whose outcome GitHub does not
+  confirm (Ctrl-C, a lost answer) is read back after the gate is on, its row below the gate's;
+- MERGE-43: if that does
+  not settle it, the row is `state unknown` and the pair says `#<pr> may be merged` with `gh pr view`.
+- MERGE-44: Before
+  the question a stdout that refuses a row stops the door (exit `2`, nothing changed);
+- MERGE-45: after `yes` such a
+  stdout takes no further row and no closing line, and the run does every step and keeps its exit.
+- MERGE-46: **Logged:** one comment on the pull request, opening `quality merge run by @<login>`
+- MERGE-47: (who, when,
+- MERGE-48: the legacy count
+- MERGE-49: and each declaration,
+- MERGE-50: `quality_gate off → <outcome> → on`
+  (`<outcome>` is `merge`, `merge failed` or `merge state unknown`),
+- MERGE-51: or
+  `quality_gate not switched off → no merge → on` when switching off failed),
+- MERGE-52: also when the restore failed,
+  the comment then ending `NOT restored, it may still be off` in place of `on`. A comment not posted is its
   `✗` row, its command under `next:`.
 
 ### Several names
 
 Ruled by the operator:
 
-- `quality merge` takes several pull requests in one run; each is judged, shown with its rows and refused exactly as a
+- MERGE-108: `quality merge` takes several pull requests in one run; each is judged, shown with its rows and refused exactly as a
   run for it alone is, every MERGE line holds per pull request and the `quality_gate` property is switched off and
-  restored per repository, and each merges only on the operator's own `yes` to it (MERGE-108).
+  restored per repository, and each merges only on the operator's own `yes` to it.
 
 `quality merge A#1 B#2 ...` judges and shows each named pull request one after the other and merges each on the
 operator's own `yes` to it (MERGE-108). It takes the names given and finds none: the door reads only the repositories
 it is named. Every line of this section above holds per pull request, because each pull request is a run for it alone.
 
-- **A process per pull request.** For each name the run starts `<python> -P -m quality.cli merge <name>` with
-  `--dry-run` and `-v` as given (MERGE-109), the interpreter being the one that runs the door, and waits until it has
+- MERGE-109: **A process per pull request.** For each name the run starts `<python> -P -m quality.cli merge <name>` with
+  `--dry-run` and `-v` as given, the interpreter being the one that runs the door, and waits until it has
   exited before it starts the next, in the order named, two of one repository included (MERGE-108). The child judges
   at its own pinned release, switches the repository's `quality_gate` off and on again itself and shares nothing with
-  the next (MERGE-109). `-P` keeps the working directory off the child's module path, so a `quality` package in a pull
-  request's checkout never loads under the operator's login (MERGE-109). A second pull request of a repository is
+  the next. `-P` keeps the working directory off the child's module path, so a `quality` package in a pull
+  request's checkout never loads under the operator's login. A second pull request of a repository is
   judged from scratch, and after a merge moved its base it is refused as behind (MERGE-108).
-- **Rows.** Before each child one `· <n> of <total>  judging  <name>` row names the pull request and its place
-  (MERGE-110). The run flushes its output and discards what the terminal holds typed ahead before each child, so a
-  line typed during one pull request never answers the next one's question; the run itself reads no line (MERGE-110).
-  Each child's own rows and closing line or pair stand as a run for it alone prints them (MERGE-111). At the end one
+- MERGE-110: **Rows.** Before each child one `· <n> of <total>  judging  <name>` row names the pull request and its
+  place. The run flushes its output and discards what the terminal holds typed ahead before each child, so a
+  line typed during one pull request never answers the next one's question; the run itself reads no line.
+- MERGE-111: Each child's own rows and closing line or pair stand as a run for it alone prints them. At the end one
   row per name says what that child came to, from its exit alone: `✓ merged` (exit `0`), `~ would merge` (exit `0` of
   a dry run), `! not merged` (exit `1`), `! interrupted` (it ended by the interrupt), `✗ stopped` (exit `2`),
-  `✗ killed` with `signal <n>` (any other signal) and `· not run` (MERGE-111).
+  `✗ killed` with `signal <n>` (any other signal) and `· not run`.
 - **Refused: the run goes on.** A child that exits `1` (a refusal, a `no`, a moved base) leaves nothing changed, and
   the next name runs (MERGE-111).
-- **Stopped: the run ends.** A child that exits `2` ends the run, because the run cannot tell an unjudged read from a
-  gate that may still be off; the later names show as not run (MERGE-112). The pair says `stopped at <name>` and the
+- MERGE-112: **Stopped: the run ends.** A child that exits `2` ends the run, because the run cannot tell an unjudged read from a
+  gate that may still be off; the later names show as not run. The pair says `stopped at <name>` and the
   count, and under `next:` names first the step that child's own pair printed above, to be done at once, then
-  `quality merge` with the names not run (MERGE-112).
-- **Killed by a signal.** A child killed by a signal other than SIGINT printed no pair: the run says
+  `quality merge` with the names not run.
+- MERGE-114: **Killed by a signal.** A child killed by a signal other than SIGINT printed no pair: the run says
   `quality_gate MAY STILL BE OFF on <owner/repo>`, names the restore command first and then `quality merge` with the
-  names not run, ends `2` and starts no child (MERGE-114).
-- **Interrupted.** Ctrl-C reaches the child and the run together. The child ends as a run for it alone does; the run
-  waits for it, never kills it, starts no further child and ends interrupted (MERGE-113). A Ctrl-C that arrives
+  names not run, ends `2` and starts no child.
+- MERGE-113: **Interrupted.** Ctrl-C reaches the child and the run together. The child ends as a run for it alone does; the run
+  waits for it, never kills it, starts no further child and ends interrupted. A Ctrl-C that arrives
   outside the wait (as a child starts, or while the run prints its rows, summary or pair) is noted, not raised: the run
-  still waits for a started child and prints the summary and the pair, a restore step included (MERGE-113). SIGTERM to the run alone
-  ends the run and leaves the child to finish and restore the property by itself (MERGE-113).
-- **The exit.** The run exits `2` if a child exited `2` or was killed, else `130` if it was interrupted, else `1` if
-  a child exited `1`, else `0` (MERGE-118): an interrupted run never exits `0` or `1`, whatever the interrupted
-  child's own exit was, so a gate that may be off is never hidden behind an interruption (MERGE-118).
-- **The last line.** All merged ends `✓ merged <n> of <n> · <duration>` on stdout (MERGE-111); a dry run ends
-  `~ dry run · would merge <n> of <n> · nothing changed` (MERGE-117). Exit `1` ends with the pair
+  still waits for a started child and prints the summary and the pair, a restore step included. SIGTERM to the run alone
+  ends the run and leaves the child to finish and restore the property by itself.
+- MERGE-118: **The exit.** The run exits `2` if a child exited `2` or was killed, else `130` if it was interrupted, else `1` if
+  a child exited `1`, else `0`: an interrupted run never exits `0` or `1`, whatever the interrupted
+  child's own exit was, so a gate that may be off is never hidden behind an interruption.
+- MERGE-117: **The last line.** All merged ends `✓ merged <n> of <n> · <duration>` on stdout (MERGE-111); a dry run ends
+  `~ dry run · would merge <n> of <n> · nothing changed`. Exit `1` ends with the pair
   `merged <m> of <n> · <k> not merged · nothing changed` and `next:` the command for the names not merged (MERGE-111);
   exit `2` with the pair of the stopped child and the names not run (MERGE-112), `--dry-run` carried in the command
-  where the run had it (MERGE-117). An interrupted run ends with its rows and no pair (MERGE-113).
-- **No terminal.** Without a terminal on stdin the run is the pair of MERGE-21, exit `1`, and no child starts
-  (MERGE-115).
-- **A word that names no pull request,** among several, is refused naming that word, before any child starts (exit
-  `2`) (MERGE-116). With one name the door runs in the same process and prints as it does without this section
+  where the run had it. An interrupted run ends with its rows and no pair (MERGE-113).
+- MERGE-115: **No terminal.** Without a terminal on stdin the run is the pair of MERGE-21, exit `1`, and no child starts.
+- MERGE-116: **A word that names no pull request,** among several, is refused naming that word, before any child starts (exit
+  `2`). With one name the door runs in the same process and prints as it does without this section
   (MERGE-117).
 
 A terminal that hangs up between the switch-off and the restore leaves the property off without a word, as a run for
