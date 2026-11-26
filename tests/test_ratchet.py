@@ -104,34 +104,25 @@ def test_a_file_python_can_read_is_measured_in_its_declared_encoding(build_repo,
 
 OPERATOR_CHAIN = b"x = " + b" + ".join([b"1"] * 200_000) + b"\n"
 
+CANNOT_READ = rf"(cannot read|ruff cannot parse) {re.escape(SOURCE_NAME)}"
 NOT_PYTHON = pytest.mark.parametrize(
-    "source",
+    ("source", "refusal_reason"),
     [
-        b"# \xe9\nx = 1\n",
-        b"# -*- coding: utf-8 -*-\nx = 1\n# \xe9\n",
-        b"# -*- coding: klingon -*-\nx = 1\n",
-        b"x = 1\x00\n",
-        b'print "py2"\n',
-        b"# coding: rot13\nx = 1\n",
-        b"# coding: base64_codec\nx = 1\n",
-        OPERATOR_CHAIN,
-    ],
-    ids=[
-        "undecodable-utf-8",
-        "invalid-for-its-cookie",
-        "unknown-codec",
-        "null-byte",
-        "python-2",
-        "non-text-codec",
-        "registered-binary-codec",
-        "operator-chain-past-the-recursion-limit",
+        pytest.param(b"# \xe9\nx = 1\n", CANNOT_READ, id="undecodable-utf-8"),
+        pytest.param(b"# -*- coding: utf-8 -*-\nx = 1\n# \xe9\n", CANNOT_READ, id="invalid-for-its-cookie"),
+        pytest.param(b"# -*- coding: klingon -*-\nx = 1\n", CANNOT_READ, id="unknown-codec"),
+        pytest.param(b"x = 1\x00\n", CANNOT_READ, id="null-byte"),
+        pytest.param(b'print "py2"\n', CANNOT_READ, id="python-2"),
+        pytest.param(b"# coding: rot13\nx = 1\n", CANNOT_READ, id="non-text-codec"),
+        pytest.param(b"# coding: base64_codec\nx = 1\n", CANNOT_READ, id="registered-binary-codec"),
+        pytest.param(OPERATOR_CHAIN, "ruff exited", id="operator-chain-past-the-recursion-limit"),
     ],
 )
 
 
 @NOT_PYTHON
 def test_without_a_baseline_the_size_rule_notes_a_file_python_cannot_read_and_python_security_decides_the_exit(
-    build_repo, capsys, source
+    build_repo, capsys, source, refusal_reason
 ):
     """SIZE-9, SECURITY-20, SECURITY-28: with no baseline the size rule notes a file Python cannot read and refuses
     nothing; python-security and python-print alone turn the run to exit 2."""
@@ -139,15 +130,14 @@ def test_without_a_baseline_the_size_rule_notes_a_file_python_cannot_read_and_py
     code, output = run(capsys, repo)
     assert code == 2, output
     assert list(refusals(repo)) == [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT]
-    expected = r"ruff exited" if source is OPERATOR_CHAIN else rf"(cannot read|ruff cannot parse) {re.escape(SOURCE_NAME)}"
-    assert all(re.search(expected, reason) for reason in refusals(repo).values())
+    assert all(re.search(refusal_reason, reason) for reason in refusals(repo).values())
     (note,) = rule_notes(repo, Rule.SIZE)
     assert (note.path, note.event) == (SOURCE_NAME, NoteEvent.NOT_MEASURED)
     assert [(row.event, row.fact) for row in note_rows(output, SOURCE_NAME)] == [(note.event, note.fact)], output
 
 
 @NOT_PYTHON
-def test_against_a_baseline_a_file_python_cannot_read_is_unparsable(build_repo, capsys, source):
+def test_against_a_baseline_a_file_python_cannot_read_is_unparsable(build_repo, capsys, source, refusal_reason):
     """SIZE-10: with a baseline a file Python cannot read makes the debt row `✗ not checked`, naming it as not valid
     Python, with no note, exit 2."""
     repo = build_repo_with_source(build_repo, {BASELINE_PATH: EMPTY_BASELINE}, SOURCE_NAME, source)
@@ -158,7 +148,7 @@ def test_against_a_baseline_a_file_python_cannot_read_is_unparsable(build_repo, 
 
 
 @NOT_PYTHON
-def test_a_fix_refuses_a_file_python_cannot_read(build_repo, capsys, source):
+def test_a_fix_refuses_a_file_python_cannot_read(build_repo, capsys, source, refusal_reason):
     """SIZE-11: a first recording refuses a file Python cannot read with `✗ not fixed`, exit 2, writing no baseline,
     since a baseline holds every function and one recorded with a file unmeasured would hide its debt."""
     repo = build_repo_with_source(build_repo, {}, SOURCE_NAME, source)

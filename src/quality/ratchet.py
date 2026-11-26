@@ -138,8 +138,8 @@ Measurements = dict[Key, Measured]
 
 
 class UnparsableSource(SizeError):
-    """A tracked Python file that cannot be decoded or parsed, or a script file that is not UTF-8 or nested too deeply to
-    read, so its functions cannot be measured."""
+    """A tracked Python file that cannot be decoded or parsed, or a script file that is not UTF-8 or nested too deeply
+    to read, so its functions cannot be measured."""
 
 
 def language_of(name: str) -> Language | None:
@@ -213,25 +213,22 @@ def measure(sources: dict[str, bytes]) -> TreeMeasurement:
     unparsable: dict[str, Unparsed] = {}
     for path, source in sources.items():
         measurements[Key(Metric.FILE_LINES, path)] = Measured(len(source.splitlines()), None)
+        kind = function_source(path)
         try:
             functions = dict(_functions_of(path, source))
-        except PARSE_ERRORS as error:
-            unparsable[path] = Unparsed(_unparsed_source(path, error), str(error))
+        except _unreadable_errors(kind) as error:
+            too_deep = kind is FunctionSource.SCRIPT and isinstance(error, RecursionError)
+            unparsable[path] = Unparsed(FunctionSource.SCRIPT_TOO_DEEP if too_deep else kind, str(error))
             continue
         measurements.update(functions)
     return TreeMeasurement(measurements, unparsable)
 
 
-def _unparsed_source(path: str, error: Exception) -> FunctionSource:
+def _unreadable_errors(source: FunctionSource) -> tuple[type[Exception], ...]:
     """A script file is unreadable only as non-UTF-8 text or as nested too deeply; any other error from it escapes."""
-    source = function_source(path)
-    if source is not FunctionSource.SCRIPT:
-        return source
-    if isinstance(error, RecursionError):
-        return FunctionSource.SCRIPT_TOO_DEEP
-    if isinstance(error, UnicodeDecodeError):
-        return source
-    raise error
+    if source is FunctionSource.SCRIPT:
+        return (UnicodeDecodeError, RecursionError)
+    return PARSE_ERRORS
 
 
 def _functions_of(path: str, source: bytes) -> Iterator[tuple[Key, Measured]]:
