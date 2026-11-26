@@ -3,6 +3,6 @@ agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
 role = "builder"
 base = "65214581a06795616407dd87ac7683d9901d7f54"
 branch = "claude/issue-1052-cover-process-and-tool-boundaries"
-scope = ["docs/rules.md", "pyproject.toml", "src/quality/fleet.py", "src/quality/gh.py", "src/quality/pin.py", "src/quality/process.py", "src/quality/python_lint.py", "src/quality/scanners.py", "tests"]
+scope = ["docs/commands.md", "docs/rules.md", "pyproject.toml", "src/quality/fleet.py", "src/quality/gh.py", "src/quality/pin.py", "src/quality/process.py", "src/quality/python_lint.py", "src/quality/scanners.py", "tests"]
 opened_commit = "8c00120bfe937f593e2357e062439df4dcafc419"
 whole_reason = "One class of site (process and tool boundaries) with one kind of answer per site and one floor value; each module alone is a few lines."
