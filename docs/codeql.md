@@ -5,9 +5,11 @@ Reference for the engineer who calls the reusable `codeql.yml` workflow. The rea
 
 ## `codeql.yml`
 
-Ruled by the operator: a reusable workflow that runs CodeQL for the languages a caller names, one for the fleet instead
-of a copy per repository, with `build-mode: none` and CodeQL's default query suite and threat model. It uploads under the
-category `/language:<language>`, the Default Setup's category, so alerts carry over when a repository switches (CODEQL-2).
+Ruled by the operator:
+
+- CODEQL-2: a reusable workflow that runs CodeQL for the languages a caller names, one for the fleet instead
+  of a copy per repository, with `build-mode: none` and CodeQL's default query suite and threat model. It uploads under the
+  category `/language:<language>`, the Default Setup's category, so alerts carry over when a repository switches.
 
 A private repository needs GitHub Code Security for code scanning (`code-scanning/default-setup` answers 403 without it); quality's fleet does not pay for it, so private repositories run no CodeQL ([ARCHITECTURE](ARCHITECTURE.md)).
 
@@ -43,10 +45,10 @@ jobs:
       config-file: .github/codeql/codeql-config.yml # optional
 ```
 
-- **`languages`:** required, a string (CODEQL-1) holding a JSON list; `'python'` or `'[]'` fails the run. List every
+- CODEQL-1: **`languages`:** required, a string holding a JSON list; `'python'` or `'[]'` fails the run. List every
   category the repository already analyses (aco also has `javascript-typescript`, which a list copied from the example
   above would drop).
-- **`config-file`:** optional, a string, empty by default (CODEQL-3). A path in the caller's checkout, handed to
+- CODEQL-3: **`config-file`:** optional, a string, empty by default. A path in the caller's checkout, handed to
   `codeql-action/init` as its `config-file`, in the form [CodeQL documents](https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/customizing-your-advanced-setup-for-code-scanning).
   A CodeQL exception lives in that file, with its reason in a comment beside it, in the narrowest form: `paths-ignore`
   for the one file, not a directory and not a query across the repository. Empty, the run uses CodeQL's defaults.
