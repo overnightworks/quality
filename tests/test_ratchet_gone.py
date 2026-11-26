@@ -109,6 +109,7 @@ def test_a_held_entry_without_a_measurement_is_gone_left_out_or_stands_by_the_in
     assert gone == ({} if expected is None else {held: expected})
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "held", "checking", "fixing"),
     [
@@ -185,6 +186,7 @@ def test_a_gone_entry_can_fall_and_the_fix_drops_it(build_repo, capsys, files, h
     assert checked(capsys, repo) == (0, "  ✓ debt          clean          ceiling held · 0 entries, 0 clone pairs\n✓ clean · 1 area · <1s\n", "")
 
 
+@pytest.mark.integration
 def test_a_gone_entry_row_follows_the_measured_can_fall_rows(build_repo, capsys):
     """FIX-3, FIX-8, CEILING-6, CEILING-7: the rows of entries the tree measures lower stand first, the row of a gone
     entry after them with no line; the fix lowers the first and drops the second, counted among the lowered."""
@@ -216,6 +218,7 @@ def moved_with_git(pull_request) -> Path:
     return repo
 
 
+@pytest.mark.integration
 def test_a_staged_move_is_gone_beside_new_debt(pull_request, capsys):
     """CEILING-4, CEILING-7, FIX-42, FIX-44: after a staged move `check` reads no history: the new path is new debt and
     the old path is a gone entry that can fall; one fix moves the entry and clears both."""
@@ -235,6 +238,7 @@ def test_a_staged_move_is_gone_beside_new_debt(pull_request, capsys):
     assert checked(capsys, repo)[0] == 0
 
 
+@pytest.mark.integration
 def test_an_untracked_move_destination_keeps_the_entry(pull_request, capsys):
     """CEILING-1, CEILING-4, FIX-41, FIX-42: a moved file the index does not yet track leaves its old entry standing;
     the tracked new path is new debt, and once the move is staged the fix moves the entry."""
@@ -252,6 +256,7 @@ def test_an_untracked_move_destination_keeps_the_entry(pull_request, capsys):
     assert (code, "moved" in out, "dropped" in out) == (0, True, False)
 
 
+@pytest.mark.integration
 def test_a_staged_deletion_with_an_untracked_destination_drops_the_entry_until_the_file_is_tracked(pull_request, capsys):
     """FIX-8, CEILING-4, CEILING-7, FIX-42: an entry whose path a staged deletion leaves the index is gone while the
     file stands untracked elsewhere and the fix drops it; tracking the new path makes it new debt, and with the
@@ -270,6 +275,7 @@ def test_a_staged_deletion_with_an_untracked_destination_drops_the_entry_until_t
     assert (code, "moved" in out, "dropped" in out) == (0, True, False)
 
 
+@pytest.mark.integration
 def test_a_sparse_checkout_keeps_the_entries_it_does_not_hold(build_repo, capsys):
     """CEILING-1: a sparse checkout leaves the entries of the files it does not hold standing, unchanged by the fix."""
     held = ceiling('[function_lines."src/out/b.py"]\nlong_one = 70\n')
@@ -282,6 +288,7 @@ def test_a_sparse_checkout_keeps_the_entries_it_does_not_hold(build_repo, capsys
     assert (code, "dropped" in out, digest(repo)) == (0, False, before)
 
 
+@pytest.mark.integration
 def test_a_deletion_on_disk_only_stands_until_it_is_staged(build_repo, capsys):
     """FIX-8, CEILING-1, CEILING-7: a file deleted on disk only stands, its entry kept by the fix, until the deletion is
     staged; then its entry is gone and the fix drops it."""
@@ -297,6 +304,7 @@ def test_a_deletion_on_disk_only_stands_until_it_is_staged(build_repo, capsys):
     assert load_baseline((repo / BASELINE_PATH).read_text()).size == {}
 
 
+@pytest.mark.integration
 def test_an_unparsable_file_refuses_before_anything_is_gone(build_repo, capsys):
     """SIZE-10, SIZE-11: a file Python cannot parse refuses the check and the fix before any entry is judged gone, and
     the fix writes nothing."""
@@ -308,6 +316,7 @@ def test_an_unparsable_file_refuses_before_anything_is_gone(build_repo, capsys):
         assert (code, "not valid Python" in out, "is gone" in out, digest(repo)) == (2, True, False, before)
 
 
+@pytest.mark.integration
 def test_a_dropped_generated_entry_beside_its_new_declaration_prints_only_the_declaration(pull_request, capsys):
     """GENERATED-10, VERDICT-68: declaring a file and dropping its entry with the fix in one change shows only the
     declaration under the verdict; the dropped entry loosens nothing."""

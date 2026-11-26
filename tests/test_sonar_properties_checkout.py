@@ -13,6 +13,8 @@ from tests.support.sonar import (
     sonar_off_files,
 )
 
+pytestmark = pytest.mark.integration
+
 ADD_ONLY_NEXT = "next: let the coverage artifact add report files only, never change a file the commit tracks\n"
 
 

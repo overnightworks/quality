@@ -436,6 +436,7 @@ PREFIXES = {
 }
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("command", list(PREFIXES))
 @pytest.mark.parametrize(("arrange", "reason"), UNUSABLE_CONFIGS)
 def test_an_unusable_config_is_exit_2_with_one_reason_in_every_command(
@@ -452,6 +453,7 @@ def test_an_unusable_config_is_exit_2_with_one_reason_in_every_command(
     assert "Traceback" not in output
 
 
+@pytest.mark.integration
 @NEEDS_PERMISSIONS
 @pytest.mark.parametrize(
     ("command", "refusal"),
@@ -483,6 +485,7 @@ def point_git_dir_at_a_file(repo: Path, monkeypatch) -> None:
     monkeypatch.setenv("GIT_DIR", str(repo / "README.md"))
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "git_refusal",
     [assume_a_foreign_owner, point_git_dir_at_a_file],

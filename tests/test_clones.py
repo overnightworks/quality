@@ -125,6 +125,7 @@ def test_methods_and_repeated_names_get_the_size_rules_symbols():
     assert {pair.first.symbol for pair in pairs} | {pair.second.symbol for pair in pairs} == {"Holder.method", "method", "method#2"}
 
 
+@pytest.mark.integration
 def test_a_file_python_cannot_parse_has_no_pair_and_leaves_the_clone_rule_clean_while_the_python_rules_exit_2(build_repo, capsys):
     """CLONE-5, SECURITY-18: with no baseline the clone rule skips a file Python cannot parse and is not refused, while
     the `code` row refuses with `ruff cannot parse` and the run exits 2."""

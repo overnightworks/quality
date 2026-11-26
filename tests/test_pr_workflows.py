@@ -18,6 +18,8 @@ from tests.support.check import (
     rule_findings,
 )
 
+pytestmark = pytest.mark.integration
+
 
 @dataclass(frozen=True)
 class Scenario:

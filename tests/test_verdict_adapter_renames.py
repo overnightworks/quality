@@ -31,6 +31,7 @@ def moved(counts: dict[str, int], pyproject: str) -> tuple[str, str, dict[str, s
     return adapter_table({"tests/core": 1}), adapter_table(counts), {"pyproject.toml": pyproject}
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("contracts", [{}, STRIKES_A_MODULE], ids=["the baselines are compared", "a contract module is struck too"])
 @pytest.mark.parametrize(("counts", "pyproject", "code", "line"), [
     pytest.param({"tests": 1}, REGISTERED, 0, None, id="the count moves with the module"),
@@ -84,6 +85,7 @@ def moved_unreadable(pull_request, base, head, unreadable):
     commit_all(repo, "head moves the module")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("unreadable", ["a symlink", "bytes that are no UTF-8 text"])
 @pytest.mark.parametrize(("base", "code", "line"), [
     pytest.param(render_baseline(ceiling({}, None)), 0, None, id="a base without the table judges as it did before the contract"),

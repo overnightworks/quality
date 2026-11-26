@@ -1,3 +1,4 @@
+import json
 import shlex
 import subprocess
 import time
@@ -149,3 +150,14 @@ def commit(repo: Path, message: str) -> None:
     git = ["git", "-C", str(repo), *GIT_IDENTITY]
     subprocess.run([*git, "add", "-A"], check=True)
     subprocess.run([*git, "commit", "-q", "-m", message], check=True)
+
+
+def recorded(name: str) -> str:
+    return (OUTPUTS / name).read_text(encoding="utf-8")
+
+
+FINDING_EXIT = {"actionlint": 1, "zizmor": 12}
+
+
+def recorded_entry(scanner: str) -> dict:
+    return json.loads(recorded(f"{scanner}-finding.json"))[0]

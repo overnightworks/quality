@@ -423,6 +423,7 @@ def test_the_window_read_at_the_start_holds_for_every_row_after_a_resize(window)
     ]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "columns", "cuts", "code"),
     [
@@ -454,6 +455,7 @@ def test_a_run_cuts_exactly_the_descriptive_facts(build_repo, window, files, col
     assert screen(err.read()) == (refusal_pair(repo) if code == 2 else "")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("out_columns", "err_columns", "environment"),
     [(None, 30, {}), (30, 30, {"NO_COLOR": "1"}), (30, 30, {"TERM": "dumb"})],

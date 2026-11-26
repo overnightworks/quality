@@ -21,6 +21,7 @@ def git_directory(build_repo, tmp_path):
     return build_repo({}) / ".git"
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "arrange",
     [
@@ -190,6 +191,7 @@ def test_the_blobs_of_a_name_are_each_version_any_commit_head_reaches_recorded(t
     assert checkout.blobs_of(repo, "f.toml") == expected
 
 
+@pytest.mark.integration
 def test_a_blob_is_the_bytes_of_a_revision(build_repo):
     repo = build_repo({"f.toml": "one\n"})
     assert checkout.blob(repo, ":f.toml") == b"one\n"
@@ -295,6 +297,7 @@ def gate_calls_of(repo: Path, name: str) -> tuple[checkout.Call, ...]:
     return checkout.read_workflows(repo, [name]).gate
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("line", "ref", "release"),
     [
@@ -315,6 +318,7 @@ def test_a_gate_call_is_its_ref_its_file_and_the_release_its_line_names(build_re
     assert gate_calls_of(repo, ".github/workflows/ci.yml") == (checkout.Call(ref.format(**words), ".github/workflows/ci.yml", release),)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "text",
     [

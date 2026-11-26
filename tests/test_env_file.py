@@ -10,6 +10,8 @@ from quality.rules import Rule
 from tests.support.check import assert_row_prints_finding, rows_of, rule_findings
 from tests.support.check import check_output as run
 
+pytestmark = pytest.mark.integration
+
 TRACKED_NAMES = [".env", "config/prod.env", ".env.local"]
 IGNORED_NAMES = ["docs/.env.example", "docs/docker/.env.docker.example", "docs/environment.txt"]
 

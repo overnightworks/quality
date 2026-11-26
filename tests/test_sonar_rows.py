@@ -88,6 +88,7 @@ def findings_checkout(monkeypatch, tmp_path):
     return checkout
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "row", "arguments"),
     [
@@ -113,6 +114,7 @@ def test_clean_properties_print_their_row_and_the_closing_line(capsys, propertie
     )
 
 
+@pytest.mark.integration
 def test_sonar_off_prints_its_row_and_writes_off(capsys, properties_checkout, elsewhere):
     """SONAR-66."""
     properties_checkout({"quality/config.toml": sonar_off_config()})
@@ -125,6 +127,7 @@ def test_sonar_off_prints_its_row_and_writes_off(capsys, properties_checkout, el
     )
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "token", "fact"),
     [
@@ -172,6 +175,7 @@ def test_a_refused_properties_file_is_the_pair_with_the_push_step_and_writes_not
     assert (result, step_output.exists()) == ((2, "", push_pair(fact)), False)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("step", ["properties", "findings"])
 def test_an_empty_token_is_the_pair_with_its_own_step(capsys, properties_checkout, findings_checkout, elsewhere, step):
     """SONAR-61, SONAR-68."""
@@ -208,6 +212,7 @@ def test_every_config_sonar_cannot_read_is_its_fact_and_example_with_the_push_st
     assert (code, out, err.splitlines(), fake.requests) == (2, "", expected, [])
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("step", ["properties", "findings"])
 def test_a_config_reads_alike_in_both_steps(capsys, properties_checkout, findings_checkout, step):
     """O10, SONAR-102, VERDICT-17."""
@@ -226,6 +231,7 @@ def test_a_config_reads_alike_in_both_steps(capsys, properties_checkout, finding
     assert drive(capsys, [step], PULL_REQUEST_ENVIRONMENT) == (2, "", pair)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "environment"),
     [
@@ -426,6 +432,7 @@ def test_a_finding_message_prints_as_one_escaped_row(capsys, findings_checkout):
     assert (code, rows, "\u202e" in out, "\x1b" in out, err) == (1, ["    ! src/a1.py:1  open  python:S1: a\\x0ab\\x1b[31m\\u202ec"], False, False, "")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("step", ["properties", "findings"])
 def test_an_unserved_run_prints_its_ref_escaped_in_the_note(capsys, properties_checkout, findings_checkout, step):
     """SONAR-129."""
@@ -443,6 +450,7 @@ def test_an_unserved_run_prints_its_ref_escaped_in_the_note(capsys, properties_c
     )
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("step", ["properties", "findings"])
 def test_both_steps_take_v_and_print_the_same(capsys, properties_checkout, findings_checkout, elsewhere, step):
     """SONAR-106."""

@@ -173,6 +173,7 @@ def test_a_declaration_for_a_strike_or_removal_the_files_make_green_matches_noth
     assert (code, "unmatched" in output) == (1, True)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("stalls", "fact"),
     [

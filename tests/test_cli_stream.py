@@ -34,6 +34,7 @@ def kill_recorded(pid_file: Path) -> None:
         os.kill(int(pid_file.read_text()), signal.SIGKILL)
 
 
+@pytest.mark.integration
 def test_each_area_starts_after_the_rows_of_every_area_above_it(build_repo, served_scanners, tmp_path, monkeypatch):
     """STREAM-1, STREAM-6: a judged run prints each area's lines to stdout as its last rule ends, none to stderr."""
     repo = build_repo({".github/workflows/w.yml": "on: push\n", "uv.lock": uv_lock(), "src/.env": "A=1\n", "src/bad.py": "def broken(:\n"})
@@ -78,6 +79,7 @@ def test_each_area_starts_after_the_rows_of_every_area_above_it(build_repo, serv
     assert (code, stderr.getvalue()) == (1, "")
 
 
+@pytest.mark.integration
 def test_a_refused_area_stands_before_the_next_scanner_and_the_pair_stays_on_stderr(build_repo, served_scanners, tmp_path):
     """STREAM-2, STREAM-6: a refused area's row stands before the next scanner starts and the pair stays on stderr."""
     repo = build_repo({"compose.yaml": "services: [\n"})
@@ -98,6 +100,7 @@ def interrupting_gitleaks(served_scanners: Path, name: str) -> None:
     fake_scanner(served_scanners, scanners.GITLEAKS, f'echo $$ > "$SCANNER_PID"; exec 9>"${{HELD:-/dev/null}}"; head -c 1048576 /dev/zero; kill -{name} $PPID; exec sleep 60')
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("sent", "under_shell"),
     [
@@ -134,6 +137,7 @@ def test_an_interrupt_during_a_scan_leaves_the_rows_of_the_finished_areas_whole(
         kill_recorded(pid_file)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("sent", "code"),
     [pytest.param(signal.SIGINT, -signal.SIGINT, id="Ctrl-C"), pytest.param(signal.SIGTERM, 128 + signal.SIGTERM, id="SIGTERM")],
@@ -159,6 +163,7 @@ def test_an_interrupt_at_a_terminal_leaves_whole_lines(build_repo, served_scanne
         kill_recorded(pid_file)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "one_pipe"),
     [
@@ -207,6 +212,7 @@ def test_a_reader_that_left_after_the_first_line_changes_neither_the_judging_nor
         os.close(release_end)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(("files", "code"), [pytest.param({"README.md": "x\n"}, 0, id="clean"), pytest.param({"src/.env": "A=1\n"}, 1, id="finding")])
 def test_a_terminal_that_hung_up_during_a_scan_leaves_the_run_s_own_exit(build_repo, served_scanners, tmp_path, window, files, code):
     """STREAM-8: a terminal that hung up during a scan leaves the run's own exit."""
@@ -238,6 +244,7 @@ def test_a_terminal_that_hung_up_during_a_scan_leaves_the_run_s_own_exit(build_r
         os.close(up_end)
 
 
+@pytest.mark.integration
 def test_a_step_s_pipes_carry_the_stop_line_and_no_live_line(build_repo):
     """COLOUR-7, MASK-14: a step's stderr holds the stop line and no other line, the live line included."""
     repo = build_repo({"README.md": "x\n"})
@@ -269,6 +276,7 @@ def env_and_broken_compose(build_repo) -> Path:
     return build_repo({".env": "A=1\n", "compose.yaml": "services: [\n"})
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("door", [QUALITY_MODULE_DOOR, CONSOLE_SCRIPT_DOOR], ids=["module", "console script"])
 def test_a_merged_pipe_of_the_real_entry_points_keeps_the_pair_in_order(env_and_broken_compose, door):
     """Both entry points write the pair in its order; a fixture without a gate pin is refused before any row."""
@@ -278,6 +286,7 @@ def test_a_merged_pipe_of_the_real_entry_points_keeps_the_pair_in_order(env_and_
     )
 
 
+@pytest.mark.integration
 def test_a_merged_pipe_shows_the_check_lines_in_run_order(env_and_broken_compose):
     """STREAM-3: a merged pipe holds the release row, the area rows with their findings (`.env` as env-file's and
     root-layout's rows, each with its fix), then the pair."""
@@ -291,6 +300,7 @@ def test_a_merged_pipe_shows_the_check_lines_in_run_order(env_and_broken_compose
     assert all((line.lstrip() if prefix in indented else line).startswith(prefix) for line, prefix in zip(lines, prefixes, strict=True)), done.stdout
 
 
+@pytest.mark.integration
 def test_discarding_stderr_hides_exactly_the_pair(env_and_broken_compose):
     """STREAM-2, STREAM-3, STREAM-4: no line changes its stream: discarding stderr hides exactly the pair, which
     follows the rows in a merged pipe; the exit stays 2."""
@@ -299,6 +309,7 @@ def test_discarding_stderr_hides_exactly_the_pair(env_and_broken_compose):
     assert (done.returncode, merged.stdout.startswith(done.stdout), merged.stdout[len(done.stdout):]) == (2, True, refusal_pair(env_and_broken_compose))
 
 
+@pytest.mark.integration
 def test_discarding_stdout_leaves_exactly_the_pair(env_and_broken_compose):
     """STREAM-1, STREAM-2: the rows are stdout's and the pair is stderr's: discarding stdout leaves exactly the pair."""
     done = quality_door(CHECK_WORD, cwd=env_and_broken_compose, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -364,6 +375,7 @@ def test_a_closed_stdout_fd_still_prints_the_pair_and_never_crashes(tmp_path, ow
     assert (done.returncode, done.stderr) == (2, f"error: not inside a git work tree · {tmp_path}\nnext: run quality check inside a repository\n")
 
 
+@pytest.mark.integration
 def test_a_closed_stdout_takes_the_rows_and_leaves_the_pair_on_stderr(env_and_broken_compose, served_scanners):
     """STREAM-2, STREAM-9: with no stdout the rows go nowhere and never to stderr, which holds the pair alone."""
     err = io.StringIO()

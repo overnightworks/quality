@@ -27,6 +27,8 @@ from tests.support.scanners import fake_gitleaks, run_deadline, serving
 from tests.support.secrets import FAKE_KEY, HOSTILE_FILE, OTHER_KEY, allow_config
 from tests.support.terminal import Terminal, without_sgr
 
+pytestmark = pytest.mark.integration
+
 KEY_LINE = f"aws_access_key_id = {FAKE_KEY}\n"
 
 

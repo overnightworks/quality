@@ -25,6 +25,8 @@ from tests.support.layout import (
 from tests.support.merge import ONE_JOB
 from tests.support.verdict import verdict_of
 
+pytestmark = pytest.mark.integration
+
 CONFIG = "quality/config.toml"
 GUIDANCE = {"HEART.md": "# guidance\n"}
 

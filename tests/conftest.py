@@ -173,6 +173,11 @@ def keyed_repo(build_repo) -> Path:
 
 
 @pytest.fixture
+def clean_repo(build_repo) -> Path:
+    return build_repo({"README.md": "x\n"})
+
+
+@pytest.fixture
 def elsewhere(tmp_path_factory) -> Path:
     """A scratch directory outside every fixture repository."""
     return tmp_path_factory.mktemp("elsewhere")

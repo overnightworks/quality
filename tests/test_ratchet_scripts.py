@@ -170,6 +170,7 @@ def test_every_script_block_of_a_component_is_read_at_the_lines_of_the_file_and_
     assert reading(suffix, MARKUP_AND_SCRIPT) == [("pick", 2, 3, 2), ("later", 12, 3, 1)]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "path", ["src/api.tsx", "src/api.jsx", "src/api.mts", "src/api.cts", "src/api.cjs", "src/app.css"]
 )
@@ -180,6 +181,7 @@ def test_a_file_of_a_lines_only_suffix_has_no_function_entry(build_repo, capsys,
     assert (code, rule_notes(repo, Rule.SIZE), rule_findings(repo, Rule.SIZE)) == (0, [], []), output
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("suffix", ["ts", "js", "mjs", "svelte", "vue"])
 def test_a_function_of_120_lines_in_a_measured_script_suffix_is_new_debt_at_its_own_line(build_repo, capsys, suffix):
     """SIZE-4: against a baseline the 120-line function of a script file is new debt at the line the file has it."""
@@ -197,6 +199,7 @@ def test_a_function_of_120_lines_in_a_measured_script_suffix_is_new_debt_at_its_
     ), output
 
 
+@pytest.mark.integration
 def test_a_css_file_of_800_lines_is_new_debt_with_no_function_entry(build_repo, capsys):
     """SIZE-1, SIZE-3: a CSS file is debt from 800 lines and is read for no function."""
     repo = build_repo({"src/app.css": ".a { color: red; }\n" * 800, BASELINE_PATH: EMPTY_BASELINE})
@@ -208,6 +211,7 @@ def test_a_css_file_of_800_lines_is_new_debt_with_no_function_entry(build_repo, 
 NOT_UTF8_SCRIPT = b"export const a = '\xe9';\n"
 
 
+@pytest.mark.integration
 def test_without_a_baseline_the_size_rule_notes_a_script_file_that_is_not_utf8(build_repo, capsys):
     """C4, SIZE-9: with no baseline a script file that is not UTF-8 is a note `not UTF-8`; the verdict is unchanged."""
     repo = build_repo_with_source(build_repo, {"src/ok.py": "x = 1\n"}, "src/api.ts", NOT_UTF8_SCRIPT)
@@ -216,6 +220,7 @@ def test_without_a_baseline_the_size_rule_notes_a_script_file_that_is_not_utf8(b
     assert (code, note.path, note.event, note.fact) == (0, "src/api.ts", NoteEvent.NOT_MEASURED, "not UTF-8"), output
 
 
+@pytest.mark.integration
 def test_against_a_baseline_a_script_file_that_is_not_utf8_is_unparsable(build_repo, capsys):
     """C4, SIZE-10: with a baseline such a file makes the debt row `✗ not checked`, naming it, exit 2."""
     repo = build_repo_with_source(build_repo, {BASELINE_PATH: EMPTY_BASELINE}, "src/api.ts", NOT_UTF8_SCRIPT)
@@ -224,6 +229,7 @@ def test_against_a_baseline_a_script_file_that_is_not_utf8_is_unparsable(build_r
     assert f"{refusal_row('debt')}src/api.ts is not UTF-8" in output
 
 
+@pytest.mark.integration
 def test_a_fix_refuses_a_script_file_that_is_not_utf8_and_writes_nothing(build_repo, capsys):
     """C4, SIZE-11: a fix refuses such a file with `✗ not fixed`, exit 2, writing no baseline."""
     repo = build_repo_with_source(build_repo, {}, "src/api.ts", NOT_UTF8_SCRIPT)

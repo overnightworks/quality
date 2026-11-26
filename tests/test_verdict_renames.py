@@ -43,6 +43,7 @@ def metric_label(metric, path):
     return f"{metric} {path}" if metric == "file_lines" else f"{metric} {path} f"
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("metric", ["file_lines", "function_lines", "ccn"])
 @pytest.mark.parametrize(
     ("change", "code"), [(0, 0), (-1, 0), (1, 1)], ids=["equal", "lower", "raised"],
@@ -58,6 +59,7 @@ def test_a_moved_entry_is_held_against_its_predecessor_for_every_metric(capsys, 
     assert (f"size baseline raises {metric_label(metric, 'src/new.py')} {size} -> {size + 1}" in output) == (change == 1)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("head", "new_text", "expected"),
     [
@@ -77,6 +79,7 @@ def test_a_new_symbol_or_metric_or_an_undetected_rename_is_an_add(capsys, pull_r
     assert (code, expected in output) == (1, True)
 
 
+@pytest.mark.integration
 def test_a_moved_file_edited_within_the_threshold_still_meets_its_predecessor(capsys, pull_request):
     """BASELINE-11, BASELINE-12: a moved file edited within git's similarity threshold still meets its
     predecessor."""
@@ -84,6 +87,7 @@ def test_a_moved_file_edited_within_the_threshold_still_meets_its_predecessor(ca
     assert viewed(pull_request[0], capsys) == (0, ["✓ green"])
 
 
+@pytest.mark.integration
 def test_a_file_split_off_beside_a_move_has_its_entries_as_adds(capsys, pull_request):
     """BASELINE-3, BASELINE-12: git pairs the moved half with its predecessor; the split-off file is new."""
     head = OLD_ENTRY.replace("old", "new") + '[ccn."src/split.py"]\n"h" = 16\n'
@@ -92,6 +96,7 @@ def test_a_file_split_off_beside_a_move_has_its_entries_as_adds(capsys, pull_req
     assert (code, "size baseline adds ccn src/split.py h 16" in output, "src/new.py" in output) == (1, True, False)
 
 
+@pytest.mark.integration
 def test_a_commit_that_renames_the_baseline_file_removes_it(capsys, pull_request):
     """BASELINE-6: a baseline moved to another name is gone from its path, as when deleted."""
     repo, commit_base = pull_request
@@ -105,6 +110,7 @@ def test_a_commit_that_renames_the_baseline_file_removes_it(capsys, pull_request
 NEW_ENTRY = OLD_ENTRY.replace("old", "new")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("base", "head", "code", "expected"),
     [
@@ -132,6 +138,7 @@ STALE_LEFTOVER = entry("src/new.py", 200)
 RAISED_LEFTOVER = entry("src/new.py", 150)
 
 
+@pytest.mark.integration
 def test_a_rename_from_a_path_that_is_not_utf8_still_clears_its_target(capsys, pull_request):
     """BASELINE-14: no baseline key names the source, but the stale entry at the target never counts."""
     moved_in_head(pull_request, STALE_LEFTOVER, RAISED_LEFTOVER, old=UNNAMEABLE_SOURCE)
@@ -152,6 +159,7 @@ def test_the_door_refuses_a_rename_from_a_path_that_is_not_utf8_as_the_verdict_d
     assert gh.merge_calls == []
 
 
+@pytest.mark.integration
 def test_a_moved_allowance_is_not_copied_into_a_later_pull_request(capsys, pull_request, monkeypatch):
     """BASELINE-3: after the move the base holds no entry under the old path, so recreating it adds it."""
     repo, _ = pull_request
@@ -164,6 +172,7 @@ def test_a_moved_allowance_is_not_copied_into_a_later_pull_request(capsys, pull_
     assert (code, "size baseline adds function_lines src/old.py f 70" in output) == (1, True)
 
 
+@pytest.mark.integration
 def test_a_move_whose_old_path_is_recreated_in_the_same_pull_request_is_an_add(capsys, pull_request):
     """BASELINE-3: git reports an edit and an addition, no rename, so the target's entries are adds."""
     moved_in_head(pull_request, OLD_ENTRY, NEW_ENTRY, head_files={"src/old.py": OTHER_FILE})
@@ -171,6 +180,7 @@ def test_a_move_whose_old_path_is_recreated_in_the_same_pull_request_is_an_add(c
     assert (code, "size baseline adds function_lines src/new.py f 70" in output) == (1, True)
 
 
+@pytest.mark.integration
 def test_a_swap_in_place_is_two_edits_under_their_own_paths(capsys, pull_request):
     """BASELINE-2: git reports no rename, so only the file that grew is raised."""
     repo, commit_base = pull_request
@@ -185,6 +195,7 @@ def test_a_swap_in_place_is_two_edits_under_their_own_paths(capsys, pull_request
     assert (code, "raises function_lines src/two.py f 50 -> 70" in output, "src/one.py" in output) == (1, True, False)
 
 
+@pytest.mark.integration
 def test_a_path_with_a_carriage_return_and_one_with_a_newline_each_meet_their_own_predecessor(capsys, pull_request):
     """BASELINE-12: the rename list keeps bytes, so a carriage return is never read as a newline."""
     repo, commit_base = pull_request
@@ -203,6 +214,7 @@ STRIP_THE_LIMIT = (
 )
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("setting", "limit_flag_kept", "code"),
     [("renames=false", True, 0), ("renames=copies", True, 0), ("renameLimit=1", True, 0), ("renameLimit=1", False, 1)],
@@ -229,6 +241,7 @@ def test_a_user_git_config_does_not_change_the_rename_map(
     assert verdict_of(repo, capsys)[0] == code
 
 
+@pytest.mark.integration
 def test_without_a_base_commit_no_renames_are_read(capsys, pull_request, monkeypatch, fake_git, tmp_path):
     """BASELINE-18: a push has no GATE_BASE_SHA, so git is never asked for a diff."""
     moved_in_head(pull_request, OLD_ENTRY, NEW_ENTRY)
@@ -276,6 +289,7 @@ def test_a_rename_list_git_did_not_finish_cannot_be_judged(listing):
         renames_of(listing)
 
 
+@pytest.mark.integration
 def test_a_rename_map_git_cannot_list_cannot_be_judged(capsys, pull_request, fake_git):
     """The verdict never guesses that nothing was renamed when git cannot list the renames."""
     moved_in_head(pull_request, OLD_ENTRY, OLD_ENTRY.replace("old", "new"))
@@ -343,6 +357,7 @@ def test_a_fetch_that_fails_cannot_be_judged_before_anything_is_touched(capsys, 
     assert gh.sequence == []
 
 
+@pytest.mark.integration
 def test_a_fetch_that_needs_a_password_never_asks_for_one(capsys, tmp_path, monkeypatch, stub_server):
     """MERGE-97: without credentials git refuses the fetch, and an askpass program in the environment is never run."""
     origin, heard = stub_server(unauthorized)
@@ -367,6 +382,7 @@ def test_a_fetch_that_needs_a_password_never_asks_for_one(capsys, tmp_path, monk
     changed_nothing(gh)
 
 
+@pytest.mark.integration
 def test_the_door_fetches_exactly_the_pull_requests_base_and_merge_commits(tmp_path, fake_git):
     """MERGE-89, MERGE-96, MERGE-106: the door fetches exactly the compared base tip and the merge commit, whatever base
     sha the pull request still names, through gh's credential helper."""
@@ -393,6 +409,7 @@ def test_the_fetched_repository_is_removed(tmp_path, monkeypatch, fails):
     assert list(scratch.iterdir()) == []
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("stalls", "refusal"),
     [
@@ -416,6 +433,7 @@ def test_a_step_that_does_not_finish_in_time_cannot_be_judged_and_leaves_no_chil
     changed_nothing(gh)
 
 
+@pytest.mark.integration
 def test_git_output_of_a_failed_rename_list_never_reaches_the_operator(capsys, tmp_path, fake_git):
     """MERGE-100, MERGE-101: the door says in its own words that the rename list failed and prints none of git's."""
     gh = failing_fetch(tmp_path)
@@ -461,6 +479,7 @@ def unauthorized(handler):
     handler.end_headers()
 
 
+@pytest.mark.integration
 def test_a_netrc_in_the_home_is_never_sent_and_gh_finds_its_login_from_the_empty_home(
     capsys, tmp_path, monkeypatch, stub_server
 ):
@@ -527,6 +546,7 @@ def test_a_sigterm_during_the_fetch_leaves_no_repository_behind(tmp_path):
 NON_UTF8_PATH = os.fsdecode(b"assets/caf\xe9.txt")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("baseline", [None, OLD_ENTRY], ids=["without baselines", "with baselines"])
 def test_an_edited_path_that_is_not_utf8_is_never_decoded(capsys, pull_request, baseline):
     """A file git does not pair counts as new; the rename list never decodes an edit's path."""
@@ -538,6 +558,7 @@ def test_an_edited_path_that_is_not_utf8_is_never_decoded(capsys, pull_request, 
     assert viewed(repo, capsys) == (0, ["✓ green"])
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("base", "head"), [(None, OLD_ENTRY), (OLD_ENTRY, None)], ids=["no base baseline", "no head baseline"]
 )
@@ -564,6 +585,7 @@ def listing_script(printed):
     return f"case \"$*\" in *\" diff \"*) printf '{printed}'; exit 0;; esac"
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(("printed", "cause"), UNFINISHED_LISTS, ids=["cut off", "a source renamed twice"])
 def test_a_rename_list_git_did_not_finish_is_exit_two_at_the_verdict(capsys, pull_request, fake_git, printed, cause):
     """The adapter turns the parser's refusal into exit 2."""
@@ -573,6 +595,7 @@ def test_a_rename_list_git_did_not_finish_is_exit_two_at_the_verdict(capsys, pul
     assert (code, f"error: {cause}" in output) == (2, True)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(("printed", "cause"), UNFINISHED_LISTS, ids=["cut off", "a source renamed twice"])
 def test_a_rename_list_git_did_not_finish_cannot_be_judged_at_the_door(capsys, tmp_path, fake_git, printed, cause):
     """MERGE-101, MERGE-102: a rename list git did not finish is not judged and never replaced by an empty map: exit 2,
@@ -605,6 +628,7 @@ def raise_line(path, base, head, job="e2e"):
     return f"job limit baseline raises {path} {job} {base} -> {head}"
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("head", "code", "expected"),
     [
@@ -623,6 +647,7 @@ def test_a_renamed_workflow_meets_the_job_limits_of_its_predecessor(capsys, pull
     assert (actual_code, expected is None or expected in output, output.count("\n    ! ")) == (code, True, int(code))
 
 
+@pytest.mark.integration
 def test_a_workflow_rename_git_does_not_pair_leaves_the_old_entries_gone_and_the_new_ones_adds(capsys, pull_request):
     """TIMEOUT-17, BASELINE-3."""
     moved_in_head(pull_request, limits(CI, 40), limits(CI_MAIN, 40), new_text=OTHER_FILE, old=CI, new=CI_MAIN)
@@ -630,6 +655,7 @@ def test_a_workflow_rename_git_does_not_pair_leaves_the_old_entries_gone_and_the
     assert (code, f"job limit baseline adds {CI_MAIN} e2e 40" in output) == (1, True)
 
 
+@pytest.mark.integration
 def test_a_job_id_renamed_inside_a_file_is_an_added_entry(capsys, pull_request):
     """TIMEOUT-17."""
     repo, commit_base = pull_request
@@ -640,6 +666,7 @@ def test_a_job_id_renamed_inside_a_file_is_an_added_entry(capsys, pull_request):
     assert (code, f"job limit baseline adds {CI} e2e-long 40" in output) == (1, True)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(("base", "head", "code"), [(40, 45, 1), (45, 40, 0)], ids=["raised", "lowered"])
 def test_a_job_limit_and_its_workflow_changed_together_in_one_commit_is_judged_from_the_baseline_alone(
     capsys, pull_request, base, head, code
@@ -655,6 +682,7 @@ def test_a_job_limit_and_its_workflow_changed_together_in_one_commit_is_judged_f
     assert viewed(repo, capsys) == (code, expected)
 
 
+@pytest.mark.integration
 def test_a_job_raised_over_its_entry_with_no_baseline_change_has_no_loosening_line(capsys, pull_request):
     """TIMEOUT-18: the verdict reads the baseline only; a job over its entry is the check's finding."""
     repo, commit_base = pull_request
@@ -665,6 +693,7 @@ def test_a_job_raised_over_its_entry_with_no_baseline_change_has_no_loosening_li
     assert viewed(repo, capsys) == (0, ["✓ green"])
 
 
+@pytest.mark.integration
 def test_a_baseline_file_deleted_in_the_head_removes_the_job_table_with_the_file(capsys, pull_request):
     """TIMEOUT-18: a deleted file is `quality/baseline.toml removed`, not `job limit baseline removed`."""
     repo, commit_base = pull_request
@@ -682,6 +711,7 @@ JOB_LOOSENINGS = [
 ]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(("base", "head", "what"), JOB_LOOSENINGS)
 def test_a_declared_job_limit_loosening_is_the_declared_red_of_the_verdict_and_an_undeclared_one_is_red(
     capsys, pull_request, base, head, what

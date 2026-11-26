@@ -5,6 +5,8 @@ from quality.rules import Rule
 from tests.support.check import check_result, refusals, rule_findings
 from tests.support.git_repositories import git
 
+pytestmark = pytest.mark.integration
+
 INDEX = 'registry = "https://pypi.org/simple"'
 WHEEL_URL = (
     "https://github.com/overnightworks/design/releases/download/v1.2.0/overnightworks_design-1.2.0-py3-none-any.whl"

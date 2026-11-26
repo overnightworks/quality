@@ -40,6 +40,7 @@ def judged_repository(build_repo) -> Path:
     return build_repo({".github/workflows/w.yml": "on: push\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n      - run: echo hi\n", "uv.lock": uv_lock(), "src/a.py": "x = 1\n"})
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("who", "area", "fact"),
     [
@@ -86,6 +87,7 @@ def test_a_refused_scanners_value_is_withheld(build_repo, served_scanners, elsew
     assert FAKE_KEY in (served_scanners / "gitleaks.vetted").read_text()
 
 
+@pytest.mark.integration
 def test_a_gitleaks_version_refusal_quotes_nothing(build_repo, served_scanners, capsys):
     """VERBOSE-23: a gitleaks version refusal quotes nothing and starts no vet."""
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)), on_version=f"{shouting([FAKE_KEY])}; exit 3")
@@ -96,6 +98,7 @@ def test_a_gitleaks_version_refusal_quotes_nothing(build_repo, served_scanners, 
     assert not (served_scanners / "gitleaks.vetted").exists()
 
 
+@pytest.mark.integration
 def test_the_whole_stderr_is_vetted_before_anything_is_cut(build_repo, served_scanners, elsewhere, capsys):
     """VERBOSE-15, VERBOSE-17, VERBOSE-18: the whole stderr is vetted before a tail is cut, and every line is withheld
     and counted."""
@@ -109,6 +112,7 @@ def test_the_whole_stderr_is_vetted_before_anything_is_cut(build_repo, served_sc
     assert (served_scanners / "gitleaks.vetted").read_text().endswith("\n".join(lines) + "\n")
 
 
+@pytest.mark.integration
 def test_a_cleared_stderr_stands_as_a_tail(build_repo, served_scanners, elsewhere, capsys):
     """VERBOSE-16, VERBOSE-21, MASK-10: a stderr cleared by exit 0 and an empty report stands as one fact line."""
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
@@ -119,6 +123,7 @@ def test_a_cleared_stderr_stands_as_a_tail(build_repo, served_scanners, elsewher
     assert (served_scanners / "gitleaks.vetted").exists()
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "on_vet",
     [
@@ -148,6 +153,7 @@ def test_anything_but_a_clean_answer_withholds_the_text(build_repo, served_scann
     assert "boom" not in out + err
 
 
+@pytest.mark.integration
 def test_a_stalled_vet_withholds_the_text(build_repo, served_scanners, elsewhere, monkeypatch, capsys):
     """VERBOSE-17: a vet that outlasts its time limit withholds the text."""
     fake_gitleaks(served_scanners, on_scan=vetting('echo "[]" > "$report"; exec sleep 30'))
@@ -159,6 +165,7 @@ def test_a_stalled_vet_withholds_the_text(build_repo, served_scanners, elsewhere
     assert "boom" not in out + err
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "stderr",
     [
@@ -194,6 +201,7 @@ def test_no_scratch_directory_withholds_the_text(tmp_path, monkeypatch):
     assert scanners.vetted_tail("boom\n") == " · 1 stderr line withheld · not cleared by gitleaks"
 
 
+@pytest.mark.integration
 def test_a_clean_run_starts_no_vet(build_repo, served_scanners, elsewhere, capsys):
     """VERBOSE-19: a run without -v whose scanners refuse nothing starts no vet, whatever they wrote to stderr."""
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
@@ -207,6 +215,7 @@ def test_a_clean_run_starts_no_vet(build_repo, served_scanners, elsewhere, capsy
     assert not (served_scanners / "gitleaks.vetted").exists()
 
 
+@pytest.mark.integration
 def test_a_refusal_without_stderr_starts_no_vet(build_repo, served_scanners, elsewhere, capsys):
     """VERBOSE-22: a refusal that wrote no stderr starts no vet."""
     fake_gitleaks(served_scanners, on_scan=vetting(flagging(FAKE_KEY)))
@@ -217,6 +226,7 @@ def test_a_refusal_without_stderr_starts_no_vet(build_repo, served_scanners, els
     assert not (served_scanners / "gitleaks.vetted").exists()
 
 
+@pytest.mark.integration
 def test_the_vet_judges_as_the_secret_scan_judges(build_repo, served_scanners, elsewhere, tmp_path, monkeypatch, capsys):
     """VERBOSE-15, VERBOSE-25, VERBOSE-28, VERBOSE-29: the vet reads stdin under quality's config, ignores
     gitleaks:allow, redacts its report and leaves no scratch directory."""
@@ -239,6 +249,7 @@ def test_the_vet_judges_as_the_secret_scan_judges(build_repo, served_scanners, e
     assert list(scratch_root.iterdir()) == []
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 @pytest.mark.parametrize(
     ("text", "withheld", "ignored"),

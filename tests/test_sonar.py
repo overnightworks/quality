@@ -595,6 +595,7 @@ def loopback():
     server.server_close()
 
 
+@pytest.mark.integration
 def test_the_real_transport_returns_json(loopback):
     """The real transport returns the JSON body."""
     responder, _, url = loopback
@@ -602,6 +603,7 @@ def test_the_real_transport_returns_json(loopback):
     assert sonar.fetch_json(url, "Basic x") == {"a": 1}
 
 
+@pytest.mark.integration
 def test_the_real_transport_sends_no_authorization_without_a_credential(loopback):
     """MERGE-79: an anonymous request carries no Authorization header at all, not even an empty Basic one."""
     responder, _, url = loopback
@@ -617,6 +619,7 @@ def test_the_real_transport_sends_no_authorization_without_a_credential(loopback
     assert received == [None, "Basic x"]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("responder", "message"),
     [
@@ -636,6 +639,7 @@ def test_the_real_transport_refuses_what_it_cannot_trust(loopback, responder, me
         sonar.fetch_json(url, "Basic x")
 
 
+@pytest.mark.integration
 def test_the_real_transport_gives_up_on_a_server_that_never_answers(loopback):
     """SONAR-82: a server that never answers is cannot judge after the timeout"""
     responder, release, url = loopback

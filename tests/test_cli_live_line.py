@@ -17,6 +17,8 @@ from tests.support.python_lint import fake_ruff
 from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_gitleaks, fake_scanner, fake_zizmor, lacking
 from tests.support.terminal import PseudoTerminal, Terminal, run_on, screen, without_sgr
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def xterm() -> dict[str, str]:

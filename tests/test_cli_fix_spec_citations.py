@@ -20,6 +20,8 @@ from tests.support.git_repositories import git, put
 from tests.support.source_code import long_function
 from tests.support.specs import SPEC, declaring, foreign_entry, implemented_entry, spec_with
 
+pytestmark = pytest.mark.integration
+
 TEST_FILE = "tests/test_a.py"
 HELD = "[file_lines]\n\n[clones]\n"
 

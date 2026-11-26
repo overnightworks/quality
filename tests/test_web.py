@@ -22,6 +22,7 @@ def test_recognises_which_transport_failures_ran_out_of_time(error, expected):
     assert web.timed_out(error) is expected
 
 
+@pytest.mark.integration
 def test_a_redirect_is_refused_and_its_target_hears_nothing(stub_server):
     """The credential `fetch` sends must never follow a redirect to another host."""
     target, target_heard = stub_server(lambda handler: (handler.send_response(200), handler.end_headers()))
@@ -65,6 +66,7 @@ def drips_the_headers(handler, release) -> None:
     handler.wfile.write(b"\r\n")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("respond", [drips_the_body, drips_the_headers], ids=["body", "headers"])
 def test_a_server_that_drips_ends_at_the_deadline_though_every_socket_operation_is_in_time(stub_server, respond):
     """SONAR-115: the deadline ends the read however the bytes arrive; the operation timeout is far longer than it"""
@@ -79,6 +81,7 @@ def test_a_server_that_drips_ends_at_the_deadline_though_every_socket_operation_
     assert time.monotonic() - started < DEADLINE_SECONDS + MARGIN_SECONDS
 
 
+@pytest.mark.integration
 def test_a_body_that_arrives_whole_within_the_deadline_is_returned_as_sent(stub_server):
     """SONAR-115: the body is returned as the server sent it"""
     body = b"abc" * (1 << 20)
@@ -93,6 +96,7 @@ def test_a_body_that_arrives_whole_within_the_deadline_is_returned_as_sent(stub_
     assert web.fetch_within(f"{origin}/zip", lambda error: CannotJudge(str(error)), time.monotonic() + 30, time.monotonic) == body
 
 
+@pytest.mark.integration
 def test_an_error_answer_ends_the_read_with_the_callers_refusal(stub_server):
     """SONAR-115: a failure of the request is `unreadable(error)`, not an error of the thread that made it"""
     refusal = CannotJudge("refused")
@@ -128,6 +132,7 @@ def drips_a_chunk_size(handler, release, client_gone) -> None:
         client_gone.set()
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("respond", [drips_forever, drips_a_chunk_size], ids=["length", "chunked"])
 def test_the_thread_of_a_read_that_ran_past_the_deadline_closes_its_connection_by_itself(stub_server, respond):
     """SONAR-115: every read of the thread is bounded by the time left, so the abandoned thread ends without the caller's help"""
@@ -143,6 +148,7 @@ def test_the_thread_of_a_read_that_ran_past_the_deadline_closes_its_connection_b
     assert ended_by_itself
 
 
+@pytest.mark.integration
 def test_a_body_that_ends_short_of_its_length_is_refused(stub_server):
     """SONAR-115: a truncated body is the caller's refusal, never a shorter body returned as whole"""
 

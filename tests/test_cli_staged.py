@@ -37,6 +37,7 @@ def a_finding_scan() -> str:
     return f'cp "{OUTPUTS / "gitleaks-finding.json"}" "$report"; exit 7'
 
 
+@pytest.mark.integration
 def test_a_clean_staged_change_prints_its_extent_row_and_the_clean_verdict(build_repo, capsys):
     """STAGED-9: a clean staged change is the secrets row with its file count, then the verdict."""
     repo = build_repo({"README.md": "x\n"})
@@ -44,6 +45,7 @@ def test_a_clean_staged_change_prints_its_extent_row_and_the_clean_verdict(build
     assert fixed(capsys, repo, *STAGED_WORDS) == (0, clean_row("2 files"), "")
 
 
+@pytest.mark.integration
 def test_a_staged_finding_prints_its_extent_row_and_the_findings_verdict(build_repo, served_scanners, capsys):
     """STAGED-9: a staged finding is the secrets row with its finding count and file count, then the verdict."""
     repo = build_repo({"README.md": "x\n"})
@@ -56,6 +58,7 @@ def test_a_staged_finding_prints_its_extent_row_and_the_findings_verdict(build_r
     )
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("committed", "change", "counted"),
     [
@@ -78,6 +81,7 @@ def test_a_staged_run_counts_what_the_next_commit_changes(build_repo, tmp_path, 
     assert fixed(capsys, repo, *STAGED_WORDS)[:2] == (0, clean_row(counted))
 
 
+@pytest.mark.integration
 def test_a_staged_run_prints_no_unused_row(build_repo, capsys):
     """STAGED-10: a staged run prints no unused row for an entry that matches nothing."""
     repo = build_repo({config_entries.CONFIG_PATH: allow_config(("aws-access-token", "docs/gone.txt", FAKE_KEY, "a stale entry"))})
@@ -101,6 +105,7 @@ def stage_a_config_link(repo: Path) -> None:
     git(repo, "add", config_entries.CONFIG_PATH)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("arrange", "fact", "pair"),
     [
@@ -140,6 +145,7 @@ def test_every_refused_staged_run_is_its_row_and_the_pair(build_repo, served_sca
 STAGED_EXAMPLE_REFUSALS = [refusal for refusal in all_refusals() if "staged" in refusal.loaders and refusal.text is not None]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("refusal", STAGED_EXAMPLE_REFUSALS, ids=[refusal.id for refusal in STAGED_EXAMPLE_REFUSALS])
 def test_a_staged_config_refusal_keeps_its_fact_and_its_example_apart(build_repo, capsys, refusal):
     """O10, STAGED-11: a staged config refusal names its fact on the row, its example apart, then the stage step."""
@@ -155,6 +161,7 @@ def test_a_staged_config_refusal_keeps_its_fact_and_its_example_apart(build_repo
         assert (lines[1], steps) == ("next:", ["write it in quality/config.toml like this:", *map(printable, refusal.example), stage_line()])
 
 
+@pytest.mark.integration
 def test_a_staged_config_is_read_from_the_tree_the_commit_records(build_repo, capsys):
     """STAGED-7: the config a staged run reads is the staged one, so an edit that is not staged changes nothing."""
     repo = build_repo({"README.md": "x\n"})
@@ -176,6 +183,7 @@ def test_a_staged_run_outside_a_repository_is_the_start_failure(elsewhere, capsy
     assert (first.startswith("error: not inside a git work tree · "), second) == (True, "next: run quality check secrets --staged inside a repository")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("words", [("--staged", "secrets"), ("secrets", "--staged"), ("secrets", "secrets", "--staged")], ids=["first", "last", "repeated"])
 def test_the_staged_flag_may_stand_before_or_after_its_area(build_repo, capsys, words):
     """HELP-17, HELP-23: --staged stands before or after its area, and a repeated `secrets` is still the one area."""
@@ -183,6 +191,7 @@ def test_the_staged_flag_may_stand_before_or_after_its_area(build_repo, capsys, 
     assert fixed(capsys, repo, CHECK_WORD, *words)[:2] == (0, clean_row("0 files"))
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("verbose", [True, False], ids=["with -v", "without -v"])
 def test_under_v_gitleaks_stands_under_the_staged_row(build_repo, served_scanners, capsys, verbose):
     """VERBOSE-2, VERBOSE-3: under -v the staged row is followed by gitleaks exit and its cleared stderr lines."""

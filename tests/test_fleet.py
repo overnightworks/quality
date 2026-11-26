@@ -50,6 +50,7 @@ HEADER = (
 CLONE = clone_function("copied", "value", "local")
 
 
+@pytest.mark.integration
 def test_a_public_repo_is_one_row_of_commit_lines_ratio_and_debt(fleet_report, public, remotes):
     """FLEET-78, FLEET-80, FLEET-84: a repository is one row of lines, languages and test:prod ratio."""
     name = public("alpha", {"src/app.py": "a = 1\nb = 2\nc = 3\n", "tests/test_app.py": "x = 1\n" * 5})
@@ -60,6 +61,7 @@ def test_a_public_repo_is_one_row_of_commit_lines_ratio_and_debt(fleet_report, p
     ]
 
 
+@pytest.mark.integration
 def test_debt_is_counted_from_the_size_rules_thresholds(fleet_report, public):
     """FLEET-86: files of 800 lines, functions of 60 and CCN 16 are debt; one less is not."""
     name = public(
@@ -79,6 +81,7 @@ def test_debt_is_counted_from_the_size_rules_thresholds(fleet_report, public):
     assert row(output, "o/edges")[5:8] == ["1 / 1", "1 / 0", "1 / 0"]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("path", "lines"),
     [
@@ -110,6 +113,7 @@ def test_the_file_name_decides_production_or_test(fleet_report, public, path, li
     assert row(output, "o/named")[3] == lines
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "source", ["a = 1\n\n# note\n", "a = 1\r\n\r\n# note\r\n", "a = 1\r\r# note\r"], ids=["LF", "CRLF", "CR"]
 )
@@ -120,6 +124,7 @@ def test_blank_and_comment_lines_count_whatever_the_line_ending(fleet_report, pu
     assert row(output, "o/endings")[3] == "3 / 0"
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "cells"),
     [
@@ -139,6 +144,7 @@ LANGUAGES_CELL = 2
 PYTHON_100 = {"src/app.py": long_file(100), "tests/test_app.py": long_file(20)}
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "cell"),
     [
@@ -172,6 +178,7 @@ def test_the_languages_cell_lists_each_measured_language_largest_first(fleet_rep
     assert row(output, "o/polyglot")[LANGUAGES_CELL] == cell
 
 
+@pytest.mark.integration
 def test_the_lines_columns_and_the_function_columns_count_a_typescript_file_like_a_python_one(fleet_report, public):
     """FLEET-77, FLEET-84, FLEET-86: a 1,210-line .ts is a production file from 800 lines, and its 1,208-line
     function is function debt."""
@@ -181,6 +188,7 @@ def test_the_lines_columns_and_the_function_columns_count_a_typescript_file_like
     assert row(output, "o/typed")[3:8] == ["1,210 / 10", "0.01", "1 / 0", "1 / 0", "0 / 0"]
 
 
+@pytest.mark.integration
 def test_a_minified_bundle_counts_its_one_line_and_nothing_is_said_to_be_skipped(fleet_report, public):
     """FLEET-78, FLEET-80: a minified bundle counts its one line, so it is no file from 800 lines."""
     code, output = fleet_report(public("bundled", {"dist/index.js": minified_bundle()}))
@@ -190,6 +198,7 @@ def test_a_minified_bundle_counts_its_one_line_and_nothing_is_said_to_be_skipped
     assert "skip" not in output
 
 
+@pytest.mark.integration
 def test_a_file_of_another_language_is_never_not_valid_python(fleet_report, public):
     """FLEET-90: only an unparsable .py is counted in the note."""
     files = {"src/broken.py": "def (:\n", "src/api.ts": typescript_file(3), "src/Card.svelte": "<p>{</p>\n"}
@@ -198,6 +207,7 @@ def test_a_file_of_another_language_is_never_not_valid_python(fleet_report, publ
     assert row(output, "o/mixed")[-1] == "1 file not valid Python"
 
 
+@pytest.mark.integration
 def test_a_script_file_that_is_not_utf8_is_counted_beside_the_unparsable_python(fleet_report, public, remotes):
     """FLEET-90: the note counts a script file that is not UTF-8 apart from a .py Python cannot parse."""
     name = public("mixed", {"src/broken.py": "def (:\n", "src/api.ts": ""})
@@ -208,6 +218,7 @@ def test_a_script_file_that_is_not_utf8_is_counted_beside_the_unparsable_python(
     assert row(output, "o/mixed")[-1] == "1 file not valid Python, 1 file not UTF-8"
 
 
+@pytest.mark.integration
 def test_an_unparsable_file_is_counted_but_never_named(fleet_report, public):
     """FLEET-89, FLEET-90, FLEET-91: an unparsable .py keeps its lines, and the note counts it without naming it."""
     code, output = fleet_report(public("broken", {"src/secret_name.py": "def (:\n", "src/ok.py": "a = 1\n"}))
@@ -217,6 +228,7 @@ def test_an_unparsable_file_is_counted_but_never_named(fleet_report, public):
     assert "secret_name" not in output
 
 
+@pytest.mark.integration
 def test_a_file_name_that_is_not_utf8_is_measured(fleet_report, public):
     """FLEET-79: a tracked .py whose name is not UTF-8 is measured."""
     code, output = fleet_report(public("bytes", {"caf\udce9.py": "a = 1\n"}))
@@ -224,6 +236,7 @@ def test_a_file_name_that_is_not_utf8_is_measured(fleet_report, public):
     assert row(output, "o/bytes")[3] == "1 / 0"
 
 
+@pytest.mark.integration
 def test_a_repo_that_cannot_be_cloned_names_git_exit_and_no_local_path(fleet_report, public, missing, tmp_path):
     """FLEET-46, FLEET-95, FLEET-96: a repository that cannot be cloned is a row with git's exit code, never a path."""
     code, output = fleet_report(missing)
@@ -232,6 +245,7 @@ def test_a_repo_that_cannot_be_cloned_names_git_exit_and_no_local_path(fleet_rep
     assert str(tmp_path) not in output
 
 
+@pytest.mark.integration
 def test_one_failing_repo_leaves_every_other_row_complete(fleet_report, public, missing):
     """FLEET-46, FLEET-97: a repository that cannot be cloned leaves every other row complete, and the run exits 2."""
     first = public("first", {"a.py": "a = 1\n"})
@@ -278,6 +292,7 @@ def private_host(monkeypatch) -> Iterator[None]:
         thread.join()
 
 
+@pytest.mark.integration
 def test_no_configured_credential_reaches_a_host_that_asks_for_one(fleet_report, public, private_host, tmp_path, monkeypatch):
     """FLEET-73, FLEET-76, FLEET-94, FLEET-95: a helper, an askpass, a `~/.netrc` login and an Authorization header in
     system, global or environment config are never used, the host sees only the repository's paths, and the repository
@@ -316,6 +331,7 @@ def test_the_git_environment_never_holds_the_listing_token(tmp_path, monkeypatch
     assert "GITHUB_TOKEN" not in anonymous_environment(tmp_path)
 
 
+@pytest.mark.integration
 def test_only_the_default_branch_tip_is_measured(fleet_report, public, remotes):
     """FLEET-75: the default branch tip is measured; another branch's files do not count."""
     name = public("branches", {"a.py": "a = 1\n"})
@@ -357,6 +373,7 @@ def report_signalled(fleet: Path, scratch: Path, fake_git: Path) -> int:
     ).returncode
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("outcome", ["measured", "cannot judge"])
 def test_no_temporary_clone_outlives_the_run(fleet_report, public, missing, scratch, outcome):
     """FLEET-74: the temporary directory goes after a measured repository and after one that cannot be judged."""
@@ -364,6 +381,7 @@ def test_no_temporary_clone_outlives_the_run(fleet_report, public, missing, scra
     assert list(scratch.iterdir()) == []
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("stop", [signal.SIGINT, signal.SIGTERM], ids=["Ctrl-C", "SIGTERM"])
 def test_no_temporary_clone_outlives_a_stopped_run(public, scratch, tmp_path, stop):
     """FLEET-74: the temporary directory goes when Ctrl-C, a cancelled job or `timeout` stops the run."""
@@ -374,6 +392,7 @@ def test_no_temporary_clone_outlives_a_stopped_run(public, scratch, tmp_path, st
     assert list(scratch.iterdir()) == []
 
 
+@pytest.mark.integration
 def test_the_heading_names_date_and_version(fleet_report, public):
     """FLEET-41: the date of the run and the quality version."""
     before = datetime.now(UTC).date()
@@ -386,6 +405,7 @@ def test_the_heading_names_date_and_version(fleet_report, public):
     assert (blank, header, separator) == ("", HEADER, "|---" * 10 + "|")
 
 
+@pytest.mark.integration
 def test_the_table_goes_to_stdout_and_identically_to_the_step_summary(fleet_report, public, tmp_path, monkeypatch):
     """FLEET-43: with GITHUB_STEP_SUMMARY the same text is appended there."""
     summary = tmp_path / "summary.md"
@@ -397,6 +417,7 @@ def test_the_table_goes_to_stdout_and_identically_to_the_step_summary(fleet_repo
     assert not any(line.lstrip().startswith("· fleet") for line in summary.read_text().splitlines())
 
 
+@pytest.mark.integration
 def test_without_a_step_summary_nothing_is_written(fleet_report, public, tmp_path, monkeypatch):
     """FLEET-43: without GITHUB_STEP_SUMMARY only stdout carries the table."""
     monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
@@ -422,6 +443,7 @@ def test_a_fleet_given_on_the_command_line_is_a_usage_error(capsys, arguments, s
     )
 
 
+@pytest.mark.integration
 def test_the_fleet_file_is_read_from_the_working_directory_by_default(capsys, public, tmp_path, monkeypatch):
     """FLEET-28: `quality report` reads `./quality/fleet.toml` where it runs."""
     monkeypatch.chdir(write_fleet(tmp_path / "checkout", [public("here", {"a.py": "a = 1\n"})]))
@@ -429,6 +451,7 @@ def test_the_fleet_file_is_read_from_the_working_directory_by_default(capsys, pu
     assert row(capsys.readouterr().out, "o/here")[3] == "1 / 0"
 
 
+@pytest.mark.integration
 def test_rows_sort_by_lower_cased_name_in_both_tables_whatever_the_file_order(fleet_report, public):
     """FLEET-34, FLEET-93: both tables sort by lower-cased name whatever the file order; a named row keeps its case."""
     later = public("Zeta", {"a.py": "a = 1\n"}, owner="b")
@@ -604,6 +627,7 @@ def test_the_report_job_outlasts_its_setup_deadline_one_request_and_tail():
     assert job["timeout-minutes"] * 60 >= parts
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "pairs"),
     [

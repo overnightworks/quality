@@ -41,6 +41,7 @@ def calls_of(calls) -> list[str]:
     return calls.read_text().splitlines() if calls.exists() else []
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("area", "started"),
     [
@@ -60,6 +61,7 @@ def test_a_named_area_starts_only_its_scanners_and_prints_only_its_row(build_rep
     assert (rows_of(out), calls_of(calls)) == ([area], started)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("words", "other", "rows"),
     [
@@ -78,6 +80,7 @@ def test_a_run_of_named_areas_equals_the_same_request_spelt_otherwise(build_repo
     assert (rows_of(named_out), named_out) == (rows, other_out)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("words", "code", "last_line"),
     [
@@ -100,6 +103,7 @@ def refused_stderr(areas_refused: str) -> str:
     return f"error: {areas_refused} could not check\nnext: {cli.REFUSED_AREAS_NEXT.text}\n"
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "words", "code", "has_refused_row", "stderr"),
     [
@@ -116,6 +120,7 @@ def test_a_refusal_outside_the_named_areas_changes_nothing(build_repo, capsys, f
     assert (done, "✗" in out, err) == (code, has_refused_row, stderr)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("area", "unneeded"),
     [
@@ -141,6 +146,7 @@ def test_a_named_area_starts_no_shared_read_it_does_not_need(build_repo, served_
     assert rows_of(out) == [area]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("words", "exit_of_actionlint", "stderr_line", "vet_answer", "code", "shown", "rows", "row"),
     [
@@ -195,6 +201,7 @@ def test_a_selected_scanner_vets_its_stderr_without_judging_another_area(
     assert (scanner_rows(out, Area.WORKFLOWS), glyph, shown in area_fact(out, Area.WORKFLOWS)) == (rows, *row)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("area", "started"),
     [

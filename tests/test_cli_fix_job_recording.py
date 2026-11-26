@@ -16,6 +16,8 @@ from tests.support.source_code import long_function
 from tests.support.verdict import verdict_streams
 from tests.support.verdict_renames import commit_all
 
+pytestmark = pytest.mark.integration
+
 WORKFLOW = ".github/workflows/e2e.yml"
 OTHER = ".github/workflows/other.yml"
 CALLED = ".github/workflows/called.yml"
