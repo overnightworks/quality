@@ -2,14 +2,16 @@
 
 quality's suffix table names the reader and hands lizard a stand-in file name with that suffix, since lizard
 reads an unknown suffix as C. A function lizard gives no name (a callback, an anonymous default export) is no
-record; its branches count in the smallest named function whose lines hold it, as its lines already do.
+record; its branches count in the smallest named function whose lines hold it, as its lines already do. A file
+nested deeper than the interpreter recurses raises `RecursionError`, which lizard's own analyzer would print to stderr
+and swallow, returning the functions read so far.
 """
 
-from collections import Counter
+from collections import Counter, deque
 from dataclasses import dataclass
 
 import lizard
-from lizard import FunctionInfo
+from lizard import FileAnalyzer, FileInfoBuilder, FunctionInfo
 
 ANONYMOUS = "(anonymous)"
 STAND_IN_OF_SUFFIX = {
@@ -19,6 +21,22 @@ STAND_IN_OF_SUFFIX = {
     ".svelte": "stand-in.vue",
     ".vue": "stand-in.vue",
 }
+
+
+class _StrictFileAnalyzer(FileAnalyzer):
+    """lizard's analyzer with the same processors and reader, but a `RecursionError` goes to the caller."""
+
+    def analyze_source_code(self, filename, code):
+        context = FileInfoBuilder(filename)
+        reader = lizard.get_reader_for(filename)(context)
+        tokens = reader.generate_tokens(code)
+        for processor in self.processors:
+            tokens = processor(tokens, reader)
+        deque(reader(tokens, reader), maxlen=0)
+        return context.fileinfo
+
+
+_ANALYZER = _StrictFileAnalyzer(lizard.analyze_file.processors)
 
 
 @dataclass(frozen=True)
@@ -36,8 +54,9 @@ def reads_functions(suffix: str) -> bool:
 
 
 def script_functions(suffix: str, text: str) -> list[ScriptFunction]:
-    """The named functions of one file in source order, equal starts in lizard's order."""
-    found = lizard.analyze_file.analyze_source_code(STAND_IN_OF_SUFFIX[suffix], text).function_list
+    """The named functions of one file in source order, equal starts in lizard's order; a file nested too deeply for
+    lizard to read raises `RecursionError`."""
+    found = _ANALYZER.analyze_source_code(STAND_IN_OF_SUFFIX[suffix], text).function_list
     named = [function for function in found if function.name != ANONYMOUS]
     callbacks = [function for function in found if function.name == ANONYMOUS]
     branches = Counter[int]()

@@ -48,7 +48,7 @@ RESTORE_STEP = Instruction(f"restore {BASELINE_PATH} from git, or repair it by h
 UNKNOWN_TABLE_HINT = "run the quality release your gate pins"
 RAISE_IS_BY_HAND = "a raise is a hand edit and a declared loosening"
 OCCURRENCE_MARK = "#"
-PARSE_ERRORS = (SyntaxError, ValueError, LookupError)
+PARSE_ERRORS = (SyntaxError, ValueError, LookupError, RecursionError)
 TEST_DIRECTORIES = frozenset({"test", "tests"})
 RUNNER_TEST_DIRECTORIES = TEST_DIRECTORIES | {"__tests__"}
 RUNNER_TEST_WORDS = frozenset({"test", "spec", "test-d", "spec-d"})
@@ -138,8 +138,8 @@ Measurements = dict[Key, Measured]
 
 
 class UnparsableSource(SizeError):
-    """A tracked Python file that cannot be decoded or parsed, or a script file that is not UTF-8, so its functions
-    cannot be measured."""
+    """A tracked Python file that cannot be decoded or parsed, or a script file that is not UTF-8 or nested too deeply
+    to read, so its functions cannot be measured."""
 
 
 def language_of(name: str) -> Language | None:
@@ -161,10 +161,12 @@ def area_of(path: str) -> Area:
 
 
 class FunctionSource(Enum):
-    """What reads a file's functions, and so why it cannot be read: Python's parser or a script's UTF-8 text."""
+    """What reads a file's functions, and so why it cannot be read:
+    Python's parser or a script's UTF-8 text and nesting depth."""
 
     PYTHON = "not valid Python"
     SCRIPT = "not UTF-8"
+    SCRIPT_TOO_DEEP = "nested too deeply to read"
 
 
 @dataclass(frozen=True)
@@ -188,8 +190,8 @@ def function_source(path: str) -> FunctionSource | None:
 
 @dataclass(frozen=True)
 class TreeMeasurement:
-    """Every file's lines, and the functions of every Python file Python can parse and every script file that is UTF-8;
-    `unparsable` maps the rest of those files to why."""
+    """Every file's lines, and the functions of every Python file Python can parse and every script file that is
+    UTF-8 and not nested too deeply; `unparsable` maps the rest of those files to why."""
 
     measurements: Measurements
     unparsable: dict[str, Unparsed]
@@ -211,13 +213,22 @@ def measure(sources: dict[str, bytes]) -> TreeMeasurement:
     unparsable: dict[str, Unparsed] = {}
     for path, source in sources.items():
         measurements[Key(Metric.FILE_LINES, path)] = Measured(len(source.splitlines()), None)
+        kind = function_source(path)
         try:
-            functions = _functions_of(path, source)
-        except PARSE_ERRORS as error:
-            unparsable[path] = Unparsed(function_source(path), str(error))
+            functions = dict(_functions_of(path, source))
+        except _unreadable_errors(kind) as error:
+            too_deep = kind is FunctionSource.SCRIPT and isinstance(error, RecursionError)
+            unparsable[path] = Unparsed(FunctionSource.SCRIPT_TOO_DEEP if too_deep else kind, str(error))
             continue
         measurements.update(functions)
     return TreeMeasurement(measurements, unparsable)
+
+
+def _unreadable_errors(source: FunctionSource | None) -> tuple[type[Exception], ...]:
+    """A script file is unreadable only as non-UTF-8 text or as nested too deeply; any other error from it escapes."""
+    if source is FunctionSource.SCRIPT:
+        return (UnicodeDecodeError, RecursionError)
+    return PARSE_ERRORS
 
 
 def _functions_of(path: str, source: bytes) -> Iterator[tuple[Key, Measured]]:
