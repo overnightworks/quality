@@ -1,4 +1,4 @@
-"""What the operator's door prints after `yes`: a row per step, the closing line, or the pair and exit 2."""
+"""What the door prints after the consent: a row per step, the closing line, or the pair and exit 2."""
 
 import os
 import shlex
@@ -11,19 +11,23 @@ from tests.support.merge import (
     MERGE_SHA,
     ONE_JOB,
     REPO,
+    REVIEW_ID,
+    SHA,
     SONAR_GREEN,
     TWO_JOBS,
     FakeGh,
     attempt_rows,
     closing_line,
     comment_line,
+    consenting,
     declaring,
     drive,
     log_body,
+    loosened,
     merge_request,
-    prompt,
     restore_line,
-    rows_before_the_prompt,
+    rows_before_the_attempt,
+    run,
 )
 
 
@@ -122,11 +126,14 @@ def merged_comment_pair():
     return "error: quality_gate on again · #7 is merged · no log comment on #7\nnext:\n" + comment_line()
 
 
-def after_the_question(gh, capsys, **arguments):
-    """The exit code, stdout and stderr once `when_asked` read the question."""
-    code, _ = drive(gh, when_asked=capsys.readouterr, **arguments)
-    streams = capsys.readouterr()
-    return code, streams.out, streams.err
+def after_the_consent_row(out):
+    return out.partition("  ✓ consent ")[2].partition("\n")[2]
+
+
+def after_the_consent(gh, capsys, **arguments):
+    """The exit code, stdout and stderr once the consent row was shown."""
+    code, out, err = run(gh, capsys, **arguments)
+    return code, after_the_consent_row(out), err
 
 
 def gate_body(value):
@@ -150,11 +157,11 @@ def requests_of_the_attempt(gh, repository=REPO):
     ids=["a merge commit", "a squash"],
 )
 def test_a_merge_that_goes_through_is_four_rows_and_the_closing_line(settings, merge_method, method, capsys):
-    """MERGE-29, MERGE-30, MERGE-31, MERGE-33, MERGE-34, MERGE-35, MERGE-36, MERGE-46, MERGE-47, MERGE-48, MERGE-50:
-    a merge that goes through switches the gate off, merges, switches it on and logs, as four rows and the closing
+    """MERGE-29, MERGE-30, MERGE-31, MERGE-33, MERGE-34, MERGE-35, MERGE-36, MERGE-46, MERGE-47, MERGE-48, MERGE-50,
+    MERGE-123: a merge that goes through switches the gate off, merges, switches it on and logs, as four rows and the closing
     line."""
     gh = FakeGh(settings=settings or None)
-    streams = after_the_question(gh, capsys)
+    streams = after_the_consent(gh, capsys)
     assert (*streams, requests_of_the_attempt(gh)) == (
         0,
         attempt_rows(method) + closing_line(),
@@ -169,14 +176,13 @@ def test_a_merge_that_goes_through_is_four_rows_and_the_closing_line(settings, m
 
 
 def gadgets_requests(outcome, restored, *between_restore_and_comment):
-    findings = 'declared loosening (overnightworks/songmaker#1345 of 2026-10-20): mandatory job "B" removed - reason: ruled'
     return [
         gate_request("acme/gadgets", "false"),
         merge_request(12, "acme/gadgets"),
         gate_request("acme/gadgets", "true"),
         *between_restore_and_comment,
         (
-            ("api", "-X", "POST", "repos/acme/gadgets/issues/12/comments", "-f", log_body(outcome=outcome, restored=restored, findings=findings)),
+            ("api", "-X", "POST", "repos/acme/gadgets/issues/12/comments", "-f", log_body(outcome=outcome, restored=restored, findings="")),
             None,
         ),
     ]
@@ -207,7 +213,7 @@ def gadgets_requests(outcome, restored, *between_restore_and_comment):
                 f"    echo '{gate_body('true')}' | gh api -X PATCH repos/acme/gadgets/properties/values --input -\n"
                 "    quality merge acme/gadgets#12\n"
                 "    gh api -X POST repos/acme/gadgets/issues/12/comments -f 'body=quality merge run by @felix at 2026-11-06T12:00:00+00:00: "
-                'declared loosening (overnightworks/songmaker#1345 of 2026-10-20): mandatory job "B" removed - reason: ruled; '
+                f"consent review {REVIEW_ID} at {SHA}; "
                 "merges with a merge commit; quality_gate off → merge failed → NOT restored, it may still be off.'\n"
             ),
             gadgets_requests(merge_failed(), not_restored(), (("api", "repos/acme/gadgets/pulls/12"), None)),
@@ -216,10 +222,11 @@ def gadgets_requests(outcome, restored, *between_restore_and_comment):
     ids=["merged", "the restore, the merge and the comment fail"],
 )
 def test_the_attempt_names_the_pull_request_asked_for(gh_kwargs, code, out, err, requests, capsys):
-    """MERGE-29, MERGE-30, MERGE-35, MERGE-36, MERGE-38, MERGE-39, MERGE-42, MERGE-46, MERGE-49: the attempt names the
-    pull request asked for in its requests, rows, pair and log comment."""
-    gh = FakeGh(checks=SONAR_GREEN, base_config=TWO_JOBS, head_config=ONE_JOB + declaring(B_REMOVED), **gh_kwargs)
-    actual = after_the_question(gh, capsys, repo="acme/gadgets", pull_request="12")
+    """MERGE-29, MERGE-30, MERGE-35, MERGE-36, MERGE-38, MERGE-39, MERGE-42, MERGE-46, MERGE-123: the attempt names the
+    pull request asked for in its requests, rows, pair and log comment with the review and its commit."""
+    consent = consenting(declared=(loosened(B_REMOVED),), legacy_branch=None, repository="acme/gadgets", pull_request=12)
+    gh = FakeGh(checks=SONAR_GREEN, base_config=TWO_JOBS, head_config=ONE_JOB + declaring(B_REMOVED), reviews=consent, **gh_kwargs)
+    actual = after_the_consent(gh, capsys, repo="acme/gadgets", pull_request="12")
     assert actual == (code, out, err)
     assert requests_of_the_attempt(gh, "acme/gadgets") == requests
 
@@ -227,21 +234,17 @@ def test_the_attempt_names_the_pull_request_asked_for(gh_kwargs, code, out, err,
 def test_the_closing_line_counts_the_seconds_from_the_answer(capsys):
     """MERGE-36: the closing line counts the seconds from the answer, the base comparison after it included."""
     gh = FakeGh()
-    seconds = [0.0]
+    seconds = [100.0]
 
     def merging(arguments, stdin=None):
-        if "/compare/" in " ".join(arguments) and seconds[0] == 100.0:
+        if "/compare/" in " ".join(arguments) and gh.compares_read == 1:
             seconds[0] = 110.0
         if list(arguments)[:3] == ["api", "-X", "PUT"]:
             seconds[0] = 114.0
         return gh(arguments, stdin)
 
-    def asking():
-        seconds[0] = 100.0
-        capsys.readouterr()
-
-    drive(merging, when_asked=asking, clock=lambda: seconds[0])
-    actual = capsys.readouterr().out
+    drive(merging, clock=lambda: seconds[0])
+    actual = after_the_consent_row(capsys.readouterr().out)
     assert actual == (
         "  ✓ quality_gate  off            acme/widgets\n"
         "  ✓ #7            merged         merge commit\n"
@@ -353,7 +356,7 @@ def test_each_way_the_attempt_ends_is_its_rows_and_the_pair(gh_kwargs, code, out
     step is a row, the log comment names the outcome, and a merge that landed with the gate on and the comment posted
     ends with the closing line."""
     gh = FakeGh(**gh_kwargs)
-    assert after_the_question(gh, capsys) == (code, out, err)
+    assert after_the_consent(gh, capsys) == (code, out, err)
     assert (gh.sequence, gh.comments) == (sequence, [comment])
 
 
@@ -386,7 +389,7 @@ def test_a_log_comment_not_posted_is_its_cross_row_and_its_command(gh_kwargs, ou
     """MERGE-37, MERGE-38, MERGE-39, MERGE-41: a log comment not posted is its `✗` row and the pair, with the
     comment's own command alone below `next:`."""
     gh = FakeGh(**gh_kwargs)
-    assert after_the_question(gh, capsys) == (2, out, err)
+    assert after_the_consent(gh, capsys) == (2, out, err)
     (comment_argv,) = [argv for argv, _ in gh.requests if argv[-2:-1] == ("-f",)]
     assert shlex.split(err.splitlines()[-1]) == ["gh", *comment_argv]
 
@@ -394,7 +397,7 @@ def test_a_log_comment_not_posted_is_its_cross_row_and_its_command(gh_kwargs, ou
 def test_the_restore_command_repeats_the_request_that_failed(capsys):
     """MERGE-39: the command that switches the gate on repeats the request that failed."""
     gh = FakeGh(fail_on=["restore"])
-    _, _, err = after_the_question(gh, capsys)
+    _, _, err = after_the_consent(gh, capsys)
     argv, stdin = next(request for request in gh.requests if request[1] is not None and '"true"' in request[1])
     assert shlex.split(err.splitlines()[2]) == ["echo", stdin, "|", "gh", *argv]
 
@@ -430,40 +433,39 @@ def workflow_reads():
 
 
 @pytest.mark.parametrize("draft", [False, True], ids=["at the first row", "at a stopped row"])
-def test_a_stdout_that_refuses_a_row_stops_the_door_before_the_question(draft, capsys, monkeypatch):
-    """MERGE-44, PIN-37, PIN-40, PIN-43: a stdout that refuses a row before the question stops the door with exit 2, the
+def test_a_stdout_that_refuses_a_row_stops_the_door_before_the_gate_is_touched(draft, capsys, monkeypatch):
+    """MERGE-44, PIN-37, PIN-40, PIN-43: a stdout that refuses a row before the attempt stops the door with exit 2, the
     pair and no change, after the release was read at the merge commit; a stopped pull request reads none."""
     gh = FakeGh(draft=draft)
     with open("/dev/full", "w", buffering=1) as full:
         monkeypatch.setattr(sys, "stdout", full)
-        code, answers = drive(gh)
-    assert (code, capsys.readouterr().err, answers, gh.calls) == (
+        code = drive(gh)
+    assert (code, capsys.readouterr().err, gh.calls) == (
         2,
         (
             "error: stdout refused a row · nothing changed\n"
             "next: send stdout where it can be written, then run quality merge acme/widgets#7 again\n"
         ),
-        [],
         [("api", "repos/acme/widgets"), ("api", "repos/acme/widgets/pulls/7"), *([] if draft else workflow_reads())],
     )
 
 
-def test_a_closed_stdout_takes_the_rows_and_the_door_still_asks(capsys, monkeypatch):
-    """STREAM-9: a closed stdout takes the rows, the question still reaches stderr and the attempt runs."""
+def test_a_closed_stdout_takes_the_rows_and_the_attempt_runs(capsys, monkeypatch):
+    """STREAM-9: a closed stdout takes the rows and the attempt runs."""
     gh = FakeGh()
     monkeypatch.setattr(sys, "stdout", None)
-    code, _ = drive(gh)
-    assert (code, capsys.readouterr().err, gh.sequence) == (0, prompt(), all_four())
+    code = drive(gh)
+    assert (code, capsys.readouterr().err, gh.sequence) == (0, "", all_four())
 
 
-def test_a_closed_stderr_takes_the_pair_after_the_answer_and_the_run_keeps_its_exit(capsys, monkeypatch):
-    """MERGE-13, MERGE-37: a closed stderr takes the pair of a step not done, and the run keeps its exit."""
+def test_a_closed_stderr_takes_the_pair_after_the_attempt_and_the_run_keeps_its_exit(capsys, monkeypatch):
+    """MERGE-37: a closed stderr takes the pair of a step not done, and the run keeps its exit."""
     monkeypatch.setattr(sys, "stderr", None)
     gh = FakeGh(fail_on=["restore"])
-    code, _ = drive(gh)
+    code = drive(gh)
     assert (code, capsys.readouterr().out, gh.sequence) == (
         2,
-        rows_before_the_prompt() + off() + merged() + restore_failed_row() + posted(),
+        rows_before_the_attempt() + off() + merged() + restore_failed_row() + posted(),
         all_four_but("gate true"),
     )
 
@@ -508,12 +510,12 @@ class RefusingGh(FakeGh):
     ],
 )
 def test_a_stdout_that_refuses_a_row_after_the_answer_leaves_the_attempt_whole(moment, gh_kwargs, code, written, err, sequence, capsys, monkeypatch, tmp_path):
-    """MERGE-45: a stdout that refuses a row after the answer takes no further row or closing line, and the steps, the
+    """MERGE-45: a stdout that refuses a row after the consent takes no further row or closing line, and the steps, the
     pair and the exit stay the run's own."""
     shown = tmp_path / "stdout"
     with shown.open("w", buffering=1) as stream:
         monkeypatch.setattr(sys, "stdout", stream)
         gh = RefusingGh(moment, stream, **gh_kwargs)
-        result, _ = drive(gh)
+        result = drive(gh)
     actual = (result, shown.read_text(), capsys.readouterr().err, gh.sequence)
-    assert actual == (code, rows_before_the_prompt() + written, prompt() + err, sequence)
+    assert actual == (code, rows_before_the_attempt() + written, err, sequence)

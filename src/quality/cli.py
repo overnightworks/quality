@@ -2,7 +2,6 @@ import argparse
 import os
 import re
 import sys
-import termios
 import time
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
@@ -58,7 +57,6 @@ from quality.cli_help import (
 from quality.config import REPOSITORY_NAME
 from quality.gh import GhRunner, run_gh
 from quality.merge import RemoteFor, github_remote, run_merge
-from quality.merge_run import PullRequestName, StartChild, run_merge_names
 from quality.output import (
     SEPARATOR,
     Channel,
@@ -68,7 +66,6 @@ from quality.output import (
     Row,
     SubLine,
     Verdict,
-    ask,
     counted,
     live_line,
     open_channels,
@@ -104,34 +101,15 @@ INSTALLED_ZIZMOR = partial(installation.installed_executable, scanners.ZIZMOR)
 
 
 @dataclass(frozen=True)
-class Terminal:
-    """The door's standard input: where the operator types and whether anyone can."""
-
-    read_line: Callable[[], str]
-    is_terminal: Callable[[], bool]
-    discard_pending: Callable[[], None] = lambda: None
-
-    @classmethod
-    def standard_input(cls) -> Terminal:
-        return cls(
-            lambda: sys.stdin.readline(),
-            lambda: sys.stdin is not None and sys.stdin.isatty(),
-            lambda: termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH),
-        )
-
-
-@dataclass(frozen=True)
 class DoorPorts:
     """What the doors judge with: the installed scanners' locators, check's release that judges, the running
-    installation the merge door judges as, the re-execution into another release and the start of the process that
-    runs the merge door for one of several names."""
+    installation the merge door judges as and the re-execution into another release."""
 
     locate_ruff: Callable[[], str] = INSTALLED_RUFF
     locate_zizmor: Callable[[], str] = INSTALLED_ZIZMOR
     judging: Callable[[Path, str, bool, Mapping[str, str]], pin.JudgingRelease | pin.Reexecution] = pin.judge_here
     running: Callable[[], pin.RunningQuality] = pin.this_installation
     reexecute: Callable[[pin.Reexecution, str, Sequence[str], Mapping[str, str], LiveLine], NoReturn] = pin.reexecute
-    start_child: StartChild = process.run_to_its_end
 
 
 def main(
@@ -143,14 +121,12 @@ def main(
     sleep: Sleep = time.sleep,
     gh: GhRunner = run_gh,
     remote_for: RemoteFor = github_remote,
-    terminal: Terminal | None = None,
     ports: DoorPorts | None = None,
     clock: Callable[[], float] = time.monotonic,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
     environment: Mapping[str, str] = os.environ,
 ) -> int:
     channels = open_channels(environment)
-    standard_input = terminal or Terminal.standard_input()
     try:
         arguments = read_invocation(argv)
     except VersionAsked:
@@ -163,17 +139,13 @@ def main(
     ports = ports or DoorPorts()
     words = sys.argv[1:] if argv is None else argv
     reexecute = partial(ports.reexecute, words=words, environment=environment, live=live_line(channels.err))
-    if arguments.command == "merge" and len(arguments.pull_requests) > 1:
-        return _run_merge_door_for_names(arguments, standard_input, ports, clock, channels)
     if arguments.command == "merge":
         return run_merge(
-            arguments.pull_requests[0].repository,
-            arguments.pull_requests[0].number,
+            arguments.pull_request.repository,
+            arguments.pull_request.number,
             dry_run=arguments.dry_run,
             gh=gh,
             transport=transport,
-            ask=partial(ask, channel=channels.err, read_line=standard_input.read_line),
-            is_terminal=standard_input.is_terminal(),
             now=now,
             environment=environment,
             clock=clock,
@@ -192,15 +164,6 @@ def main(
             return sonar_scanner.run_scanner(environment, clock, channels)
         return sonar.run_findings(environment, transport, sleep, clock, channels)
     return _run_check_door(arguments, ports, reexecute, environment, clock, channels)
-
-
-def _run_merge_door_for_names(
-    arguments: argparse.Namespace, standard_input: Terminal, ports: DoorPorts, clock: Callable[[], float], channels: Channels,
-) -> int:
-    return run_merge_names(
-        arguments.pull_requests, dry_run=arguments.dry_run, verbose=arguments.verbose, is_terminal=standard_input.is_terminal(),
-        channels=channels, clock=clock, start_child=ports.start_child, discard_input=standard_input.discard_pending,
-    )
 
 
 def _run_check_door(
@@ -296,6 +259,14 @@ def named_area(word: str) -> Area:
         raise CannotJudge(f"no area {word}{SEPARATOR}areas: {', '.join(Area)}", help_step("quality check")) from error
 
 
+@dataclass(frozen=True)
+class PullRequestName:
+    """The pull request `quality merge` names: its repository as `<owner>/<repo>` and its number."""
+
+    repository: str
+    number: int
+
+
 PULL_REQUEST_NAME = re.compile(rf"(?P<repository>{REPOSITORY_NAME.pattern})#(?P<number>[1-9][0-9]*)")
 PULL_REQUEST_SHAPE = "a pull request reads OWNER/REPO#N"
 
@@ -317,7 +288,7 @@ def read_invocation(argv: list[str] | None) -> argparse.Namespace:
         raise CannotJudge(f"unknown argument{SEPARATOR}{' '.join(stray)}", help_step(command))
     if arguments.command == "check":
         _refuse_what_check_does_not_take(arguments)
-    if arguments.command == "merge" and not arguments.pull_requests:
+    if arguments.command == "merge" and arguments.pull_request is None:
         raise CannotJudge(f"no pull request{SEPARATOR}{PULL_REQUEST_SHAPE}", help_step(MERGE_COMMAND))
     return arguments
 
@@ -351,7 +322,7 @@ def build_parser() -> DoorParser:
     merge_parser = commands.add_parser("merge", allow_abbrev=False)
     merge_parser.ruled_help = MERGE_HELP
     merge_parser.intermixed = True
-    merge_parser.add_argument("pull_requests", nargs="*", type=named_pull_request, metavar="OWNER/REPO#N")
+    merge_parser.add_argument("pull_request", nargs="?", type=named_pull_request, metavar="OWNER/REPO#N")
     merge_parser.add_argument(DRY_RUN_WORD, dest="dry_run", action="store_true")
     merge_parser.add_argument("-v", dest="verbose", action="store_true")
     report_parser = commands.add_parser("report", allow_abbrev=False)
@@ -694,8 +665,6 @@ def run(
     try:
         exit_code = door()
     except KeyboardInterrupt:
-        process.exit_as_interrupted(send_signal)
-    if exit_code == process.EXIT_INTERRUPTED:  # a run over several names ends its children's interrupt as a Ctrl-C does
         process.exit_as_interrupted(send_signal)
     sys.exit(exit_code)
 

@@ -1,4 +1,4 @@
-"""The operator's door for one pull request, `quality merge`: switch a repository's gate off, merge it, switch it on again."""
+"""The door for one pull request, `quality merge`: on the operator's consent, switch a repository's gate off, merge it, switch it on again."""
 
 import json
 import shlex
@@ -15,6 +15,7 @@ from quality.config import Declaration, GateSettings, LegacyMode
 from quality.config_entries import CONFIG_PATH
 from quality.gh import GhFailed, GhRunner, file_at, workflow_texts_at
 from quality.landing import Landing, LandingKind, LandingRefused, landing_of
+from quality.merge_consent import Review, consent_lines, read_consent
 from quality.output import (
     DRY_RUN,
     SEPARATOR,
@@ -68,7 +69,6 @@ EXIT_REFUSED = 1
 EXIT_COULD_NOT_DO = 2
 
 GATE_PROPERTY = "quality_gate"
-CONFIRMATION_WORD = "yes"
 SONAR_CHECK = f"{CALLER_JOB} / sonar"
 VERDICT_CHECK = f"{CALLER_JOB} / verdict"
 LEGACY_CHECKS = (SONAR_CHECK, VERDICT_CHECK)
@@ -76,7 +76,6 @@ RED = "failure"
 COMPLETED = "completed"
 PENDING_STATUS = "pending"
 
-Ask = Callable[[str], str | None]
 Judging = Callable[[checkout.GateState, str, str], JudgingRelease]
 RemoteFor = Callable[[str], str]
 
@@ -90,7 +89,7 @@ class Refused(Exception):
 
 
 class DoorEvent(StrEnum):
-    """What a row of the operator's door says."""
+    """What a row of the door says."""
 
     OPEN = "open"
     DRAFT = "draft"
@@ -103,6 +102,8 @@ class DoorEvent(StrEnum):
     RUNNING = "running"
     REFUSED = "refused"
     DECLARED = "declared"
+    GIVEN = "given"
+    MISSING = "missing"
     NONE = "none"
     LEGACY_FINDING = "legacy finding"
     MERGE_COMMIT = "merge commit"
@@ -119,12 +120,6 @@ class DoorEvent(StrEnum):
     STATE_UNKNOWN = "state unknown"
     POSTED = "posted"
     NOT_POSTED = "not posted"
-    JUDGING = "judging"
-    WOULD_MERGE = "would merge"
-    STOPPED = "stopped"
-    KILLED = "killed"
-    INTERRUPTED = "interrupted"
-    NOT_RUN = "not run"
 
 
 METHOD_EVENTS = {MergeMethod.MERGE: DoorEvent.MERGE_COMMIT, MergeMethod.SQUASH: DoorEvent.SQUASH}
@@ -185,19 +180,16 @@ class Check:
         return self.status != COMPLETED
 
 
-def described(declaration: Declaration) -> str:
-    return f"declared loosening ({declaration.ruling()}): {declaration.what} - reason: {declaration.reason}"
-
-
 @dataclass(frozen=True)
 class Door:
-    """What the door settled before the word: the pull request, the base branch and the tip the verdict compared, its
+    """What the door settled before the consent: the pull request, the base branch and the tip the verdict compared, its
     declared loosenings, the legacy count where Sonar failed, the method and the landing."""
 
     repository: str
     pull_request: int
     head_sha: str
     base: str
+    default_branch: str
     tip: str
     declared: tuple[Declaration, ...]
     legacy: int | None
@@ -208,9 +200,11 @@ class Door:
     def legacy_count(self) -> list[str]:
         return [] if self.legacy is None else [f"{self.legacy} legacy finding(s)"]
 
-    def reasons(self) -> list[str]:
-        """Why the door merges, as the log comment names it."""
-        return [*self.legacy_count, *map(described, self.declared)]
+    @property
+    def consent_text(self) -> tuple[str, ...]:
+        """What the operator consents to, the block the door prints for this head."""
+        legacy_branch = None if self.legacy is None else self.default_branch
+        return consent_lines(self.repository, self.pull_request, self.head_sha, self.declared, legacy_branch)
 
 
 def sonar_failed(checks: Sequence[Check]) -> bool:
@@ -424,19 +418,14 @@ def settled_by_github(gh: GhRunner, door: Door, interrupted: bool) -> Outcome:
     return Outcome.UNKNOWN if landed is None or interrupted else Outcome.NOT_MERGED
 
 
-def log_comment(login: str, moment: datetime, door: Door, attempt: Attempt) -> str:
+def log_comment(login: str, moment: datetime, door: Door, review: Review, attempt: Attempt) -> str:
     restored = "on" if attempt.restore_error is None else "NOT restored, it may still be off"
     switched = "not switched off" if attempt.outcome is Outcome.NOT_STARTED else "off"
+    why = "; ".join([*door.legacy_count, f"consent review {review.id} at {review.commit_id}"])
     return printable(
-        f"{MERGE_COMMAND} run by @{login} at {moment.isoformat(timespec='seconds')}: {'; '.join(door.reasons())}; merges with a {METHOD_EVENTS[door.merge_method]}; "
+        f"{MERGE_COMMAND} run by @{login} at {moment.isoformat(timespec='seconds')}: {why}; merges with a {METHOD_EVENTS[door.merge_method]}; "
         f"{GATE_PROPERTY} {switched} → {attempt.outcome.value} → {restored}."
     )
-
-
-def confirmed(ask: Ask, pull_request: int) -> bool:
-    """`yes` and nothing else: the end of input is no, and Ctrl-C at the prompt ends the run interrupted."""
-    answer = ask(f"Switch {GATE_PROPERTY} off, merge #{pull_request}, switch it on? Type {CONFIRMATION_WORD}: ")
-    return answer is not None and answer.strip() == CONFIRMATION_WORD
 
 
 def gh_command(repository: str, pull_request: int, word: str) -> Command:
@@ -602,7 +591,7 @@ def read_base(gh: GhRunner, repository: str, pull_request: int, base: str, head_
 
 
 def read_base_unmoved(gh: GhRunner, door: Door) -> Judged[None]:
-    """After `yes`, before the gate is touched: the tip the rows showed is still the base branch's tip."""
+    """After the consent, before the gate is touched: the tip the rows showed is still the base branch's tip."""
     comparison = compare_with_tip(gh, door.repository, door.base, door.head_sha)
     if comparison.tip != door.tip:
         steps = update_steps(door.repository, door.pull_request) if comparison.behind_by else (Command(merge_command(door.repository, door.pull_request)),)
@@ -620,7 +609,7 @@ def judge_pull_request(
     show: Show,
     judging: Judging,
 ) -> tuple[Door, str]:
-    """Each step in the door's order, its rows shown as it passes and the landing's row last, right before the question;
+    """Each step in the door's order, its rows shown as it passes and the landing's row last, right before the consent;
     the first step that does not pass stops the door."""
     rerun = merge_command(repository, pull_request)
     refused: Pair = (REFUSED_ERROR, (gh_command(repository, pull_request, "checks"),))
@@ -649,7 +638,20 @@ def judge_pull_request(
         legacy = step("sonar", sonar_step, refused)
     merge_method, login = step("merge", lambda: read_method(gh, repository, facts, pull["base"]["ref"]), refused)
     show((Row(Glyph.NOTE, LANDING, LANDING_EVENTS[landing.kind], landing.value),))
-    return Door(repository, pull_request, pull["head"]["sha"], pull["base"]["ref"], tip, verdict.declared, legacy, merge_method, landing), login
+    return Door(repository, pull_request, pull["head"]["sha"], pull["base"]["ref"], facts["default_branch"], tip, verdict.declared, legacy, merge_method, landing), login
+
+
+def read_consent_row(gh: GhRunner, door: Door) -> Judged[Review]:
+    """The owner's review that carries the text for this head; without one the door stops at the `consent` row with the
+    block below it and the step that gives it."""
+    lines = door.consent_text
+    review = read_consent(gh, door.repository, door.pull_request, door.head_sha, lines)
+    head = door.head_sha[:7]
+    if review is None:
+        missing = Row(Glyph.NEEDS_YOU, "consent", DoorEvent.MISSING, f"no organisation owner's latest review at {head} carries the text below", block=lines)
+        give = Instruction(f"the operator leaves the text above as his review at {head}, then {merge_command(door.repository, door.pull_request)} runs again")
+        raise Stopped(missing, not_merged(f"no consent review at {head}"), (give,))
+    return review, (Row(Glyph.CLEAN, "consent", DoorEvent.GIVEN, f"review {review.id} at {review.commit_id[:7]}"),)
 
 
 MERGE_FACTS = {Outcome.MERGED: "is merged", Outcome.UNKNOWN: "may be merged"}
@@ -688,10 +690,10 @@ def unfinished_pair(door: Door, attempt: Attempt, unposted: str | None) -> Pair:
 
 
 class Unshown(Exception):
-    """stdout refused a row before the question, so the operator would answer for rows he never read."""
+    """stdout refused a row before the gate was touched, so the operator would consent without the rows he never read."""
 
 
-def shown_before_asking(rows: tuple[Row, ...], out: DoorStream) -> None:
+def shown_before_changing(rows: tuple[Row, ...], out: DoorStream) -> None:
     if not out.show(rows):
         raise Unshown
 
@@ -702,11 +704,6 @@ def end_at(stop: Stopped, show: Show, channels: Channels) -> int:
     return stop.exit_code
 
 
-def refuse_without_terminal(channels: Channels) -> int:
-    write_pair(not_merged("the operator's merge needs a terminal on stdin"), (Instruction("the operator runs it in his own terminal"),), channels.err)
-    return EXIT_REFUSED
-
-
 def run_merge(
     repository: str,
     pull_request: int,
@@ -714,8 +711,6 @@ def run_merge(
     dry_run: bool,
     gh: GhRunner,
     transport: Transport,
-    ask: Ask,
-    is_terminal: bool,
     now: Callable[[], datetime],
     clock: Callable[[], float],
     environment: Mapping[str, str],
@@ -723,39 +718,35 @@ def run_merge(
     judging: Judging,
     remote_for: RemoteFor = github_remote,
 ) -> int:
-    """Every line leaves through `channels`, escaped: rows and the closing line on stdout, the prompt and the pair on stderr;
-    a release that cannot judge is its pair alone."""
-    if not is_terminal:
-        return refuse_without_terminal(channels)
+    """Every line leaves through `channels`, escaped: rows and the closing line on stdout, the pair on stderr; a release
+    that cannot judge is its pair alone."""
     out = DoorStream(channels.out)
-    show = partial(shown_before_asking, out=out)
+    show = partial(shown_before_changing, out=out)
+    again = Instruction(f"fix what the ✗ row names, then run {merge_command(repository, pull_request)} again")
     try:
         try:
             door, login = judge_pull_request(repository, pull_request, gh, transport, environment, remote_for, show, judging)
+            review = judged("consent", lambda: read_consent_row(gh, door), (REFUSED_ERROR, ()), again, show=show)
         except Stopped as stop:
             return end_at(stop, show, channels)
         except CannotJudge as refusal:
-            again = Instruction(f"fix what the error names, then run {merge_command(repository, pull_request)} again")
-            write_pair(refusal.reason.fact, refusal.reason.next_steps or (again,), channels.err)
+            release_error = Instruction(f"fix what the error names, then run {merge_command(repository, pull_request)} again")
+            write_pair(refusal.reason.fact, refusal.reason.next_steps or (release_error,), channels.err)
             return EXIT_COULD_NOT_DO
     except Unshown:
-        again = Instruction(f"send stdout where it can be written, then run {merge_command(repository, pull_request)} again")
-        write_pair(f"stdout refused a row{SEPARATOR}{NOTHING_CHANGED}", (again,), channels.err)
+        send_elsewhere = Instruction(f"send stdout where it can be written, then run {merge_command(repository, pull_request)} again")
+        write_pair(f"stdout refused a row{SEPARATOR}{NOTHING_CHANGED}", (send_elsewhere,), channels.err)
         return EXIT_COULD_NOT_DO
     if dry_run:
         write_closing_line(Glyph.WILL_CHANGE, (DRY_RUN, f"would switch {GATE_PROPERTY} off, merge #{pull_request}, switch it on", NOTHING_CHANGED), channels.out)
         return EXIT_YES
-    if not confirmed(ask, pull_request):
-        write_pair(f"not confirmed{SEPARATOR}{NOTHING_CHANGED}", (Command(merge_command(repository, pull_request)),), channels.err)
-        return EXIT_REFUSED
     started = clock()
-    again = Instruction(f"fix what the ✗ row names, then run {merge_command(repository, pull_request)} again")
     try:
         judged("base", lambda: read_base_unmoved(gh, door), (REFUSED_ERROR, ()), again, show=lambda rows: None)
     except Stopped as stop:
         return end_at(stop, out.show, channels)
     attempt = switch_off_merge_switch_on(gh, door, out)
-    comment = log_comment(login, now(), door, attempt)
+    comment = log_comment(login, now(), door, review, attempt)
     posted = post_log_comment(gh, door, comment, out)
     if attempt.outcome is Outcome.MERGED and attempt.restore_error is None and posted:
         write_closing_line(Glyph.CLEAN, (f"merged #{pull_request}", f"{GATE_PROPERTY} on again", format_duration(clock() - started)), channels.out)

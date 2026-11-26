@@ -61,7 +61,7 @@ CALLER_JOB = "quality"
 
 
 def merge_command(repository: str, pull_request: int) -> str:
-    """The operator's door for one pull request, as a person types it."""
+    """The door for one pull request, as a person types it."""
     return f"{MERGE_COMMAND} {repository}#{pull_request}"
 
 
@@ -189,7 +189,7 @@ class Verdict:
 
     @property
     def blocked(self) -> bool:
-        """Anything but a declared loosening: what no ruling lets the operator's door merge."""
+        """Anything but a declared loosening: what no ruling lets the door merge."""
         return bool(self.undeclared or self.stale or self.failed)
 
     @property
@@ -197,9 +197,15 @@ class Verdict:
         return not (self.loosenings or self.blocked or self.unsettled)
 
 
+def declaration_texts(declaration: Declaration) -> tuple[str, str]:
+    """A declaration as the verdict, the door and the consent text word it: its `what` with its ruling, and its reason."""
+    return f"{declaration.what}{SEPARATOR}{declaration.ruling()}", f"reason: {declaration.reason}"
+
+
 def declaration_line(declaration: Declaration) -> SubLine:
     """A declaration as the verdict and the door show it: its `what`, its ruling, and its reason below."""
-    return SubLine(Glyph.NEEDS_YOU, f"{declaration.what}{SEPARATOR}{declaration.ruling()}", whole=True, below=(f"reason: {declaration.reason}",))
+    shown, reason = declaration_texts(declaration)
+    return SubLine(Glyph.NEEDS_YOU, shown, whole=True, below=(reason,))
 
 
 def loosening_lines(verdict: Verdict) -> tuple[SubLine, ...]:

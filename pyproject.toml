@@ -82,9 +82,8 @@ exhaustive = true
 layers = [
     "cli",
     "cli_help",
-    "merge_run",
     "merge",
-    "landing | base_branch",
+    "merge_consent | landing | base_branch",
     "verdict",
     "loosenings",
     "sides | gh",

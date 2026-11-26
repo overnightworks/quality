@@ -1,4 +1,4 @@
-"""The rows the operator's door prints before its prompt and the pair it prints when a step stops it."""
+"""The rows the door prints before its consent check and the pair it prints when a step stops it."""
 
 import contextlib
 import io
@@ -27,16 +27,17 @@ from tests.support.merge import (
     changed_nothing,
     closing_line,
     comment_line,
+    consenting,
     declaring,
     door_ports,
     frozen_now,
+    loosened,
     no_network,
-    not_confirmed_pair,
-    prompt,
     restore_line,
     run,
     sonar,
 )
+from tests.support.merge import consent_row as consent_row_with_line_end
 from tests.support.merge import pull_row as pull_row_with_line_end
 from tests.support.terminal import screen
 
@@ -96,8 +97,15 @@ def merge_and_landing_rows(work_item="#3"):
     return ["  · merge         merge commit   allowed on main", f"  · landing       work item      {work_item}"]
 
 
+def consent_row():
+    return consent_row_with_line_end().removesuffix("\n")
+
+
 def rows_before_the_attempt():
-    return [release_row(), pull_row(), base_row_text(), checks_row(), loosenings_none(), legacy_row(), *merge_and_landing_rows()]
+    return [release_row(), pull_row(), base_row_text(), checks_row(), loosenings_none(), legacy_row(), *merge_and_landing_rows(), consent_row()]
+
+
+DRY_RUN_AT_40 = ["~ dry run · would switch quality_gate off, merge #7, switch it on · nothing changed"]
 
 
 def verdict_only_checks_row():
@@ -119,27 +127,19 @@ def not_judged_pair():
 
 
 @pytest.mark.parametrize(
-    ("terminal", "repository", "code", "pair"),
+    ("repository", "code", "pair"),
     [
-        (False, REPO, 1, frame(
-            "error: not merged · the operator's merge needs a terminal on stdin · nothing changed",
-            "next: the operator runs it in his own terminal",
-        )),
-        (True, "not-a-repo", 2, frame(
-            "error: no pull request not-a-repo#7 · a pull request reads OWNER/REPO#N",
-            "next: quality merge --help",
-        )),
-        (False, "not-a-repo", 2, frame(
+        ("not-a-repo", 2, frame(
             "error: no pull request not-a-repo#7 · a pull request reads OWNER/REPO#N",
             "next: quality merge --help",
         )),
     ],
-    ids=["no terminal", "a malformed name", "a malformed name and no terminal"],
+    ids=["a malformed name"],
 )
-def test_a_refusal_before_any_read_is_the_pair_alone(terminal, repository, code, pair, capsys):
-    """MERGE-21, HELP-12, HELP-18: no terminal, or a name of another form, is the pair alone and nothing is read."""
+def test_a_refusal_before_any_read_is_the_pair_alone(repository, code, pair, capsys):
+    """HELP-12, HELP-18: a name of another form is the pair alone and nothing is read."""
     gh = FakeGh()
-    refused, out, err, _ = run(gh, capsys, terminal=terminal, repo=repository)
+    refused, out, err = run(gh, capsys, repo=repository)
     assert (refused, out, err, gh.calls) == (code, "", pair, [])
 
 
@@ -165,8 +165,8 @@ def test_a_draft_stops_the_door_before_its_body_or_any_check_is_read(gh_kwargs, 
     """MERGE-14, MERGE-56, MERGE-57, MERGE-58, PIN-43: a draft or a closed pull request stops the door at its `!` row
     and the pair, before its body, any check or the pin is read."""
     gh = FakeGh(**gh_kwargs)
-    code, out, err, answers = run(gh, capsys)
-    assert (code, out, err, answers) == (1, frame(row), pair, [])
+    code, out, err = run(gh, capsys)
+    assert (code, out, err) == (1, frame(row), pair)
     assert gh.requests == [(("api", f"repos/{REPO}"), None), (("api", f"repos/{REPO}/pulls/7"), None)]
     changed_nothing(gh)
 
@@ -190,9 +190,9 @@ def test_the_door_asks_for_the_head_commits_checks_and_statuses_and_the_login_by
 def test_a_draft_flag_that_is_no_boolean_cannot_be_judged(draft, capsys):
     """MERGE-16: a draft flag that is no boolean is its `✗` row and the pair."""
     gh = FakeGh(draft=draft)
-    code, out, err, answers = run(gh, capsys)
-    assert (code, out, err, answers) == (
-        2, frame("  ✗ #7            not judged     GitHub's answer for the pull request holds no draft flag"), not_judged_pair(), [],
+    code, out, err = run(gh, capsys)
+    assert (code, out, err) == (
+        2, frame("  ✗ #7            not judged     GitHub's answer for the pull request holds no draft flag"), not_judged_pair(),
     )
     changed_nothing(gh)
 
@@ -268,8 +268,8 @@ def test_each_refusal_is_its_row_and_the_pair(gh_kwargs, sonar_kwargs, rows, cap
     MERGE-87: each refusal is its `!` row and the pair, and the verdict's blocking lines stand below the `loosenings`
     row."""
     gh = FakeGh(**gh_kwargs)
-    code, out, err, answers = run(gh, capsys, transport=sonar(**sonar_kwargs))
-    assert (code, out, err, answers) == (1, frame(*rows), refused_pair(), [])
+    code, out, err = run(gh, capsys, transport=sonar(**sonar_kwargs))
+    assert (code, out, err) == (1, frame(*rows), refused_pair())
     changed_nothing(gh)
 
 
@@ -315,8 +315,8 @@ def test_a_step_that_cannot_be_judged_is_its_cross_row_and_the_pair(gh_kwargs, s
     """MERGE-16, MERGE-54, MERGE-55, MERGE-105: a step that cannot be judged is its `✗` row and the pair, a missing admin right
     included."""
     gh = FakeGh(**gh_kwargs)
-    code, out, err, answers = run(gh, capsys, transport=sonar(**sonar_kwargs))
-    assert (code, out, err, answers) == (2, frame(*rows), not_judged_pair(), [])
+    code, out, err = run(gh, capsys, transport=sonar(**sonar_kwargs))
+    assert (code, out, err) == (2, frame(*rows), not_judged_pair())
     changed_nothing(gh)
 
 
@@ -339,10 +339,10 @@ def test_every_config_refused_at_the_merge_commit_is_its_fact_on_the_row_and_its
     """MERGE-17, MERGE-20, O10: a config refused at the merge commit is its fact on the `✗ loosenings` row, its
     example under `next:` and the push step."""
     gh = FakeGh(merge_config=refusal.text)
-    code, out, err, answers = run(gh, capsys)
+    code, out, err = run(gh, capsys)
     lines = err.splitlines()
     row = f"  ✗ loosenings    not judged     {printable(refusal.fact)}"
-    assert (code, out, lines[0], answers) == (2, frame(release_row(), pull_row(), base_row_text(), checks_row(), row), "error: could not judge · nothing changed", [])
+    assert (code, out, lines[0]) == (2, frame(release_row(), pull_row(), base_row_text(), checks_row(), row), "error: could not judge · nothing changed")
     if refusal.example is None:
         assert lines[1:] == [f"next: {push_step()}"]
     else:
@@ -364,8 +364,8 @@ def test_a_head_behind_the_base_tip_is_refused_as_base_before_the_checks_and_cha
     """MERGE-103, MERGE-104: a head that lacks commits of the base's live tip stops the door at the `base` row, also
     while its checks run, with the update step, exit 1, no write request and no log comment."""
     gh = FakeGh(**gh_kwargs)
-    code, out, err, answers = run(gh, capsys)
-    assert (code, out, err, answers) == (
+    code, out, err = run(gh, capsys)
+    assert (code, out, err) == (
         1,
         frame(release_row(), f"  · #7            open           head aaaaaaa · into {base}", f"  ! base          behind         {behind_by} commit(s) behind {base}"),
         frame(
@@ -374,7 +374,6 @@ def test_a_head_behind_the_base_tip_is_refused_as_base_before_the_checks_and_cha
             "    gh pr update-branch 7 --repo acme/widgets",
             "    wait for the checks, then run quality merge acme/widgets#7 again",
         ),
-        [],
     )
     changed_nothing(gh)
     assert (gh.comments, [call for call in gh.calls if "-X" in call]) == ([], [])
@@ -422,7 +421,6 @@ def test_a_config_refusal_at_the_door_reads_as_drawn(gh_kwargs, into, fact, pair
             f"  ✗ loosenings    not judged     {fact}",
         ),
         frame("error: could not judge · nothing changed", *pair_end),
-        [],
     )
     changed_nothing(gh)
 
@@ -430,7 +428,7 @@ def test_a_config_refusal_at_the_door_reads_as_drawn(gh_kwargs, into, fact, pair
 def test_a_config_refused_at_both_commits_is_fixed_on_the_base_first(capsys):
     """MERGE-18, MERGE-19: a config refused at both commits is fixed on the base first."""
     gh = FakeGh(base_config=sonar_string_config(), merge_config=unknown_key_config(), base_ref="release/v0.9")
-    code, out, err, _ = run(gh, capsys)
+    code, out, err = run(gh, capsys)
     assert (code, out.splitlines()[-1], err.splitlines()[1:]) == (
         2,
         "  ✗ loosenings    not judged     quality/config.toml [gate] sonar must be true or false",
@@ -441,7 +439,7 @@ def test_a_config_refused_at_both_commits_is_fixed_on_the_base_first(capsys):
 
 def test_the_rows_name_the_pull_requests_base_not_the_default_branch(capsys):
     """MERGE-1, MERGE-4, MERGE-35, MERGE-36: the rows name the pull request's base, not the default branch, before
-    and after yes."""
+    and after the consent."""
     gh = FakeGh(base_ref="release/1")
     shown = run(gh, capsys)
     assert shown == (
@@ -453,21 +451,21 @@ def test_the_rows_name_the_pull_requests_base_not_the_default_branch(capsys):
             legacy_row(),
             "  · merge         merge commit   allowed on release/1",
             "  · landing       work item      #3",
+            consent_row(),
             *attempt_rows().splitlines(),
             closing_line().rstrip("\n"),
         ),
-        prompt(),
-        ["yes\n"],
+        "",
     )
 
 
-def at_a_terminal(gh, window, columns, transport=None, typed="no\n"):
-    """What the door shows on a terminal of `columns` before it asks, read off the screen, with its exit and stderr."""
+def at_a_terminal(gh, window, columns, transport=None, words=("--dry-run",)):
+    """What the door shows on a terminal of `columns`, read off the screen, with its exit and stderr."""
     terminal = window(columns)
     errors = io.StringIO()
     with contextlib.redirect_stdout(terminal.stream), contextlib.redirect_stderr(errors):
         code = cli.main(
-            ["merge", f"{REPO}#7"], gh=gh, transport=transport or sonar(), terminal=cli.Terminal(lambda: typed, lambda: True),
+            ["merge", f"{REPO}#7", *words], gh=gh, transport=transport or sonar(),
             remote_for=no_network, environment={"TERM": "xterm"}, now=frozen_now, ports=door_ports(),
         )
     return code, screen(terminal.read()).splitlines(), errors.getvalue()
@@ -477,22 +475,26 @@ def at_a_terminal(gh, window, columns, transport=None, typed="no\n"):
     ("gh_kwargs", "sonar_kwargs", "code", "lines", "err"),
     [
         (
-            {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED, reason="a reason that runs on past the window")},
-            {}, 1,
+            {
+                "checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED, reason="a reason that runs on past the window"),
+                "reviews": consenting(declared=(loosened(B_REMOVED, reason="a reason that runs on past the window"),), legacy_branch=None),
+            },
+            {}, 0,
             [
                 release_row(), pull_row(), base_row_text(), verdict_only_checks_row(), "  ! loosenings    1 declared",
                 f'    ! {B_REMOVED} · overnightworks/songmaker#1345 of 2026-10-20',
                 "        reason: a reason that runs on past the window",
-                *merge_and_landing_rows(),
+                *merge_and_landing_rows(), consent_row(), *DRY_RUN_AT_40,
             ],
-            prompt() + not_confirmed_pair(),
+            "",
         ),
         (
-            {"body": "Work-Item: #123456789"}, {}, 1,
+            {"body": "Work-Item: #123456789"}, {}, 0,
             [
                 release_row(), pull_row(), base_row_text(), checks_row(), loosenings_none(), legacy_row(), *merge_and_landing_rows("#123456789"),
+                consent_row(), *DRY_RUN_AT_40,
             ],
-            prompt() + not_confirmed_pair(),
+            "",
         ),
         (
             {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB},
@@ -589,7 +591,5 @@ def test_a_refused_or_cross_fact_ends_at_the_window(gh_kwargs, code, lines, err,
 def test_an_attempts_cross_fact_ends_at_the_window(gh_kwargs, lines, pair_end, window):
     """LENGTH-1, LENGTH-6, MERGE-37, MERGE-39: at a terminal a `✗` row of the attempt ends at the window, and the pair
     and its commands stand whole."""
-    code, shown, err = at_a_terminal(FakeGh(**gh_kwargs), window, 40, typed="yes\n")
-    assert (code, shown, err) == (
-        2, rows_before_the_attempt() + lines, prompt() + "".join(f"{line}\n" for line in pair_end),
-    )
+    code, shown, err = at_a_terminal(FakeGh(**gh_kwargs), window, 40, words=())
+    assert (code, shown, err) == (2, rows_before_the_attempt() + lines, "".join(f"{line}\n" for line in pair_end))

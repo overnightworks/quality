@@ -11,8 +11,8 @@ from tests.support.merge import (
     drive,
     landing_pair,
     not_judged_pair,
-    prompt,
     pull_row,
+    run,
 )
 
 
@@ -80,14 +80,14 @@ def test_the_merge_commit_ends_with_the_bodys_one_classification_line(body, mess
     """MERGE-30, MERGE-64, MERGE-65, MERGE-66, MERGE-69: the merge commit ends with the body's one line outside the fences, in its
     trailer form, after a blank line."""
     gh = FakeGh(body=body)
-    assert (drive(gh)[0], gh.merge_messages) == (0, [message])
+    assert (drive(gh), gh.merge_messages) == (0, [message])
     assert "-F" not in gh.merge_calls[0]
 
 
 def test_a_squash_ends_with_the_same_line():
     """MERGE-69: a squash ends with the same line."""
     gh = FakeGh(body="Work-Item: #9\n\nWhy.", settings={"allow_merge_commit": False, "allow_squash_merge": True, "allow_rebase_merge": False})
-    assert (drive(gh)[0], gh.merge_messages) == (0, ["Why.\n\nWork-Item: #9"])
+    assert (drive(gh), gh.merge_messages) == (0, ["Why.\n\nWork-Item: #9"])
     assert [(body["merge_method"], body["sha"]) for body in gh.merge_bodies] == [("squash", SHA)]
 
 
@@ -120,10 +120,9 @@ def test_a_body_without_one_valid_line_keeps_the_door_shut(body, line, capsys):
     stops the door at its `! landing  refused` row under the pull request's row, with the reason and the pair, and
     changes nothing; the line's text cannot forge a line."""
     gh = FakeGh(body=body)
-    code, answers = drive(gh)
-    output = capsys.readouterr()
-    assert (code, output.out, output.err, answers) == (1, f"{RELEASE_ROW}{pull_row()}  ! landing       refused        {line}\n", landing_pair(), [])
-    assert_every_line_starts_with_the_door(output.out.splitlines())
+    code, out, err = run(gh, capsys)
+    assert (code, out, err) == (1, f"{RELEASE_ROW}{pull_row()}  ! landing       refused        {line}\n", landing_pair())
+    assert_every_line_starts_with_the_door(out.splitlines())
     changed_nothing(gh)
 
 
@@ -135,19 +134,15 @@ def test_a_body_without_one_valid_line_keeps_the_door_shut(body, line, capsys):
 def test_a_body_that_is_no_text_cannot_be_judged(body, capsys):
     """MERGE-16: a body that is no text is not judged: its `✗ landing` row and the pair, nothing changed."""
     gh = FakeGh(body=body)
-    code, answers = drive(gh)
-    output = capsys.readouterr()
-    assert (code, output.out, output.err, answers) == (2, f"{RELEASE_ROW}{pull_row()}  ✗ landing       not judged     {no_body_text()}\n", not_judged_pair(), [])
+    assert run(gh, capsys) == (2, f"{RELEASE_ROW}{pull_row()}  ✗ landing       not judged     {no_body_text()}\n", not_judged_pair())
     changed_nothing(gh)
 
 
 def test_a_pull_answer_without_a_body_field_cannot_be_judged(capsys):
     """MERGE-16: a pull answer without a body field is not judged: its `✗ landing` row and the pair."""
     gh = FakeGh(body=ABSENT)
-    code, answers = drive(gh)
-    output = capsys.readouterr()
-    assert (code, output.out, output.err, answers) == (
-        2, f"{RELEASE_ROW}{pull_row()}  ✗ landing       not judged     GitHub's answer holds no 'body'\n", not_judged_pair(), []
+    assert run(gh, capsys) == (
+        2, f"{RELEASE_ROW}{pull_row()}  ✗ landing       not judged     GitHub's answer holds no 'body'\n", not_judged_pair()
     )
     changed_nothing(gh)
 
@@ -162,14 +157,12 @@ def test_a_pull_answer_without_a_body_field_cannot_be_judged(capsys):
     ],
     ids=["a work item", "no item", "this repository named whole", "a kind in capitals"],
 )
-def test_the_last_row_before_the_question_is_what_the_merge_commit_ends_with(body, row, capsys):
-    """MERGE-5: the last row before the question is what the merge commit ends with."""
-    shown = []
-    drive(FakeGh(body=body), when_asked=lambda: shown.append(capsys.readouterr()))
-    assert (shown[0].out, shown[0].err) == (
-        (f"{RELEASE_ROW}{pull_row()}{base_row()}  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
-        f"  ✓ loosenings    none\n  ! sonar         4 legacy findings on main\n  · merge         merge commit   allowed on main\n  · landing       {row}\n"),
-        prompt(),
+def test_the_last_row_before_the_consent_is_what_the_merge_commit_ends_with(body, row, capsys):
+    """MERGE-5: the last row before the consent check is what the merge commit ends with."""
+    _, out, _ = run(FakeGh(body=body), capsys, words=["--dry-run"])
+    assert out.startswith(
+        f"{RELEASE_ROW}{pull_row()}{base_row()}  ✓ checks        ok             only quality / sonar and quality / verdict are red\n"
+        f"  ✓ loosenings    none\n  ! sonar         4 legacy findings on main\n  · merge         merge commit   allowed on main\n  · landing       {row}\n  ✓ consent"
     )
 
 

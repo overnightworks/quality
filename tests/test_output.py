@@ -624,45 +624,11 @@ def test_the_step_summary_is_the_one_the_given_environment_names(tmp_path, monke
     assert (named.read_text(), elsewhere.exists()) == ("| a |\n", False)
 
 
-@pytest.mark.parametrize(
-    ("typed", "returned", "shown"),
-    [
-        ("yes\n", "yes", "Type \\x1b: "),
-        ("\n", "", "Type \\x1b: "),
-        ("", None, "Type \\x1b: \n"),
-        ("yes", None, "Type \\x1b: \n"),
-    ],
-    ids=["an ended line", "Enter alone", "end of input", "an unended line"],
-)
-def test_ask_returns_the_line_a_person_ended_and_none_where_the_input_ended_first(typed, returned, shown):
-    stream = io.StringIO()
-    answer = output.ask("Type \x1b: ", output.Channel(stream, False, None), lambda: typed)
-    written = stream.getvalue()
-    assert (answer, written) == (returned, shown)
-
-
-class _FlushRecordingStream(io.StringIO):
-    """Holds what was written until flushed, as a terminal's stderr holds a prompt without a line end."""
-
-    def __init__(self):
-        super().__init__()
-        self.flushed = ""
-
-    def flush(self):
-        self.flushed = self.getvalue()
-
-
-def test_ask_shows_the_prompt_before_it_reads_the_line():
-    stream = _FlushRecordingStream()
-    shown_at_the_read = []
-
-    def read_line():
-        shown_at_the_read.append(stream.flushed)
-        return "yes\n"
-
-    output.ask("Type yes: ", output.Channel(stream, False, None), read_line)
-
-    assert shown_at_the_read == ["Type yes: "]
+def test_a_block_stands_below_its_row_escaped_with_no_row_prefix():
+    """MERGE-119: a row's block is printed line by line below the row, each line escaped and with no prefix or padding."""
+    row = Row(Glyph.NEEDS_YOU, "consent", Event.CLEAN, block=("```", "reason: a\x1b[8m", "```"))
+    shown = written(io.StringIO, lambda channel: output.write_rows((row,), channel))
+    assert shown == "  ! consent       clean\n```\nreason: a\\x1b[8m\n```\n"
 
 
 def a_stream_that_takes_the_rows(tmp_path):
