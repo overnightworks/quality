@@ -834,8 +834,8 @@ Ruled by the operator:
 - MERGE-27: it sends no request that changes anything (no `gh api -X`).
 - MERGE-28: `-v` is taken and adds nothing:
   the door runs no scanner.
-- MERGE-29: **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this takes the fleet's ruleset off
-  it), runs `gh api -X PUT repos/<owner/repo>/pulls/<pr>/merge --input -`, the JSON on its stdin
+- MERGE-29: **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this takes off both rulesets the property selects,
+  `quality / verdict required` and `code scanning: high or higher blocks the merge`), runs `gh api -X PUT repos/<owner/repo>/pulls/<pr>/merge --input -`, the JSON on its stdin
   holding `sha` (the head sha), `merge_method` and `commit_message` (the message of MERGE-69, sent as it is; no
   `commit_title`, so a squash takes its headline from the repository's squash title setting).
 - MERGE-30: The request merges or
