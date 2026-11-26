@@ -152,17 +152,13 @@ def test_a_refining_contract_with_as_packages_false_cannot_be_judged(tmp_path):
     assert str(tmp_path) not in str(refused.value)
 
 
-MOVED_INTO_A_PACKAGE = {
-    **{name: content for name, content in skat_files().items() if name != skat_core_path()},
-    "src/skat/table/core/__init__.py": "import agents.turn\n",
-}
-
-
 @pytest.mark.parametrize(("files", "untracked", "tracked_absent", "refusal"), [
     (skat_files("import agents.calling\nimport agents.member\nx = 1" + "0" * 5000 + "\n"), (), (),
      "src/skat/table/core.py is not valid Python"),
     (skat_files("import agents.turn\n"), (skat_core_path(),), (), "module skat.table.core cannot be examined"),
-    (MOVED_INTO_A_PACKAGE, ("src/skat/table/core/__init__.py",), (skat_core_path(),),
+    ({**{name: content for name, content in skat_files().items() if name != skat_core_path()},
+      "src/skat/table/core/__init__.py": "import agents.turn\n"},
+     ("src/skat/table/core/__init__.py",), (skat_core_path(),),
      "module skat.table.core cannot be examined: the checkout holds nothing at src/skat/table/core.py"),
 ], ids=["a module grimp reads and Python does not parse", "a module the checkout does not track",
         "a module git tracks as a file and the checkout holds as a package"])
