@@ -691,31 +691,45 @@ It applies these rules:
 
   No configuration switches the rule off.
 - `root-layout`:
-  - ROOT-1: every entry directly in the root of the tracked tree is on quality's base list or declared.
+  - ROOT-1: every entry directly in the root of the tracked tree is on quality's base list, accepted by its case, or
+    declared.
   - ROOT-2: An entry is a file or a directory (written `frontend/`); a directory with many files is one entry.
   - ROOT-3: Names compare in exact case, and the finding for a name that differs only in case names the base-list
-    spelling.
+    spelling, or the spelling of the case that names it.
   - ROOT-4: A file and a directory of one name are two entries,
   - ROOT-5: and a root symlink counts by its own name.
   - ROOT-6: Only tracked files count; a stray left on disk is not judged.
   - ROOT-7: The base list: `README.md AGENTS.md CLAUDE.md HEART.md LICENSE .gitignore .gitattributes .gitmodules
     pyproject.toml uv.lock .python-version package.json pnpm-lock.yaml package-lock.json Cargo.toml Cargo.lock
     rust-toolchain.toml Dockerfile .dockerignore compose.yaml compose.yml docker-compose.yaml docker-compose.yml
-    sonar-project.properties .importlinter .pre-commit-config.yaml` and the directories `.github/ .aco/ quality/ src/
-    tests/ docs/ scripts/`.
-  - ROOT-8: It belongs to quality and changes with a quality version; a repository extends it, never shortens it. Each
-    other entry is declared in `quality/config.toml`, one entry and one one-line reason, no pattern and no deeper path:
+    sonar-project.properties .importlinter .pre-commit-config.yaml tsconfig.json vitest.config.ts Makefile mise.toml
+    mise.lock pnpm-workspace.yaml alembic.ini .sops.yaml` and the directories `.github/ .aco/ quality/ src/ tests/ docs/
+    scripts/ .claude/ .claude-plugin/ .codex/ .agents/`. A name joins it when a tool reads it from the project root by
+    default, as the tool's own documentation says, and no other rule of quality refuses it; a directory of one
+    repository's own structure never joins it, and is accepted by a case or declared.
+  - ROOT-18: The cases are conditional entries: a directory is accepted where a tracked name shows the shape, compared in
+    exact case. `frontend/` is accepted where `frontend/package.json` is tracked;
+  - ROOT-19: `packages/` and `providers/`, where each of their child directories that holds a tracked file holds a tracked
+    `pyproject.toml` or `package.json` directly, and at least one does;
+  - ROOT-20: `legal/`, where `legal/datenschutz.html` is tracked, the page the platform's app standard requires of every
+    app;
+  - ROOT-21: `clusters/`, `infrastructure/` and `apps/`, where a tracked file lies under `clusters/<name>/flux-system/`,
+    the directory Flux's bootstrap writes.
+  - ROOT-8: The base list belongs to quality and changes with a quality version; a repository extends it, never shortens
+    it. Each other entry that no case accepts is declared in `quality/config.toml`, one entry and one one-line reason, no
+    pattern and no deeper path:
 
   ```toml
   [[root.allow]]
-  entry = "frontend/"
-  reason = "the web client, built apart from the Python package"
+  entry = "specs/"
+  reason = "the written requirements, kept apart from the code"
   ```
 
   - ROOT-9: A declaration that matches no tracked root entry is a finding;
-  - ROOT-10: a declaration of a base-list entry that is tracked is clean.
+  - ROOT-10: a declaration of a tracked base-list entry or of a tracked entry a case names is clean, whether or not the
+    case's condition is met.
   - ROOT-11: A finding's row names the entry and says `unlisted` (its fact adds the base list's spelling for a name that
-    differs only in case)
+    differs only in case, the spelling of the case that names it, and the condition of a case that names the entry)
   - ROOT-12: with both ways out in the fix, move it to its owner's directory or declare it with a reason, in prose with
     no command and no local path;
   - ROOT-13: a declaration that matches no tracked root entry says `unused` (its fact adds the tracked directory for an
@@ -733,7 +747,9 @@ It applies these rules:
   - ROOT-17: No configuration switches it off.
 
   Named gaps: a submodule in the root counts as a file entry and no case of it is tested; marketplace's refusal of every
-  symlink in the tree stays that repository's own check.
+  symlink in the tree stays that repository's own check; a directory of projects is judged by its direct children only,
+  a Flux bootstrap deeper than `clusters/<name>/flux-system/` is unlisted, and a condition is met by the name alone, so
+  an empty or symlinked `frontend/package.json` meets it (ROOT-16).
 - `file-suffix`:
   - SUFFIX-1: a tracked file whose basename has no suffix is a finding,
   - SUFFIX-2: unless it is executable (index mode 100755), a symlink (120000) or a gitlink (160000),

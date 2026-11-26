@@ -9,6 +9,6 @@ allow = [
 
 [[gate.loosened]]
 what = "import contract \"quality's layers, top to bottom\" changes layers"
-item = "overnightworks/quality#728"
-date = 2026-11-10
-reason = "claude_md becomes agent_guidance so one module owns AGENTS.md for both rules; a layers rename is a loosening"
+item = "overnightworks/quality#1079"
+date = 2026-11-26
+reason = "root_layout reuses layout's manifest names, so it moves one layer above its former siblings; a layers change is a loosening"

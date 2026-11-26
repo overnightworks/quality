@@ -1,4 +1,4 @@
-"""The root-layout rule: every root entry on quality's base list or declared with a reason."""
+"""The root-layout rule: every root entry on quality's base list, accepted by its case or declared with a reason."""
 
 import re
 import subprocess
@@ -58,6 +58,17 @@ def test_every_base_list_entry_is_green_without_a_config(build_repo):
     files |= {"compose.yml": "services: {}\n", "docker-compose.yaml": "services: {}\n", "docker-compose.yml": "services: {}\n"}
     files |= {f"{directory}f": "x" for directory in ROOT_BASE_DIRECTORIES}
     assert red(build_repo(files), Rule.ROOT_LAYOUT) == []
+
+
+PROJECTS_CONDITION = "holds folders and each holds a package.json or pyproject.toml"
+FLUX_CONDITION = "clusters/<name>/flux-system/"
+
+
+def unlisted_facts(repo) -> dict[str, str]:
+    """The root-layout rule's finding facts by entry, each one an `unlisted` finding."""
+    findings = rule_findings(repo, Rule.ROOT_LAYOUT)
+    assert {finding.event for finding in findings} <= {FindingEvent.UNLISTED}
+    return {finding.path: finding.fact for finding in findings}
 
 
 ROOT = f"{CONFIG_PATH} [[root.allow]]"
@@ -158,7 +169,7 @@ def test_the_rule_is_on_in_a_repository_without_a_config(build_repo, capsys):
 
 def test_a_declared_entry_is_green_and_a_base_list_entry_may_be_declared(build_repo):
     """ROOT-8, ROOT-10."""
-    repo = build_repo({**GUIDANCE, "Makefile": "x", CONFIG: declaring("Makefile") + declaring("HEART.md")})
+    repo = build_repo({**GUIDANCE, "notes.txt": "x", CONFIG: declaring("notes.txt") + declaring("HEART.md")})
     assert red(repo, Rule.ROOT_LAYOUT) == []
 
 
@@ -217,11 +228,6 @@ def test_a_tracked_env_file_is_red_under_env_file_and_under_root_layout(build_re
     assert (red(repo, Rule.ROOT_LAYOUT), env_row_stands(check_output(capsys, repo)[1])) == ([".env"], True)
 
 
-def test_tsconfig_in_the_root_is_red_unless_declared(build_repo):
-    """ROOT-7."""
-    assert red(build_repo({**GUIDANCE, "tsconfig.json": "{}"}), Rule.ROOT_LAYOUT) == ["tsconfig.json"]
-
-
 def test_a_hundred_strays_print_a_hundred_sorted_findings(build_repo, capsys):
     """ROOT-14."""
     names = [f"stray{number:03d}.txt" for number in range(100)]
@@ -239,3 +245,100 @@ def test_a_declaration_is_no_loosening_at_the_verdict(pull_request, capsys):
     put(repo / CONFIG, ONE_JOB + declaring("frontend/"))
     code, output = verdict_of(repo, capsys)
     assert (code, "loosened" in output, "✓ green" in output) == (0, False, True)
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        {"frontend/package.json": "{}"},
+        {"packages/client/pyproject.toml": "x", "packages/web/package.json": "{}"},
+        {"legal/datenschutz.html": "x", "legal/nutzungsbedingungen.html": "x"},
+        {"clusters/pc/flux-system/gotk-sync.yaml": "x", "apps/x.yaml": "x", "infrastructure/y.yaml": "x"},
+        {"packages/a/pyproject.toml": "x", "packages/README.md": "x"},
+        {"src/frontend/package.json": "{}"},
+    ],
+    ids=[
+        "frontend with its package.json",
+        "packages of two projects",
+        "legal with its privacy page",
+        "the three Flux directories",
+        "packages with a project and a file beside it",
+        "frontend below the root",
+    ],
+)
+def test_a_directory_whose_case_condition_is_met_is_green_without_a_declaration(build_repo, files):
+    """ROOT-1, ROOT-18, ROOT-19, ROOT-20, ROOT-21."""
+    assert red(build_repo({**GUIDANCE, **files}), Rule.ROOT_LAYOUT) == []
+
+
+@pytest.mark.parametrize(
+    ("files", "facts"),
+    [
+        ({"frontend/index.html": "x"}, {"frontend/": "frontend/package.json"}),
+        ({"frontend/Package.json": "{}"}, {"frontend/": "frontend/package.json"}),
+        ({"frontend/app/package.json": "{}"}, {"frontend/": "frontend/package.json"}),
+        ({"legal/impressum.html": "x"}, {"legal/": "legal/datenschutz.html"}),
+        ({"providers/a/pyproject.toml": "x", "providers/b/readme.md": "x"}, {"providers/": PROJECTS_CONDITION}),
+        ({"packages/readme.md": "x"}, {"packages/": PROJECTS_CONDITION}),
+        (
+            {"apps/x.yaml": "x", "infrastructure/y.yaml": "x"},
+            {"apps/": FLUX_CONDITION, "infrastructure/": FLUX_CONDITION},
+        ),
+        ({"clusters/pc/apps.yaml": "x"}, {"clusters/": FLUX_CONDITION}),
+        ({"apps/x/flux-system/y.yaml": "x"}, {"apps/": FLUX_CONDITION}),
+        ({"clusters/pc/flux-system": "x"}, {"clusters/": FLUX_CONDITION}),
+    ],
+    ids=[
+        "frontend without a package.json",
+        "frontend with a wrongly cased package.json",
+        "frontend whose package.json lies deeper",
+        "legal without the privacy page",
+        "providers with a folder that is no project",
+        "packages with files only directly inside",
+        "apps and infrastructure without clusters",
+        "clusters without flux-system",
+        "flux-system below another root directory than clusters",
+        "a file named flux-system directly in a cluster",
+    ],
+)
+def test_a_directory_whose_case_condition_fails_is_unlisted_and_its_fact_names_the_condition(build_repo, files, facts):
+    """ROOT-3, ROOT-11, ROOT-18, ROOT-19, ROOT-20, ROOT-21."""
+    found = unlisted_facts(build_repo({**GUIDANCE, **files}))
+    assert {entry: condition in found[entry] for entry, condition in facts.items()} == dict.fromkeys(facts, True)
+    assert set(found) == set(facts)
+
+
+@pytest.mark.parametrize(
+    "files",
+    [{"Frontend/package.json": "{}"}, {"Frontend/index.html": "x", "frontend/package.json": "{}"}],
+    ids=["its condition fails too", "its condition is met by the exactly spelled entry"],
+)
+def test_a_case_directory_in_another_case_names_its_case_spelling_and_condition(build_repo, files):
+    """ROOT-3, ROOT-11, ROOT-18."""
+    found = unlisted_facts(build_repo({**GUIDANCE, **files}))
+    fact = found["Frontend/"]
+    hint = "its case spells it frontend/"
+    assert (list(found), hint in fact, "the list spells" in fact, fact.index(hint) < fact.index("frontend/package.json")) == (
+        ["Frontend/"], True, False, True,
+    )
+
+
+def test_a_root_symlink_named_like_a_case_directory_is_a_file_entry_and_unlisted(build_repo):
+    """ROOT-4, ROOT-5, ROOT-18."""
+    repo = build_repo({**GUIDANCE, "frontend/package.json": "{}"})
+    subprocess.run(["git", "-C", str(repo), "rm", "-rq", "--", "frontend"], check=True)
+    (repo / "frontend").symlink_to("HEART.md")
+    subprocess.run(["git", "-C", str(repo), "add", "--", "frontend"], check=True)
+    facts = unlisted_facts(repo)
+    assert (list(facts), "accepted where" in facts["frontend"]) == (["frontend"], False)
+
+
+@pytest.mark.parametrize(
+    "files",
+    [{"frontend/package.json": "{}"}, {"frontend/index.html": "x"}],
+    ids=["a case entry whose condition is met", "a case entry whose condition fails"],
+)
+def test_a_declared_case_entry_is_green_and_never_unused(build_repo, files):
+    """ROOT-10, ROOT-18."""
+    repo = build_repo({**GUIDANCE, **files, CONFIG: declaring("frontend/")})
+    assert red(repo, Rule.ROOT_LAYOUT) == []
