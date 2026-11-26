@@ -34,4 +34,5 @@
 - `docs/naming.md`: read when you name a package or rename a repository, or change a Sonar key.
 - `docs/proof.md`: read when you add tests or a CI job, or change a proof or CI-time rule or number.
 - `docs/sonar.md`: read when you change `sonar findings`, coverage on new code or the Sonar gate.
+- `docs/protective-checks.md`: read when you plan or judge a trial, or change a check it lists.
 - `docs/runbooks/`: read when the door past a red gate is the question, a pull request red that no change can turn green; the files are named by their task.
