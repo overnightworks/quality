@@ -254,9 +254,17 @@ def test_a_declaration_is_no_loosening_at_the_verdict(pull_request, capsys):
         {"packages/client/pyproject.toml": "x", "packages/web/package.json": "{}"},
         {"legal/datenschutz.html": "x", "legal/nutzungsbedingungen.html": "x"},
         {"clusters/pc/flux-system/gotk-sync.yaml": "x", "apps/x.yaml": "x", "infrastructure/y.yaml": "x"},
+        {"packages/a/pyproject.toml": "x", "packages/README.md": "x"},
         {"src/frontend/package.json": "{}"},
     ],
-    ids=["frontend with its package.json", "packages of two projects", "legal with its privacy page", "the three Flux directories", "frontend below the root"],
+    ids=[
+        "frontend with its package.json",
+        "packages of two projects",
+        "legal with its privacy page",
+        "the three Flux directories",
+        "packages with a project and a file beside it",
+        "frontend below the root",
+    ],
 )
 def test_a_directory_whose_case_condition_is_met_is_green_without_a_declaration(build_repo, files):
     """ROOT-1, ROOT-18, ROOT-19, ROOT-20, ROOT-21."""
@@ -277,6 +285,8 @@ def test_a_directory_whose_case_condition_is_met_is_green_without_a_declaration(
             {"apps/": FLUX_CONDITION, "infrastructure/": FLUX_CONDITION},
         ),
         ({"clusters/pc/apps.yaml": "x"}, {"clusters/": FLUX_CONDITION}),
+        ({"apps/x/flux-system/y.yaml": "x"}, {"apps/": FLUX_CONDITION}),
+        ({"clusters/pc/flux-system": "x"}, {"clusters/": FLUX_CONDITION}),
     ],
     ids=[
         "frontend without a package.json",
@@ -287,6 +297,8 @@ def test_a_directory_whose_case_condition_is_met_is_green_without_a_declaration(
         "packages with files only directly inside",
         "apps and infrastructure without clusters",
         "clusters without flux-system",
+        "flux-system below another root directory than clusters",
+        "a file named flux-system directly in a cluster",
     ],
 )
 def test_a_directory_whose_case_condition_fails_is_unlisted_and_its_fact_names_the_condition(build_repo, files, facts):
