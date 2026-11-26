@@ -298,9 +298,9 @@ reason = "the operator ruled the requirement shelf machinery out"
 - VERDICT-77: With `item` and `date` written on the entry, the operator's ruling that lets it in, the line is declared by
   them, as `· <item> of <date>` with `reason: …` beneath. Without them the line is undeclared and has
   `fix: write the operator's ruling that lets it in on the entry in quality/config.toml, its item and its date` beneath,
-  where `reason:` stands for a declared line. The verdict is red either way, and only [the operator's
-  door](commands.md#quality-merge) lands a declared one: an undeclared one stops the door, whose blocking row shows the
-  same line with the same `fix:`.
+  where `reason:` stands for a declared line. The verdict is red either way, and only
+  [the door](commands.md#quality-merge), on the operator's consent, lands a declared one: an undeclared one stops the
+  door, whose blocking row shows the same line with the same `fix:`.
 - VERDICT-78: An inherited entry, a changed `reason`, `ends` or ruling and a deleted entry loosen nothing; a layout entry
   whose `rule` changes is a new entry.
 - VERDICT-79: The base side of the two tables is read by identity only, `entry` for root and `rule` and `path` for
