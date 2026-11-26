@@ -406,7 +406,7 @@ def _file_that_is_no_python_file_in_a_directory_without_search_permission(packag
                  id="a file that is no .py file in a directory without search permission"),
 ])
 def test_a_place_grimp_reads_no_source_from_is_judged_without_refusal(build_repo, capsys, arrange):
-    """IMPORT-18, IMPORT-19, IMPORT-23: only a .py file is stat'ed and read, so a link or a file that is no .py file
+    """IMPORT-33: only a .py file is stat'ed and read, so a link or a file that is no .py file
     and cannot be examined leaves the run judged on the tree, exit 0."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     sealed = arrange(repo / "src" / "shop")
