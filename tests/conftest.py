@@ -260,15 +260,18 @@ def live_database(monkeypatch) -> None:
 
 @pytest.fixture
 def fake_git(tmp_path, monkeypatch):
-    """Puts a `git` first on PATH that runs `preamble` (shell) and then the real git."""
+    """Puts a `git` first on PATH that runs every `preamble` (shell) installed so far, in order, and then the real git."""
     real_git = shutil.which("git")
+    preambles: list[str] = []
 
     def install(preamble: str) -> None:
         fake_bin = tmp_path / "fake-git"
-        fake_bin.mkdir()
-        (fake_bin / "git").write_text(f'#!/bin/sh\n{preamble}\nexec {real_git} "$@"\n')
+        if not preambles:
+            fake_bin.mkdir()
+            monkeypatch.setenv("PATH", f"{fake_bin}:{os.environ['PATH']}")
+        preambles.append(preamble)
+        (fake_bin / "git").write_text("#!/bin/sh\n" + "\n".join(preambles) + f'\nexec {real_git} "$@"\n')
         (fake_bin / "git").chmod(0o755)
-        monkeypatch.setenv("PATH", f"{fake_bin}:{os.environ['PATH']}")
 
     return install
 
