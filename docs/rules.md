@@ -256,7 +256,7 @@ It applies these rules:
   the exit stays `0`, and the [verdict line](output.md#the-closing-line) says `imports not enforced` before the
   duration, after debt's note. A config with contracts that are kept is
   [`✓ imports  clean  N contracts`](output.md#area-rows) (a config without a contract: `0 contracts`). import-linter
-  2.16 runs inside quality as a library, never its CLI, and writes nothing to the checkout (no `.import_linter_cache`)
+  runs inside quality as a library, never its CLI, and writes nothing to the checkout (no `.import_linter_cache`)
   (IMPORT-5). A broken contract is one finding `! <config>  broken  contract <name>`, with the lines import-linter
   renders for it (the chain, `shop.db -> shop.web (l.1)`, and the contract's guidance) under the [row](output.md#rows)
   behind `| `, fix `change the import or the contract`, exit `1`. An `ignore_imports` entry no import matches follows

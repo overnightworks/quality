@@ -5,12 +5,15 @@ judges the findings itself and keeps the properties check stands in [ARCHITECTUR
 
 ## `quality sonar findings`
 
-`gate.yml` runs SonarCloud's scanner in its `sonar` job and judges it through `verdict`; callers use `gate.yml`
-(SONAR-83), never an action, because quality publishes none. A caller passes the Actions secret by name
-(`secrets: SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}`) (SONAR-84), has automatic analysis off in SonarCloud, and commits a
-root `sonar-project.properties` (SONAR-47). A missing or empty token is red (`error: SONAR_TOKEN is empty: …`, with the
-step to set and pass the secret), never skipped while SonarCloud runs (SONAR-68); `[gate] sonar = false` turns it off
-([the gate](gate.md#gateyml)). Dependabot runs resolve the Dependabot secret of the same name.
+- SONAR-83: `gate.yml` runs SonarCloud's scanner in its `sonar` job and judges it through `verdict`; callers use `gate.yml`,
+  never an action, because quality publishes none.
+- SONAR-84: A caller passes the Actions secret by name
+  (`secrets: SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}`),
+- SONAR-47: has automatic analysis off in SonarCloud, and commits a
+  root `sonar-project.properties`.
+- SONAR-68: A missing or empty token is red (`error: SONAR_TOKEN is empty: …`, with the
+  step to set and pass the secret), never skipped while SonarCloud runs; `[gate] sonar = false` turns it off
+  ([the gate](gate.md#gateyml)). Dependabot runs resolve the Dependabot secret of the same name.
 
 Ruled by the operator:
 
@@ -18,28 +21,34 @@ Ruled by the operator:
   secret.
 - The CI scanner analyses, and automatic analysis is off.
 
-The `sonar` job checks out the caller with its full history and without stored credentials, holds `contents: read` alone
-and the job, its scanner install step and its scan step are each bounded by a timeout, the job's covering the install,
-the scan, the task wait and the findings wait (SONAR-85). `SONAR_TOKEN` reaches only the properties check, the scan and
-the findings step, each through its own `env`, never through a workflow's or a job's (SONAR-86); the install step gets
-none. The pull request's number reaches the findings step alone, as `PULL_REQUEST_NUMBER` (SONAR-87).
+- SONAR-85: The `sonar` job checks out the caller with its full history and without stored credentials, holds `contents: read` alone
+  and the job, its scanner install step and its scan step are each bounded by a timeout, the job's covering the install,
+  the scan, the task wait and the findings wait.
+- SONAR-86: `SONAR_TOKEN` reaches only the properties check, the scan and
+  the findings step, each through its own `env`, never through a workflow's or a job's; the install step gets
+  none.
+- SONAR-87: The pull request's number reaches the findings step alone, as `PULL_REQUEST_NUMBER`.
 
 ### What the three steps print
 
-Every command prints rows on stdout and ends with one closing line: `✓ clean · <time>` when the properties check passes
-(SONAR-100), `✓ off · nothing reaches SonarCloud · <time>`, `✓ clean · new 0 · legacy N · <time>`, `! red · …` or
-`✓ unserved · <time>`; `scanner` prints `✓ clean · <time>` after its row
-`✓ scanner  installed  <version> · signature verified by <fingerprint>`, or its row
-`· scanner  cached  <version> is in the tool cache` (SONAR-114). When they cannot judge (exit `2`) they print the
-`error:`/`next:` pair on stderr instead (SONAR-101). A refusal that knows its own step names it: a `quality/config.toml`
-it cannot read shows [its example to copy](output.md#refusals), where the refusal has one, and
-`push the fix; the gate judges the new commit` (SONAR-102); an empty `SONAR_TOKEN` the step to set the secret and pass
-it to `gate.yml`; an unwritable `GITHUB_OUTPUT` `fix what the error names, then re-run this run's failed jobs`
-(SONAR-103); a changed tracked file the step to let the artifact add reports only (SONAR-104); an issue search that
-never reaches the analysis's own count `re-run this run's failed jobs` (SONAR-112). Every other refusal falls back to
-its step's general step: `properties` the push step, `scanner` the push step (its key-file and download lines name
-their own step, SONAR-117, SONAR-115), `findings` the re-run step (SONAR-105).
-`-v` adds nothing: no step runs a scanner (SONAR-106).
+- SONAR-100: Every command prints rows on stdout and ends with one closing line: `✓ clean · <time>` when the properties check passes,
+  `✓ off · nothing reaches SonarCloud · <time>`, `✓ clean · new 0 · legacy N · <time>`, `! red · …` or
+  `✓ unserved · <time>`; `scanner` prints `✓ clean · <time>` after its row
+  `✓ scanner  installed  <version> · signature verified by <fingerprint>`, or its row
+  `· scanner  cached  <version> is in the tool cache` (SONAR-114).
+- SONAR-101: When they cannot judge (exit `2`) they print the
+  `error:`/`next:` pair on stderr instead.
+- SONAR-102: A refusal that knows its own step names it: a `quality/config.toml`
+  it cannot read shows [its example to copy](output.md#refusals), where the refusal has one, and
+  `push the fix; the gate judges the new commit`;
+- SONAR-103: an empty `SONAR_TOKEN` the step to set the secret and pass
+  it to `gate.yml`; an unwritable `GITHUB_OUTPUT` `fix what the error names, then re-run this run's failed jobs`;
+- SONAR-104: a changed tracked file the step to let the artifact add reports only; an issue search that
+  never reaches the analysis's own count `re-run this run's failed jobs` (SONAR-112).
+- SONAR-105: Every other refusal falls back to
+  its step's general step: `properties` the push step, `scanner` the push step (its key-file and download lines name
+  their own step, SONAR-117, SONAR-115), `findings` the re-run step.
+- SONAR-106: `-v` adds nothing: no step runs a scanner.
 
 ```text
 $ quality sonar properties
@@ -66,97 +75,120 @@ $ quality sonar findings        # a pull request
 The scan only sees a coverage report that is in the checkout when it starts. `gate.yml` never runs a caller's tests; the
 caller hands over the report its checks job wrote, in four steps:
 
-1. Upload the report from the checks job: `actions/upload-artifact` with `name: coverage` and `path: coverage.xml`
-   (SONAR-88).
-2. Give the gate job `needs: [checks]` (the checks job's id), so the artifact exists when the gate downloads it
-   (SONAR-89).
-3. Pass the artifact's name to the gate: `with: coverage-artifact: coverage` (SONAR-90).
-4. Name the report in `sonar-project.properties`, for example `sonar.python.coverage.reportPaths=coverage.xml` (or
-   `sonar.javascript.lcov.reportPaths` for JavaScript and TypeScript) (SONAR-91). The path is relative to the upload's
+1. SONAR-88: Upload the report from the checks job: `actions/upload-artifact` with `name: coverage` and `path: coverage.xml`.
+2. SONAR-89: Give the gate job `needs: [checks]` (the checks job's id), so the artifact exists when the gate downloads it.
+3. SONAR-90: Pass the artifact's name to the gate: `with: coverage-artifact: coverage`.
+4. SONAR-91: Name the report in `sonar-project.properties`, for example `sonar.python.coverage.reportPaths=coverage.xml` (or
+   `sonar.javascript.lcov.reportPaths` for JavaScript and TypeScript). The path is relative to the upload's
    common directory, which is where the download puts it.
 
-Before anything reads the checkout, the properties check refuses (exit `2`) a checkout whose tracked files differ from
-the checked-out commit, naming the first (SONAR-48). The artifact may add a report but never change a file the commit
-tracks: not `quality/config.toml`, whose `[gate] legacy` the findings step reads and the verdict holds at the commit,
-not `sonar-project.properties`, not a source the scan reads (SONAR-49). The download comes before the tool checkout
-(SONAR-92), so a `.gate-tool/` path in the artifact does not stand in for the pinned tool. A planted `.git/` still
-reaches git; upload-artifact leaves hidden paths out unless the caller's own workflow sets `include-hidden-files`, which
-the caller's workflow could do anyway.
+- SONAR-48: Before anything reads the checkout, the properties check refuses (exit `2`) a checkout whose tracked files differ from
+  the checked-out commit, naming the first.
+- SONAR-49: The artifact may add a report but never change a file the commit
+  tracks: not `quality/config.toml`, whose `[gate] legacy` the findings step reads and the verdict holds at the commit,
+  not `sonar-project.properties`, not a source the scan reads.
+- SONAR-92: The download comes before the tool checkout,
+  so a `.gate-tool/` path in the artifact does not stand in for the pinned tool. A planted `.git/` still
+  reaches git; upload-artifact leaves hidden paths out unless the caller's own workflow sets `include-hidden-files`, which
+  the caller's workflow could do anyway.
 
-The properties check exits `2` naming the key and the entry when a listed report does not exist (SONAR-50): each
-comma-separated entry is judged on its own (SONAR-51), a glob (`*`, `?`, `**`) must match at least one file (SONAR-52)
-and `**` must be a whole path segment (SONAR-53), a plain entry must be a file (SONAR-54), and an absolute entry or one
-with `..` is refused (SONAR-55). So a key whose report is missing, for instance because no `coverage-artifact` was
-passed, is red, not a silent `0.0%`. A caller that names no coverage key and passes no input scans as before (SONAR-56).
+- SONAR-50: The properties check exits `2` naming the key and the entry when a listed report does not exist:
+- SONAR-51: each
+  comma-separated entry is judged on its own,
+- SONAR-52: a glob (`*`, `?`, `**`) must match at least one file
+- SONAR-53: and `**` must be a whole path segment,
+- SONAR-54: a plain entry must be a file,
+- SONAR-55: and an absolute entry or one
+  with `..` is refused. So a key whose report is missing, for instance because no `coverage-artifact` was
+  passed, is red, not a silent `0.0%`.
+- SONAR-56: A caller that names no coverage key and passes no input scans as before.
 
-The gate downloads the named artifact the same way for every repository, reading its name through `with:` and never in a
-shell (SONAR-93). No step or job of the `sonar` job continues on error, so an artifact the run does not have fails the
-download, the job and the verdict (SONAR-94).
+- SONAR-93: The gate downloads the named artifact the same way for every repository, reading its name through `with:` and never in a
+  shell.
+- SONAR-94: No step or job of the `sonar` job continues on error, so an artifact the run does not have fails the
+  download, the job and the verdict.
 
-`quality sonar properties` runs before the scan (SONAR-95) and refuses (exit `2`, naming the key) any property outside
-an allowlist (`sonar.organization`, `sonar.projectKey`, `sonar.projectName`, `sonar.sources`, `sonar.tests`, the
-inclusion/exclusion keys, `sonar.sourceEncoding`, `sonar.python.version` and the two coverage report path keys)
-(SONAR-57), any value containing a `${...}` substitution after decoding (the scanner would expand `${env.SONAR_TOKEN}`)
-(SONAR-58), a `sonar.organization` or `sonar.projectKey` other than `<owner>` and `<owner>_<repo>` (SONAR-59; the procedure that changes a key is P2 in [naming.md](naming.md)), a tracked
-`.scannerwork/` (SONAR-60), a tracked file that differs from the checked-out commit, and an empty token (SONAR-61). The
-file is read with the `java.util.Properties` grammar (`=`, `:` or whitespace separators, `\` continuation, `\uXXXX` and
-`\` escapes) (SONAR-62). The file is read inside the checkout; a link leading out of it is refused (SONAR-63), and every
-refusal names the file repository-relative (SONAR-64). The check does not stop a pull request that edits the caller's
-workflow, which holds the token itself.
+- SONAR-95: `quality sonar properties` runs before the scan
+- SONAR-57: and refuses (exit `2`, naming the key) any property outside
+  an allowlist (`sonar.organization`, `sonar.projectKey`, `sonar.projectName`, `sonar.sources`, `sonar.tests`, the
+  inclusion/exclusion keys, `sonar.sourceEncoding`, `sonar.python.version` and the two coverage report path keys),
+- SONAR-58: any value containing a `${...}` substitution after decoding (the scanner would expand `${env.SONAR_TOKEN}`),
+- SONAR-59: a `sonar.organization` or `sonar.projectKey` other than `<owner>` and `<owner>_<repo>` (the procedure that changes a key is P2 in [naming.md](naming.md)),
+- SONAR-60: a tracked
+  `.scannerwork/`,
+- SONAR-61: a tracked file that differs from the checked-out commit, and an empty token.
+- SONAR-62: The
+  file is read with the `java.util.Properties` grammar (`=`, `:` or whitespace separators, `\` continuation, `\uXXXX` and
+  `\` escapes).
+- SONAR-63: The file is read inside the checkout; a link leading out of it is refused,
+- SONAR-64: and every
+  refusal names the file repository-relative. The check does not stop a pull request that edits the caller's
+  workflow, which holds the token itself.
 
-After its checks pass (SONAR-13), the properties check also hands the scan its issue exclusion: it appends
-`scanner-arguments=<value>` to the file named by `$GITHUB_OUTPUT`, keeping the lines the file holds (SONAR-14); outside
-a workflow step it appends nothing, prints the `· scan  excludes  docker:S8431 · .github/dependabot.yml exists` row and
-exits `0` (SONAR-15). `gate.yml` appends that step output to the scan's `args` (SONAR-96). The value is empty unless
-`.github/dependabot.yml` exists, and the keys it sets are all `sonar.issue.ignore.multicriteria` keys (SONAR-16; see the
-Dependabot exception below). With `[gate] sonar = false` the properties check refuses a properties file and a passed
-token (SONAR-65), prints `· sonar  off  quality/config.toml sets [gate] sonar = false` instead and appends `sonar=off`,
-and ends with `✓ off · nothing reaches SonarCloud` (SONAR-66). A run SonarCloud serves nothing of
-([below](#runs-sonarcloud-serves)) gets `sonar=off` too, after every refusal above (SONAR-129).
+- SONAR-13: After its checks pass,
+- SONAR-14: the properties check also hands the scan its issue exclusion: it appends
+  `scanner-arguments=<value>` to the file named by `$GITHUB_OUTPUT`, keeping the lines the file holds;
+- SONAR-15: outside
+  a workflow step it appends nothing, prints the `· scan  excludes  docker:S8431 · .github/dependabot.yml exists` row and
+  exits `0`.
+- SONAR-96: `gate.yml` appends that step output to the scan's `args`.
+- SONAR-16: The value is empty unless
+  `.github/dependabot.yml` exists, and the keys it sets are all `sonar.issue.ignore.multicriteria` keys (see the
+  Dependabot exception below).
+- SONAR-65: With `[gate] sonar = false` the properties check refuses a properties file and a passed
+  token,
+- SONAR-66: prints `· sonar  off  quality/config.toml sets [gate] sonar = false` instead and appends `sonar=off`,
+  and ends with `✓ off · nothing reaches SonarCloud`. A run SonarCloud serves nothing of
+  ([below](#runs-sonarcloud-serves)) gets `sonar=off` too, after every refusal above (SONAR-129).
 
-`quality sonar scanner` runs before the scan, with the same `if:` as the scan, so with `[gate] sonar = false` it does
-not run (SONAR-114). The scan action would verify the scanner CLI's signature against a key it fetches from a key server
-at every run, with no time limit, so a server that does not answer left the job red or hanging. The command takes that
-check over and leaves the key servers out of the trust path (SONAR-121):
-
-- `gate.yml` names the version (`SCANNER_VERSION`, the job's `env`, which the scan's `scannerVersion` reads too) and the
-  primary key's fingerprint (`SCANNER_SIGNER_FINGERPRINT`, the install step's `env`) (SONAR-122, SONAR-124). A missing
-  or malformed one is exit `2` naming the variable and where gate.yml sets it: the `sonar` job's `env` for the version,
-  the install step's `env` for the fingerprint (SONAR-123).
-- The key file `src/quality/sonarsource-scanner-key.asc` holds SonarSource's public key without its expired and revoked
-  subkeys. `gpg --show-keys` must list exactly one primary key, with that fingerprint and neither expired nor revoked;
-  otherwise the command stops before any download with a line that names the file and says to replace it (SONAR-116,
-  SONAR-125). A file whose primary key differs from the fingerprint says so in that line. If the file was changed by
-  accident, restore the file that matches `SCANNER_SIGNER_FINGERPRINT`. If SonarSource has rotated its primary key,
-  replace the file and `SCANNER_SIGNER_FINGERPRINT` together, see below.
-- It downloads the zip and its `.asc` from `binaries.sonarsource.com`, retrying a failed attempt while the deadline has
-  time left; an answer that no retry changes (a redirect or a 4xx other than 429) ends the download at once with its
-  status and the step to set `SCANNER_VERSION` to another release. One deadline of `COMMAND_DEADLINE_SECONDS` covers
-  the whole command: a download is cut at the deadline however slowly its name lookup, connect, headers or body arrive,
-  and each `gpg` call and `unzip` get the smaller of their own limit and the time left. A failed or stalled download
-  ends with one line naming the URL and `re-run this run's failed jobs`, and when an attempt is cut by the deadline the
-  line keeps the last real failure of the attempts before it (a refused connection, a name that does not resolve, a
-  status) beside "no answer in time"; a deadline spent in `gpg` or `unzip` names that
-  program and says the same (SONAR-115). The install step's `timeout-minutes` is larger than the deadline plus the
-  start-up of `uv` and Python (SONAR-120).
-- It installs only when `gpg --status-fd` reports `GOODSIG` and a `VALIDSIG` whose last field, the primary key's
-  fingerprint, is the pinned one, and reports none of `EXPKEYSIG`, `REVKEYSIG`, `BADSIG` or `ERRSIG`; the exit status
-  alone decides nothing, because `gpg` exits `0` for a signature by an expired key. A `KEYEXPIRED` line alone refuses
-  nothing: `gpg` prints it for any expired subkey in the file, also one that did not sign. Otherwise the line names the
-  key file and what to do, exit `2`, and nothing is installed (SONAR-117, SONAR-126). When the signing subkey has
-  expired (`EXPKEYSIG`) or revoked (`REVKEYSIG`), replacing the file does not help: the line says to set
-  `SCANNER_VERSION` to a release signed by a subkey that has neither expired nor been revoked and to re-export the key
-  file; for a signature by a subkey the file does not hold (`ERRSIG`, SONAR-128) it says to set `SCANNER_VERSION` to a
-  release whose signing subkey the file holds, or to re-export the file for the pinned release; for a zip that does not
-  match (`BADSIG`) it says to re-run and, when the same line returns, to set `SCANNER_VERSION` to another release.
-- The scanner is unpacked beside its place in the runner tool cache and moved there whole; the `.complete` marker the
-  action looks for is written last (SONAR-118). The action finds the directory and the marker, prints
-  `Using cached Sonar Scanner CLI`, and downloads and verifies nothing; a marker without its directory is no install
-  and is removed. Before `unzip` runs, every entry name must be unique and its own normal form inside the
-  scanner's folder, and every link's target, followed through the links the zip declares, must stay inside it, so no
-  entry reaches outside whatever `unzip` does.
-- The scan sets `scannerBinariesUrl` to a host under `.invalid`, which a cache hit never reads: a later action version
-  that looks elsewhere fails at the download, before any key fetch, instead of falling back to a key server (SONAR-119).
+- SONAR-114: `quality sonar scanner` runs before the scan, with the same `if:` as the scan, so with `[gate] sonar = false` it does
+  not run. The scan action would verify the scanner CLI's signature against a key it fetches from a key server
+  at every run, with no time limit, so a server that does not answer left the job red or hanging.
+- SONAR-121: The command takes that
+  check over and leaves the key servers out of the trust path:
+  - SONAR-122: `gate.yml` names the version (`SCANNER_VERSION`, the job's `env`, which the scan's `scannerVersion` reads too)
+  - SONAR-124: and the
+    primary key's fingerprint (`SCANNER_SIGNER_FINGERPRINT`, the install step's `env`).
+  - SONAR-123: A missing
+    or malformed one is exit `2` naming the variable and where gate.yml sets it: the `sonar` job's `env` for the version,
+    the install step's `env` for the fingerprint.
+  - SONAR-116: The key file `src/quality/sonarsource-scanner-key.asc` holds SonarSource's public key without its expired and revoked
+    subkeys. `gpg --show-keys` must list exactly one primary key, with that fingerprint and neither expired nor revoked;
+  - SONAR-125: otherwise the command stops before any download with a line that names the file and says to replace it.
+    A file whose primary key differs from the fingerprint says so in that line. If the file was changed by
+    accident, restore the file that matches `SCANNER_SIGNER_FINGERPRINT`. If SonarSource has rotated its primary key,
+    replace the file and `SCANNER_SIGNER_FINGERPRINT` together, see below.
+  - SONAR-115: It downloads the zip and its `.asc` from `binaries.sonarsource.com`, retrying a failed attempt while the deadline has
+    time left; an answer that no retry changes (a redirect or a 4xx other than 429) ends the download at once with its
+    status and the step to set `SCANNER_VERSION` to another release. One deadline of `COMMAND_DEADLINE_SECONDS` covers
+    the whole command: a download is cut at the deadline however slowly its name lookup, connect, headers or body arrive,
+    and each `gpg` call and `unzip` get the smaller of their own limit and the time left. A failed or stalled download
+    ends with one line naming the URL and `re-run this run's failed jobs`, and when an attempt is cut by the deadline the
+    line keeps the last real failure of the attempts before it (a refused connection, a name that does not resolve, a
+    status) beside "no answer in time"; a deadline spent in `gpg` or `unzip` names that
+    program and says the same.
+  - SONAR-120: The install step's `timeout-minutes` is larger than the deadline plus the
+    start-up of `uv` and Python.
+  - SONAR-117: It installs only when `gpg --status-fd` reports `GOODSIG` and a `VALIDSIG` whose last field, the primary key's
+    fingerprint, is the pinned one, and reports none of `EXPKEYSIG`, `REVKEYSIG`, `BADSIG` or `ERRSIG`; the exit status
+    alone decides nothing, because `gpg` exits `0` for a signature by an expired key. A `KEYEXPIRED` line alone refuses
+    nothing: `gpg` prints it for any expired subkey in the file, also one that did not sign.
+  - SONAR-126: Otherwise the line names the
+    key file and what to do, exit `2`, and nothing is installed.
+  - SONAR-128: When the signing subkey has
+    expired (`EXPKEYSIG`) or revoked (`REVKEYSIG`), replacing the file does not help: the line says to set
+    `SCANNER_VERSION` to a release signed by a subkey that has neither expired nor been revoked and to re-export the key
+    file; for a signature by a subkey the file does not hold (`ERRSIG`) it says to set `SCANNER_VERSION` to a
+    release whose signing subkey the file holds, or to re-export the file for the pinned release; for a zip that does not
+    match (`BADSIG`) it says to re-run and, when the same line returns, to set `SCANNER_VERSION` to another release.
+  - SONAR-118: The scanner is unpacked beside its place in the runner tool cache and moved there whole; the `.complete` marker the
+    action looks for is written last. The action finds the directory and the marker, prints
+    `Using cached Sonar Scanner CLI`, and downloads and verifies nothing; a marker without its directory is no install
+    and is removed. Before `unzip` runs, every entry name must be unique and its own normal form inside the
+    scanner's folder, and every link's target, followed through the links the zip declares, must stay inside it, so no
+    entry reaches outside whatever `unzip` does.
+  - SONAR-119: The scan sets `scannerBinariesUrl` to a host under `.invalid`, which a cache hit never reads: a later action version
+    that looks elsewhere fails at the download, before any key fetch, instead of falling back to a key server.
 
 Re-pinning the key: SonarSource's own key file is https://binaries.sonarsource.com/sonarsource-public.key. See which
 subkey signed a release with `gpg --list-packets` on the release's `.asc`, export only that subkey with
@@ -169,71 +201,86 @@ fingerprint and so cannot confirm the new one. The new fingerprint must match So
 that `binaries.sonarsource.com` does not serve, such as the constant in a newer `SonarSource/sonarqube-scan-action`
 release's `dist/index.js` on GitHub or the key as published on keys.openpgp.org.
 
-The scanner's transport, verified at sonar-scanner-java-library 4.2.1.1698 (the library of sonar-scanner-cli
-8.3.1.16491, which `gate.yml` pins through `SCANNER_VERSION`; SONAR-97):
+- SONAR-97: The scanner's transport, verified at sonar-scanner-java-library 4.2.1.1698 (the library of sonar-scanner-cli
+  8.3.1.16491, which `gate.yml` pins through `SCANNER_VERSION`):
+  - The scanner CLI's signature is checked against the key file above; `binaries.sonarsource.com` is trusted for the bytes
+    and SonarSource's signing key for the signature. A cache hit is trusted as found: with the directory and its marker
+    present the command verifies nothing again (SONAR-118), and on a GitHub-hosted runner the tool cache starts empty.
+  - SONAR-98: The bootstrap's authenticated requests reach only `sonarcloud.io` and `api.sonarcloud.io`. This holds only with the
+    pinned `-Dsonar.host.url=https://sonarcloud.io` argument, a properties file that passed the properties
+    check, and a job environment that sets none of `SONAR_HOST_URL`, `SONAR_REGION`, `SONAR_SCANNER_*`,
+    `SONAR_SCANNER_JSON_PARAMS` and `SONARQUBE_SCANNER_PARAMS`, which the library turns into properties: only the steps
+    of the `sonar` job set environment variables, and none of those.
+  - The properties check keeps out every key that steers the endpoint or the requests: it allows only listed keys, so
+    `sonar.host.url`, `sonar.scanner.apiBaseUrl`, `sonar.scanner.sonarcloudUrl`, `sonar.region`, the proxy keys and
+    `sonar.scanner.httpExtraHeaders` are refused (SONAR-57). The last is new in this library version: its headers go on
+    every request, and an `Authorization` header among them replaces the token.
+  - Residual limit: a redirect issued by SonarCloud itself carries the token to the host it names.
+  - The engine is downloaded from SonarCloud and is not pinned by the CLI pin. SonarSource's server-side code is an
+    accepted trust boundary: the token's only purpose is to authenticate to SonarCloud.
+  - Re-verify all of this on any bump of the scan action or `SCANNER_VERSION`, and check the scan's log for
+    `Using cached Sonar Scanner CLI`.
+  - Sources at 4.2.1.1698, the tag https://github.com/SonarSource/sonar-scanner-java-library/tree/4.2.1.1698,
+    paths under `lib/src/main/java/org/sonarsource/scanner/lib/`:
+    - `internal/endpoint/ScannerEndpointResolver.java` lines 39-44
+    - `internal/endpoint/ScannerEndpointResolver.java` lines 86-104
+    - `internal/endpoint/OfficialSonarQubeCloudInstance.java` lines 33-34
+    - `internal/http/HttpClientFactory.java` line 72
+    - `internal/http/ScannerHttpClient.java` lines 162-172
+    - `internal/http/ScannerHttpClient.java` lines 227-233
+    - `internal/facade/forked/ScannerEngineLauncherFactory.java` lines 81-82
+    - `internal/facade/forked/ScannerEngineLauncherFactory.java` lines 99-106
+    - `internal/facade/forked/ScannerEngineLauncherFactory.java` lines 123-130
+    - `EnvironmentConfig.java` lines 50-76
 
-- The scanner CLI's signature is checked against the key file above; `binaries.sonarsource.com` is trusted for the bytes
-  and SonarSource's signing key for the signature. A cache hit is trusted as found: with the directory and its marker
-  present the command verifies nothing again (SONAR-118), and on a GitHub-hosted runner the tool cache starts empty.
-- The bootstrap's authenticated requests reach only `sonarcloud.io` and `api.sonarcloud.io`. This holds only with the
-  pinned `-Dsonar.host.url=https://sonarcloud.io` argument (SONAR-98), a properties file that passed the properties
-  check, and a job environment that sets none of `SONAR_HOST_URL`, `SONAR_REGION`, `SONAR_SCANNER_*`,
-  `SONAR_SCANNER_JSON_PARAMS` and `SONARQUBE_SCANNER_PARAMS`, which the library turns into properties: only the steps
-  of the `sonar` job set environment variables, and none of those.
-- The properties check keeps out every key that steers the endpoint or the requests: it allows only listed keys, so
-  `sonar.host.url`, `sonar.scanner.apiBaseUrl`, `sonar.scanner.sonarcloudUrl`, `sonar.region`, the proxy keys and
-  `sonar.scanner.httpExtraHeaders` are refused (SONAR-57). The last is new in this library version: its headers go on
-  every request, and an `Authorization` header among them replaces the token.
-- Residual limit: a redirect issued by SonarCloud itself carries the token to the host it names.
-- The engine is downloaded from SonarCloud and is not pinned by the CLI pin. SonarSource's server-side code is an
-  accepted trust boundary: the token's only purpose is to authenticate to SonarCloud.
-- Re-verify all of this on any bump of the scan action or `SCANNER_VERSION`, and check the scan's log for
-  `Using cached Sonar Scanner CLI`.
-- Sources at 4.2.1.1698, the tag https://github.com/SonarSource/sonar-scanner-java-library/tree/4.2.1.1698,
-  paths under `lib/src/main/java/org/sonarsource/scanner/lib/`:
-  - `internal/endpoint/ScannerEndpointResolver.java` lines 39-44
-  - `internal/endpoint/ScannerEndpointResolver.java` lines 86-104
-  - `internal/endpoint/OfficialSonarQubeCloudInstance.java` lines 33-34
-  - `internal/http/HttpClientFactory.java` line 72
-  - `internal/http/ScannerHttpClient.java` lines 162-172
-  - `internal/http/ScannerHttpClient.java` lines 227-233
-  - `internal/facade/forked/ScannerEngineLauncherFactory.java` lines 81-82
-  - `internal/facade/forked/ScannerEngineLauncherFactory.java` lines 99-106
-  - `internal/facade/forked/ScannerEngineLauncherFactory.java` lines 123-130
-  - `EnvironmentConfig.java` lines 50-76
-
-`quality sonar findings` is the SonarCloud zero-findings rule: every open finding counts (SONAR-69). Where
-`.github/dependabot.yml` exists the scan itself excludes one rule, see the
-[Dependabot exception](#a-dependabot-exception-for-dockers8431). It reads the scanner's `.scannerwork/report-task.txt`
-relative to the working directory (no other path can be given) (SONAR-70); a missing or unreadable file is exit 2
-(SONAR-71).
+- SONAR-69: `quality sonar findings` is the SonarCloud zero-findings rule: every open finding counts. Where
+  `.github/dependabot.yml` exists the scan itself excludes one rule, see the
+  [Dependabot exception](#a-dependabot-exception-for-dockers8431).
+- SONAR-70: It reads the scanner's `.scannerwork/report-task.txt`
+  relative to the working directory (no other path can be given);
+- SONAR-71: a missing or unreadable file is exit 2.
 
 Ruled by the operator: every open finding counts, in every repository that runs SonarCloud; SonarCloud belongs to every repository's minimum gate, except a repository whose files the operator rules must not reach it, which sets `[gate] sonar = false`.
 
-The project is the caller's repository: `GITHUB_REPOSITORY` gives the key `<owner>_<repo>` and the organization
-`<owner>` (SONAR-72). The task file must name that `projectKey`, `organization=<owner>` and
-`serverUrl=https://sonarcloud.io` (SONAR-73); the URLs inside it are never requested (SONAR-74). The task file and the
-environment are judged before the first request: anything there the command cannot use is exit `2` (SONAR-75). The
-command polls `api/ce/task` until its own analysis is `SUCCESS` (SONAR-76) and bound to this component, organization and
-pull request (or branch) (SONAR-77), then reads the open findings with `SONAR_TOKEN` (header only, never printed),
-which count only once they reach the analysis's own count (SONAR-78, SONAR-110). A task that ends `FAILED` or
-`CANCELED`, that is still pending after a bounded number of polls, or that belongs to another analysis is exit `2`
-(SONAR-79). A scope SonarCloud does not resolve is exit `2` before the findings
-are read: its issue search would answer zero findings. The request that proves the scope resolves asks for
-the `violations` measure and hands its answer on (SONAR-80). Anything unreadable is exit `2` (SONAR-29). The command
-follows no redirect (SONAR-81), so the token reaches SonarCloud alone; an HTTP error, a redirect, a timeout or an
-unreachable host is exit `2` too (SONAR-82).
+- SONAR-72: The project is the caller's repository: `GITHUB_REPOSITORY` gives the key `<owner>_<repo>` and the organization
+  `<owner>`.
+- SONAR-73: The task file must name that `projectKey`, `organization=<owner>` and
+  `serverUrl=https://sonarcloud.io`;
+- SONAR-74: the URLs inside it are never requested.
+- SONAR-75: The task file and the
+  environment are judged before the first request: anything there the command cannot use is exit `2`.
+- SONAR-76: The
+  command polls `api/ce/task` until its own analysis is `SUCCESS`
+- SONAR-77: and bound to this component, organization and
+  pull request (or branch),
+- SONAR-78: then reads the open findings with `SONAR_TOKEN` (header only, never printed),
+  which count only once they reach the analysis's own count (SONAR-110).
+- SONAR-79: A task that ends `FAILED` or
+  `CANCELED`, that is still pending after a bounded number of polls, or that belongs to another analysis is exit `2`.
+- SONAR-80: A scope SonarCloud does not resolve is exit `2` before the findings
+  are read: its issue search would answer zero findings. The request that proves the scope resolves asks for
+  the `violations` measure and hands its answer on.
+- SONAR-29: Anything unreadable is exit `2`.
+- SONAR-81: The command
+  follows no redirect,
+- SONAR-82: so the token reaches SonarCloud alone; an HTTP error, a redirect, a timeout or an
+  unreachable host is exit `2` too.
 
 The `violations` measure is the analysis's own count of unresolved issues in the scope, the same for a pull request and
-the default branch. The issue search is a separate index that can trail the analysis, so a read of
-the open findings is trusted only when its count is at least the measure (SONAR-110). A count above the measure is
-normal, because the search also lists accepted and false-positive issues. A read below the measure waits 5 seconds, then
-reads the measure and the findings again, up to 12 reads and 55 seconds of waiting, and prints nothing meanwhile; a
-read that agrees costs no wait and no extra request (SONAR-111). If the two never agree the run is exit `2`: `error:
-SonarCloud counts <n> open findings for <scope> but its issue search lists <m> after <k> reads`, then `next: re-run this
-run's failed jobs`, and nothing on stdout, never `new none` (SONAR-112). A missing or unreadable measure (not a
-non-negative integer, or an unexpected shape) is exit `2` before any finding is read (SONAR-113). `quality merge` keeps
-a single read of the findings.
+the default branch.
+
+- SONAR-110: The issue search is a separate index that can trail the analysis, so a read of
+  the open findings is trusted only when its count is at least the measure. A count above the measure is
+  normal, because the search also lists accepted and false-positive issues.
+- SONAR-111: A read below the measure waits 5 seconds, then
+  reads the measure and the findings again, up to 12 reads and 55 seconds of waiting, and prints nothing meanwhile; a
+  read that agrees costs no wait and no extra request.
+- SONAR-112: If the two never agree the run is exit `2`: `error:
+  SonarCloud counts <n> open findings for <scope> but its issue search lists <m> after <k> reads`, then `next: re-run this
+  run's failed jobs`, and nothing on stdout, never `new none`.
+- SONAR-113: A missing or unreadable measure (not a
+  non-negative integer, or an unexpected shape) is exit `2` before any finding is read. `quality merge` keeps
+  a single read of the findings.
 
 ### New and legacy findings
 
@@ -248,42 +295,52 @@ Ruled by the operator:
   open finding, even when the pull request adds none. Any other value is a config error, exit 2. The config is read and
   validated before the first SonarCloud request.
 
-`gate.yml` passes the repository's default branch (`github.event.repository.default_branch`) as `DEFAULT_BRANCH` to
-the properties step and the findings step, which both decide the run's kind (SONAR-30); it is never assumed to be `main` (SONAR-31), and a missing or empty value is exit
-`2` before any request (SONAR-32). "Legacy" means the open findings of that branch, counted by the same
-`issues/search` with the same open statuses, and only counted, never listed (SONAR-33). `quality sonar findings`
-counts them on a pull request only (SONAR-34).
-- **Pull request:** the rows `· analysis  pull request  #<n> · <key>`, `new`, `legacy` and `quality gate` (SONAR-107);
-  new findings are listed below `! new  N findings` and make the run exit `1` (SONAR-35). Both counts always stand in
-  the closing line, for example `✓ clean · new 0 · legacy 17 · 3s` (SONAR-36), the legacy count as `legacy unknown`
-  while the default branch is not analysed yet (SONAR-67).
-- **Default branch:** a run on the default branch exits `1` on any open finding and lists them below
-  `! open  N findings` (SONAR-37).
+- SONAR-30: `gate.yml` passes the repository's default branch (`github.event.repository.default_branch`) as `DEFAULT_BRANCH` to
+  the properties step and the findings step, which both decide the run's kind;
+- SONAR-31: it is never assumed to be `main`,
+- SONAR-32: and a missing or empty value is exit
+  `2` before any request.
+- SONAR-33: "Legacy" means the open findings of that branch, counted by the same
+  `issues/search` with the same open statuses, and only counted, never listed.
+- SONAR-34: `quality sonar findings`
+  counts them on a pull request only.
+- SONAR-107: **Pull request:** the rows `· analysis  pull request  #<n> · <key>`, `new`, `legacy` and `quality gate`;
+- SONAR-35: new findings are listed below `! new  N findings` and make the run exit `1`.
+- SONAR-36: Both counts always stand in
+  the closing line, for example `✓ clean · new 0 · legacy 17 · 3s`,
+- SONAR-67: the legacy count as `legacy unknown`
+  while the default branch is not analysed yet.
+- SONAR-37: **Default branch:** a run on the default branch exits `1` on any open finding and lists them below
+  `! open  N findings`.
 
-A run on the default branch starts with `· analysis  default branch  <default> · <key>` and ends with
-`✓ clean · 0 open on <default> · <time>` or `! red · N open on <default> · <time>` (SONAR-108).
+- SONAR-108: A run on the default branch starts with `· analysis  default branch  <default> · <key>` and ends with
+  `✓ clean · 0 open on <default> · <time>` or `! red · N open on <default> · <time>`.
 
 ### Runs SonarCloud serves
 
 SonarCloud holds an analysis of a pull request and of the repository's default branch only: on the fleet's plan it
-answers a read of any other branch with HTTP 403, though the scan of that branch succeeds. The kind of a run is decided
-once, from `GITHUB_EVENT_NAME`, `GITHUB_REF_NAME` and `DEFAULT_BRANCH` alone (SONAR-130): a `pull_request` event is a
-pull request, a run on the default branch is a default-branch run whatever started it (`push`, `schedule`,
-`workflow_dispatch`), and every other run is unserved: a `workflow_dispatch` or `push` on a lane branch, a
-`merge_group` ref, a tag. An unset or empty one of the three is exit `2` before any request. The pull request's number
-plays no part in the decision; it reaches the findings step alone (SONAR-87).
+answers a read of any other branch with HTTP 403, though the scan of that branch succeeds.
 
-A run that is unserved is scanned and read by no one, and its `sonar` job is green (SONAR-129). After its refusals and
-the `[gate] sonar = false` row, the properties step prints one note,
-`· sonar  unserved  <ref> · SonarCloud serves only pull requests and <default>`, ends with `✓ unserved · <time>` and
-appends `sonar=off`, so `gate.yml` skips the scanner install, the scan and the findings step on that output (CALLER-9).
-`quality sonar findings` run on such a run anyway prints the same note, makes no request and exits `0`, after its own
-refusals of the config, the task file and the token. This keeps the ruled sentence above: a run on any other branch
-reports and never fails; its findings stay unlisted because nothing of that branch can be read.
+- SONAR-130: The kind of a run is decided
+  once, from `GITHUB_EVENT_NAME`, `GITHUB_REF_NAME` and `DEFAULT_BRANCH` alone: a `pull_request` event is a
+  pull request, a run on the default branch is a default-branch run whatever started it (`push`, `schedule`,
+  `workflow_dispatch`), and every other run is unserved: a `workflow_dispatch` or `push` on a lane branch, a
+  `merge_group` ref, a tag. An unset or empty one of the three is exit `2` before any request. The pull request's number
+  plays no part in the decision; it reaches the findings step alone (SONAR-87).
 
-`[gate] legacy` in `quality/config.toml` decides whether legacy findings fail a pull request. `quality sonar findings`
-reads that file like the verdict does: a missing file, or one without `[gate] mandatory_jobs`, is exit `2` before any
-request (SONAR-39).
+- SONAR-129: A run that is unserved is scanned and read by no one, and its `sonar` job is green. After its refusals and
+  the `[gate] sonar = false` row, the properties step prints one note,
+  `· sonar  unserved  <ref> · SonarCloud serves only pull requests and <default>`, ends with `✓ unserved · <time>` and
+  appends `sonar=off`, so `gate.yml` skips the scanner install, the scan and the findings step on that output (CALLER-9).
+  `quality sonar findings` run on such a run anyway prints the same note, makes no request and exits `0`, after its own
+  refusals of the config, the task file and the token. This keeps the ruled sentence above: a run on any other branch
+  reports and never fails; its findings stay unlisted because nothing of that branch can be read.
+
+`[gate] legacy` in `quality/config.toml` decides whether legacy findings fail a pull request.
+
+- SONAR-39: `quality sonar findings`
+  reads that file like the verdict does: a missing file, or one without `[gate] mandatory_jobs`, is exit `2` before any
+  request.
 
 ```toml
 [gate]
@@ -291,51 +348,55 @@ mandatory_jobs = ["quality"]
 legacy = "fail"
 ```
 
-- `"report"` (the default when the key is absent): legacy findings are printed and never fail a pull request
-  (SONAR-40).
-- `"fail"`: a pull request fails while the default branch has any open finding, even when it adds none (SONAR-41).
-- Any other value is a config error (exit `2`), read before the first SonarCloud request (SONAR-42).
+- SONAR-40: `"report"` (the default when the key is absent): legacy findings are printed and never fail a pull request.
+- SONAR-41: `"fail"`: a pull request fails while the default branch has any open finding, even when it adds none.
+- SONAR-42: Any other value is a config error (exit `2`), read before the first SonarCloud request.
 - A pull request whose head config drops `legacy = "fail"` is a loosening the verdict judges
   ([the gate](gate.md#gateyml)).
-- `legacy = "fail"` beside `[gate] sonar = false` is a config error, exit `2` (SONAR-109).
+- SONAR-109: `legacy = "fail"` beside `[gate] sonar = false` is a config error, exit `2`.
 
-On pull requests and default-branch runs `quality sonar findings` reads `api/project_branches/list` once before the
-counts (SONAR-43). An unserved run reads nothing from SonarCloud (SONAR-44).
-- The default branch has no entry, or one without `analysisDate` (a repository's first adoption pull request): the run
+- SONAR-43: On pull requests and default-branch runs `quality sonar findings` reads `api/project_branches/list` once before the
+  counts.
+- SONAR-44: An unserved run reads nothing from SonarCloud.
+- SONAR-45: The default branch has no entry, or one without `analysisDate` (a repository's first adoption pull request): the run
   prints `· legacy  unknown  <default> not analysed yet`. With `"report"` the run exits `0`; with `"fail"` it is exit
-  `2` (`error: legacy unknown (<default> not analysed yet)`) (SONAR-45).
-- The default branch is not SonarCloud's main branch, analysed or not: exit `2` in both modes, with the fix
-  `set SonarCloud's main branch to <default>` (SONAR-46). A non-main SonarCloud branch counts only changed code, so the
+  `2` (`error: legacy unknown (<default> not analysed yet)`).
+- SONAR-46: The default branch is not SonarCloud's main branch, analysed or not: exit `2` in both modes, with the fix
+  `set SonarCloud's main branch to <default>`. A non-main SonarCloud branch counts only changed code, so the
   legacy count would be too low.
 
 ### The quality gate
 
-On a pull request `quality sonar findings` also reads SonarCloud's quality gate for this run's own analysis (SONAR-1),
-by `api/qualitygates/project_status?analysisId=…` with the id of the finished task it waited for (SONAR-2); the token
-travels in the header only (SONAR-3). `quality` names no gate and holds no threshold: the repository's gate in
-SonarCloud decides, and a move to another gate changes the verdict with no change here. Default-branch runs make no gate
-request (SONAR-4).
+- SONAR-1: On a pull request `quality sonar findings` also reads SonarCloud's quality gate for this run's own analysis,
+- SONAR-2: by `api/qualitygates/project_status?analysisId=…` with the id of the finished task it waited for;
+- SONAR-3: the token
+  travels in the header only. `quality` names no gate and holds no threshold: the repository's gate in
+  SonarCloud decides, and a move to another gate changes the verdict with no change here.
+- SONAR-4: Default-branch runs make no gate
+  request.
 
-| SonarCloud answers | Exit | Output |
-| --- | --- | --- |
-| `OK` (SONAR-5) | by the findings, as before | `✓ quality gate  passed` |
-| `ERROR` (SONAR-6) | `1` | `! quality gate  failed  N conditions`, each failed condition below it: `! new_coverage is 70.0, the gate needs at least 80` (`LT` reads "at least", `GT` "at most") |
-| `NONE`, `WARN`, any other word, no `projectStatus`, an unreadable body, an `ERROR` that names no failed condition or a comparator other than `LT` and `GT` (SONAR-7) | `2` | `error:` and `next:` |
-| the task has no `analysisId` (SONAR-8), HTTP 401, 403, 404 or 5xx, a timeout (SONAR-9) | `2` | `error:` and `next:`, before the findings are read |
+| ID | SonarCloud answers | Exit | Output |
+| --- | --- | --- | --- |
+| SONAR-5 | `OK` | by the findings, as before | `✓ quality gate  passed` |
+| SONAR-6 | `ERROR` | `1` | `! quality gate  failed  N conditions`, each failed condition below it: `! new_coverage is 70.0, the gate needs at least 80` (`LT` reads "at least", `GT` "at most") |
+| SONAR-7 | `NONE`, `WARN`, any other word, no `projectStatus`, an unreadable body, an `ERROR` that names no failed condition or a comparator other than `LT` and `GT` | `2` | `error:` and `next:` |
+| SONAR-8 | the task has no `analysisId` | `2` | `error:` and `next:`, before the findings are read |
+| SONAR-9 | HTTP 401, 403, 404 or 5xx, a timeout | `2` | `error:` and `next:`, before the findings are read |
 
-A failed gate fails the `sonar` job whatever the findings count says (SONAR-10), and `legacy = "fail"` still fails it on
-its own (SONAR-11); the verdict then prints the row `! quality / sonar  failure` ([the gate](gate.md#gateyml)).
-`-Dsonar.qualitygate.wait=false` stays in `gate.yml` (SONAR-99): the scanner does not wait for the gate, this command
-reads it.
+- SONAR-10: A failed gate fails the `sonar` job whatever the findings count says,
+- SONAR-11: and `legacy = "fail"` still fails it on
+  its own; the verdict then prints the row `! quality / sonar  failure` ([the gate](gate.md#gateyml)).
+- SONAR-99: `-Dsonar.qualitygate.wait=false` stays in `gate.yml`: the scanner does not wait for the gate, this command
+  reads it.
 
 - **What the gates check.** The gate set in SonarCloud for the repository; the organization's default is the built-in
   "Sonar way". It judges new code (coverage, duplication, ratings, reviewed security hotspots).
 - **A new security hotspot** needs its review mark in the SonarCloud UI and a re-run before the gate is `OK`; unlike a
   finding, it is not fixed in code.
-- **A small change.** SonarCloud skips the coverage and duplication conditions for a change of fewer than 20 new lines.
+- SONAR-12: **A small change.** SonarCloud skips the coverage and duplication conditions for a change of fewer than 20 new lines.
   When its answer says so (`ignoredConditions`), the quality gate row's fact reads
-  `coverage and duplication not judged: fewer than 20 new lines`, with `passed` and with `failed`; the exit is unchanged
-  (SONAR-12). Branch coverage of a small change is therefore not judged.
+  `coverage and duplication not judged: fewer than 20 new lines`, with `passed` and with `failed`; the exit is unchanged.
+  Branch coverage of a small change is therefore not judged.
 - **Joined coverage.** The gate judges the coverage SonarCloud holds, so it measures the 100 % branch rule only for a
   repository whose report joins every test layer and carries branches. For a repository that has not joined its layers
   yet, the coverage gap is SonarCloud's figure.
@@ -354,24 +415,28 @@ SONARIAC-3096). A pull-request analysis does not see an unchanged `.github/depen
 `sonar.sources` leaves `.github` out keeps the finding on its default branch too. The gate therefore keeps the rule out
 of the analysis:
 
-- **In the analysis:** where `.github/dependabot.yml` exists, the properties check hands the scan a multi-criteria
+- SONAR-17: **In the analysis:** where `.github/dependabot.yml` exists, the properties check hands the scan a multi-criteria
   issue exclusion for `docker:S8431` over every file, so no analysis, pull request or branch, raises the finding; where
-  it does not exist it hands nothing (SONAR-17). A finding an earlier analysis raised is closed by the next analysis of
+  it does not exist it hands nothing. A finding an earlier analysis raised is closed by the next analysis of
   its branch. The exclusion replaces a multi-criteria exclusion set in SonarCloud's interface on such a repository,
   because a value given to the scanner takes precedence over the interface's.
-- **The rule:** `quality sonar properties` tests whether `.github/dependabot.yml` exists. Its content is never read, so
-  an empty or broken file counts as existing (SONAR-18); a link to a file counts and a link to nowhere does not
-  (SONAR-19); a directory named `.github/dependabot.yml` counts too, unlike Sonar, which needs a file (SONAR-20).
-  `.github/dependabot.yaml` is not looked at (SONAR-21).
-- **What counts:** `quality sonar findings` and `quality merge` count every open finding (SONAR-25 at merge) and read no
-  `dependabot.yml` (SONAR-26). A `docker:S8431` finding that an analysis raises anyway (no `.github/dependabot.yml`,
+- SONAR-18: **The rule:** `quality sonar properties` tests whether `.github/dependabot.yml` exists. Its content is never read, so
+  an empty or broken file counts as existing;
+- SONAR-19: a link to a file counts and a link to nowhere does not;
+- SONAR-20: a directory named `.github/dependabot.yml` counts too, unlike Sonar, which needs a file.
+- SONAR-21: `.github/dependabot.yaml` is not looked at.
+- SONAR-25: **What counts:** `quality sonar findings` and `quality merge` count every open finding (at merge)
+- SONAR-26: and read no
+  `dependabot.yml`.
+- SONAR-24: A `docker:S8431` finding that an analysis raises anyway (no `.github/dependabot.yml`,
   only `.github/dependabot.yaml`, or an analysis that predates the exclusion) is an ordinary finding: it prints as its
-  row with its `fix:` line, counts in `new` and in the legacy number (SONAR-24), and fails the run (SONAR-23). On the
-  default branch it is as ordinary as on a pull request: listed, counted, and judged by the branch's own rule
-  (SONAR-27).
-- **An unreachable file:** a `.github` the filesystem refuses access to is exit `2` from `quality sonar properties`
-  with a line naming the file, before it writes the step output (SONAR-22).
-- **Only this rule** has the exception (SONAR-28), because only it has the premise (Sonar's own exception that its
+  row with its `fix:` line, counts in `new` and in the legacy number,
+- SONAR-23: and fails the run.
+- SONAR-27: On the
+  default branch it is as ordinary as on a pull request: listed, counted, and judged by the branch's own rule.
+- SONAR-22: **An unreachable file:** a `.github` the filesystem refuses access to is exit `2` from `quality sonar properties`
+  with a line naming the file, before it writes the step output.
+- SONAR-28: **Only this rule** has the exception, because only it has the premise (Sonar's own exception that its
   pull-request analysis misses); every other finding and rule counts as before. There is no per-image entry in
   `quality/config.toml` and no reading of `dependabot.yml`: Sonar itself checks existence only, and a pull request is
   judged the way the default branch is. The Docker rule is no reason to move the zero rule to the hosted gate, because

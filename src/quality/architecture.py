@@ -1,4 +1,4 @@
-"""Judges a repository's import-linter contracts, with import-linter 2.16 as a library and never its CLI.
+"""Judges a repository's import-linter contracts, with import-linter as a library and never its CLI.
 
 import-linter's own reader parses the config from a private temporary copy, and grimp builds the graph without a
 cache, so nothing is written to the checkout. grimp reads each root package from its tracked directory, handed in
