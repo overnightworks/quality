@@ -805,7 +805,8 @@ Ruled by the operator:
   consent text below the row, whole and with no row prefix, so a reader pastes it as a review, and the pair
   `error: not merged · no consent review at <head, 7 characters> · nothing changed` with `next:` the operator leaves
   the text above as his review at that head, then the door runs again. Reviews or a membership that GitHub does not
-  answer, or answers in a shape the door does not read, are the `✗ consent` row (exit `2`). With it the row is `✓ consent  given  review <id> at <commit, 7 characters>`.
+  answer, or answers in a shape the door does not read, are the `✗ consent` row (exit `2`). With it the row is
+  `✓ consent  given  review <id> at <commit, 7 characters>`.
 - MERGE-122: The door never reads the comment that shows the operator the text: it recomputes the text at the head and
   refuses any difference, so a review of an earlier head or of another text is no consent.
 - MERGE-14: A refusal is its `!` row and the `error:`/`next:` pair on
