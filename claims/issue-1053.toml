@@ -1,8 +1,0 @@
-claim_id = "dec4a8cd27bf489ea1b0515863d37057"
-agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
-role = "builder"
-base = "f47d82a7280d08e5401172d38556627d619627b7"
-branch = "claude/issue-1053-commands-md-scanners-merge-rule-form"
-scope = ["docs/commands.md", "tests"]
-opened_commit = "41d562167d74d4bde18e82e215bf8b92dddb6bca"
-whole_reason = "The last two sections of one document converted to one form, plus at most the test docstrings that already prove their uncited IDs."
