@@ -121,7 +121,7 @@ def cancel_fact(text: str = "Abbrechen") -> str:
     ],
 )
 def test_a_catalog_text_in_a_locator_position_of_a_python_test_is_a_finding(build_repo, scenario, source, text, key):
-    """LOCATOR-1 to LOCATOR-5: the fact names the text and the first key; the line is the site's."""
+    """LOCATOR-1, LOCATOR-2, LOCATOR-3, LOCATOR-4 and LOCATOR-5: the fact names the text and the first key; the line is the site's."""
     repo = build_repo(scenario.only_test(source))
     ((path, line, fact),) = found(repo)
     assert (path, line, fact) == (scenario.test_file, source.count("\n"), f"'{text}' is the catalog text of {key}")

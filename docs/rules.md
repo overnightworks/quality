@@ -1800,17 +1800,17 @@ The `render-pass` rule, in the `workflows` area, requires a covered repository t
 job that renders each page once per language. It judges presence and gating, never what the job does; the three assertions
 of the pass (no key shown as text, `lang` equal to the language, no overflow) stay the app's test.
 
-- **Who is judged (RENDER-1).** A repository covered as for `catalog-check` (CATALOG-1) that tracks two or more catalogs. A
+- RENDER-1: **Who is judged.** A repository covered as for `catalog-check` (CATALOG-1) that tracks two or more catalogs. A
   repository that is not covered, or has fewer than two catalogs, sees no row and no exit `2` from this rule, and no
   workflow is read for it.
-- **Where the catalogs lie (RENDER-2).** The directory is design's `catalog_directory` over the text of the tracked root
+- RENDER-2: **Where the catalogs lie.** The directory is design's `catalog_directory` over the text of the tracked root
   `pyproject.toml` that quality has read: `[tool.design-catalogs] catalogs`, else `frontend/src/lib/catalogs`, the default
   design owns. It is read only when the repository is covered. A table design refuses is exit `2` naming `pyproject.toml`
   with design's sentence: a `catalogs` that is absolute, has no parts (`""` and `"."`), starts with `..` or is no string, a
   `python`, `typescript` or `source` that is no string, an unknown key, and a `tool.design-catalogs` that is no table. The
   app's own `design-catalogs --check` refuses the same table. A catalog is a tracked file `<directory>/<name>.po` directly in
   that directory; a `.po` file elsewhere does not count.
-- **The declaration (RENDER-3).** `quality/config.toml` takes the optional table `[languages]` with the one key
+- RENDER-3: **The declaration.** `quality/config.toml` takes the optional table `[languages]` with the one key
   `render_pass`, the name of a job as `mandatory_jobs` names it (the job's `name:`, else its id; a `name:` that holds an
   expression is no name). Another key, or a value that is not a non-empty string, is exit `2`. A quality older than the
   release that ships the table refuses it as an unknown table.
@@ -1828,34 +1828,37 @@ listed as `caller / job`; pointing `render_pass` at any other mandatory job pass
 (CATALOG-6). No configuration switches the rule off. It first ships in v0.17.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column, and from
 v0.17.0 on, and on main, the cell reads `enforced` where the clone declares the catalogs and `no catalogs declaration` where it does not (FLEET-99).
 
-The `literal-text` rule, in the `files` area, turns every literal text of a covered repository's pages into a finding: the
-texts a person reads that the markup holds itself instead of taking them from a catalog. A repository is covered as for
-`catalog-check` (the same read of the root `pyproject.toml`, CATALOG-1), so a repository that is not covered sees no row
-and no new verdict, and its `debt` area holds exactly the verdicts of `size`, `clone`, `job-timeout`, `test-twin` and `spec-citation`; the root
-`pyproject.toml` is read once for the area, and one that cannot be read refuses the rule with the reason `python-floor` gives,
-`pyproject.toml is not UTF-8 TOML that Python reads (<error>)`, which `catalog-check` and `render-pass` give too (LITERAL-15).
-The rule reads every tracked `*.svelte` file the tree holds, with the standard library's `html.parser` and a fold of the
-`{...}` holes; a `.vue`, `.jsx`, `.tsx` or `.html` file is not read (LITERAL-1).
+- LITERAL-15: The `literal-text` rule, in the `files` area, turns every literal text of a covered repository's pages into a finding: the
+  texts a person reads that the markup holds itself instead of taking them from a catalog. A repository is covered as for
+  `catalog-check` (the same read of the root `pyproject.toml`, CATALOG-1), so a repository that is not covered sees no row
+  and no new verdict, and its `debt` area holds exactly the verdicts of `size`, `clone`, `job-timeout`, `test-twin` and `spec-citation`; the root
+  `pyproject.toml` is read once for the area, and one that cannot be read refuses the rule with the reason `python-floor` gives,
+  `pyproject.toml is not UTF-8 TOML that Python reads (<error>)`, which `catalog-check` and `render-pass` give too.
+- LITERAL-1: The rule reads every tracked `*.svelte` file the tree holds, with the standard library's `html.parser` and a fold of the
+  `{...}` holes; a `.vue`, `.jsx`, `.tsx` or `.html` file is not read.
 
-A text counts once per text node and once per attribute value, not per word: the text nodes of a page, the values of
-`title`, `placeholder`, `aria-label`, `alt`, `label`, `aria-description`, `aria-roledescription` and `aria-valuetext`, a
-`value` on an `<input>` whose `type` is `submit`, `button` or `reset` and on a `<button>` whose `type` is `submit` or absent,
-and `content` on `<meta name="description">`, on elements and on components alike (the parser lowercases names, so
-`<Dialog title="x">` is read like `<dialog title="x">` and a prop written `Label="x"` counts) (LITERAL-2). Not text: a
-`<script>` or `<style>` block, a hole that is not a bare string literal, a logic block or a hole starting with `#`, `:`, `/`
-or `@` (`{@html '...'}` included), and any content with no letter. A hole that is one string literal, or a template literal
-without a substitution, counts as the text it holds, in a text position and as a whole attribute value; there is no
-exemption mechanism, a brand name lives in the catalog (LITERAL-3).
+- LITERAL-2: A text counts once per text node and once per attribute value, not per word: the text nodes of a page, the values of
+  `title`, `placeholder`, `aria-label`, `alt`, `label`, `aria-description`, `aria-roledescription` and `aria-valuetext`, a
+  `value` on an `<input>` whose `type` is `submit`, `button` or `reset` and on a `<button>` whose `type` is `submit` or absent,
+  and `content` on `<meta name="description">`, on elements and on components alike (the parser lowercases names, so
+  `<Dialog title="x">` is read like `<dialog title="x">` and a prop written `Label="x"` counts).
+- LITERAL-3: Not text: a
+  `<script>` or `<style>` block, a hole that is not a bare string literal, a logic block or a hole starting with `#`, `:`, `/`
+  or `@` (`{@html '...'}` included), and any content with no letter. A hole that is one string literal, or a template literal
+  without a substitution, counts as the text it holds, in a text position and as a whole attribute value; there is no
+  exemption mechanism, a brand name lives in the catalog.
 
-Each literal text is one `literal text` finding at `<page>:<line>`, whatever `quality/baseline.toml` holds: no table and
-no exemption turn it off. Its fact is the text in single quotes with its whitespace collapsed (`'Log in'`), and its fix is
-`read it through the generated module and keep it in the catalog`. A text node stands at the line of its first letter and
-an attribute value at the line of its tag; the fold leaves the newlines of a dropped `<script>` or `<style>` block and of a
-folded hole behind, so the line is the page's (LITERAL-14). A page the index tracks and the disk lacks is not read.
+- LITERAL-14: Each literal text is one `literal text` finding at `<page>:<line>`, whatever `quality/baseline.toml` holds: no table and
+  no exemption turn it off. Its fact is the text in single quotes with its whitespace collapsed (`'Log in'`), and its fix is
+  `read it through the generated module and keep it in the catalog`. A text node stands at the line of its first letter and
+  an attribute value at the line of its tag; the fold leaves the newlines of a dropped `<script>` or `<style>` block and of a
+  folded hole behind, so the line is the page's.
 
-A `[literal_text]` table in `quality/baseline.toml`, which an earlier release wrote, is read and ignored whatever it holds,
-malformed included, so it is no exit `2`, no finding and no loosening: a base that holds it and a head that does not is
-green. `quality check debt --fix` rewrites the file without it (`rewritten`, FIX-16) (LITERAL-16).
+A page the index tracks and the disk lacks is not read.
+
+- LITERAL-16: A `[literal_text]` table in `quality/baseline.toml`, which an earlier release wrote, is read and ignored whatever it holds,
+  malformed included, so it is no exit `2`, no finding and no loosening: a base that holds it and a head that does not is
+  green. `quality check debt --fix` rewrites the file without it (`rewritten`, FIX-16).
 
 Named gaps, each a fact of the parser or of the scan: a literal inside a larger expression (`{ok ? 'Saved' : x}`) is not
 counted; a component prop outside the attribute list (`<Hero heading="Welcome" />`) is not counted; a string in a `<script>`
@@ -1867,17 +1870,21 @@ unescaped (`'Don't'`); an attribute of a tag spread over several lines names the
 parser reads the body of `title`, `textarea`, `iframe`, `xmp`, `noembed` and `noframes` as one text up to the end tag,
 whatever the case, so `<Title><b>One</b><i>Two</i></Title>` is one text and a self-closing `<Title />` holds none.
 
-Exit `2` names the file: a page that is not UTF-8; a `<script>`, `<style>`, `<textarea>`, `<title>`, `<iframe>`, `<xmp>`,
-`<noembed>` or `<noframes>` that is opened and never closed, because the parser then reads the rest of the page as one text
-and every text after it would be missed in silence; and a `{` hole that is never closed, an unbalanced `{` in an HTML comment
-included. The first page in the tracked order that cannot be read to its end stops the rule, so one fact prints, a page that is not UTF-8 is named before any other, and the fold runs
-before the parser, so an unclosed hole is named before an unclosed element. A missing directory, no Svelte file and a
-tracked page deleted from the tree are no finding (LITERAL-9). It first ships in v0.13.0, so a gate pinned below that release shows `not in <tag>`
-in the fleet matrix's column. v0.16.0 is the release that names the table as its switch (FLEET-102): a gate pinned at v0.13.0 to v0.15.0
-reads `report-only` (FLEET-101), from v0.16.0 on the cell reads `enforced` where `quality/baseline.toml`
-holds `[literal_text]` and `report-only` where it does not, until the release that names the catalogs declaration as the switch
-(`SwitchChange` in `src/quality/rules.py`); from that release on and on main the cell reads `enforced` where the clone declares
-the catalogs and `no catalogs declaration` where it does not, as for `catalog-check` (FLEET-99). No
+- LITERAL-9: Exit `2` names the file: a page that is not UTF-8; a `<script>`, `<style>`, `<textarea>`, `<title>`, `<iframe>`, `<xmp>`,
+  `<noembed>` or `<noframes>` that is opened and never closed, because the parser then reads the rest of the page as one text
+  and every text after it would be missed in silence; and a `{` hole that is never closed, an unbalanced `{` in an HTML comment
+  included. The first page in the tracked order that cannot be read to its end stops the rule, so one fact prints, a page that is not UTF-8 is named before any other, and the fold runs
+  before the parser, so an unclosed hole is named before an unclosed element. A missing directory, no Svelte file and a
+  tracked page deleted from the tree are no finding.
+- FLEET-102: It first ships in v0.13.0, so a gate pinned below that release shows `not in <tag>`
+  in the fleet matrix's column. v0.16.0 is the release that names the table as its switch:
+- FLEET-101: a gate pinned at v0.13.0 to v0.15.0
+  reads `report-only`, from v0.16.0 on the cell reads `enforced` where `quality/baseline.toml`
+  holds `[literal_text]` and `report-only` where it does not, until the release that names the catalogs declaration as the switch
+  (`SwitchChange` in `src/quality/rules.py`); from that release on and on main the cell reads `enforced` where the clone declares
+  the catalogs and `no catalogs declaration` where it does not, as for `catalog-check` (FLEET-99).
+
+No
 configuration switches it off.
 
 The `locator-text` rule, in the `files` area, turns a catalog text in a locator position of a covered repository's Python,
@@ -1886,13 +1893,13 @@ It is not a second target of `literal-text`, which reads page files; this rule r
 catalog holds, in a position that finds an element. There is no baseline, no ceiling and no exemption: a brand name lives
 in the catalog like any text (LITERAL-3), so a test reads it by key.
 
-- **Who is judged (LOCATOR-9).** A repository covered as for `catalog-check` (CATALOG-1). A repository that is not covered
+- LOCATOR-9: **Who is judged.** A repository covered as for `catalog-check` (CATALOG-1). A repository that is not covered
   sees no row and nothing is read for it.
-- **Test files (LOCATOR-8).** Every tracked `*.py` file the tree holds under a directory named `tests`, and every tracked
+- LOCATOR-8: **Test files.** Every tracked `*.py` file the tree holds under a directory named `tests`, and every tracked
   `*.ts` or `*.js` file named `*.test.*` or `*.spec.*` (`x.test.browser.ts` too) or held under a directory named `e2e` or
   `test-utils` (`.tsx`, `.jsx`, `.mjs`, `.cjs` and `.mts` files are not read). A file that cannot be read refuses the rule
   naming the file (LOCATOR-10).
-- **Reading a script (LOCATOR-11).** A script is read as tokens, not parsed: strings with their escapes decoded (`\'`,
+- LOCATOR-11: **Reading a script.** A script is read as tokens, not parsed: strings with their escapes decoded (`\'`,
   `\n`, `\xHH`, `\uHHHH`, `\u{...}`, a line continuation), templates, regex literals, names, numbers and punctuation,
   with comments skipped. A `/` starts a regex after nothing, after punctuation but `)` and `]`, and after `return`,
   `typeof`, `case` and the other keywords that take an operand, but not after a property or a private field of that
@@ -1902,13 +1909,14 @@ in the catalog like any text (LITERAL-3), so a test reads it by key.
   non-null mark (`v! / 2`); a `!` after anything else is a prefix not and a regex may follow it (`!/x/.test(y)`).
   A template with a hole is no site and its holes are read like the rest, so a locator inside one is judged.
   A literal's line is the line it starts on, a line ending at `\n`, `\r\n`, `\r`, U+2028 or U+2029. JSX is not read.
-- **Catalog texts (LOCATOR-4).** The directory is design's `catalog_directory` (RENDER-2). Every tracked `<name>.po` file
+- LOCATOR-4: **Catalog texts.** The directory is design's `catalog_directory` (RENDER-2). Every tracked `<name>.po` file
   directly in it is read with design's `parse_catalog` over the bytes `repository.py` read, so the reading is design's own:
   strict UTF-8, closed strings, obsolete `#~` entries left out. A text is every msgid and every non-empty msgstr form, so an
   English translation (`en.po`, msgstr `Settings`) is surface text too; a fuzzy entry gives its msgid only, since gettext
-  does not show its msgstr. The key a finding names is the entry's msgctxt (the msgid for an entry that has none), and a
-  text several keys hold names the first in sort order (LOCATOR-5).
-- **Locator positions (LOCATOR-1).** An argument of a call named `getBy<Upper...>` or `get_by_<lower...>` (an app's
+  does not show its msgstr.
+  - LOCATOR-5: The key a finding names is the entry's msgctxt (the msgid for an entry that has none), and a
+    text several keys hold names the first in sort order.
+- LOCATOR-1: **Locator positions.** An argument of a call named `getBy<Upper...>` or `get_by_<lower...>` (an app's
   `getByRoleButton` counts, `getByteTimeDomainData` does not); an argument of `to_have_text`, `to_have_accessible_name`,
   `to_have_title`, `to_have_accessible_description` and their camelCase forms; the value argument of `to_have_attribute`
   and `toHaveAttribute` (its second argument, in Python also `value=`) when its first argument (in Python also `name=`) is a
@@ -1917,7 +1925,7 @@ in the catalog like any text (LITERAL-3), so a test reads it by key.
   `has_not_text`, `hasText` or `hasNotText` keyword or property of any call. The role argument of `get_by_role` and
   `getByRole` (its first argument, in Python also `role=`) and the argument of `get_by_test_id` and `getByTestId` are
   protocol tokens and test ids, never surface text, so they are no position.
-- **Sites (LOCATOR-2).** A literal in such a position whose whole value is a catalog text: a string, in a script also a
+- LOCATOR-2: **Sites.** A literal in such a position whose whole value is a catalog text: a string, in a script also a
   template without a `${` hole, including one inside a helper call that is itself an argument
   (`get_by_role("button", name=label("Abbrechen"))`), one in a list and, in a script, one a property of an options object
   holds (`{ name: 'Abbrechen' }`); and a regex literal anchored `^...$` whose body, regex escapes undone, is exactly such a
@@ -1926,7 +1934,7 @@ in the catalog like any text (LITERAL-3), so a test reads it by key.
   concatenation, a ternary branch and a comparison are no site. In a script a value is a site only when it stands alone:
   it follows `(`, `,`, the `[` of an array (a `[` after a name, `)` or `]` is an index) or a `key:`, and it is followed by
   `)`, `,`, `]` or `}`.
-- **Constants (LOCATOR-3).** A name bound exactly once at module level to a plain string literal in the same file is
+- LOCATOR-3: **Constants.** A name bound exactly once at module level to a plain string literal in the same file is
   resolved to it; a name bound twice, extended, unpacked or imported from another module is not. In a script it is a
   top-level `const` (optionally `export`) set to a string or a template without a hole and ended by `;`, `as const`, the
   end of the file or a line that starts with a name, and it is the only top-level `const`, `let`, `var`, `function` or
@@ -1934,26 +1942,28 @@ in the catalog like any text (LITERAL-3), so a test reads it by key.
   runs, so code that type-checks has none. A `const` inside a function is no constant,
   and a function-local name that shadows a top-level one resolves to the top-level value, so a false finding there is fixed
   by renaming.
-- **Out of scope (LOCATOR-7).** `toBe`, `toContain`, `toEqual`, `to_be`, `to_contain_text`, `toContainText` and the other
+- LOCATOR-7: **Out of scope.** `toBe`, `toContain`, `toEqual`, `to_be`, `to_contain_text`, `toContainText` and the other
   substring assertions, `assert x == "..."` and every other position: about four
   of five such sites are scenario data, and the scheduled audit judges them.
 
-Each site is one `catalog text` finding at `<test file>:<line>` (the line of the literal), whatever `quality/baseline.toml`
-holds. Its fact is `'<text>' is the catalog text of <key>`, with `, and N more keys` when several keys share the text, and
-its fix is `find it by its key through the generated module` (LOCATOR-6). The extent of the rule's row is the number of test
+- LOCATOR-6: Each site is one `catalog text` finding at `<test file>:<line>` (the line of the literal), whatever `quality/baseline.toml`
+  holds. Its fact is `'<text>' is the catalog text of <key>`, with `, and N more keys` when several keys share the text, and
+  its fix is `find it by its key through the generated module`.
+
+The extent of the rule's row is the number of test
 files read.
 
 It first ships in v0.21.0, so a gate pinned below that release shows `not in <tag>` in the fleet matrix's column, and on main and
 from v0.21.0 on the cell reads `enforced` where the clone declares the catalogs and `no catalogs declaration` where it does not (FLEET-99).
 
-Exit `2` (LOCATOR-10): a Python test file that is not valid Python or not UTF-8; a script test file that is not UTF-8, has a
-string that reaches a raw newline or the end of the file, a template or `${` hole that is never closed, a regex that reaches
-a line ending or the end of the file, or a block comment that is never closed, named with the file and the `line N` of the
-construct; a catalog design's strict reading refuses, named `<file>:<line>`; a catalog that is a symlink resolving outside
-the repository, which is never read; a `[tool.design-catalogs]` table design refuses (RENDER-2), named `pyproject.toml`.
-Unbalanced brackets, a stray `}`, any other character and a valid file nested deeper than the interpreter recurses refuse
-nothing: a valid file is judged like any other, and no site of it is lost. A missing catalogs directory is no finding here:
-it is held by `catalog-check`, since the app's own `design-catalogs --check` turns red when the source catalog is missing.
+- LOCATOR-10: Exit `2`: a Python test file that is not valid Python or not UTF-8; a script test file that is not UTF-8, has a
+  string that reaches a raw newline or the end of the file, a template or `${` hole that is never closed, a regex that reaches
+  a line ending or the end of the file, or a block comment that is never closed, named with the file and the `line N` of the
+  construct; a catalog design's strict reading refuses, named `<file>:<line>`; a catalog that is a symlink resolving outside
+  the repository, which is never read; a `[tool.design-catalogs]` table design refuses (RENDER-2), named `pyproject.toml`.
+  Unbalanced brackets, a stray `}`, any other character and a valid file nested deeper than the interpreter recurses refuse
+  nothing: a valid file is judged like any other, and no site of it is lost. A missing catalogs directory is no finding here:
+  it is held by `catalog-check`, since the app's own `design-catalogs --check` turns red when the source catalog is missing.
 
 Named gaps: a msgid with a gap (`Hello {name}`) and a `msgid_plural`; a regex locator that is not an anchored exact text
 (`/shuffle/i`), a case-insensitive one that differs in case; a later
@@ -1965,125 +1975,152 @@ data), and an attribute named by a variable or `value` or `content`, which `lite
 `.tsx`, `.jsx`, `.mjs`, `.cjs` and `.mts` files; helper modules outside `tests/` directories; a nested project's
 catalogs.
 
-The `job-timeout` rule, in the `debt` area, judges every job of a workflow that runs on a pull request or on a push to
-main, and of the reusable workflows those call through a local `uses:`. Every tracked workflow is parsed, a root or not,
-because a root is known only after the parse; a tracked file gone from the tree is skipped and a composite action is not
-read (TIMEOUT-1). A workflow is a root when its `on:` (a string, a list or the keys of a mapping) names
-`pull_request`, `pull_request_target` or `pull_request_review`, or names `push`: bare or with an empty, `~` or `null`
-value, with filters that name no `branches`, `branches-ignore` or `tags`, with `branches` of which a pattern that does
-not start with `!` matches `main`, or with `branches-ignore` of which none matches it. A pattern matches as Python's
-`fnmatch` reads it with `**` read as `*`; a `!` pattern is not read, so the reading errs toward a root. A `push` with
-only `tags` is no root, and `schedule`, `workflow_dispatch`, `merge_group`, `workflow_run` and `workflow_call` alone are
-none (TIMEOUT-2).
+- TIMEOUT-1: The `job-timeout` rule, in the `debt` area, judges every job of a workflow that runs on a pull request or on a push to
+  main, and of the reusable workflows those call through a local `uses:`. Every tracked workflow is parsed, a root or not,
+  because a root is known only after the parse; a tracked file gone from the tree is skipped and a composite action is not
+  read.
+- TIMEOUT-2: A workflow is a root when its `on:` (a string, a list or the keys of a mapping) names
+  `pull_request`, `pull_request_target` or `pull_request_review`, or names `push`: bare or with an empty, `~` or `null`
+  value, with filters that name no `branches`, `branches-ignore` or `tags`, with `branches` of which a pattern that does
+  not start with `!` matches `main`, or with `branches-ignore` of which none matches it. A pattern matches as Python's
+  `fnmatch` reads it with `**` read as `*`; a `!` pattern is not read, so the reading errs toward a root. A `push` with
+  only `tags` is no root, and `schedule`, `workflow_dispatch`, `merge_group`, `workflow_run` and `workflow_call` alone are
+  none.
 
-A job whose `uses:` starts with `./` or `$/` and names `.github/workflows/<file>.yml` or `.yaml`, a tracked workflow,
-makes that file judged, followed from every root and judged once, so a cycle ends where it closes and is no finding. A
-remote reusable workflow is not followed: it is judged in its own repository when a root there reaches it through a
-local call, and one that only another repository's root reaches is judged nowhere, a gap this rule keeps. A workflow no
-root reaches is outside, which is how release and image workflows stay outside; a local call in a file that is not
-judged is not read (TIMEOUT-3). A judged job is an entry of
-`jobs:` with no `uses:`; a job with `uses:` is not judged itself, and a matrix job is one job (TIMEOUT-4).
+- TIMEOUT-3: A job whose `uses:` starts with `./` or `$/` and names `.github/workflows/<file>.yml` or `.yaml`, a tracked workflow,
+  makes that file judged, followed from every root and judged once, so a cycle ends where it closes and is no finding. A
+  remote reusable workflow is not followed: it is judged in its own repository when a root there reaches it through a
+  local call, and one that only another repository's root reaches is judged nowhere, a gap this rule keeps. A workflow no
+  root reaches is outside, which is how release and image workflows stay outside; a local call in a file that is not
+  judged is not read.
+- TIMEOUT-4: A judged job is an entry of
+  `jobs:` with no `uses:`; a job with `uses:` is not judged itself, and a matrix job is one job.
 
-The limit is read in this order: no `timeout-minutes` key is `missing`, never debt; a plain unquoted decimal number
-above zero is that many minutes; any other value is `invalid` (an expression, a quoted number, `0`, a negative, signed,
-hex or exponent form, an empty value, `~`, `null`, a word, a sequence or a mapping); a limit above 15 is `new debt`,
-`15.5` included, unless the baseline holds it (TIMEOUT-5). The findings stand in the `debt` area at the file that
-defines the job, a reached workflow under its own path, at the `timeout-minutes` line or the job id's line for
-`missing`, in the listing's order and the file's job order. The facts are `job <id> has no timeout-minutes`, `job <id>
-has a timeout-minutes that is not a number above zero` and `job <id> has timeout-minutes <value> · limit 15`; the fix is
-`set timeout-minutes to a number of at most 15` for the first two and `lower timeout-minutes to 15 or less` for the last
-(TIMEOUT-6). Where the baseline has no `[job_minutes]` table, no ceiling file included, the last reads `lower
+- TIMEOUT-5: The limit is read in this order: no `timeout-minutes` key is `missing`, never debt; a plain unquoted decimal number
+  above zero is that many minutes; any other value is `invalid` (an expression, a quoted number, `0`, a negative, signed,
+  hex or exponent form, an empty value, `~`, `null`, a word, a sequence or a mapping); a limit above 15 is `new debt`,
+  `15.5` included, unless the baseline holds it.
+- TIMEOUT-6: The findings stand in the `debt` area at the file that
+  defines the job, a reached workflow under its own path, at the `timeout-minutes` line or the job id's line for
+  `missing`, in the listing's order and the file's job order. The facts are `job <id> has no timeout-minutes`, `job <id>
+  has a timeout-minutes that is not a number above zero` and `job <id> has timeout-minutes <value> · limit 15`; the fix is
+  `set timeout-minutes to a number of at most 15` for the first two and `lower timeout-minutes to 15 or less` for the last.
+
+Where the baseline has no `[job_minutes]` table, no ceiling file included, the last reads `lower
 timeout-minutes to 15 or less, or run quality check --fix to record it`; where it holds the table, an empty one included,
 it stays as it is. `check` reads no git history for these words, so a table git held and the file lost reads as the
 first, and `--fix` refuses it (TIMEOUT-29).
 
-A job above 15 may be held as debt in a `[job_minutes]` table of `quality/baseline.toml`: one subtable per workflow
-file, keyed by the repository-relative path of the file that defines the job, and one key per job id with a positive
-whole number of minutes (`[job_minutes.".github/workflows/ci.yml"]`, then `e2e = 40`). A table with no subtable is held
-and empty; a value that is no positive integer, or a subtable or key that is no table, is a malformed baseline
-(`needs <where> as a positive count, not <value>`, `needs <where> as a table`) (TIMEOUT-12), where `<where>` joins the
-table, the path and the job as a TOML dotted key, the path and a job id that is no bare key quoted
-(`job_minutes.".github/workflows/ci.yml".e2e`) (TIMEOUT-33). It renders after the size and
-`[clones]` tables, subtables sorted by path and keys by job id, and a file that already renders so stays untouched by
-`--fix`, and the unknown-table message lists `job_minutes` among the tables quality knows (TIMEOUT-13). An older quality
-refuses the table as unknown. The debt a limit counts as is its rounded-up whole
-minutes, so `17.5` is held by an entry of `18`; a fact prints the limit as written (TIMEOUT-14).
+- TIMEOUT-12: A job above 15 may be held as debt in a `[job_minutes]` table of `quality/baseline.toml`: one subtable per workflow
+  file, keyed by the repository-relative path of the file that defines the job, and one key per job id with a positive
+  whole number of minutes (`[job_minutes.".github/workflows/ci.yml"]`, then `e2e = 40`). A table with no subtable is held
+  and empty; a value that is no positive integer, or a subtable or key that is no table, is a malformed baseline
+  (`needs <where> as a positive count, not <value>`, `needs <where> as a table`),
+- TIMEOUT-33: where `<where>` joins the
+  table, the path and the job as a TOML dotted key, the path and a job id that is no bare key quoted
+  (`job_minutes.".github/workflows/ci.yml".e2e`).
+- TIMEOUT-13: It renders after the size and
+  `[clones]` tables, subtables sorted by path and keys by job id, and a file that already renders so stays untouched by
+  `--fix`, and the unknown-table message lists `job_minutes` among the tables quality knows.
+- TIMEOUT-14: An older quality
+  refuses the table as unknown. The debt a limit counts as is its rounded-up whole
+  minutes, so `17.5` is held by an entry of `18`; a fact prints the limit as written.
 
-Against the table a judged job with a readable limit is compared by its rounded-up value `d`, with or without a ceiling
-file. An entry of 15 or less is no debt and reads as no entry. With no entry and `d` above 15 the job is `new debt`; an
-entry above 15 and `d` above it is `grew` (`job e2e has timeout-minutes 45 · ceiling 40`, fix: bring it back to 40 or
-below); an entry above 15 and `d` below it, or `d` of 15 or less, is `can fall` (`job e2e has timeout-minutes 20 ·
-ceiling 40`, fix: quality check --fix); `d` equal to the entry, and no entry with `d` of 15 or less, are green. A job
-without a readable limit keeps its `missing` or `invalid` finding and its entry stands (TIMEOUT-15). After the measured
-findings, sorted by path and job and with no line, each entry that can fall with nothing to measure is `can fall`: its
-path is not tracked or no root reaches the file any more, the file has no such job or the job calls a workflow (`job e2e
-is gone · ceiling 40`), or the entry is of 15 or less (`job e2e has no debt · ceiling 10`) (TIMEOUT-16); the fix of each
-`can fall` form is `quality check --fix` (TIMEOUT-24). The rule's extent is the jobs the held table holds, and a clean
-`debt` row over a table holding at least one job reads `ceiling held · N entries, M clone pairs, K job limits`; an empty or
-absent table adds nothing (TIMEOUT-34). A baseline that cannot be read
+- TIMEOUT-15: Against the table a judged job with a readable limit is compared by its rounded-up value `d`, with or without a ceiling
+  file. An entry of 15 or less is no debt and reads as no entry. With no entry and `d` above 15 the job is `new debt`; an
+  entry above 15 and `d` above it is `grew` (`job e2e has timeout-minutes 45 · ceiling 40`, fix: bring it back to 40 or
+  below); an entry above 15 and `d` below it, or `d` of 15 or less, is `can fall` (`job e2e has timeout-minutes 20 ·
+  ceiling 40`, fix: quality check --fix); `d` equal to the entry, and no entry with `d` of 15 or less, are green. A job
+  without a readable limit keeps its `missing` or `invalid` finding and its entry stands.
+- TIMEOUT-16: After the measured
+  findings, sorted by path and job and with no line, each entry that can fall with nothing to measure is `can fall`: its
+  path is not tracked or no root reaches the file any more, the file has no such job or the job calls a workflow (`job e2e
+  is gone · ceiling 40`), or the entry is of 15 or less (`job e2e has no debt · ceiling 10`);
+- TIMEOUT-24: the fix of each
+  `can fall` form is `quality check --fix`.
+- TIMEOUT-34: The rule's extent is the jobs the held table holds, and a clean
+  `debt` row over a table holding at least one job reads `ceiling held · N entries, M clone pairs, K job limits`; an empty or
+  absent table adds nothing.
+
+A baseline that cannot be read
 makes the rule `cannot judge` and names the baseline, as it does for `size` and `clone`; one that is absent leaves the rule judging with no entry.
 
-A renamed workflow carries its base entries to its new path in the verdict as a renamed source file carries its size
-entries, a leftover under the new path and an entry under a path the head still names moving nothing; a job id renamed
-inside a file is a new entry (TIMEOUT-17).
+- TIMEOUT-17: A renamed workflow carries its base entries to its new path in the verdict as a renamed source file carries its size
+  entries, a leftover under the new path and an entry under a path the head still names moving nothing; a job id renamed
+  inside a file is a new entry.
 
-`--fix` follows a renamed workflow for the `[job_minutes]` table as it follows a renamed source file (FIX-34 to FIX-45
-apply). From the ceiling's last commit, the workflow's held job entries move to the new path at their held values
-(`moved`, `job e2e 40 minutes from .github/workflows/old.yml`), what the table held under the new path before the move,
-and the carry of the last commit lacks, is dropped (`dropped`, `job e2e 25 minutes · left from before the move`), and an entry
-the carry already holds, no higher, stays unless a moved entry takes its key; each entry is judged on its own. An entry under a renamed path that the last commit's table does not explain
-refuses with the restore step before anything is written, naming the workflow. Where the last commit holds no
-`[job_minutes]` table the verdict compares nothing (TIMEOUT-18), so held entries under a renamed workflow move, no
-leftover is judged, and only an entry a moved one takes the key of is dropped. A held ceiling without the table stays without it, a held empty table stays held, and entries under
-a path no rename touches are written as they were. A moved job entry counts as moved in the debt row and the verdict
-line (TIMEOUT-19).
+- TIMEOUT-18: `--fix` follows a renamed workflow for the `[job_minutes]` table as it follows a renamed source file (FIX-34 to FIX-45
+  apply). From the ceiling's last commit, the workflow's held job entries move to the new path at their held values
+  (`moved`, `job e2e 40 minutes from .github/workflows/old.yml`), what the table held under the new path before the move,
+  and the carry of the last commit lacks, is dropped (`dropped`, `job e2e 25 minutes · left from before the move`), and an entry
+  the carry already holds, no higher, stays unless a moved entry takes its key; each entry is judged on its own. An entry under a renamed path that the last commit's table does not explain
+  refuses with the restore step before anything is written, naming the workflow. Where the last commit holds no
+  `[job_minutes]` table the verdict compares nothing,
+- TIMEOUT-19: so held entries under a renamed workflow move, no
+  leftover is judged, and only an entry a moved one takes the key of is dropped. A held ceiling without the table stays without it, a held empty table stays held, and entries under
+  a path no rename touches are written as they were. A moved job entry counts as moved in the debt row and the verdict
+  line.
 
-`--fix` then lowers and drops the held job entries, from the jobs the rule judges (TIMEOUT-1 to TIMEOUT-4) under the
-paths it followed. An entry above 15 falls to its job's rounded-up limit when that is above 15 and below the entry
-(`lowered`, `job e2e 40 → 18 minutes` for `timeout-minutes: 17.5`) (TIMEOUT-20). An entry that is no debt is dropped
-(`dropped`) when the job's rounded-up limit is 15 or less (`job e2e 40 → 12 minutes · debt from 16 minutes`), when the
-entry itself is 15 or less (`job e2e has no debt · was 10 minutes`), and when its job is gone, because its workflow is
-not tracked or no root reaches it, the file has no such job or the job calls a workflow (`job e2e is gone · was 40
-minutes`); dropping the last entry leaves a held empty table (TIMEOUT-21). Nothing rises and nothing enters: a job above
-its entry stays `grew`, a job above 15 without an entry stays `new debt`, and an entry whose job has a `missing` or
-`invalid` limit stands (TIMEOUT-22). Where the table holds an entry and a workflow the rule must read cannot be read
-(TIMEOUT-7), the whole fix is refused with the rule's reason, `✗ not fixed`, exit `2`, and nothing is written, the size
-entries and clone pairs included, since a half-read set of jobs would drop the entries of the jobs it did not see; a
-file without the table, a held empty table and a first recording lower nothing and refuse nothing for a workflow they
-cannot read (TIMEOUT-23). Whether a held entry can fall is decided once, for the rule's `can fall` findings and for
-this lowering alike (TIMEOUT-32). A lowered or
-dropped job entry counts like a size entry in `fell`, the `debt` row and the verdict line, and a `✓` row per entry names
-the workflow (TIMEOUT-25); `--dry-run` makes the same table and words each change as what the fix would do, row for row,
-and refuses where the fix refuses (TIMEOUT-26).
+- TIMEOUT-20: `--fix` then lowers and drops the held job entries, from the jobs the rule judges (TIMEOUT-1 to TIMEOUT-4) under the
+  paths it followed. An entry above 15 falls to its job's rounded-up limit when that is above 15 and below the entry
+  (`lowered`, `job e2e 40 → 18 minutes` for `timeout-minutes: 17.5`).
+- TIMEOUT-21: An entry that is no debt is dropped
+  (`dropped`) when the job's rounded-up limit is 15 or less (`job e2e 40 → 12 minutes · debt from 16 minutes`), when the
+  entry itself is 15 or less (`job e2e has no debt · was 10 minutes`), and when its job is gone, because its workflow is
+  not tracked or no root reaches it, the file has no such job or the job calls a workflow (`job e2e is gone · was 40
+  minutes`); dropping the last entry leaves a held empty table.
+- TIMEOUT-22: Nothing rises and nothing enters: a job above
+  its entry stays `grew`, a job above 15 without an entry stays `new debt`, and an entry whose job has a `missing` or
+  `invalid` limit stands.
+- TIMEOUT-23: Where the table holds an entry and a workflow the rule must read cannot be read
+  (TIMEOUT-7), the whole fix is refused with the rule's reason, `✗ not fixed`, exit `2`, and nothing is written, the size
+  entries and clone pairs included, since a half-read set of jobs would drop the entries of the jobs it did not see; a
+  file without the table, a held empty table and a first recording lower nothing and refuse nothing for a workflow they
+  cannot read.
+- TIMEOUT-32: Whether a held entry can fall is decided once, for the rule's `can fall` findings and for
+  this lowering alike.
+- TIMEOUT-25: A lowered or
+  dropped job entry counts like a size entry in `fell`, the `debt` row and the verdict line, and a `✓` row per entry names
+  the workflow;
+- TIMEOUT-26: `--dry-run` makes the same table and words each change as what the fix would do, row for row,
+  and refuses where the fix refuses.
 
-`--fix` records the `[job_minutes]` table where the file has none and no version of it in git's history ever held one,
-when at least one judged job has a readable limit whose rounded-up value is above 15: exactly the judged jobs above 15,
-each at its rounded-up limit under the path of the file that defines it (`17.5` as `18`), and no table, not even an
-empty one, where no job is; a first `--fix` with no ceiling file records it with the size entries and clone pairs
-under the same condition, and a second `--fix` changes nothing (TIMEOUT-27). The question to git is asked only where a
-recording would happen: a ceiling that lost the table although a version of it held one refuses the whole fix as
-`[clones]` does (`quality/baseline.toml lost its [job_minutes] table, which git holds`, exit `2`, the restore step,
-nothing written), and a version no TOML parser reads that names the table (FIX-13) or a shallow clone that cannot prove the table never held names
-its step, `--dry-run` alike; a table-less file with no job above 15 reads no history for it (TIMEOUT-28). A recording
-is not a raise: after the table exists `--fix` adds no entry to it, so a job above 15 with no entry stays `new debt`
-(TIMEOUT-29). A job whose limit cannot be read is never recorded, and where a workflow the rule must read cannot be
-read no job table is written, not even a partial one, while the size and clone fix proceeds and the rule reports the
-file with exit `2` (TIMEOUT-30). The debt row is `recorded  K job limits · quality/baseline.toml` with a `recorded  K
-job limits` row under it (`1 job limit` for one); beside clone pairs it names both (`M clone pairs, K job limits`), a
-first recording names the job limits after the pairs (`N entries, M clone pairs, K job limits · quality/baseline.toml is new`), and
-`--dry-run` words the rows `to record` and `record`; the verdict line is `ceiling recorded`, under the dry run `ceiling
-would be recorded`, and a recording adds nothing to the entries that fell (TIMEOUT-31).
+- TIMEOUT-27: `--fix` records the `[job_minutes]` table where the file has none and no version of it in git's history ever held one,
+  when at least one judged job has a readable limit whose rounded-up value is above 15: exactly the judged jobs above 15,
+  each at its rounded-up limit under the path of the file that defines it (`17.5` as `18`), and no table, not even an
+  empty one, where no job is; a first `--fix` with no ceiling file records it with the size entries and clone pairs
+  under the same condition, and a second `--fix` changes nothing.
+- TIMEOUT-28: The question to git is asked only where a
+  recording would happen: a ceiling that lost the table although a version of it held one refuses the whole fix as
+  `[clones]` does (`quality/baseline.toml lost its [job_minutes] table, which git holds`, exit `2`, the restore step,
+  nothing written), and a version no TOML parser reads that names the table (FIX-13) or a shallow clone that cannot prove the table never held names
+  its step, `--dry-run` alike; a table-less file with no job above 15 reads no history for it.
+- TIMEOUT-29: A recording
+  is not a raise: after the table exists `--fix` adds no entry to it, so a job above 15 with no entry stays `new debt`.
+- TIMEOUT-30: A job whose limit cannot be read is never recorded, and where a workflow the rule must read cannot be
+  read no job table is written, not even a partial one, while the size and clone fix proceeds and the rule reports the
+  file with exit `2`.
+- TIMEOUT-31: The debt row is `recorded  K job limits · quality/baseline.toml` with a `recorded  K
+  job limits` row under it (`1 job limit` for one); beside clone pairs it names both (`M clone pairs, K job limits`), a
+  first recording names the job limits after the pairs (`N entries, M clone pairs, K job limits · quality/baseline.toml is new`), and
+  `--dry-run` words the rows `to record` and `record`; the verdict line is `ceiling recorded`, under the dry run `ceiling
+  would be recorded`, and a recording adds nothing to the entries that fell.
 
-A workflow whose YAML or file cannot be read, an alias or a merge key where it can hide the top mapping, `on:`, the
-`push` value, its `branches`, `branches-ignore` or `tags`, or in a judged file `jobs`, a job, a `uses:` or a
-`timeout-minutes` value, a `push` that is a word, a number or a sequence, a filter of another shape, a `jobs` or a job
-that is no mapping, a local call in a judged file that names no tracked workflow of the workflow folder, and a called
-workflow gone from the tree are exit `2` naming the file; the other rules still judge. A workflow with no `jobs:` has no
-job (TIMEOUT-7). The rule is judged beside `size` and `clone` and independent of both, and the debt area counts only the
-rules a ceiling file switches as measured, so the verdict reads `debt ceiling measured, not enforced` where no ceiling file holds the debt, even when
-`job-timeout` finds (TIMEOUT-8). A clean `debt` row keeps its words, and no configuration
-switches the rule off (TIMEOUT-10). It first ships in v0.12.0, so a gate pinned below that release shows `not in <tag>`
-in the fleet matrix's column (TIMEOUT-11). A repeated job id or a repeated `timeout-minutes` key is read as the loader
+- TIMEOUT-7: A workflow whose YAML or file cannot be read, an alias or a merge key where it can hide the top mapping, `on:`, the
+  `push` value, its `branches`, `branches-ignore` or `tags`, or in a judged file `jobs`, a job, a `uses:` or a
+  `timeout-minutes` value, a `push` that is a word, a number or a sequence, a filter of another shape, a `jobs` or a job
+  that is no mapping, a local call in a judged file that names no tracked workflow of the workflow folder, and a called
+  workflow gone from the tree are exit `2` naming the file; the other rules still judge. A workflow with no `jobs:` has no
+  job.
+- TIMEOUT-8: The rule is judged beside `size` and `clone` and independent of both, and the debt area counts only the
+  rules a ceiling file switches as measured, so the verdict reads `debt ceiling measured, not enforced` where no ceiling file holds the debt, even when
+  `job-timeout` finds.
+- TIMEOUT-10: A clean `debt` row keeps its words, and no configuration
+  switches the rule off.
+- TIMEOUT-11: It first ships in v0.12.0, so a gate pinned below that release shows `not in <tag>`
+  in the fleet matrix's column.
+
+A repeated job id or a repeated `timeout-minutes` key is read as the loader
 reads it, the last winning; actionlint, which `workflow-lint` runs, refuses the repetition. Named gaps: `merge_group`
 and `workflow_run` as roots, the negation and the `+` of a push filter, a limit set only by a `workflow_call` input, a
 step's `timeout-minutes`, and a default branch other than `main`; the jobs of a remote reusable workflow that only
@@ -2092,24 +2129,24 @@ another repository calls are judged by no rule yet.
 The `test-twin` rule, in the `debt` area, counts two kinds of copying in the tracked Python test files and reports them as one
 `open` [note](output.md#notes); it only reports and holds no count.
 
-- **Which functions (TWIN-1).** A file `Language.is_test_file` calls a test is read. A function whose name starts with `test`
+- TWIN-1: **Which functions.** A file `Language.is_test_file` calls a test is read. A function whose name starts with `test`
   is a test wherever it stands, a method of any class and a nested function included; every other function of such a file is a
   helper (a fixture, a function of a support module or `conftest.py`, a method of a fake, a function nested in a test). The
   token stream of a function is the one `clone` reads (`clones.tokens`): arguments and statements, without the docstring and
   the decorators.
-- **Test twins (TWIN-2).** Tests of one file whose streams are equal with names kept and literals folded, from 12 tokens, form
+- TWIN-2: **Test twins.** Tests of one file whose streams are equal with names kept and literals folded, from 12 tokens, form
   a group. A case table stands in a decorator and is not compared, so two parametrized tests with one body and two tables are a
   group; the fix is one table whose case ids name the behaviours.
-- **Copied helpers (TWIN-3).** Helpers of two or more files whose streams are equal with names and literals kept, from 8
+- TWIN-3: **Copied helpers.** Helpers of two or more files whose streams are equal with names and literals kept, from 8
   tokens, form a group, whatever the functions are called. A copy that differs by one literal is no copy here.
-- **The note (TWIN-4).** The unit of both counts is the group. One `open` note under the `debt` area at the location `.` reads
+- TWIN-4: **The note.** The unit of both counts is the group. One `open` note under the `debt` area at the location `.` reads
   `24 groups of test twins · 20 groups of copied test helpers`; a count of zero leaves its half out, and no note stands when both
   are zero. The rule holds no finding, its extent is 0 and it is never measured only, so every other row, the closing line and the
   exit are what `size` and `clone` make them, in every state of the baseline, a red area included.
-- **Refusals (TWIN-5).** The rule reads the sources the `debt` area read; when they cannot be read the area is refused as
+- TWIN-5: **Refusals.** The rule reads the sources the `debt` area read; when they cannot be read the area is refused as
   before and no note stands. It needs no baseline, so a baseline that cannot be read refuses `size` and `clone` (CLONE-9) and the
   note still stands. A file Python cannot parse is skipped without a refusal; `size` and `clone` refuse it.
-- **Report only (TWIN-6).** The rule is `report-only` in the fleet matrix and changes no verdict. It first ships in v0.23.0, so a gate
+- TWIN-6: **Report only.** The rule is `report-only` in the fleet matrix and changes no verdict. It first ships in v0.23.0, so a gate
   pinned below that release shows `not in <tag>` in the fleet matrix's column, and from v0.23.0 on the cell reads `report-only` (FLEET-18).
 
 The `spec-citation` rule, in the `debt` area, reads the spec IDs of a repository's Markdown files and the IDs its tests cite.
