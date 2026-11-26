@@ -1,8 +1,0 @@
-claim_id = "935d83ef6d7e4d00ae3bc92525433895"
-agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
-role = "builder"
-base = "e298d2e45172220901d348d36c60f52442fc8ca2"
-branch = "claude/issue-1043-output-md-proof-md-and-codeql-md-define"
-scope = ["docs/codeql.md", "docs/output.md", "docs/proof.md", "tests"]
-opened_commit = "18f28ee3cbf626f31726ecbddcb6a43caaf50717"
-whole_reason = "Three documents converted to one form, plus at most the test docstrings that already prove their uncited IDs."
