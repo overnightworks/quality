@@ -748,7 +748,7 @@ It applies these rules:
   as UTF-8 (a PEP 263 cookie such as utf-7) (SECURITY-21), [a missing or mismatched ruff](commands.md#scanners),
   ruff exiting other than 0 or 1
   (SECURITY-22), a `Failed to lint` warning (SECURITY-23), a report quality cannot read (SECURITY-24), a time-out
-  (SECURITY-25) or a file with a finding whose comments Python's tokenizer cannot read (SECURITY-26) is `cannot judge`
+  (SECURITY-25), two tracked files whose names ruff's report prints alike, as names that differ only in bytes that are not UTF-8 do (SECURITY-30), or a file with a finding whose comments Python's tokenizer cannot read (SECURITY-26) is `cannot judge`
   (exit 2). One such file makes the whole rule `cannot judge` or `unparsable`, so the S findings of the other files are
   not printed in that run (SECURITY-27); everything here but the tokenizer refuses the shared run, so `python-print`
   refuses with it (SECURITY-28). The other rules are judged either way. A deliberately invalid Python fixture takes

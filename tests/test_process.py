@@ -52,6 +52,14 @@ def test_a_bounded_command_returns_at_its_bound_though_a_descendant_left_the_gro
 
 
 @pytest.mark.integration
+def test_a_bounded_command_that_runs_out_of_time_while_the_seconds_are_reported_ends_at_its_bound():
+    seconds = []
+    with process.scratch_directory(), pytest.raises(ProcessError, match="sleep did not finish within 1.5 seconds"):
+        process.run_bounded_in_own_group(["sleep", "30"], 1.5, every_second=seconds.append)
+    assert seconds == [1]
+
+
+@pytest.mark.integration
 def test_a_bound_that_cuts_a_utf8_character_reports_the_timeout():
     with pytest.raises(ProcessError, match="did not finish within 0.5 seconds"):
         process.run_bounded_in_own_group(["sh", "-c", r"printf '\303'; sleep 30"], 0.5)

@@ -92,6 +92,7 @@ def test_the_first_row_names_the_release_the_targets_gate_pins_at_the_merge_comm
         pytest.param({"fail_on": ("listing",)}, "error: cannot read the workflows of acme/widgets at ddddddd: listing broke\n" + AGAIN, id="a listing gh cannot read"),
         pytest.param({"fail_on": ("workflow",)}, "error: cannot read the workflows of acme/widgets at ddddddd: workflow broke\n" + AGAIN, id="a workflow gh cannot read"),
         pytest.param({"listing": {"name": "ci.yml"}}, listing_refused("is not a list of files"), id="not a list"),
+        pytest.param({"raw_answers": {"listing": "not json"}}, listing_refused("is not a list of files"), id="an answer that is no JSON"),
         pytest.param({"listing": [{"type": "file"}]}, listing_refused("is not a list of files"), id="an entry without a name"),
         pytest.param(
             {"listing": [{"name": "ci.yml", "type": "symlink"}]}, listing_refused("holds the symlink ci.yml"), id="a workflow that is a symlink",
@@ -123,6 +124,14 @@ def gh_failing_with(tmp_path, monkeypatch):
         monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
 
     return install
+
+
+@pytest.mark.integration
+def test_a_gh_that_cannot_run_is_cannot_read_the_workflows(tmp_path, monkeypatch):
+    """PIN-49: where `gh` cannot be run, the workflows cannot be read."""
+    monkeypatch.setenv("PATH", str(tmp_path))
+    with pytest.raises(CannotJudge, match="cannot read the workflows of"):
+        workflow_texts_at(run_gh, "acme/widgets", "d" * 40)
 
 
 @pytest.mark.integration
