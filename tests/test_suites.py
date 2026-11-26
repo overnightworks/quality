@@ -67,10 +67,14 @@ def test_a_test_is_counted_in_the_layer_its_path_names(path, manifest, source, l
         ("x.test('a', () => {});", 0),
         ("test.skip(browserName === 'x', 'why');", 0),
         ("test.describe.configure({ mode: 'serial' });", 0),
+        ("test(name, () => {});", 0),
+        ("const run = test;", 0),
+        ("it.each([1, 2", 0),
     ],
     ids=[
         "test", "it", "template title", "skip", "only", "fixme", "concurrent", "skipIf", "runIf", "each", "inside a describe",
         "step is no test", "use is no test", "hook is no test", "member call is no test", "runtime skip is no test", "configure is no test",
+        "a computed title is no test", "a bare name is no call", "an unclosed modifier call is no test",
     ],
 )
 def test_a_script_call_is_a_test_only_in_the_forms_the_standard_names(source, tests):
