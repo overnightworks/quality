@@ -185,7 +185,13 @@ def test_a_cache_directory_that_cannot_be_written_is_a_run_without_a_copy(run, p
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("unreadable", ["a link to itself", "a file whose read fails"])
+@pytest.mark.parametrize(
+    "unreadable",
+    [
+        "a link to itself",
+        pytest.param("a file whose read fails", marks=pytest.mark.skipif(not Path("/proc/self/mem").exists(), reason="needs Linux procfs")),
+    ],
+)
 def test_a_copy_that_cannot_be_read_counts_as_none_and_is_replaced(run, published_databases, copy_of, database_root, unreadable):
     """ADVISORY-43, ADVISORY-46: a copy that cannot be opened or read is no copy."""
     copy_of().parent.mkdir(parents=True)

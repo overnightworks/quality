@@ -70,7 +70,7 @@ def install_distribution(site: Path, record: str, name: str = "scanner") -> None
 @pytest.mark.parametrize(
     "record",
     [None, "", "scanner-1.0.dist-info/METADATA,,\n", "scanner-1.0.dist-info/METADATA,,\n../bin/scanner,,\n"],
-    ids=["not installed", "no RECORD", "RECORD without the executable", "recorded file gone"],
+    ids=["not installed", "no RECORD", "RECORD without the executable", "recorded file missing from disk"],
 )
 def test_an_executable_the_installation_does_not_hold_is_not_found(tmp_path, monkeypatch, record):
     """SCANNER-16: an executable the installation does not hold, or does not record, is not found."""
