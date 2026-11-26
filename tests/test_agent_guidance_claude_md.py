@@ -106,11 +106,8 @@ def test_claude_md_two_wrong_files_are_two_findings(build_repo, capsys):
     assert (code, [len(rows_of(output, finding)) for finding in findings]) == (1, [1, 1]), output
 
 
-@pytest.mark.parametrize(
-    ("name", "deleted_code"),
-    [("CLAUDE.md", 0), (".claude/CLAUDE.md", 1)],  # the files rule flags the tracked `.claude/` directory itself, whatever its file
-)
-def test_claude_md_counts_only_once_tracked_and_only_while_on_disk(build_repo, capsys, name, deleted_code):
+@pytest.mark.parametrize("name", ["CLAUDE.md", ".claude/CLAUDE.md"])
+def test_claude_md_counts_only_once_tracked_and_only_while_on_disk(build_repo, capsys, name):
     """CLAUDE-1, CLAUDE-12: an untracked file is not judged until `git add`; a tracked one gone from disk is skipped."""
     repo = with_github_remote(build_repo(GUIDANCE))
     (repo / name).parent.mkdir(exist_ok=True)
@@ -123,7 +120,7 @@ def test_claude_md_counts_only_once_tracked_and_only_while_on_disk(build_repo, c
     deleted = run(capsys, repo)
     assert (untracked[0], is_clean(untracked[1])) == (0, True), untracked
     assert (tracked[0], len(rows_of(tracked[1], finding))) == (1, 1), tracked
-    assert (deleted[0], len(rows_of(deleted[1], finding)), rule_findings(repo, Rule.CLAUDE_MD)) == (deleted_code, 0, []), deleted
+    assert (deleted[0], len(rows_of(deleted[1], finding)), rule_findings(repo, Rule.CLAUDE_MD)) == (0, 0, []), deleted
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 file, so no permission is refused")
