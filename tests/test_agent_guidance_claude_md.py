@@ -120,6 +120,8 @@ def test_claude_md_counts_only_once_tracked_and_only_while_on_disk(build_repo, c
     deleted = run(capsys, repo)
     assert (untracked[0], is_clean(untracked[1])) == (0, True), untracked
     assert (tracked[0], len(rows_of(tracked[1], finding))) == (1, 1), tracked
+    if name == "CLAUDE.md":  # the files rule flags the tracked `.claude/` directory itself, whatever its file
+        assert (deleted[0], is_clean(deleted[1])) == (0, True), deleted
     assert (len(rows_of(deleted[1], finding)), rule_findings(repo, Rule.CLAUDE_MD)) == (0, []), deleted
 
 
