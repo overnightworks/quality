@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "PyYAML>=6",
-    "import-linter==2.16",
+    "import-linter==2.17",
     # grimp 3.20: architecture.py implements its internal package-finder port, so an upgrade is a reviewed bump
     "grimp==3.20",
     "lizard==1.26.1",
