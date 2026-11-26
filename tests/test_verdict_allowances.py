@@ -121,6 +121,14 @@ def test_a_file_git_renamed_moves_its_entry(table):
 
 
 @EACH_TABLE
+def test_an_entry_the_base_holds_at_a_rename_target_stays_inherited(table):
+    """VERDICT-78: an inherited entry is never a loosening, whether or not git lists a rename onto its path."""
+    renames = Renames({table.first: table.second}, frozenset({table.second}))
+    both = CHECKS + table.entry(table.second)
+    assert judged(both, both, renames) == green()
+
+
+@EACH_TABLE
 def test_a_head_that_still_declares_the_old_name_adds_the_new_one(table):
     """VERDICT-81: the entry moves rather than being copied."""
     renames = Renames({table.first: table.second}, frozenset({table.second}))

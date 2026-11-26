@@ -137,12 +137,12 @@ _SELF_DECLARING = (
 
 def _added(kind: _SelfDeclaring, base: GateSettings, head: GateSettings, renames: Renames) -> list[DeclaringEntry]:
     """The head's entries of one kind whose identity the base lacks; where the kind carries renames, a base entry whose
-    path git renamed holds the new path unless the head still declares the old one."""
+    path git renamed also holds the new path unless the head still declares the old one."""
     entries = list(kind.entries(head))
     held = {kind.identity(entry) for entry in kind.entries(base)}
     if kind.carries_renames:
         kept = {kind.identity(entry)[0] for entry in entries}
-        held = {(moved, qualifier) for path, qualifier in held if (moved := moved_path(path, renames, kept)) is not None}
+        held |= {(moved, qualifier) for path, qualifier in held if (moved := moved_path(path, renames, kept)) is not None}
     return [entry for entry in entries if kind.identity(entry) not in held]
 
 
