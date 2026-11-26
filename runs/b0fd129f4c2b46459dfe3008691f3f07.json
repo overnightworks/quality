@@ -44,7 +44,65 @@
     {
       "run": "41fe93c97d68431e99ab9a3b33c34aba",
       "start_tip": "bcf658ab62b08f08ca0ac418182be324b092b5ab",
-      "follows": true
+      "follows": true,
+      "end_tip": "0d67c4a9430787f864fafffb5d0c3718015c6301",
+      "ran": [
+        "review",
+        "fix",
+        "gate"
+      ],
+      "record": {
+        "version": 1,
+        "stages": {
+          "build": "sonnet/high",
+          "fix": "sonnet/high",
+          "review": "opus/medium",
+          "test": "none",
+          "gate": "opus/high",
+          "land": "haiku/low"
+        },
+        "fix_rounds": {
+          "review": 0,
+          "gate": 1,
+          "ci": 0,
+          "test": 0
+        },
+        "blocking": {
+          "review": 1,
+          "gate": 4,
+          "ci": 0,
+          "test": 0
+        },
+        "misses": {
+          "review": 0,
+          "gate": 0,
+          "ci": 0,
+          "test": 0
+        },
+        "verdicts": [
+          {
+            "stage": "review",
+            "verdict": "revise",
+            "sha": "bcf658ab62b08f08ca0ac418182be324b092b5ab"
+          },
+          {
+            "stage": "gate",
+            "verdict": "revise",
+            "sha": "bcf658ab62b08f08ca0ac418182be324b092b5ab"
+          },
+          {
+            "stage": "review",
+            "verdict": "approve",
+            "sha": "0d67c4a9430787f864fafffb5d0c3718015c6301"
+          },
+          {
+            "stage": "gate",
+            "verdict": "revise",
+            "sha": "0d67c4a9430787f864fafffb5d0c3718015c6301"
+          }
+        ],
+        "risk": "material"
+      }
     }
   ]
 }
