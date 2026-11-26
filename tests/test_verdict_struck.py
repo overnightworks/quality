@@ -83,10 +83,10 @@ def test_the_verdict_reads_the_merge_commits_files_before_a_strike_loosens(capsy
 
 
 @pytest.mark.integration
-def test_the_verdict_reads_a_submodule_at_a_struck_modules_folder_as_no_file_of_the_module(capsys, pull_request):
+def test_the_verdict_reads_a_submodule_at_a_struck_modules_file_path_as_no_file_of_the_module(capsys, pull_request):
     """LOOSE-19: a struck module with no tracked file of its own at the head is no loosening, and a submodule the head
     tracks where the module stood is a commit, not a file."""
-    repo = committed(pull_request, DEAD, STRUCK, DELETED, submodules=["src/shop/dead"])
+    repo = committed(pull_request, DEAD, STRUCK, DELETED, submodules=["src/shop/dead.py"])
     assert viewed(repo, capsys) == (0, GREEN)
 
 
