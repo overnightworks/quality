@@ -58,7 +58,7 @@ EMPTY_BASELINE = ""
 
 
 def test_without_a_baseline_the_debt_row_counts_the_entries_a_first_recording_writes(build_repo, capsys):
-    """O21, SIZE-3, SIZE-6, SIZE-7: with no baseline the debt row counts the entries over the thresholds, a first
+    """SIZE-3, SIZE-6, SIZE-7, O21: with no baseline the debt row counts the entries over the thresholds, a first
     recording writes as many, and the exit is unchanged."""
     repo = build_repo({"src/big.py": long_file(800) + long_function(60) + branchy_function(16), "tests/test_big.py": long_file(900)})
     code, output = run(capsys, repo)
