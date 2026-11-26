@@ -298,7 +298,7 @@ def test_every_tracked_regular_python_file_is_judged(build_repo, path):
 def test_two_files_whose_names_ruff_prints_alike_cannot_be_judged(build_repo, capsys):
     """SECURITY-28, SECURITY-30: two names that differ only in bytes that are not UTF-8 make both rules `cannot judge`,
     exit 2, and the other rules are still judged."""
-    repo = build_repo({".env": "A=1\n", "src/p/\udcff.py": EVAL, "src/p/\udcfe.py": EVAL})
+    repo = build_repo({".env": "A=1\n", **{f"src/p/{byte}.py": EVAL for byte in ("\udcff", "\udcfe")}})
     code, output = run(capsys, repo)
     assert (code, list(refusals(repo)), env_row_stands(output)) == (2, [Rule.PYTHON_SECURITY, Rule.PYTHON_PRINT], True)
 
