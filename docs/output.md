@@ -537,8 +537,8 @@ Ruled by the operator:
   under a finding and `fix:`,
 - LENGTH-6: lines to copy ([Rows](#rows)), the verdict, `error:` and `next:`; a
   long line wraps.
-- LENGTH-7: A line under a row that the door marks whole, as it marks a declared loosening and its `reason:` line,
-  stands whole at a terminal.
+- LENGTH-7: A line under a row that the door marks whole, as it marks a declared loosening and its `reason:` line, or an
+  undeclared one and its `fix:` line, stands whole at a terminal.
 - LENGTH-8: The cut is at the end, never inside an escape `printable` creates;
 - LENGTH-9: in
   a window at or below the text before the fact it is `…`.

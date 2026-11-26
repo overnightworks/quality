@@ -488,7 +488,8 @@ ROOT = {"AGENTS.md": "# guidance\n"}
 MISPLACED_FACT = "guidance outside the root file"
 MISPLACED_FIX = (
     "move what an agent needs into the root AGENTS.md or delete it, or declare it in quality/config.toml with "
-    "[[layout.allow]], its path, the rule agents-md and a reason"
+    "[[layout.allow]]: its path, the rule agents-md, a reason, the item that ends it, and the item and date of the operator's "
+    "ruling that lets it in"
 )
 MISNAMED_FACT = "the document set's path is exact"
 MISNAMED_FIX = "rename it to AGENTS.md"
@@ -498,7 +499,7 @@ MISPLACED, MISNAMED, UNUSED = FindingEvent.MISPLACED, FindingEvent.MISNAMED, Fin
 
 
 def declaring(path: str, rule: str = "agents-md") -> str:
-    return f'[[layout.allow]]\npath = "{path}"\nrule = "{rule}"\nreason = "the tool reads it"\n'
+    return f'[[layout.allow]]\npath = "{path}"\nrule = "{rule}"\nreason = "the tool reads it"\nends = "#2"\n'
 
 
 def placed(repo: Path, rule: Rule = Rule.AGENTS_MD) -> list[tuple[str, FindingEvent, str, str]]:

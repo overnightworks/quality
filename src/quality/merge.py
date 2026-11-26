@@ -12,6 +12,7 @@ from quality import architecture, checkout
 from quality.base_branch import MergeMethod, choose_merge_method, compare_with_tip
 from quality.baseline_file import BASELINE_PATH
 from quality.config import Declaration, GateSettings, LegacyMode
+from quality.config_allowances import ConfigSide
 from quality.config_entries import CONFIG_PATH
 from quality.gh import GhFailed, GhRunner, file_at, workflow_texts_at
 from quality.landing import Landing, LandingKind, LandingRefused, landing_of
@@ -255,14 +256,15 @@ def read_statuses(gh: GhRunner, repository: str, head_sha: str) -> list[Check]:
     return [Check(status["context"], "queued" if status["state"] == PENDING_STATUS else COMPLETED, status["state"]) for status in statuses]
 
 
-def read_side_at(gh: GhRunner, repository: str, sha: str, fix: Step) -> Side:
-    """The gate's settings, baseline and import-linter configs at one commit, as the verdict reads them; a 404 reads as absent,
-    a config quality cannot read is its refusal with `fix`, the step that repairs it at this commit."""
+def read_side_at(gh: GhRunner, repository: str, sha: str, fix: Step, side: ConfigSide) -> Side:
+    """The gate's settings, baseline and import-linter configs at one commit, as the verdict reads the `side` that commit
+    stands for; a 404 reads as absent, a config quality cannot read is its refusal with `fix`, the step that repairs it at
+    this commit."""
     config = file_at(gh, repository, CONFIG_PATH, sha)
     baseline = file_at(gh, repository, BASELINE_PATH, sha)
     import_configs = {name: file_at(gh, repository, name, sha) for name in architecture.CONFIG_FILES}
     try:
-        return side_of(config, baseline, sha, import_configs)
+        return side_of(config, baseline, sha, import_configs, side=side)
     except UnusableConfig as unusable:
         raise config_refusal(unusable.error, fix) from unusable
 
@@ -555,8 +557,10 @@ def read_loosenings(
 ) -> Judged[tuple[Verdict, GateSettings]]:
     """The base side is the compared tip, read first: a config refused there is not repaired on the pull request's branch."""
     merge_commit_sha = pull["merge_commit_sha"]
-    base = read_side_at(gh, repository, tip, Instruction(f"fix it on {pull['base']['ref']} first"))
-    head = read_side_at(gh, repository, merge_commit_sha, Instruction(f"push the fix to the pull request's branch, then run {rerun} again"))
+    base = read_side_at(gh, repository, tip, Instruction(f"fix it on {pull['base']['ref']} first"), ConfigSide.BASE)
+    head = read_side_at(
+        gh, repository, merge_commit_sha, Instruction(f"push the fix to the pull request's branch, then run {rerun} again"), ConfigSide.HEAD
+    )
     pull_tree, renames = read_pull_files(remote_for, repository, base, head, (tip, merge_commit_sha), environment)
     verdict = rederived_verdict(head, base, check_runs, renames, pull_tree)
     return (verdict, head.settings), (loosenings_row(verdict, sonar_red, refused),)

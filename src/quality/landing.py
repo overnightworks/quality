@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 
-from quality.config import ITEM_REFERENCE
+from quality.config_entries import ITEM_REFERENCE
 from quality.markdown_fences import live_line_indexes
 from quality.report import CannotJudge
 

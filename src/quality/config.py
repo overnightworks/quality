@@ -1,6 +1,5 @@
 import datetime
 import re
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path, PurePosixPath
@@ -14,9 +13,10 @@ from quality.config_allowances import (
     ROOT_ALLOWANCE_EXAMPLE,
     WORKFLOW_ALLOWANCE_EXAMPLE,
     ComposeAllowance,
-    LayoutAllowance,
+    ConfigSide,
+    LayoutEntry,
     PythonAllowance,
-    RootAllowance,
+    RootEntry,
     WorkflowAllowance,
     compose_allowances,
     layout_allowances,
@@ -32,12 +32,8 @@ DECLARATION_KEYS = {"what", "item", "date", "reason"}
 GENERATED_FILE_KEYS = {"path", "job", "item", "date", "reason"}
 FOREIGN_PREFIX_KEYS = {"prefix", "owner"}
 IMPLEMENTED_DOCUMENT_KEYS = {"path", "item", "date", "reason"}
-ITEM_REFERENCE_EXPECTED = "item as #<number> or <owner>/<repo>#<number>"
 ADVISORY_ALLOWANCE_KEYS = {"id", "lock", "until", "date", "item", "reason"}
 SHA256_HEX = re.compile(r"[0-9a-f]{64}")
-# ASCII only, so a lookalike name (a Cyrillic letter in it) is no repository.
-REPOSITORY_NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
-ITEM_REFERENCE = re.compile(rf"(?:{REPOSITORY_NAME.pattern})?#[1-9][0-9]*")
 # The part of a spec ID before its last number; `quality.spec_citations` builds the ID from it.
 ID_PREFIX = r"[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*"
 ID_PREFIX_PATTERN = re.compile(ID_PREFIX)
@@ -220,6 +216,8 @@ class GateSettings:
     implemented_documents: tuple[ImplementedDocument, ...] = ()
     sonar: bool = True
     secret_allowances: tuple[Allowance, ...] = ()
+    root_allowances: tuple[RootEntry, ...] = ()
+    layout_allowances: tuple[LayoutEntry, ...] = ()
 
 
 class Allowance(NamedTuple):
@@ -236,8 +234,8 @@ class AllowLists:
 
     secrets: dict[Allowance, str] = field(default_factory=dict)
     advisories: tuple[AdvisoryAllowance, ...] = ()
-    root: tuple[RootAllowance, ...] = ()
-    layout: tuple[LayoutAllowance, ...] = ()
+    root: tuple[RootEntry, ...] = ()
+    layout: tuple[LayoutEntry, ...] = ()
     python: tuple[PythonAllowance, ...] = ()
     compose: tuple[ComposeAllowance, ...] = ()
     workflow: tuple[WorkflowAllowance, ...] = ()
@@ -303,8 +301,9 @@ def _refuse_unknown_keys(document: dict, tables: dict[str, dict]) -> None:
         raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} has {config_entries.unknown_keys(unknown)} - {KNOWN_KEYS}", example)
 
 
-def _validated_document(text: str) -> _Document:
-    """The one validation of the whole config: one parse, one unknown-key check, and every entry of every table."""
+def _validated_document(text: str, side: ConfigSide) -> _Document:
+    """The one validation of the whole config: one parse, one unknown-key check, and every entry of every table; the base
+    side reads a root and a layout entry by its identity only."""
     document = config_entries.parse(text, EXAMPLE)
     tables = {name: config_entries.table_named(document, name, shape.example) for name, shape in TABLE_SHAPES.items()}
     _refuse_unknown_keys(document, tables)
@@ -315,8 +314,8 @@ def _validated_document(text: str) -> _Document:
         AllowLists(
             _parse_allowances(tables["secrets"]),
             _advisory_allowances(tables["advisories"]),
-            root_allowances(tables["root"]),
-            layout_allowances(tables["layout"]),
+            root_allowances(tables["root"], side),
+            layout_allowances(tables["layout"], side),
             python_allowances(tables["python"]),
             compose_allowances(tables["compose"]),
             workflow_allowances(tables["workflow"]),
@@ -368,16 +367,6 @@ def _declarations(gate: dict) -> tuple[Declaration, ...]:
     )
 
 
-def _refuse_unless_ruled(refuse: Callable[[str], config_entries.ConfigError], item: object, date: object, reason: object) -> None:
-    """The item, date and reason every declaration that carries its own ruling needs."""
-    if not (isinstance(item, str) and ITEM_REFERENCE.fullmatch(item)):
-        raise refuse(ITEM_REFERENCE_EXPECTED)
-    if not config_entries.is_date_without_time(date):
-        raise refuse("date as a TOML date without a time")
-    if not config_entries.is_one_line_text(reason):
-        raise refuse(config_entries.ONE_LINE_REASON)
-
-
 def _read_declaration(entry: object, position: int) -> Declaration:
     refuse = config_entries.entry_refusal(LOOSENED_HEADING, position, LOOSENED_EXAMPLE)
     if not isinstance(entry, dict) or set(entry) != DECLARATION_KEYS:
@@ -385,7 +374,7 @@ def _read_declaration(entry: object, position: int) -> Declaration:
     what, item, date, reason = (entry[key] for key in ("what", "item", "date", "reason"))
     if not (isinstance(what, str) and what.strip()):
         raise refuse("a non-empty what")
-    _refuse_unless_ruled(refuse, item, date, reason)
+    config_entries.refuse_unless_ruled(refuse, item, date, reason)
     return Declaration(what, item, date, reason)
 
 
@@ -408,8 +397,8 @@ def _read_advisory_allowance(entry: object, position: int) -> AdvisoryAllowance:
     )
     if not all(config_entries.is_one_line_text(value) for value in (identifier, lock, reason)):
         raise refuse("a non-empty one-line id, lock and reason")
-    if not (isinstance(item, str) and ITEM_REFERENCE.fullmatch(item)):
-        raise refuse(ITEM_REFERENCE_EXPECTED)
+    if not (isinstance(item, str) and config_entries.ITEM_REFERENCE.fullmatch(item)):
+        raise refuse(config_entries.ITEM_REFERENCE_EXPECTED)
     if not (config_entries.is_date_without_time(until) and config_entries.is_date_without_time(date)):
         raise refuse("until and date as TOML dates without a time")
     return AdvisoryAllowance(identifier, lock, until, date, item, reason)
@@ -433,7 +422,7 @@ def _read_generated_file(entry: object, position: int, mandatory_jobs: tuple[str
         raise refuse("path as the exact tracked path of one file: no folder, pattern, .. or absolute path")
     if job not in mandatory_jobs:
         raise refuse("job as one of [gate] mandatory_jobs, the job whose generator check proves the file")
-    _refuse_unless_ruled(refuse, item, date, reason)
+    config_entries.refuse_unless_ruled(refuse, item, date, reason)
     return GeneratedFile(path, job, item, date, reason)
 
 
@@ -451,7 +440,7 @@ def _read_foreign_prefix(entry: object, position: int) -> ForeignPrefix:
     prefix, owner = entry["prefix"], entry["owner"]
     if not (isinstance(prefix, str) and ID_PREFIX_PATTERN.fullmatch(prefix)):
         raise refuse("prefix as capital letters and digits, joined by -, like LANG or REQ-AUTH")
-    if not (isinstance(owner, str) and REPOSITORY_NAME.fullmatch(owner)):
+    if not (isinstance(owner, str) and config_entries.REPOSITORY_NAME.fullmatch(owner)):
         raise refuse("owner as <owner>/<repo>")
     return ForeignPrefix(prefix, owner)
 
@@ -471,7 +460,7 @@ def _read_implemented_document(entry: object, position: int) -> ImplementedDocum
     path, item, date, reason = (entry[key] for key in ("path", "item", "date", "reason"))
     if not config_entries.is_exact_file_path(path) or PurePosixPath(path).suffix != MARKDOWN_SUFFIX:
         raise refuse(f"path as the exact tracked path of one {MARKDOWN_SUFFIX} file: no folder, pattern, .. or absolute path")
-    _refuse_unless_ruled(refuse, item, date, reason)
+    config_entries.refuse_unless_ruled(refuse, item, date, reason)
     return ImplementedDocument(path, item, date, reason)
 
 
@@ -488,17 +477,19 @@ def _sonar(gate: dict, legacy: LegacyMode) -> bool:
     return value
 
 
-def load_gate_settings(text: str | None) -> GateSettings:
-    """mandatory_jobs is judged before legacy, so a config wrong in both is refused for mandatory_jobs."""
+def load_gate_settings(text: str | None, side: ConfigSide = ConfigSide.HEAD) -> GateSettings:
+    """mandatory_jobs is judged before legacy, so a config wrong in both is refused for mandatory_jobs. A `quality check`
+    never reads a base, so the head side is the default."""
     if text is None:
         raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} is missing", EXAMPLE)
-    document = _validated_document(text)
+    document = _validated_document(text, side)
     jobs = _mandatory_jobs(document.gate)
     legacy = _legacy_mode(document.gate)
     return GateSettings(
         jobs, legacy, document.declarations,
         document.allow_lists.advisories, document.allow_lists.generated, document.allow_lists.implemented_documents,
         _sonar(document.gate, legacy), tuple(document.allow_lists.secrets),
+        document.allow_lists.root, document.allow_lists.layout,
     )
 
 
@@ -528,7 +519,7 @@ def load_declarations(text: str | None) -> Declarations:
     """
     if text is None:
         return Declarations()
-    document = _validated_document(text)
+    document = _validated_document(text, ConfigSide.HEAD)
     return Declarations(document.allow_lists, document.render_pass)
 
 

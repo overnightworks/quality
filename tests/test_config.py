@@ -419,15 +419,15 @@ LAYOUT_RULE_IDS = "agents-md, file-suffix, script-header, script-name, test-impo
     ("entries", "message"),
     [
         (
-            '[[layout.allow]]\npath = "NOTES"\nrule = "size"\nreason = "r"\n',
+            '[[layout.allow]]\npath = "NOTES"\nrule = "size"\nreason = "r"\nends = "#2"\n',
             f"{CONFIG_PATH} [[layout.allow]] entry 1 needs rule as one of {LAYOUT_RULE_IDS}",
         ),
         (
-            '[[layout.allow]]\npath = "NOTES"\nrule = "file-suffix"\nreason = "r"\n' * 2,
+            '[[layout.allow]]\npath = "NOTES"\nrule = "file-suffix"\nreason = "r"\nends = "#2"\n' * 2,
             f'{CONFIG_PATH} [[layout.allow]] declares path = "NOTES" for rule = "file-suffix" twice; one declaration per rule and path',
         ),
         (
-            '[[layout.allow]]\npath = "NOTES"\nrule = [1]\nreason = "r"\n',
+            '[[layout.allow]]\npath = "NOTES"\nrule = [1]\nreason = "r"\nends = "#2"\n',
             f"{CONFIG_PATH} [[layout.allow]] entry 1 needs rule as one of {LAYOUT_RULE_IDS}",
         ),
     ],
@@ -442,11 +442,11 @@ def test_a_layout_allowance_refusal_names_the_rules_in_plain_words(entries, mess
 
 def test_a_layout_declaration_for_agents_md_is_read_as_written():
     """AGENTS-20: `agents-md` is a layout rule, so its entry is accepted by the one reader of `[[layout.allow]]`."""
-    entry = '[[layout.allow]]\npath = "docs/AGENTS.md"\nrule = "agents-md"\nreason = "r"\n'
-    assert load_declarations(entry).allow_lists.layout == (LayoutAllowance("docs/AGENTS.md", Rule.AGENTS_MD, "r"),)
+    entry = '[[layout.allow]]\npath = "docs/AGENTS.md"\nrule = "agents-md"\nreason = "r"\nends = "#2"\n'
+    assert load_declarations(entry).allow_lists.layout == (LayoutAllowance("docs/AGENTS.md", Rule.AGENTS_MD, "r", "#2"),)
 
 
-BAD_LAYOUT_ENTRY = '[[layout.allow]]\npath = "dir/"\nrule = "agents-md"\nreason = "r"\n'
+BAD_LAYOUT_ENTRY = '[[layout.allow]]\npath = "dir/"\nrule = "agents-md"\nreason = "r"\nends = "#2"\n'
 
 
 @pytest.mark.integration
@@ -713,7 +713,7 @@ QUOTED = r'"(?:[^"\\]|\\.)*"'
 def test_a_repeated_value_is_quoted_so_that_its_printed_form_reads_back_as_the_value(character):
     """REFUSAL-20: the fact passed through the one escaping holds the value as a TOML string."""
     value = f"a{character}b"
-    entries = f'[[root.allow]]\nentry = "{toml_escaped(value)}"\nreason = "r"\n' * 2
+    entries = f'[[root.allow]]\nentry = "{toml_escaped(value)}"\nreason = "r"\nends = "#2"\n' * 2
     with pytest.raises(ConfigError) as refused:
         load_declarations(entries)
     printed = printable(refused.value.fact)

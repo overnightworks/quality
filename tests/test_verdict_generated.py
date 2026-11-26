@@ -6,7 +6,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from quality.ratchet import NO_RENAMES
+from quality.config_allowances import ConfigSide
+from quality.ratchet import NO_RENAMES, Renames
 from quality.sides import side_of
 from quality.verdict import judge
 from tests.support.generated_files import TYPES_FILE, generated_config
@@ -42,11 +43,11 @@ KINDS = {
 EACH_KIND = pytest.mark.parametrize("kind", KINDS.values(), ids=KINDS.keys())
 
 
-def judged(base: str | None, head: str, *, with_base: bool = True):
+def judged(base: str | None, head: str, *, with_base: bool = True, renames: Renames = NO_RENAMES):
     """The verdict's loosenings as `(what, ruling)`, its unmatched declarations' `what`s, and whether it is blocked and
     green; a base of None is a base without quality/config.toml, `with_base=False` a run without one."""
-    base_side = side_of(base, None, "the base") if with_base else None
-    result = judge(side_of(head, None, "the head"), base_side, [job(), job("other")], {}, 1, NO_RENAMES)
+    base_side = side_of(base, None, "the base", side=ConfigSide.BASE) if with_base else None
+    result = judge(side_of(head, None, "the head", side=ConfigSide.HEAD), base_side, [job(), job("other")], {}, 1, renames)
     loosenings = tuple((each.what, each.declaration and each.declaration.ruling()) for each in result.loosenings)
     return loosenings, tuple(declared.what for declared in result.stale), result.blocked, result.green
 
@@ -86,6 +87,13 @@ def test_adding_or_re_pathing_a_declaration_is_a_self_declared_loosening(kind, c
     declaration's own item and date; inherited, removed and other-key changes are green."""
     base, head, expected = change(kind)
     assert judged(base, head) == expected
+
+
+@EACH_KIND
+def test_a_declared_path_git_renamed_is_still_an_add(kind):
+    """VERDICT-68, VERDICT-81: a rename moves a root or layout entry and no declaration of these two kinds."""
+    renames = Renames({kind.first: kind.second}, frozenset({kind.second}))
+    assert judged(CHECKS + kind.entry(kind.first), CHECKS + kind.entry(kind.second), renames=renames) == declared(kind, kind.second)
 
 
 def test_a_changed_job_of_a_generated_file_loosens_nothing():
