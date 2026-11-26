@@ -1,8 +1,0 @@
-claim_id = "3a3ee755f9e44ababe309a81ab37c0ba"
-agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
-role = "builder"
-base = "bde65d7f6ed50d7ad6031c8d636a33fe1891a452"
-branch = "claude/issue-1063-import-walk-vanished-file"
-scope = ["docs/rules.md", "pyproject.toml", "src/quality/architecture.py", "tests"]
-opened_commit = "b3d4e5dece2b4bea566b90d24273de321b9104c4"
-whole_reason = "One decision about one walk's read failures, its spec sentences and its tests; the tests directory because the cases sit in several architecture test modules and their support."
