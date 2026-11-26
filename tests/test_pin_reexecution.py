@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from coverage.config import CoverageConfig
 
 from quality import output, pin, process
 from quality.report import CannotJudge, Release
@@ -150,6 +151,19 @@ class Scene:
             [*wrap, *self.parent(*words, running=running)], cwd=cwd or self.judged, env=environment, capture_output=True, text=True,
             check=False, timeout=120,
         )
+
+
+def measured_once_at_exit() -> dict[str, str]:
+    """The environment of a child that coverage measures without saving before an `exec`: its one data file is named by
+    its whole content at exit. A save before the failed `exec` names the file by the data up to there, and `coverage
+    combine` drops a file whose name equals another's, so which test's lines after the call count would follow the order
+    of random file names."""
+    serialized = os.environ.get("COVERAGE_PROCESS_CONFIG")
+    if serialized is None:
+        return {}
+    config = CoverageConfig.deserialize(serialized)
+    config.patch = [patch for patch in config.patch if patch != "execv"]
+    return {"COVERAGE_PROCESS_CONFIG": config.serialize()}
 
 
 def new_repo(directory: Path, files: dict[str, str]) -> Path:
@@ -381,7 +395,7 @@ def test_uv_missing_is_the_pair(scene):
 def test_a_vanished_environment_is_the_pair(scene):
     """PIN-32: a prepared quality that cannot start is the pair that names the cause and asks to run again."""
     scene._write_quality("#!/vanished/python\n")
-    done = scene.run("check", "files")
+    done = scene.run("check", "files", **measured_once_at_exit())
     assert (done.returncode, done.stderr.splitlines()) == (
         2, [f"error: cannot start quality {RELEASE} · No such file or directory", "next: quality check again"],
     )
