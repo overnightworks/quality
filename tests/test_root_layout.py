@@ -60,7 +60,7 @@ def test_every_base_list_entry_is_green_without_a_config(build_repo):
     assert red(build_repo(files), Rule.ROOT_LAYOUT) == []
 
 
-PROJECTS_CONDITION = "holds folders and each holds a pyproject.toml or package.json"
+PROJECTS_CONDITION = "holds folders and each holds a package.json or pyproject.toml"
 FLUX_CONDITION = "clusters/<name>/flux-system/"
 
 

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from quality.config_allowances import ROOT_ALLOWANCE_HEADING, RootAllowance
 from quality.config_entries import CONFIG_PATH
-from quality.layout import PACKAGE_FILE, PROJECT_FILE
+from quality.layout import PACKAGE_FILE, PROJECT_FILES
 from quality.report import Finding, FindingEvent
 from quality.rules import Rule
 
@@ -29,7 +29,6 @@ ROOT_BASE_ENTRIES = ROOT_BASE_FILES | ROOT_BASE_DIRECTORIES
 
 FLUX_CLUSTERS = "clusters"
 FLUX_DIRECTORY = "flux-system"
-PROJECT_MANIFESTS = (PROJECT_FILE, PACKAGE_FILE)
 
 
 @dataclass(frozen=True)
@@ -57,9 +56,9 @@ def _directory_of_projects(directory: str) -> CaseCondition:
 
     def met(tracked: frozenset[str]) -> bool:
         children = {parts[1] for parts in (path.split("/") for path in tracked) if len(parts) > 2 and parts[0] + "/" == directory}
-        return bool(children) and all(any(f"{directory}{child}/{name}" in tracked for name in PROJECT_MANIFESTS) for child in children)
+        return bool(children) and all(any(f"{directory}{child}/{name}" in tracked for name in PROJECT_FILES) for child in children)
 
-    return CaseCondition(f"it holds folders and each holds a {' or '.join(PROJECT_MANIFESTS)}", met)
+    return CaseCondition(f"it holds folders and each holds a {' or '.join(sorted(PROJECT_FILES))}", met)
 
 
 def _flux_bootstrap() -> CaseCondition:
@@ -74,7 +73,7 @@ ROOT_CASES = (
     RootCase("legal/", _tracks("legal/datenschutz.html")),
     RootCase("packages/", _directory_of_projects("packages/")),
     RootCase("providers/", _directory_of_projects("providers/")),
-    *(RootCase(entry, _flux_bootstrap()) for entry in ("clusters/", "infrastructure/", "apps/")),
+    *(RootCase(entry, _flux_bootstrap()) for entry in (f"{FLUX_CLUSTERS}/", "infrastructure/", "apps/")),
 )
 
 _BASE_SPELLINGS = {entry.casefold(): entry for entry in ROOT_BASE_ENTRIES}
