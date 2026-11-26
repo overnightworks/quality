@@ -212,7 +212,7 @@ def test_each_kind_of_import_contract_result_carries_its_event_at_the_config(
 
 
 def test_an_unmatched_ignore_names_its_expression_and_a_grimp_warning_the_skipped_module_without_a_local_path(build_repo):
-    """IMPORT-6, IMPORT-26: an unmatched ignore at `warn` is a note naming the ignored expression, and a grimp warning
+    """IMPORT-6, IMPORT-25, IMPORT-26: an unmatched ignore at `warn` is a note naming the ignored expression, and a grimp warning
     names the skipped module repository-relative."""
     ignoring = build_repo({**SHOP, ".importlinter": ini({**STALE_IGNORE, "unmatched_ignore_imports_alerting": "warn"})})
     (unused,) = rule_notes(ignoring, Rule.IMPORT_CONTRACT)

@@ -2,15 +2,21 @@
 
 Reference for the engineer or operator who needs the exact behaviour of `quality check`.
 
-`quality check` reads git's view of the repository it is started in, from its top level, so a run from `src` judges
-the same files and the same `quality/baseline.toml` as one at the top, and names every file relative to the top (`size
-src/big.py`) (CHECK-1). There is no path argument; in a submodule or a linked worktree a run judges that work tree's own
-top (CHECK-2).
+- CHECK-1: `quality check` reads git's view of the repository it is started in, from its top level, so a run from `src` judges
+  the same files and the same `quality/baseline.toml` as one at the top, and names every file relative to the top (`size
+  src/big.py`).
+- CHECK-2: There is no path argument; in a submodule or a linked worktree a run judges that work tree's own
+  top.
 
-`quality check [AREA ...]` judges only the areas it names, each whole, in the order of `quality check --help` and each
-once, however they are named; with none it judges all seven (CHECK-3). An area not named starts nothing and has no
-row (CHECK-6); the verdict counts only the named areas (`✓ clean · 1 area`) (CHECK-7) and the exit is the worst of
-theirs (CHECK-8), so a named run says nothing of the rest. The gate runs all seven ([gate](gate.md#gateyml)).
+- CHECK-3: `quality check [AREA ...]` judges only the areas it names, each whole, in the order of `quality check --help` and each
+  once, however they are named; with none it judges all seven.
+- CHECK-6: An area not named starts nothing and has no
+  row;
+- CHECK-7: the verdict counts only the named areas (`✓ clean · 1 area`)
+- CHECK-8: and the exit is the worst of
+  theirs, so a named run says nothing of the rest.
+
+The gate runs all seven ([gate](gate.md#gateyml)).
 
 Three statements hold for each of six declaration tables of `quality/config.toml` and the rule that reads it:
 `[[compose.allow]]`, `[[root.allow]]`, `[[layout.allow]]`, `[[python.allow]]`, `[[workflow.allow]]` and
@@ -21,37 +27,62 @@ than the rule refuses its table as an unknown key.
 
 It applies these rules:
 
-- `env-file`: no tracked `.env`, `.env.*` or `*.env` file (names ending in `.example` are templates and pass) (ENV-1).
-  The fix is `git --literal-pathspecs rm --cached -- <name>, then add <name> to .gitignore`, the first name quoted for
-  the shell, so a copy untracks exactly that file (ENV-2); the second stands only where the name needs no quoting, else
-  it reads `it` (ENV-3). A name without a slash, such as `.env`, also matches that name in every folder
-  (`gitignore(5)`). A name that is not printable UTF-8 gets the hint to remove it by its bytes (`git ls-files -z` shows
-  them) instead of a command (ENV-4). For an app repository it checks the rule of
+- `env-file`:
+  - ENV-1: no tracked `.env`, `.env.*` or `*.env` file (names ending in `.example` are templates and pass).
+  - ENV-2: The fix is `git --literal-pathspecs rm --cached -- <name>, then add <name> to .gitignore`, the first name quoted for
+    the shell, so a copy untracks exactly that file;
+  - ENV-3: the second stands only where the name needs no quoting, else
+    it reads `it`.
+
+  A name without a slash, such as `.env`, also matches that name in every folder
+  (`gitignore(5)`).
+
+  - ENV-4: A name that is not printable UTF-8 gets the hint to remove it by its bytes (`git ls-files -z` shows
+    them) instead of a command.
+
+  For an app repository it checks the rule of
   [platform's app standard](https://github.com/overnightworks/platform/blob/main/docs/app.md) that env files pass
   quality's rules.
 
   Ruled by the operator: the command runs exactly as printed, with no home-made encoder for the name (ENV-2).
-- `compose-port`: every published port in a tracked compose file binds loopback, `127.0.0.1` or `::1` (`"[::1]:HOST:CONTAINER"`,
-  `host_ip: ::1`); `[::]` and `0.0.0.0` are findings (COMPOSE-1). For an app repository it checks the rule of
+- `compose-port`:
+  - COMPOSE-1: every published port in a tracked compose file binds loopback, `127.0.0.1` or `::1` (`"[::1]:HOST:CONTAINER"`,
+    `host_ip: ::1`); `[::]` and `0.0.0.0` are findings.
+
+  For an app repository it checks the rule of
   [platform's app standard](https://github.com/overnightworks/platform/blob/main/docs/app.md) that published compose
-  ports pass quality's rules. A compose file is a `.yml` or `.yaml` file whose name holds the word `compose` between
-  `.`, `-` or `_`, in any case: `docker-compose.ci.yml` and `keycloak/bootstrap.compose.yaml` are judged,
-  `composer.yml`, `compose2.yaml` and `compose.yaml.example` are not (COMPOSE-2). Only tracked files count: an untracked
-  `compose.yaml` is never judged, one added with `git add` is (COMPOSE-3). Its rows say `published port`,
-  `unreadable port`, `host network` or `unused` (a stale `[[compose.allow]]`) (COMPOSE-4). A tracked file missing from
-  disk (deleted, or a symlink to nowhere or in a loop) is skipped (COMPOSE-5); one the filesystem refuses to read makes
-  the `files` row `✗ not checked` with the reason (exit `2`) (COMPOSE-6).
-  A file is read as Compose reads it: `- 22:22` is the text `22:22` (COMPOSE-7), and `!override` and `!reset` are read
-  as the value they wrap (COMPOSE-8); any other tag (`!foo`) and any YAML error is `cannot judge` (COMPOSE-9), in one
-  line with its line and column (or its position for a character YAML refuses, `nested too deeply`, `a value does not
-  fit its tag`, or `not valid YAML`) (COMPOSE-10).
-  A port that is neither text, a number nor a mapping whose `published` (or, without one, `target`) is text or a number
-  is a finding (COMPOSE-11). A `ports` that is neither a list nor empty, `0` or `false` is a finding too (COMPOSE-12). A
-  service with `network_mode: host` publishes whatever its process binds, so it is a finding too (COMPOSE-13), and so is
-  a `network_mode` that holds a Compose interpolation (`${...}`), which may resolve to `host` (COMPOSE-14); `none`,
-  `service:x` and any other literal are clean (COMPOSE-15). A service is declared in `quality/config.toml`, a table of
-  its own beside `[[layout.allow]]`, with the exact tracked path of its compose file, the service name and a one-line
-  reason (COMPOSE-16):
+  ports pass quality's rules.
+
+  - COMPOSE-2: A compose file is a `.yml` or `.yaml` file whose name holds the word `compose` between
+    `.`, `-` or `_`, in any case: `docker-compose.ci.yml` and `keycloak/bootstrap.compose.yaml` are judged,
+    `composer.yml`, `compose2.yaml` and `compose.yaml.example` are not.
+  - COMPOSE-3: Only tracked files count: an untracked
+    `compose.yaml` is never judged, one added with `git add` is.
+  - COMPOSE-4: Its rows say `published port`,
+    `unreadable port`, `host network` or `unused` (a stale `[[compose.allow]]`).
+  - COMPOSE-5: A tracked file missing from
+    disk (deleted, or a symlink to nowhere or in a loop) is skipped;
+  - COMPOSE-6: one the filesystem refuses to read makes
+    the `files` row `✗ not checked` with the reason (exit `2`).
+  - COMPOSE-7: A file is read as Compose reads it: `- 22:22` is the text `22:22`,
+  - COMPOSE-8: and `!override` and `!reset` are read
+    as the value they wrap;
+  - COMPOSE-9: any other tag (`!foo`) and any YAML error is `cannot judge`,
+  - COMPOSE-10: in one
+    line with its line and column (or its position for a character YAML refuses, `nested too deeply`, `a value does not
+    fit its tag`, or `not valid YAML`).
+  - COMPOSE-11: A port that is neither text, a number nor a mapping whose `published` (or, without one, `target`) is text or a number
+    is a finding.
+  - COMPOSE-12: A `ports` that is neither a list nor empty, `0` or `false` is a finding too.
+  - COMPOSE-13: A
+    service with `network_mode: host` publishes whatever its process binds, so it is a finding too,
+  - COMPOSE-14: and so is
+    a `network_mode` that holds a Compose interpolation (`${...}`), which may resolve to `host`;
+  - COMPOSE-15: `none`,
+    `service:x` and any other literal are clean.
+  - COMPOSE-16: A service is declared in `quality/config.toml`, a table of
+    its own beside `[[layout.allow]]`, with the exact tracked path of its compose file, the service name and a one-line
+    reason:
 
   ```toml
   [[compose.allow]]
@@ -60,27 +91,32 @@ It applies these rules:
   reason = "it terminates TLS on the host's own interfaces"
   ```
 
-  A declared service passes the host check only; its ports are still judged (COMPOSE-17). A declaration that matches
-  nothing is a finding on its file: the file is not tracked or not a compose file, it lacks the service, or the service
-  is neither host-networked nor interpolated there; the fix is to delete the entry (COMPOSE-18). A duplicate
-  `(file, service)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, an absolute path, an unknown key, a
-  missing key or a service or reason that is not one-line text makes the `files` row `✗ not checked` with the reason,
-  and `next:` shows a `[[compose.allow]]` example (COMPOSE-19).
+  - COMPOSE-17: A declared service passes the host check only; its ports are still judged.
+  - COMPOSE-18: A declaration that matches
+    nothing is a finding on its file: the file is not tracked or not a compose file, it lacks the service, or the service
+    is neither host-networked nor interpolated there; the fix is to delete the entry.
+  - COMPOSE-19: A duplicate
+    `(file, service)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, an absolute path, an unknown key, a
+    missing key or a service or reason that is not one-line text makes the `files` row `✗ not checked` with the reason,
+    and `next:` shows a `[[compose.allow]]` example.
 
   Ruled by the operator: a service with `network_mode: host` (COMPOSE-13), or one whose `network_mode` holds a Compose
   interpolation (COMPOSE-14), is a finding unless `quality/config.toml` declares its file and service
   (COMPOSE-16, COMPOSE-17).
-- `size`: every tracked file of Python, TypeScript (`.ts` `.tsx` `.mts` `.cts`), JavaScript (`.js` `.jsx` `.mjs`
-  `.cjs`), Svelte, Vue or CSS (`.css`) is measured by its lines (SIZE-1), and no other file is (SIZE-2), and every
-  tracked `.py`, `.ts`, `.js`, `.mjs`, `.svelte` and `.vue` file also by its functions with
-  [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a named function from 60 lines and a named
-  function with a CCN above 15 are debt (SIZE-3), [counted apart](commands.md#quality-report) for production and tests
-  (a path under `test/` or `tests/`; Python also `conftest.py`, `test_*.py`, `*_test.py`; TypeScript and JavaScript
-  also `__tests__/`, `*.test.*`, `*.spec.*`, `*.test-d.*` and `*.spec-d.*`).
+- `size`:
+  - SIZE-1: every tracked file of Python, TypeScript (`.ts` `.tsx` `.mts` `.cts`), JavaScript (`.js` `.jsx` `.mjs`
+    `.cjs`), Svelte, Vue or CSS (`.css`) is measured by its lines,
+  - SIZE-2: and no other file is,
+  - SIZE-3: and every
+    tracked `.py`, `.ts`, `.js`, `.mjs`, `.svelte` and `.vue` file also by its functions with
+    [lizard](https://github.com/terryyin/lizard): a file from 800 lines, a named function from 60 lines and a named
+    function with a CCN above 15 are debt, [counted apart](commands.md#quality-report) for production and tests
+    (a path under `test/` or `tests/`; Python also `conftest.py`, `test_*.py`, `*_test.py`; TypeScript and JavaScript
+    also `__tests__/`, `*.test.*`, `*.spec.*`, `*.test-d.*` and `*.spec-d.*`).
 
-  Ruled by the operator: a file that `quality/config.toml` declares generated is left out of the `size` rule
-  (GENERATED-1); a minified or generated file the repository does not declare is counted by its lines like any other
-  (SIZE-1):
+  Ruled by the operator:
+  - GENERATED-1: a file that `quality/config.toml` declares generated is left out of the `size` rule; a minified or generated file the repository does not declare is counted by its lines like any other
+    (SIZE-1):
 
   ```toml
   [[size.generated]]
@@ -91,27 +127,38 @@ It applies these rules:
   reason = "written by scripts/generate_types.py, proven by its --check"
   ```
 
-  A declared file's lines, functions and CCN are neither judged (GENERATED-1), counted in the not-recorded row's count
-  (GENERATED-2) nor recorded by `quality check --fix` (GENERATED-3). A declared Python file that Python cannot parse
-  is left out likewise: the `size` rule names no note for it and is not refused by it (GENERATED-4). `path` is the
-  exact tracked path of one file, `job` one of `[gate] mandatory_jobs`, the job whose generator check proves the file
-  (GENERATED-5). A missing or extra key, a folder (a trailing `/`), a pattern, `..`, an absolute path, a `job` the gate
-  does not list (a config without `mandatory_jobs` included), a malformed `item` or `date`, a reason that is not one
-  line or two entries for one path is exit `2` naming the entry with this example (GENERATED-6): in `check` as the
-  `debt` row `✗ not checked` with the [example under `next:`](output.md#refusals), in `quality check --fix` as the same
-  row (GENERATED-7), and in the verdict (GENERATED-8) and the door naming the side; [`check secrets --staged` reads only
-  `[secrets]`](gate.md#declared-loosenings). A declaration whose path holds no
-  tracked file in a measured language is an `unused` row
-  (`[[size.generated]] matches no tracked file in a measured language`) on that path, fixed by deleting the entry from
-  `quality/config.toml` (GENERATED-9). Only `quality/config.toml` declares: `.gitattributes`, `linguist-generated`
+  - GENERATED-2: A declared file's lines, functions and CCN are neither judged (GENERATED-1), counted in the not-recorded row's count
+  - GENERATED-3: nor recorded by `quality check --fix`.
+  - GENERATED-4: A declared Python file that Python cannot parse
+    is left out likewise: the `size` rule names no note for it and is not refused by it.
+  - GENERATED-5: `path` is the
+    exact tracked path of one file, `job` one of `[gate] mandatory_jobs`, the job whose generator check proves the file.
+  - GENERATED-6: A missing or extra key, a folder (a trailing `/`), a pattern, `..`, an absolute path, a `job` the gate
+    does not list (a config without `mandatory_jobs` included), a malformed `item` or `date`, a reason that is not one
+    line or two entries for one path is exit `2` naming the entry with this example:
+  - GENERATED-7: in `check` as the
+    `debt` row `✗ not checked` with the [example under `next:`](output.md#refusals), in `quality check --fix` as the same
+    row,
+  - GENERATED-8: and in the verdict and the door naming the side; [`check secrets --staged` reads only
+    `[secrets]`](gate.md#declared-loosenings).
+  - GENERATED-9: A declaration whose path holds no
+    tracked file in a measured language is an `unused` row
+    (`[[size.generated]] matches no tracked file in a measured language`) on that path, fixed by deleting the entry from
+    `quality/config.toml`.
+
+  Only `quality/config.toml` declares: `.gitattributes`, `linguist-generated`
   included, plays no part.
 
-  A baseline entry left under a declared file's path can fall (`file is left out as generated · ceiling 850 lines`)
-  until `quality check --fix` drops it (`dropped  file is left out as generated`) (GENERATED-10). Only the `size`
+  - GENERATED-10: A baseline entry left under a declared file's path can fall (`file is left out as generated · ceiling 850 lines`)
+    until `quality check --fix` drops it (`dropped  file is left out as generated`).
+
+  Only the `size`
   rule leaves the file out: `clone` and the report still read it. quality cannot see what the declared job runs; the
   operator checks it once, at the door.
 
-  Functions are measured as follows (SIZE-4). lizard 1.26.1 is pinned exactly, and quality's suffix table names the
+  - SIZE-4: Functions are measured as follows.
+
+  lizard 1.26.1 is pinned exactly, and quality's suffix table names the
   reader, never lizard's fallback to C: `.ts` is read by lizard's TypeScript reader, `.js` and `.mjs` by its JavaScript
   reader, `.svelte` and `.vue` by its Vue reader, which reads their `<script>` blocks as TypeScript at the lines of the
   file. A function lizard gives no name (a callback passed to a call, an anonymous default export, an arrow under a
@@ -134,246 +181,377 @@ It applies these rules:
   - An optional chain is no decision for lizard.
 
   A Python function is named by its qualified symbol (`Class.method`); lizard names a function of the script languages
-  without its class (`render`, an accessor `get name`, an assignment target `window.onload`). A second function of the
-  same name, such as a property setter or a method of another class, is `Class.method#2` or `render#2`, numbered in
-  source order, so a function inserted above a held one renumbers it (SIZE-5).
-  Without `quality/baseline.toml` the [debt row](output.md#area-rows) is
-  `· debt  not recorded  N entries over the thresholds · measured only`, N the size entries over the thresholds that
-  quality measured (a declared file left out); it equals what a first `quality check --fix` records only when every
-  Python file parses and every script file is UTF-8 and not nested too deeply to read, otherwise that fix refuses
-  (SIZE-6). The size debt leaves the exit unchanged (SIZE-7). The per-class and language counts leave `check`; the
+  without its class (`render`, an accessor `get name`, an assignment target `window.onload`).
+
+  - SIZE-5: A second function of the
+    same name, such as a property setter or a method of another class, is `Class.method#2` or `render#2`, numbered in
+    source order, so a function inserted above a held one renumbers it.
+  - SIZE-6: Without `quality/baseline.toml` the [debt row](output.md#area-rows) is
+    `· debt  not recorded  N entries over the thresholds · measured only`, N the size entries over the thresholds that
+    quality measured (a declared file left out); it equals what a first `quality check --fix` records only when every
+    Python file parses and every script file is UTF-8 and not nested too deeply to read, otherwise that fix refuses.
+  - SIZE-7: The size debt leaves the exit unchanged.
+
+  The per-class and language counts leave `check`; the
   report keeps them.
-  A `.py` file is read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding)
-  (SIZE-8). One Python 3.14 cannot decode or parse (nesting past the interpreter's recursion limit included) is
-  named as not valid Python, and a script file that is not UTF-8 as `not UTF-8` or that lizard cannot read for its
-  nesting as `nested too deeply to read`: without a baseline it stands as a
-  [note row](output.md#notes) under the debt row (`· bad.py  not measured  not valid Python`) and the size verdict is
-  unchanged (SIZE-9), while `python-security` judges the file unparsable or cannot judge it (exit `2`); with a baseline
-  the `debt` row is `✗ not checked` with `bad.py is not valid Python (...)`, `bad.ts is not UTF-8` or
-  `bad.ts is nested too deeply to read` (SIZE-10), and `quality check --fix`
-  refuses the same way, writing nothing; both exit `2`. Only where no baseline is held does `--fix` refuse with
-  `✗ not fixed`, since only recording the first ceiling is refused (SIZE-11). A tracked file the operating system
-  refuses to read makes the `debt` row `✗ not checked` with or without a baseline, and `quality check --fix` refuses
-  likewise with the same `debt` row, writing nothing; both exit `2` (SIZE-12). The reason names the case: a file without
-  read permission is `cannot read locked.py: [Errno 13] ...`, a file behind a directory without permission is
-  `cannot reach pkg/m.py: [Errno 13] ...` (SIZE-13). A tracked file missing from disk
-  (deleted but not staged, left out by a sparse checkout, or a dangling symlink) is skipped, and its entries stand,
-  unjudged, while the index tracks it (CEILING-1). A `quality/baseline.toml` that is not UTF-8 is malformed like invalid
-  TOML and says to restore it from git or repair it by hand (CEILING-2). A baseline with a table this quality does not
-  know (`has an unknown table [future]; quality <version> knows ccn, file_lines, function_lines, clones, job_minutes, spec_citations`) is not told
-  that: a newer quality may have written it, so the head is told to run the quality release its gate pins (CEILING-3).
-  With `quality/baseline.toml`, the tree on disk must hold the baseline: a new violation, an entry that grew and an
-  entry above its measured value are findings, each a row under the [debt row](output.md#area-rows): `new debt`
-  (`file has 800 lines · debt from 800 lines`, fix: split the file below 800 lines) (CEILING-4), `grew`
-  (`function read_rows has 71 lines · ceiling 64`, fix: bring it back to 64 lines or below) (CEILING-5) and `can fall`
-  (`file has 742 lines · ceiling 766`, fix: `quality check --fix`) (CEILING-6); an entry whose path the index no longer
-  tracks, or whose Python or script file is measured without the function, can fall after the measured rows, with no line
-  (`file is gone · ceiling 802 lines`, `function total is gone · ceiling CCN 19`, fix: `quality check --fix`)
-  (CEILING-7); an entry with no measurement otherwise (a tracked file missing from disk, a function entry under a file
-  of a suffix measured by lines only) stands (CEILING-8) and counts in the [clean row](output.md#area-rows)'s
-  `ceiling held · N entries, M clone pairs`, followed by `, K job limits` when the held `[job_minutes]` table holds
-  jobs (TIMEOUT-34).
-  [`quality check debt --fix`](commands.md#quality-check---fix) (`--fix` takes no `--staged` and needs `debt` among the
-  named areas, or none named; `--dry-run` needs `--fix`; no workflow runs either) changes `quality/baseline.toml` at the
-  top of the repository it is started in (a stray `src/quality/baseline.toml` is neither read nor removed) (FIX-1) and
-  then judges the tree against the new file (FIX-2). It only lowers: each held entry falls to its measured value
-  (`lowered`, `function total CCN 19 → 17`) (FIX-3) and goes where the measured value is no longer debt (`dropped`,
-  `file 805 → 790 lines · debt from 800 lines`) (FIX-4); an entry that grew stays a finding, its `fix:` adding
-  `a raise is a hand edit and a declared loosening` (FIX-5), a new one stays a finding (FIX-6) with its usual `fix:`,
-  and the rest still falls (FIX-7). An entry `check` calls gone or left out as generated goes (`dropped  file is gone`),
-  counted among the lowered (FIX-8); a held pair the tree lost goes (`dropped`, `pair ... is gone`) (FIX-9), and a new
-  pair stays a finding (FIX-10). It
-  records a ceiling (`recorded`, `N entries, M clone pairs · quality/baseline.toml is new`, with `, K job limits` after
-  the pairs where it records the job table) only where none lies on
-  disk, in the index or in any commit `HEAD` reaches (FIX-11); a ceiling or a `[clones]` table git holds and the tree
-  lacks (a `[job_minutes]` table too, where a job above 15 would be recorded) is `✗ not fixed` with `restore quality/baseline.toml from git, or repair it by hand` (FIX-12) (a version no TOML
-  parser reads refuses likewise where its bytes name the table, `a version of quality/baseline.toml in git cannot be read and
-  names clones`) (FIX-13), a version no TOML parser reads whose bytes never name the table holds no table (FIX-46; named limit: an escaped or non-UTF-8 spelling of the name in such a version passes), and a shallow clone that cannot prove it names
-  `git fetch --unshallow` (FIX-14). A file without `[clones]` that git never held it in records the pairs and keeps its
-  entries (FIX-15); a file without `[job_minutes]` records the jobs above 15 under the same condition (TIMEOUT-27), and a file without `[adapter_imports]` records the counts of marked modules under it. It also rewrites a file whose text is not what it would render (an older header, other blank lines
-  or order, a comment), though no entry changes: `rewritten`, `quality/baseline.toml` (FIX-16), or beside a finding
-  `rewritten · quality/baseline.toml` (FIX-17). The verdict line adds `ceiling lowered by N entries`,
-  `ceiling recorded`, `ceiling rewritten` or `nothing to lower` (FIX-18). Under `--dry-run` the same ceiling is made,
-  judged and rendered and nothing is written (FIX-19): each change is a `~` row worded as what the fix would do
-  (FIX-20), the `~` debt row (`N to lower`, `N to move`, `to record` or `to rewrite`,
-  `text differs · quality/baseline.toml`) (FIX-21) and the verdict (`~ dry run · N ceiling entries would fall`,
-  `N ceiling entries would move`, `ceiling would be recorded` or `ceiling would be rewritten`, then `· nothing written`)
-  (FIX-22), the exit `1` while the fix would change the file (FIX-23).
-  The file is written whole or not at all: a hidden sibling takes the text and replaces the file in one step, so
-  whatever stops the process leaves the complete old file or the complete new one (FIX-24), the replacement being the
-  commit point, so a Ctrl-C just after it keeps the new file (FIX-25), and a killed process can leave that
-  sibling (FIX-26). It keeps the file's mode (FIX-27), stays refused on a read-only file (FIX-28) and needs a writable
-  folder (FIX-29); a symlink on its way is never written through (FIX-30). A fix writes only when an entry changes or
-  the file's bytes are not its rendering; a file that renders byte for byte stays untouched (FIX-31). A `check` without
+
+  - SIZE-8: A `.py` file is read the way Python reads source (a PEP 263 coding cookie or a UTF-8 BOM decides the encoding).
+  - SIZE-9: One Python 3.14 cannot decode or parse (nesting past the interpreter's recursion limit included) is
+    named as not valid Python, and a script file that is not UTF-8 as `not UTF-8` or that lizard cannot read for its
+    nesting as `nested too deeply to read`: without a baseline it stands as a
+    [note row](output.md#notes) under the debt row (`· bad.py  not measured  not valid Python`) and the size verdict is
+    unchanged,
+  - SIZE-10: while `python-security` judges the file unparsable or cannot judge it (exit `2`); with a baseline
+    the `debt` row is `✗ not checked` with `bad.py is not valid Python (...)`, `bad.ts is not UTF-8` or
+    `bad.ts is nested too deeply to read`, and `quality check --fix`
+    refuses the same way, writing nothing; both exit `2`.
+  - SIZE-11: Only where no baseline is held does `--fix` refuse with
+    `✗ not fixed`, since only recording the first ceiling is refused.
+  - SIZE-12: A tracked file the operating system
+    refuses to read makes the `debt` row `✗ not checked` with or without a baseline, and `quality check --fix` refuses
+    likewise with the same `debt` row, writing nothing; both exit `2`.
+  - SIZE-13: The reason names the case: a file without
+    read permission is `cannot read locked.py: [Errno 13] ...`, a file behind a directory without permission is
+    `cannot reach pkg/m.py: [Errno 13] ...`.
+  - CEILING-1: A tracked file missing from disk
+    (deleted but not staged, left out by a sparse checkout, or a dangling symlink) is skipped, and its entries stand,
+    unjudged, while the index tracks it.
+  - CEILING-2: A `quality/baseline.toml` that is not UTF-8 is malformed like invalid
+    TOML and says to restore it from git or repair it by hand.
+  - CEILING-3: A baseline with a table this quality does not
+    know (`has an unknown table [future]; quality <version> knows ccn, file_lines, function_lines, clones, job_minutes, spec_citations`) is not told
+    that: a newer quality may have written it, so the head is told to run the quality release its gate pins.
+  - CEILING-4: With `quality/baseline.toml`, the tree on disk must hold the baseline: a new violation, an entry that grew and an
+    entry above its measured value are findings, each a row under the [debt row](output.md#area-rows): `new debt`
+    (`file has 800 lines · debt from 800 lines`, fix: split the file below 800 lines),
+  - CEILING-5: `grew`
+    (`function read_rows has 71 lines · ceiling 64`, fix: bring it back to 64 lines or below)
+  - CEILING-6: and `can fall`
+    (`file has 742 lines · ceiling 766`, fix: `quality check --fix`);
+  - CEILING-7: an entry whose path the index no longer
+    tracks, or whose Python or script file is measured without the function, can fall after the measured rows, with no line
+    (`file is gone · ceiling 802 lines`, `function total is gone · ceiling CCN 19`, fix: `quality check --fix`);
+  - CEILING-8: an entry with no measurement otherwise (a tracked file missing from disk, a function entry under a file
+    of a suffix measured by lines only) stands and counts in the [clean row](output.md#area-rows)'s
+    `ceiling held · N entries, M clone pairs`, followed by `, K job limits` when the held `[job_minutes]` table holds
+    jobs (TIMEOUT-34).
+  - FIX-1: [`quality check debt --fix`](commands.md#quality-check---fix) (`--fix` takes no `--staged` and needs `debt` among the
+    named areas, or none named; `--dry-run` needs `--fix`; no workflow runs either) changes `quality/baseline.toml` at the
+    top of the repository it is started in (a stray `src/quality/baseline.toml` is neither read nor removed)
+  - FIX-2: and
+    then judges the tree against the new file.
+  - FIX-3: It only lowers: each held entry falls to its measured value
+    (`lowered`, `function total CCN 19 → 17`)
+  - FIX-4: and goes where the measured value is no longer debt (`dropped`,
+    `file 805 → 790 lines · debt from 800 lines`);
+  - FIX-5: an entry that grew stays a finding, its `fix:` adding
+    `a raise is a hand edit and a declared loosening`,
+  - FIX-6: a new one stays a finding
+  - FIX-7: with its usual `fix:`,
+    and the rest still falls.
+  - FIX-8: An entry `check` calls gone or left out as generated goes (`dropped  file is gone`),
+    counted among the lowered;
+  - FIX-9: a held pair the tree lost goes (`dropped`, `pair ... is gone`),
+  - FIX-10: and a new
+    pair stays a finding.
+  - FIX-11: It
+    records a ceiling (`recorded`, `N entries, M clone pairs · quality/baseline.toml is new`, with `, K job limits` after
+    the pairs where it records the job table) only where none lies on
+    disk, in the index or in any commit `HEAD` reaches;
+  - FIX-12: a ceiling or a `[clones]` table git holds and the tree
+    lacks (a `[job_minutes]` table too, where a job above 15 would be recorded) is `✗ not fixed` with `restore quality/baseline.toml from git, or repair it by hand`
+  - FIX-13: (a version no TOML
+    parser reads refuses likewise where its bytes name the table, `a version of quality/baseline.toml in git cannot be read and
+    names clones`),
+  - FIX-46: a version no TOML parser reads whose bytes never name the table holds no table (named limit: an escaped or non-UTF-8 spelling of the name in such a version passes),
+  - FIX-14: and a shallow clone that cannot prove it names
+    `git fetch --unshallow`.
+  - FIX-15: A file without `[clones]` that git never held it in records the pairs and keeps its
+    entries; a file without `[job_minutes]` records the jobs above 15 under the same condition (TIMEOUT-27), and a file without `[adapter_imports]` records the counts of marked modules under it.
+  - FIX-16: It also rewrites a file whose text is not what it would render (an older header, other blank lines
+    or order, a comment), though no entry changes: `rewritten`, `quality/baseline.toml`,
+  - FIX-17: or beside a finding
+    `rewritten · quality/baseline.toml`.
+  - FIX-18: The verdict line adds `ceiling lowered by N entries`,
+    `ceiling recorded`, `ceiling rewritten` or `nothing to lower`.
+  - FIX-19: Under `--dry-run` the same ceiling is made,
+    judged and rendered and nothing is written:
+  - FIX-20: each change is a `~` row worded as what the fix would do,
+  - FIX-21: the `~` debt row (`N to lower`, `N to move`, `to record` or `to rewrite`,
+    `text differs · quality/baseline.toml`)
+  - FIX-22: and the verdict (`~ dry run · N ceiling entries would fall`,
+    `N ceiling entries would move`, `ceiling would be recorded` or `ceiling would be rewritten`, then `· nothing written`),
+  - FIX-23: the exit `1` while the fix would change the file.
+  - FIX-24: The file is written whole or not at all: a hidden sibling takes the text and replaces the file in one step, so
+    whatever stops the process leaves the complete old file or the complete new one,
+  - FIX-25: the replacement being the
+    commit point, so a Ctrl-C just after it keeps the new file,
+  - FIX-26: and a killed process can leave that
+    sibling.
+  - FIX-27: It keeps the file's mode,
+  - FIX-28: stays refused on a read-only file
+  - FIX-29: and needs a writable
+    folder;
+  - FIX-30: a symlink on its way is never written through.
+  - FIX-31: A fix writes only when an entry changes or
+    the file's bytes are not its rendering; a file that renders byte for byte stays untouched.
+
+  A `check` without
   `--fix` says nothing of the text. It promises nothing against a power loss.
-  A config or baseline the check cannot read, or a file Python cannot parse (a declared file included (GENERATED-11),
-  because the clone pairs of the whole tree must be measured), refuses it (CEILING-9): the `debt` row is
-  `✗ not checked` or `✗ not fixed`, exit `2`, and nothing is written. A refused fix leaves each rule the verdict it
-  reached against the unchanged file (FIX-32). Another area's refusal does not undo a finished fix: the file is written,
-  the `✓` row stands, the exit is `2` (FIX-33).
-  `--fix` follows renames as the verdict carries them (FIX-34): from the ceiling's last commit it reads what git
-  renamed into the index (`git diff --cached -M50% -l1000`) (FIX-35), moves a renamed file's entries, pairs, job entries
-  (TIMEOUT-19) to the new path at their values (`moved`) (FIX-36) and drops what the ceiling held under that path
-  before the move (`dropped ... left from before the move`) (FIX-37); a ceiling it already moved stays (FIX-38), an entry it cannot
-  place refuses with the restore step (FIX-39), a shallow clone whose ceiling's last commit is its edge, which is
-  every depth-1 clone that holds a ceiling, refuses `--fix` with `git fetch --unshallow` (FIX-40), and a move the
-  index does not record is not followed (FIX-41). Renames are followed before anything is judged gone, so a renamed
-  file's entries move and never fall (FIX-42); with no committed ceiling a moved file's entries are gone (FIX-43).
-  `check` reads no history: after a staged move it names the new path `new debt` and the old one
-  `can fall … is gone`, and one `--fix` clears both (FIX-44).
-  A fix that moves entries and lowers none counts them in the [debt row](output.md#area-rows) and adds
-  `ceiling moved N entries` to the verdict line (FIX-45).
-- `clone`: a pair is two functions (methods and nested functions too) in two different tracked `*.py` files, each of at
-  least 40 tokens without its docstring, whose structure is at least 90 % the same once every name and literal is
-  renamed (CLONE-1); tests count like code (CLONE-4), and a copy inside one file is no pair. A pair is named by the
-  path and qualified symbol of both sides, as `size` names a function (CLONE-2); a pair counts as tests only when both
-  files are tests (CLONE-3). Without a `[clones]` table in `quality/baseline.toml` the rule only measures (CLONE-5):
-  where the file exists, the pairs stand in the [partly row](output.md#area-rows)
-  (`· debt  not recorded  2 clone pairs · partly measured only`). With one, even an empty one, a new pair is a
-  `near copy` row at its second side (`function check and tests/test_a.py run`, fix: give the shared body one owner and
-  call it, or make the cases one parametrized test) (CLONE-6) and so is a held pair the tree lost, even when a side
-  was deleted (`can fall` at its first side: `pair tests/test_a.py run <-> tests/test_b.py check is gone`, fix:
-  `quality check --fix`) (CLONE-7). A Python file that cannot be parsed may hide a pair, so with a `[clones]` table the
-  `debt` row is `✗ not checked` (exit `2`), as for `size` (CLONE-8). The baseline is read once for both rules: one that
-  cannot be read leaves both unjudged (the `debt` row [names the reason once](output.md#refusals), exit `2`), also when
-  it has no `[clones]` table, since the mode is then unknown (CLONE-9).
+
+  - GENERATED-11: A config or baseline the check cannot read, or a file Python cannot parse (a declared file included,
+  - CEILING-9: because the clone pairs of the whole tree must be measured), refuses it: the `debt` row is
+    `✗ not checked` or `✗ not fixed`, exit `2`, and nothing is written.
+  - FIX-32: A refused fix leaves each rule the verdict it
+    reached against the unchanged file.
+  - FIX-33: Another area's refusal does not undo a finished fix: the file is written,
+    the `✓` row stands, the exit is `2`.
+  - FIX-34: `--fix` follows renames as the verdict carries them:
+  - FIX-35: from the ceiling's last commit it reads what git
+    renamed into the index (`git diff --cached -M50% -l1000`),
+  - FIX-36: moves a renamed file's entries, pairs, job entries
+    (TIMEOUT-19) to the new path at their values (`moved`)
+  - FIX-37: and drops what the ceiling held under that path
+    before the move (`dropped ... left from before the move`);
+  - FIX-38: a ceiling it already moved stays,
+  - FIX-39: an entry it cannot
+    place refuses with the restore step,
+  - FIX-40: a shallow clone whose ceiling's last commit is its edge, which is
+    every depth-1 clone that holds a ceiling, refuses `--fix` with `git fetch --unshallow`,
+  - FIX-41: and a move the
+    index does not record is not followed.
+  - FIX-42: Renames are followed before anything is judged gone, so a renamed
+    file's entries move and never fall;
+  - FIX-43: with no committed ceiling a moved file's entries are gone.
+  - FIX-44: `check` reads no history: after a staged move it names the new path `new debt` and the old one
+    `can fall … is gone`, and one `--fix` clears both.
+  - FIX-45: A fix that moves entries and lowers none counts them in the [debt row](output.md#area-rows) and adds
+    `ceiling moved N entries` to the verdict line.
+- `clone`:
+  - CLONE-1: a pair is two functions (methods and nested functions too) in two different tracked `*.py` files, each of at
+    least 40 tokens without its docstring, whose structure is at least 90 % the same once every name and literal is
+    renamed;
+  - CLONE-4: tests count like code, and a copy inside one file is no pair.
+  - CLONE-2: A pair is named by the
+    path and qualified symbol of both sides, as `size` names a function;
+  - CLONE-3: a pair counts as tests only when both
+    files are tests.
+  - CLONE-5: Without a `[clones]` table in `quality/baseline.toml` the rule only measures: where the file exists, the pairs stand in the [partly row](output.md#area-rows)
+    (`· debt  not recorded  2 clone pairs · partly measured only`).
+  - CLONE-6: With one, even an empty one, a new pair is a
+    `near copy` row at its second side (`function check and tests/test_a.py run`, fix: give the shared body one owner and
+    call it, or make the cases one parametrized test)
+  - CLONE-7: and so is a held pair the tree lost, even when a side
+    was deleted (`can fall` at its first side: `pair tests/test_a.py run <-> tests/test_b.py check is gone`, fix:
+    `quality check --fix`).
+  - CLONE-8: A Python file that cannot be parsed may hide a pair, so with a `[clones]` table the
+    `debt` row is `✗ not checked` (exit `2`), as for `size`.
+  - CLONE-9: The baseline is read once for both rules: one that
+    cannot be read leaves both unjudged (the `debt` row [names the reason once](output.md#refusals), exit `2`), also when
+    it has no `[clones]` table, since the mode is then unknown.
 
   Ruled by the operator: quality owns this detector instead of calling jscpd or lizard; it is the detector taken over
   from aco.
 
-  The detector compares the functions' name-folded token streams and judges Python only (CLONE-10). The threshold, what
+  - CLONE-10: The detector compares the functions' name-folded token streams and judges Python only.
+
+  The threshold, what
   makes a pair, how it is named, that tests count, the report-only mode and the printed lines are defaults the operator
-  never answered. A renamed file or function orphans the held pair and names a new one (CLONE-11). Only the verdict's
+  never answered.
+
+  - CLONE-11: A renamed file or function orphans the held pair and names a new one.
+
+  Only the verdict's
   comparison with the base and `check --fix` treat a pair whose files git renamed as the same pair (see the baseline
   paragraph below).
-- `import-contract`: the repository's [import-linter](https://github.com/seddonym/import-linter) contracts must be
-  kept (IMPORT-1). The config is the tracked `.importlinter` or `setup.cfg` (`[importlinter]`) or `pyproject.toml`
-  (`[tool.importlinter]`) (IMPORT-2), counted once its name exists in the tree: a tracked one deleted from disk is none
-  (IMPORT-3), a symlink to nowhere cannot be read (exit `2`) (IMPORT-4).
+- `import-contract`:
+  - IMPORT-1: the repository's [import-linter](https://github.com/seddonym/import-linter) contracts must be
+    kept.
+  - IMPORT-2: The config is the tracked `.importlinter` or `setup.cfg` (`[importlinter]`) or `pyproject.toml`
+    (`[tool.importlinter]`),
+  - IMPORT-3: counted once its name exists in the tree: a tracked one deleted from disk is none,
+  - IMPORT-4: a symlink to nowhere cannot be read (exit `2`).
 
-  Ruled by the operator: without one the rule only measures (IMPORT-27); the `imports` row is a grey note (ROW-13), the
-  area is not counted among the clean areas (IMPORT-28), and the verdict names it (CLOSING-10).
+  Ruled by the operator:
+  - IMPORT-27: without one the rule only measures;
+  - IMPORT-28: the `imports` row is a grey note (ROW-13), the
+    area is not counted among the clean areas, and the verdict names it (CLOSING-10).
 
   The [`imports` row](output.md#area-rows) reads `· imports  not set up  no import-linter config`, dim at a terminal,
   the exit stays `0`, and the [verdict line](output.md#the-closing-line) says `imports not enforced` before the
   duration, after debt's note. A config with contracts that are kept is
-  [`✓ imports  clean  N contracts`](output.md#area-rows) (a config without a contract: `0 contracts`). import-linter
-  runs inside quality as a library, never its CLI, and writes nothing to the checkout (no `.import_linter_cache`)
-  (IMPORT-5). A broken contract is one finding `! <config>  broken  contract <name>`, with the lines import-linter
+  [`✓ imports  clean  N contracts`](output.md#area-rows) (a config without a contract: `0 contracts`).
+
+  - IMPORT-5: import-linter
+    runs inside quality as a library, never its CLI, and writes nothing to the checkout (no `.import_linter_cache`).
+
+  A broken contract is one finding `! <config>  broken  contract <name>`, with the lines import-linter
   renders for it (the chain, `shop.db -> shop.web (l.1)`, and the contract's guidance) under the [row](output.md#rows)
-  behind `| `, fix `change the import or the contract`, exit `1`. An `ignore_imports` entry no import matches follows
-  the contract's `unmatched_ignore_imports_alerting`: `error` (the default) is a finding
-  `unused  contract <name> ignores a -> b`, fix `delete it from the contract's ignore_imports`, `warn` a
-  [note row](output.md#notes) `· <config>  unused  contract <name> ignores a -> b`, `none` nothing (IMPORT-6). Each root
-  package is the one tracked `<dir>/<name>/__init__.py` outside the tests (IMPORT-7), and grimp reads it from there
-  even when quality itself has imported a package of that name or an untracked copy comes first on `sys.path`
-  (IMPORT-7, IMPORT-26). The rule cannot judge (exit `2`,
-  before any caller code runs or any file outside is read) (IMPORT-8) two configs that each hold a section (IMPORT-9),
-  a `contract_types` option (plugins would be imported) (IMPORT-10), a type other than forbidden, layers, independence,
-  protected and acyclic_siblings (IMPORT-11), invalid contract options (IMPORT-12), a config value of the wrong type or
-  any other error of import-linter or grimp (`contract <name> in pyproject.toml cannot be judged: ...` or
-  `the config pyproject.toml cannot be judged: ...`) (IMPORT-13), a dotted root
-  package, because a root package is one tracked `<name>/__init__.py` and quality judges only top-level ones
-  (IMPORT-14), a root package with no or several such directories, or whose tracked `__init__.py` the checkout does
-  not hold (IMPORT-15), a symlink under a root package that leaves the repository, directly or through
-  a link that stays inside (IMPORT-17), and a symlink loop (IMPORT-18), a dangling link (IMPORT-19), and a `.py` file
-  that "cannot be examined" (no regular file (IMPORT-20), a name or content that is not valid UTF-8 (IMPORT-21), a
-  coding cookie in any spelling but utf-8, utf8, ascii, us-ascii or ansi_x3.4-1968 (accepted in any letter case)
-  (IMPORT-22), or one the system will not let it read (IMPORT-23)). A module grimp cannot parse makes the `imports`
-  row `✗ not checked` with the reason (exit `2`) (IMPORT-24); a warning grimp gives while building the graph is a
-  [note row](output.md#notes) `· <config>  warning  <grimp's message>`, before the contracts' notes (IMPORT-25). No
+  behind `| `, fix `change the import or the contract`, exit `1`.
+
+  - IMPORT-6: An `ignore_imports` entry no import matches follows
+    the contract's `unmatched_ignore_imports_alerting`: `error` (the default) is a finding
+    `unused  contract <name> ignores a -> b`, fix `delete it from the contract's ignore_imports`, `warn` a
+    [note row](output.md#notes) `· <config>  unused  contract <name> ignores a -> b`, `none` nothing.
+  - IMPORT-7: Each root
+    package is the one tracked `<dir>/<name>/__init__.py` outside the tests,
+  - IMPORT-26: and grimp reads it from there
+    even when quality itself has imported a package of that name or an untracked copy comes first on `sys.path` (IMPORT-7).
+  - IMPORT-8: The rule cannot judge (exit `2`,
+    before any caller code runs or any file outside is read)
+  - IMPORT-9: two configs that each hold a section,
+  - IMPORT-10: a `contract_types` option (plugins would be imported),
+  - IMPORT-11: a type other than forbidden, layers, independence,
+    protected and acyclic_siblings,
+  - IMPORT-12: invalid contract options,
+  - IMPORT-13: a config value of the wrong type or
+    any other error of import-linter or grimp (`contract <name> in pyproject.toml cannot be judged: ...` or
+    `the config pyproject.toml cannot be judged: ...`),
+  - IMPORT-14: a dotted root
+    package, because a root package is one tracked `<name>/__init__.py` and quality judges only top-level ones,
+  - IMPORT-15: a root package with no or several such directories, or whose tracked `__init__.py` the checkout does
+    not hold,
+  - IMPORT-17: a symlink under a root package that leaves the repository, directly or through
+    a link that stays inside,
+  - IMPORT-18: and a symlink loop,
+  - IMPORT-19: a dangling link,
+  - IMPORT-20: and a `.py` file
+    that "cannot be examined" (no regular file,
+  - IMPORT-21: a name or content that is not valid UTF-8,
+  - IMPORT-22: a
+    coding cookie in any spelling but utf-8, utf8, ascii, us-ascii or ansi_x3.4-1968 (accepted in any letter case),
+  - IMPORT-23: or one the system will not let it read).
+  - IMPORT-24: A module grimp cannot parse makes the `imports`
+    row `✗ not checked` with the reason (exit `2`);
+  - IMPORT-25: a warning grimp gives while building the graph is a
+    [note row](output.md#notes) `· <config>  warning  <grimp's message>`, before the contracts' notes.
+
+  No
   message names an absolute local path (IMPORT-26).
-  A `forbidden` contract whose own `ignore_imports` name a plain dotted submodule of an external package (one that is
-  no root package), such as `skat.table.** -> agents.calling`, is checked on its own copy of the graph in which that
-  package keeps the submodules the contract names; every other contract keeps grimp's squashed package, and a wildcard
-  such as `-> agents.*` names no submodule (IMPORT-29). Stock import-linter reports such a line as unmatched, so an app
-  that uses it drops its own `lint-imports` run. Every import statement at a line grimp reports for an import of that
-  package is read from the importer's tracked file, an import inside a function included and one under `TYPE_CHECKING`
-  left out as grimp leaves it out: `import a.b` names `a.b`, `from M import x` names `M.x`, `from M import *` names
-  `M`, and each name is held at the longest prefix the contract names, otherwise at the package, so
-  `from agents import calling` is `agents.calling`, `from agents.calling.sub import x` is `agents.calling`, and
-  `from agents import Standing`, `from agents.turn import T` and `import agents` are `agents` (IMPORT-30). On that
-  copy an `ignore_imports` line naming the bare package matches only imports held at the package itself, and a line no
-  import matches follows IMPORT-6 (IMPORT-31). A refining contract with `as_packages = false`, and a module grimp read
-  that Python cannot parse or git does not track, cannot be judged (exit `2`) (IMPORT-32).
+
+  - IMPORT-29: A `forbidden` contract whose own `ignore_imports` name a plain dotted submodule of an external package (one that is
+    no root package), such as `skat.table.** -> agents.calling`, is checked on its own copy of the graph in which that
+    package keeps the submodules the contract names; every other contract keeps grimp's squashed package, and a wildcard
+    such as `-> agents.*` names no submodule.
+
+  Stock import-linter reports such a line as unmatched, so an app
+  that uses it drops its own `lint-imports` run.
+
+  - IMPORT-30: Every import statement at a line grimp reports for an import of that
+    package is read from the importer's tracked file, an import inside a function included and one under `TYPE_CHECKING`
+    left out as grimp leaves it out: `import a.b` names `a.b`, `from M import x` names `M.x`, `from M import *` names
+    `M`, and each name is held at the longest prefix the contract names, otherwise at the package, so
+    `from agents import calling` is `agents.calling`, `from agents.calling.sub import x` is `agents.calling`, and
+    `from agents import Standing`, `from agents.turn import T` and `import agents` are `agents`.
+  - IMPORT-31: On that
+    copy an `ignore_imports` line naming the bare package matches only imports held at the package itself, and a line no
+    import matches follows IMPORT-6.
+  - IMPORT-32: A refining contract with `as_packages = false`, and a module grimp read
+    that Python cannot parse or git does not track, cannot be judged (exit `2`).
+
   On a pull request `quality verdict` and the door also hold the head's import contracts against the base's (see
   "The import contracts only tighten" below).
-- `adapter-import`: a core unit test imports no adapter. It judges a repository whose import-linter config (IMPORT-2)
-  holds a `forbidden` contract with the `id` `core-imports-no-adapter`, read from the raw contract options (a TOML key,
-  or an INI section suffix) (ADAPTERIMPORT-1): the contract's `source_modules` are the core and its `forbidden_modules`
-  the adapters, external packages allowed. Without such a contract it judges nothing, and a repository without a config
-  stays as IMPORT-27 says (ADAPTERIMPORT-2). Two contracts carrying the id, or a wildcard in its `source_modules` or
-  `forbidden_modules`, cannot be judged (exit `2`) (ADAPTERIMPORT-3).
+- `adapter-import`: a core unit test imports no adapter.
+  - ADAPTERIMPORT-1: It judges a repository whose import-linter config (IMPORT-2)
+    holds a `forbidden` contract with the `id` `core-imports-no-adapter`, read from the raw contract options (a TOML key,
+    or an INI section suffix): the contract's `source_modules` are the core and its `forbidden_modules`
+    the adapters, external packages allowed.
+  - ADAPTERIMPORT-2: Without such a contract it judges nothing, and a repository without a config
+    stays as IMPORT-27 says.
+  - ADAPTERIMPORT-3: Two contracts carrying the id, or a wildcard in its `source_modules` or
+    `forbidden_modules`, cannot be judged (exit `2`).
 
   Ruled by the operator: the contract's `source_modules` decide what is core, so a core-subject test that imports an
   adapter is red also when it is marked integration (#898, line 1, A).
 
-  A test module is a tracked `test_*.py` under a project's `tests/` as `test-layout` finds projects; its subject is the
-  module or package its longest matching key names (LAYOUT-24), and a test named after its package's own name
-  (LAYOUT-23) has that package as its subject (ADAPTERIMPORT-4). It is a core test when its subject lies inside
-  `source_modules` (by prefix with `as_packages`, the default, else exactly) (ADAPTERIMPORT-5). A test with no subject,
-  because a `[[layout.allow]]` entry exempts it from `test-layout` or its project is not judged, is a core test too, so
-  no declaration becomes a path allowlist (ADAPTERIMPORT-6). A subject equal to or inside a forbidden module, or any
-  other subject outside `source_modules`, makes no core test (ADAPTERIMPORT-7); these are name checks and no graph is
-  asked. Modules under `tests/scripts/`, `tests/workflows/` and `tests/e2e/`, and every `conftest.py`, are not judged
-  (ADAPTERIMPORT-8).
+  - ADAPTERIMPORT-4: A test module is a tracked `test_*.py` under a project's `tests/` as `test-layout` finds projects; its subject is the
+    module or package its longest matching key names (LAYOUT-24), and a test named after its package's own name
+    (LAYOUT-23) has that package as its subject.
+  - ADAPTERIMPORT-5: It is a core test when its subject lies inside
+    `source_modules` (by prefix with `as_packages`, the default, else exactly).
+  - ADAPTERIMPORT-6: A test with no subject,
+    because a `[[layout.allow]]` entry exempts it from `test-layout` or its project is not judged, is a core test too, so
+    no declaration becomes a path allowlist.
+  - ADAPTERIMPORT-7: A subject equal to or inside a forbidden module, or any
+    other subject outside `source_modules`, makes no core test; these are name checks and no graph is
+    asked.
+  - ADAPTERIMPORT-8: Modules under `tests/scripts/`, `tests/workflows/` and `tests/e2e/`, and every `conftest.py`, are not judged.
 
-  Every `import` and `from ... import` statement of a core test is read, inside a function or under `if TYPE_CHECKING:`
-  too, and so are those of every `support/` module it imports, followed through further support modules and each read
-  once (ADAPTERIMPORT-9). A `from M import a` judges `M` and `M.a` (ADAPTERIMPORT-10). An imported name is red when it is
-  a forbidden module or lies inside one (ADAPTERIMPORT-11). A name that is
-  an ancestor of a forbidden module (`shop` above `shop.adapters`) counts only as a namespace: its own `__init__` is not
-  judged, only `M.a` (ADAPTERIMPORT-12). Any other name the import graph holds is red when it reaches a forbidden module
-  (ADAPTERIMPORT-13). Reach is computed once per run as the union of grimp's `find_downstream_modules(m, as_package=True)`
-  over the forbidden modules `m` the graph holds, as import-linter's own forbidden contract filters them; a forbidden module nothing imports is not in the graph and reaches nothing (ADAPTERIMPORT-14).
-  A name neither forbidden nor in the graph is clean (ADAPTERIMPORT-15).
+  - ADAPTERIMPORT-9: Every `import` and `from ... import` statement of a core test is read, inside a function or under `if TYPE_CHECKING:`
+    too, and so are those of every `support/` module it imports, followed through further support modules and each read
+    once.
+  - ADAPTERIMPORT-10: A `from M import a` judges `M` and `M.a`.
+  - ADAPTERIMPORT-11: An imported name is red when it is
+    a forbidden module or lies inside one.
+  - ADAPTERIMPORT-12: A name that is
+    an ancestor of a forbidden module (`shop` above `shop.adapters`) counts only as a namespace: its own `__init__` is not
+    judged, only `M.a`.
+  - ADAPTERIMPORT-13: Any other name the import graph holds is red when it reaches a forbidden module.
+  - ADAPTERIMPORT-14: Reach is computed once per run as the union of grimp's `find_downstream_modules(m, as_package=True)`
+    over the forbidden modules `m` the graph holds, as import-linter's own forbidden contract filters them; a forbidden module nothing imports is not in the graph and reaches nothing.
+  - ADAPTERIMPORT-15: A name neither forbidden nor in the graph is clean.
 
-  One finding per statement, at the core test's `path:line`, is an `adapter import` row whose fact names each
-  forbidden module the statement's names are or reach once, with the support modules that carried it (and `directly`
-  where the statement is the module too), as in `imports shop.adapters (through tests/support/stores.py)`
-  (ADAPTERIMPORT-16), its fix to name the test after an adapter or composition module or to import no adapter; all
-  findings print sorted by path and line
-  (ADAPTERIMPORT-17). A core test, or a support module one imports, that does not parse makes the `imports` row
-  `✗ not checked` with the reason (exit `2`) (ADAPTERIMPORT-18). A `[[layout.allow]]` entry naming the rule is refused
-  like any rule outside the layout rules (ADAPTERIMPORT-19). The imports area reads the config and builds the graph once
-  per run; `import-contract`, `adapter-import` and `integration-marker` judge that one read. A read that cannot judge
-  refuses all three, a rule's own refusal only that rule,
-  and grimp's warnings print once, as `import-contract`'s note rows (IMPORT-25) (ADAPTERIMPORT-20). The
-  [fleet matrix](commands.md#quality-report) cell reads `enforced` when the repository's config holds the contract with
-  the id, `no adapter contract` otherwise, and `not in <tag>` under a pin below v0.27.0. It first ships in v0.27.0
-  (ADAPTERIMPORT-21).
+  - ADAPTERIMPORT-16: One finding per statement, at the core test's `path:line`, is an `adapter import` row whose fact names each
+    forbidden module the statement's names are or reach once, with the support modules that carried it (and `directly`
+    where the statement is the module too), as in `imports shop.adapters (through tests/support/stores.py)`,
+  - ADAPTERIMPORT-17: its fix to name the test after an adapter or composition module or to import no adapter; all
+    findings print sorted by path and line.
+  - ADAPTERIMPORT-18: A core test, or a support module one imports, that does not parse makes the `imports` row
+    `✗ not checked` with the reason (exit `2`).
+  - ADAPTERIMPORT-19: A `[[layout.allow]]` entry naming the rule is refused
+    like any rule outside the layout rules.
+
+  The imports area reads the config and builds the graph once
+  per run; `import-contract`, `adapter-import` and `integration-marker` judge that one read.
+
+  - ADAPTERIMPORT-20: A read that cannot judge
+    refuses all three, a rule's own refusal only that rule,
+    and grimp's warnings print once, as `import-contract`'s note rows (IMPORT-25).
+
+  - ADAPTERIMPORT-21: The
+    [fleet matrix](commands.md#quality-report) cell reads `enforced` when the repository's config holds the contract with
+    the id, `no adapter contract` otherwise, and `not in <tag>` under a pin below v0.27.0.
+    It first ships in v0.27.0.
 
   Ruled by the operator: a core test is exempt only through the registered module marker `imports_adapter`, counted per
   test directory in `[adapter_imports]` of `quality/baseline.toml`, a raise being a loosening.
 
-  A core test whose module-level `pytestmark` holds `pytest.mark.imports_adapter` gets no `adapter import` finding: the
-  mark may be bare or called, alone, in a list or tuple, or reached through a module-level alias, read as the report's
-  suite columns read it (`docs/commands.md`, FLEET-122); a mark on a class or a
-  test exempts nothing (ADAPTERIMPORT-22). It exempts only where the project's `pyproject.toml` registers it, as
-  `imports_adapter` or `imports_adapter: <text>` in `[tool.pytest.ini_options] markers`; otherwise the finding stands and
-  its fix is `register imports_adapter in [tool.pytest.ini_options] markers`. A registration only a `conftest.py` hook,
-  pytest's native `[tool.pytest]` table, `pytest.ini`, `tox.ini` or `setup.cfg` makes is not read, so the test stays red
-  (ADAPTERIMPORT-23). Each exempted module counts once toward its direct parent directory, and parents are never summed
-  (ADAPTERIMPORT-24). A marked test module the rule would not report, a clean core test or a test that is no core test,
-  registered or not, is `unused` at its `pytestmark` line with the fix `remove the imports_adapter mark`, so a stale mark
-  cannot let a later adapter import in silently (ADAPTERIMPORT-25).
+  - ADAPTERIMPORT-22: A core test whose module-level `pytestmark` holds `pytest.mark.imports_adapter` gets no `adapter import` finding: the
+    mark may be bare or called, alone, in a list or tuple, or reached through a module-level alias, read as the report's
+    suite columns read it (`docs/commands.md`, FLEET-122); a mark on a class or a
+    test exempts nothing.
 
-  `[adapter_imports]` of `quality/baseline.toml` holds a positive count per test directory; a missing table or entry holds
-  0. The rule judges the count: above the held one is `grew` at the directory (`3 marked modules import an adapter ·
-  ceiling 2`), a directory with no entry is `new debt` (`… · ceiling 0`) with the fix `quality check --fix` while the file
-  has no table and `import no adapter in one of them, or move it into the integration suite` otherwise, and below it is
-  `can fall` at `quality/baseline.toml` with the fix `quality check --fix` (ADAPTERIMPORT-26). Without the contract that
-  carries the id the table is neither judged nor changed (ADAPTERIMPORT-27); with it, a baseline that cannot be read
-  refuses the rule. Under `--fix --dry-run` the rule judges the table the fix would write.
-  `quality check debt --fix` lowers or drops entries and never raises or adds one, except a carried move, which it
+  - ADAPTERIMPORT-23: It exempts only where the project's `pyproject.toml` registers it, as
+    `imports_adapter` or `imports_adapter: <text>` in `[tool.pytest.ini_options] markers`; otherwise the finding stands and
+    its fix is `register imports_adapter in [tool.pytest.ini_options] markers`.
+    A registration only a `conftest.py` hook,
+    pytest's native `[tool.pytest]` table, `pytest.ini`, `tox.ini` or `setup.cfg` makes is not read, so the test stays red.
+  - ADAPTERIMPORT-24: Each exempted module counts once toward its direct parent directory, and parents are never summed.
+  - ADAPTERIMPORT-25: A marked test module the rule would not report, a clean core test or a test that is no core test,
+    registered or not, is `unused` at its `pytestmark` line with the fix `remove the imports_adapter mark`, so a stale mark
+    cannot let a later adapter import in silently.
+
+  - ADAPTERIMPORT-26: `[adapter_imports]` of `quality/baseline.toml` holds a positive count per test directory; a missing table or entry holds
+    0.
+    The rule judges the count: above the held one is `grew` at the directory (`3 marked modules import an adapter ·
+    ceiling 2`), a directory with no entry is `new debt` (`… · ceiling 0`) with the fix `quality check --fix` while the file
+    has no table and `import no adapter in one of them, or move it into the integration suite` otherwise, and below it is
+    `can fall` at `quality/baseline.toml` with the fix `quality check --fix`.
+  - ADAPTERIMPORT-27: Without the contract that
+    carries the id the table is neither judged nor changed; with it, a baseline that cannot be read
+    refuses the rule.
+
+  Under `--fix --dry-run` the rule judges the table the fix would write. `quality check debt --fix` lowers or drops entries and never raises or adds one, except a carried move, which it
   writes under the new directory and reports as `moved` as it does for `[job_minutes]` (FIX-34); each report is a change
   of the written table against the held one, so a fix run again before the commit tells none. It records the measured
   counts (`recorded  K adapter import exceptions · quality/baseline.toml`, `to record` in a dry run) where the file has no
   table, a marked module exempts an import and git never held the table, as FIX-12, FIX-13 and FIX-46 say for every
-  held table; a table git holds and the tree lost refuses with the restore step. The fix reads the import contracts and
-  builds the graph for the counts, and a read that cannot judge refuses it while the table is held (ADAPTERIMPORT-28).
-  The verdict and the door hold the head's table against the base's as "The baseline only falls" says, and a quality older
-  than the release that knows the table is exit `2` on it, as for every unknown table (ADAPTERIMPORT-30).
+  held table; a table git holds and the tree lost refuses with the restore step.
+
+  - ADAPTERIMPORT-28: The fix reads the import contracts and
+    builds the graph for the counts, and a read that cannot judge refuses it while the table is held.
+  - ADAPTERIMPORT-30: The verdict and the door hold the head's table against the base's as "The baseline only falls" says, and a quality older
+    than the release that knows the table is exit `2` on it, as for every unknown table.
 
   Named gaps, waiting for usage evidence: fixtures a
   `conftest.py` injects, string imports (`importlib.import_module`, `pytest.importorskip`), the `__init__` of an ancestor

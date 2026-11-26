@@ -75,7 +75,7 @@ CORE_IMPORTS = [
 
 @pytest.mark.parametrize(("content", "expected"), CORE_IMPORTS)
 def test_a_core_test_is_red_for_an_import_that_is_or_reaches_an_adapter(red, content, expected):
-    """ADAPTERIMPORT-9 to ADAPTERIMPORT-13, ADAPTERIMPORT-15: which names of a core test are red, at which line."""
+    """ADAPTERIMPORT-9, ADAPTERIMPORT-10, ADAPTERIMPORT-11, ADAPTERIMPORT-12, ADAPTERIMPORT-13, ADAPTERIMPORT-15: which names of a core test are red, at which line."""
     assert red({CORE_TEST: content}) == expected
 
 
@@ -194,7 +194,7 @@ def test_as_packages_decides_only_what_lies_inside_the_core(red, contract, conte
     ],
 )
 def test_a_test_is_judged_when_its_subject_lies_in_the_core_outside_every_adapter(red, contract, path, expected):
-    """ADAPTERIMPORT-4 to ADAPTERIMPORT-8: the module a test is named after decides whether it is a core test, by names alone."""
+    """ADAPTERIMPORT-4, ADAPTERIMPORT-5, ADAPTERIMPORT-6, ADAPTERIMPORT-7, ADAPTERIMPORT-8: the module a test is named after decides whether it is a core test, by names alone."""
     assert red({path: ADAPTER_IMPORT}, contract) == ([f"{path}:1"] if expected else [])
 
 
