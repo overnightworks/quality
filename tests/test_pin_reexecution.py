@@ -429,11 +429,9 @@ def test_a_machine_without_a_cache_directory_still_judges_and_fetches_every_time
     assert ([done.returncode for done in runs], [("--offline" in call["argv"]) for call in scene.uv_calls()]) == ([0, 0], [False, False])
 
 
-def test_a_tag_query_answered_with_what_is_not_text_is_the_offline_pair(scene):
+def test_a_tag_query_answered_with_what_is_not_text_is_the_offline_pair(scene, fake_git):
     """PIN-27: a quality remote whose answer cannot be read is no answer from github.com."""
-    shim = scene.root / "bin" / "git"
-    shim.write_text(f"#!/bin/sh\nfor word; do [ \"$word\" = ls-remote ] && {{ printf '\\377'; exit 0; }}; done\nexec {shutil.which('git')} \"$@\"\n")
-    shim.chmod(0o755)
+    fake_git("case \" $* \" in *\" ls-remote \"*) printf '\\377'; exit 0;; esac")
     done = scene.run("check", "files")
     assert (done.returncode, done.stdout, done.stderr.splitlines(), scene.uv_calls()) == (2, "", OFFLINE_PAIR, [])
 
