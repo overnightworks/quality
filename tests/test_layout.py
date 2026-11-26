@@ -1,6 +1,5 @@
 """The layout rules of the files area: file-suffix, script-name and script-header."""
 
-
 import pytest
 
 from quality import layout
@@ -14,12 +13,14 @@ from tests.support.layout import (
     CONTROL_CHARACTERS,
     EXAMPLE_SHA,
     GUIDANCE,
+    assert_fix_names_what_a_declaration_needs,
     assert_prints_as_kind,
     assert_prints_escaped_row,
     assert_row_is_kind,
     declaring,
     in_index,
     red,
+    root_declaring,
     rule_ids_in,
 )
 from tests.support.merge import ONE_JOB
@@ -74,7 +75,8 @@ def test_the_mode_comes_from_the_index_not_the_disk(build_repo):
 
 
 def test_findings_are_all_printed_sorted_by_path_with_both_ways_out(build_repo, capsys):
-    """SUFFIX-15, SUFFIX-16: all findings print, no fix holds a command, and declaring each path clears it."""
+    """SUFFIX-15, SUFFIX-16: all findings print, no fix holds a command and each names what a declaration needs, and declaring
+    each path clears it."""
     repo = build_repo({**GUIDANCE, "z/NOTES": "x", "EDGE_SHA": "x", "a/b/TODO": "x"})
     code, output = check_output(capsys, repo)
     found = rule_findings(repo, Rule.FILE_SUFFIX)
@@ -82,6 +84,8 @@ def test_findings_are_all_printed_sorted_by_path_with_both_ways_out(build_repo, 
     assert (code, red(repo)) == (1, ["EDGE_SHA", "a/b/TODO", "z/NOTES"])
     assert ([row.fix_follows for row in rows], output.count(f" {FIX_LABEL} {found[0].fix}")) == ([False, False, True], 1)
     assert [finding.fix for finding in found if "git " in finding.fix] == []
+    for finding in found:
+        assert_fix_names_what_a_declaration_needs(finding.fix)
     put(repo / CONFIG, ONE_JOB + "".join(declaring(finding.path) for finding in found))
     assert red(repo) == []
 
@@ -125,11 +129,15 @@ def test_an_invalid_declared_path_cannot_be_judged_and_shows_an_example(build_re
     [
         declaring("NOTES") + declaring("NOTES", "again"),
         declaring("NOTES", rule="script-size"),
-        declaring("NOTES", reason="two\\nlines"),
+        declaring("NOTES", reason="two\nlines"),
         declaring("NOTES", reason=" "),
         declaring("NOTES") + "extra = 1\n",
-        '[[layout.allow]]\npath = "NOTES"\nrule = "file-suffix"\n',
-        '[[layout.allow]]\npath = 3\nrule = "file-suffix"\nreason = "r"\n',
+        '[[layout.allow]]\npath = "NOTES"\nrule = "file-suffix"\nends = "#2"\n',
+        '[[layout.allow]]\npath = 3\nrule = "file-suffix"\nreason = "r"\nends = "#2"\n',
+        declaring("NOTES", ends=None),
+        declaring("NOTES", ends="soon"),
+        declaring("NOTES") + 'item = "#9"\n',
+        declaring("NOTES") + "date = 2026-11-24\n",
         "[layout]\nignore = []\n",
         '[layout]\nallow = "x"\n',
         "[layout]\nenabled = false\n",
@@ -142,6 +150,10 @@ def test_an_invalid_declared_path_cannot_be_judged_and_shows_an_example(build_re
         "unknown key",
         "no reason",
         "path not text",
+        "no ends",
+        "ends that is no item",
+        "an item without a date",
+        "a date without an item",
         "unknown table key",
         "allow not a list",
         "no off switch",
@@ -158,7 +170,7 @@ def test_a_malformed_layout_table_cannot_be_judged(build_repo, capsys, config):
 
 def test_the_layout_table_is_separate_from_the_root_table(build_repo):
     """SUFFIX-8: `[[layout.allow]]` is separate from `[[root.allow]]`."""
-    root = '[[root.allow]]\nentry = "NOTES"\nreason = "r"\n'
+    root = root_declaring("NOTES")
     repo = build_repo({**GUIDANCE, "NOTES": "x", CONFIG: ONE_JOB + root})
     assert red(repo) == ["NOTES"]
 
@@ -380,10 +392,12 @@ LAYOUT_ALLOWANCE_SCENARIOS = [
 
 @pytest.mark.parametrize(("rule", "files"), LAYOUT_ALLOWANCE_SCENARIOS, ids=[rule.value for rule, _ in LAYOUT_ALLOWANCE_SCENARIOS])
 def test_the_allowance_fix_names_the_findings_own_rule_and_its_entry_clears_the_finding(build_repo, rule, files):
-    """SUFFIX-17: the one rule id a fix names is the finding's own, and the entry it asks for is accepted."""
+    """SUFFIX-17: the one rule id a fix names is the finding's own, it names what the entry needs, and the entry it asks for
+    is accepted."""
     repo = build_repo({**GUIDANCE, **files})
     (finding,) = rule_findings(repo, rule)
     assert rule_ids_in(finding.fix) == {rule.value}
+    assert_fix_names_what_a_declaration_needs(finding.fix)
     put(repo / CONFIG, ONE_JOB + declaring(finding.path, rule=rule))
     assert red(repo, rule) == []
 

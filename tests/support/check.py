@@ -520,4 +520,4 @@ def frame_run(capsys, path: Path, **keywords) -> tuple[int, list[str], list[str]
 CASE_TWO = {**compose_services(("web", "8080:80"), ("db", "5432")), ".env": "A=1\n"}
 
 
-ROOT_ALLOWS_ENV = {"quality/config.toml": ONE_JOB + '[[root.allow]]\nentry = ".env"\nreason = "r"\n'}
+ROOT_ALLOWS_ENV = {"quality/config.toml": ONE_JOB + '[[root.allow]]\nentry = ".env"\nreason = "r"\nends = "#2"\n'}

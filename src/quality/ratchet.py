@@ -452,19 +452,22 @@ def _rekeyed[Entry: (Key, JobKey)](
     return {key._replace(path=path): value for key, value in entries.items() if (path := new_path(key.path))}
 
 
-def carried_base(base: Baseline, renames: Renames, kept: Collection[str]) -> Baseline:
-    """The base as `renames` read it.
+def moved_path(path: str, renames: Renames, kept: Collection[str]) -> str | None:
+    """Where what the base holds under `path` goes in the head's reading, None when it is dropped.
 
-    An entry under a rename's target is a leftover of a file the base no longer has and is dropped. The entries under
-    the old path move to the target unless `kept`, the paths the head still names, holds the old path.
+    What sits under a rename's target is a leftover of a file the base no longer has and is dropped. What sits under the
+    old path moves to the target unless `kept`, the paths the head still names, holds the old path.
     """
-    moves = {old: new for old, new in renames.moves.items() if old not in kept}
+    if path in renames.targets:
+        return None
+    return path if path in kept else renames.moves.get(path, path)
+
+
+def carried_base(base: Baseline, renames: Renames, kept: Collection[str]) -> Baseline:
+    """The base as `renames` read it, each path as `moved_path` gives it."""
 
     def new_path(path: str) -> str | None:
-        """Where the base's entries under `path` go in the head's reading, None when they are dropped."""
-        if path in renames.targets:
-            return None
-        return moves.get(path, path)
+        return moved_path(path, renames, kept)
 
     size = _rekeyed(base.size, new_path)
     limits = base.job_minutes and _rekeyed(base.job_minutes, new_path)

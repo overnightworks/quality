@@ -812,7 +812,7 @@ Ruled by the operator:
 - MERGE-14: A refusal is its `!` row and the `error:`/`next:` pair on
   stderr (exit `1`),
 - MERGE-15: each blocking line of the verdict [whole](output.md#length) below the `loosenings`
-  row;
+  row, an undeclared root or layout entry's with its `fix:` beneath (VERDICT-77);
 - MERGE-16: a step that cannot be judged is its `✗` row and the pair (exit `2`);
 - MERGE-17: a
   `quality/config.toml` it cannot read at the base or at the merge commit is the `✗ loosenings` row with the config's

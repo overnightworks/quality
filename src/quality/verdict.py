@@ -12,8 +12,9 @@ from types import MappingProxyType
 from quality import __version__, ci_time, output, pin, web
 from quality.architecture import PullTree
 from quality.checkout import COMMIT_SHA
-from quality.config import REPOSITORY_NAME, Declaration
-from quality.loosenings import Loosening, collect_loosenings, removal
+from quality.config import Declaration
+from quality.config_entries import REPOSITORY_NAME
+from quality.loosenings import Loosening, collect_loosenings, removal, renames_can_change
 from quality.output import SEPARATOR, Glyph, Row, SubLine, counted, format_duration
 from quality.ratchet import Renames
 from quality.report import (
@@ -179,8 +180,13 @@ class Verdict:
         return tuple(loosening.declaration for loosening in self.loosenings if loosening.declaration is not None)
 
     @property
+    def unruled(self) -> tuple[Loosening, ...]:
+        """The loosenings no declaration binds: what only a ruling lets in."""
+        return tuple(loosening for loosening in self.loosenings if loosening.declaration is None)
+
+    @property
     def undeclared(self) -> tuple[str, ...]:
-        return tuple(loosening.what for loosening in self.loosenings if loosening.declaration is None)
+        return tuple(loosening.what for loosening in self.unruled)
 
     @property
     def failed(self) -> tuple[JobOutcome, ...]:
@@ -210,17 +216,18 @@ def declaration_line(declaration: Declaration) -> SubLine:
 
 def loosening_lines(verdict: Verdict) -> tuple[SubLine, ...]:
     """Each loosening in judgement order as its `what`; a declared one with its ruling and reason."""
-    return tuple(_undeclared_line(each.what) if each.declaration is None else declaration_line(each.declaration) for each in verdict.loosenings)
+    return tuple(_undeclared_line(each.what, each.fix) if each.declaration is None else declaration_line(each.declaration) for each in verdict.loosenings)
 
 
 def blocking_lines(verdict: Verdict) -> tuple[SubLine, ...]:
     """What blocks the door, in the verdict's words: each undeclared loosening, unmatched declaration and failed job."""
     failed = (_undeclared_line(SEPARATOR.join(filter(None, (f"{job.subject} {job.event}", job.fact)))) for job in verdict.failed)
-    return (*map(_undeclared_line, verdict.undeclared), *map(declaration_line, verdict.stale), *failed)
+    unruled = (_undeclared_line(each.what, each.fix) for each in verdict.unruled)
+    return (*unruled, *map(declaration_line, verdict.stale), *failed)
 
 
-def _undeclared_line(text: str) -> SubLine:
-    return SubLine(Glyph.NEEDS_YOU, text, whole=True)
+def _undeclared_line(text: str, fix: str = "") -> SubLine:
+    return SubLine(Glyph.NEEDS_YOU, text, whole=True, below=(f"fix: {fix}",) if fix else ())
 
 
 def judge(
@@ -518,6 +525,7 @@ def run_verdict(
             base, head,
             lambda marks: read_pull_tree(Path("."), run.pull_request.base_sha, "HEAD", marks=marks),
             lambda marks: read_renames(Path("."), run.pull_request.base_sha, "HEAD", marks=marks),
+            renames_can_change(base, head),
         )
         fetch = fetcher_for(run.token)
         settled = read_settled(

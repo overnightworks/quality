@@ -1,5 +1,7 @@
 """Helpers of the layout rules' tests."""
 
+import datetime
+import json
 import re
 import subprocess
 
@@ -26,8 +28,40 @@ CONTROL_CHARACTERS = [
 ]
 
 
-def declaring(path: str, reason: str = "the build reads it by this name", rule: str = Rule.FILE_SUFFIX) -> str:
-    return f'[[layout.allow]]\npath = "{path}"\nrule = "{rule}"\nreason = "{reason}"\n'
+ENDS = "#2"
+DECLARATION_NEEDS = ("a reason", "the item that ends it", "the item and date of the operator's ruling that lets it in")
+
+
+def assert_fix_names_what_a_declaration_needs(fix: str) -> None:
+    """The fix that asks for a `[[root.allow]]` or `[[layout.allow]]` entry says which keys the new entry carries."""
+    assert [need for need in DECLARATION_NEEDS if need not in fix] == []
+
+
+def _entry_keys(reason: str, ends: str | None, ruling: tuple[str, datetime.date] | None) -> str:
+    """The keys every `[[root.allow]]` and `[[layout.allow]]` entry carries besides its identity; `ends` None writes an
+    entry as it was before the key, `ruling` is the item and the date of the operator's ruling that let it in."""
+    keys = {"reason": reason, "ends": ends}
+    if ruling is not None:
+        keys |= {"item": ruling[0], "date": ruling[1]}
+    return "".join(
+        f"{key} = {value.isoformat() if isinstance(value, datetime.date) else json.dumps(value)}\n"
+        for key, value in keys.items() if value is not None
+    )
+
+
+def declaring(
+    path: str, reason: str = "the build reads it by this name", rule: str = Rule.FILE_SUFFIX, ends: str | None = ENDS,
+    ruling: tuple[str, datetime.date] | None = None,
+) -> str:
+    """One `[[layout.allow]]` entry."""
+    return f"[[layout.allow]]\npath = {json.dumps(path)}\nrule = {json.dumps(str(rule))}\n{_entry_keys(reason, ends, ruling)}"
+
+
+def root_declaring(
+    entry: str, reason: str = "built apart from the package", ends: str | None = ENDS, ruling: tuple[str, datetime.date] | None = None
+) -> str:
+    """One `[[root.allow]]` entry."""
+    return f"[[root.allow]]\nentry = {json.dumps(entry)}\n{_entry_keys(reason, ends, ruling)}"
 
 
 FILES_RULE_IDS = frozenset(rule.value for rule in Rule if rule.area is Area.FILES)

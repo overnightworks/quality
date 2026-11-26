@@ -18,12 +18,14 @@ Reference for the engineer or operator who needs the exact behaviour of `quality
 
 The gate runs all seven ([gate](gate.md#gateyml)).
 
-Three statements hold for each of six declaration tables of `quality/config.toml` and the rule that reads it:
+Two statements hold for each of six declaration tables of `quality/config.toml` and the rule that reads it:
 `[[compose.allow]]`, `[[root.allow]]`, `[[layout.allow]]`, `[[python.allow]]`, `[[workflow.allow]]` and
 `[[spec_citations.foreign]]`. A malformed
 table other than the rule's own is forwarded with its validation error; the values of `[gate]` stay the verdict's to
-judge. A declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry. A config reader older
-than the rule refuses its table as an unknown key.
+judge. A config reader older than the rule refuses its table as an unknown key. In the four tables other than
+`[[root.allow]]` and `[[layout.allow]]` a declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]`
+entry; an added `[[root.allow]]` or `[[layout.allow]]` entry is one, which [the verdict](gate.md#declared-loosenings)
+judges (VERDICT-76).
 
 It applies these rules:
 
@@ -674,8 +676,9 @@ It applies these rules:
   - AGENTS-14: No printed line holds a remote URL; a URL with credentials counts as no remote.
   - AGENTS-15: The file sits at the root only: a tracked path whose last component is `AGENTS.md` in any case and that
     is not the root path is a `misplaced` finding at that path, fact "guidance outside the root file", fix "move what an
-    agent needs into the root AGENTS.md or delete it, or declare it in quality/config.toml with [[layout.allow]], its
-    path, the rule agents-md and a reason".
+    agent needs into the root AGENTS.md or delete it, or declare it in quality/config.toml with [[layout.allow]]: its
+    path, the rule agents-md, a reason, the item that ends it, and the item and date of the operator's ruling that lets
+    it in".
   - AGENTS-16: A tracked root file named `AGENTS.md` in another case is a `misnamed` finding, fact "the document set's
     path is exact", fix "rename it to AGENTS.md", and its content is not judged.
   - AGENTS-17: A `[[layout.allow]]` entry with the rule `agents-md` and a nested path stops AGENTS-15 for that path
@@ -691,49 +694,73 @@ It applies these rules:
 
   No configuration switches the rule off.
 - `root-layout`:
-  - ROOT-1: every entry directly in the root of the tracked tree is on quality's base list or declared.
+  - ROOT-1: every entry directly in the root of the tracked tree is on quality's base list, accepted by its case, or
+    declared.
   - ROOT-2: An entry is a file or a directory (written `frontend/`); a directory with many files is one entry.
   - ROOT-3: Names compare in exact case, and the finding for a name that differs only in case names the base-list
-    spelling.
+    spelling, or the spelling of the case that names it.
   - ROOT-4: A file and a directory of one name are two entries,
   - ROOT-5: and a root symlink counts by its own name.
   - ROOT-6: Only tracked files count; a stray left on disk is not judged.
   - ROOT-7: The base list: `README.md AGENTS.md CLAUDE.md HEART.md LICENSE .gitignore .gitattributes .gitmodules
     pyproject.toml uv.lock .python-version package.json pnpm-lock.yaml package-lock.json Cargo.toml Cargo.lock
     rust-toolchain.toml Dockerfile .dockerignore compose.yaml compose.yml docker-compose.yaml docker-compose.yml
-    sonar-project.properties .importlinter .pre-commit-config.yaml` and the directories `.github/ .aco/ quality/ src/
-    tests/ docs/ scripts/`.
-  - ROOT-8: It belongs to quality and changes with a quality version; a repository extends it, never shortens it. Each
-    other entry is declared in `quality/config.toml`, one entry and one one-line reason, no pattern and no deeper path:
+    sonar-project.properties .importlinter .pre-commit-config.yaml tsconfig.json vitest.config.ts Makefile mise.toml
+    mise.lock pnpm-workspace.yaml alembic.ini .sops.yaml` and the directories `.github/ .aco/ quality/ src/ tests/ docs/
+    scripts/ .claude/ .claude-plugin/ .codex/ .agents/`. A name joins it when a tool reads it from the project root by
+    default, as the tool's own documentation says, and no other rule of quality refuses it; a directory of one
+    repository's own structure never joins it, and is accepted by a case or declared.
+  - ROOT-18: The cases are conditional entries: a directory is accepted where a tracked name shows the shape, compared in
+    exact case. `frontend/` is accepted where `frontend/package.json` is tracked;
+  - ROOT-19: `packages/` and `providers/`, where each of their child directories that holds a tracked file holds a tracked
+    `pyproject.toml` or `package.json` directly, and at least one does;
+  - ROOT-20: `legal/`, where `legal/datenschutz.html` is tracked, the page the platform's app standard requires of every
+    app;
+  - ROOT-21: `clusters/`, `infrastructure/` and `apps/`, where a tracked file lies under `clusters/<name>/flux-system/`,
+    the directory Flux's bootstrap writes.
+  - ROOT-8: The base list belongs to quality and changes with a quality version; a repository extends it, never shortens
+    it. Each other entry that no case accepts is declared in `quality/config.toml`, one entry, one one-line reason and
+    `ends`, the open item whose landing removes it, written `#<n>` or `<owner>/<repo>#<n>`, no pattern and no deeper
+    path. An entry a pull request adds also carries `item` and `date`, the operator's ruling that lets it in, which
+    stand together or not at all:
 
   ```toml
   [[root.allow]]
-  entry = "frontend/"
-  reason = "the web client, built apart from the Python package"
+  entry = "specs/"
+  reason = "the written requirements, kept apart from the code"
+  ends = "#123"
   ```
 
   - ROOT-9: A declaration that matches no tracked root entry is a finding;
-  - ROOT-10: a declaration of a base-list entry that is tracked is clean.
+  - ROOT-10: a declaration of a tracked base-list entry or of a tracked entry a case names is clean, whether or not the
+    case's condition is met.
   - ROOT-11: A finding's row names the entry and says `unlisted` (its fact adds the base list's spelling for a name that
-    differs only in case)
-  - ROOT-12: with both ways out in the fix, move it to its owner's directory or declare it with a reason, in prose with
-    no command and no local path;
+    differs only in case, the spelling of the case that names it, and the condition of a case that names the entry)
+  - ROOT-12: with both ways out in the fix, move it to its owner's directory or declare it with a reason, the item that
+    ends it, and the item and date of the operator's ruling that lets it in, in prose with no command and no local path;
   - ROOT-13: a declaration that matches no tracked root entry says `unused` (its fact adds the tracked directory for an
     entry written without its slash).
   - ROOT-14: Findings are sorted by entry and all printed.
   - ROOT-15: An invalid declaration (a `/` inside the entry, `.`, `..`, `.git`, an empty entry, a multi-line reason, an
-    unknown key, a missing key, an entry that is not text, a `[root]` key other than `allow`, `allow` that is not an
-    array of tables, or one entry declared twice) makes the `files` row `✗ not checked` with the reason, and `next:`
-    shows a `[[root.allow]]` example.
+    unknown key, a missing key, an `ends` that is missing or no item reference, an `item` without a `date` or a `date`
+    without an `item`, an entry that is not text, a `[root]` key other than `allow`, `allow` that is not an array of
+    tables, or one entry declared twice) makes the `files` row `✗ not checked` with the reason, and `next:` shows a
+    `[[root.allow]]` example.
 
-  Ruled by the operator: any pull request may add a declaration with a reason (ROOT-8); the review judges whether the
-  reason holds. A declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry.
+  Ruled by the operator: a declaration names the open item whose landing removes it; an added declaration is a
+  loosening, so only `quality merge` lands it, with the operator's ruling that lets it in.
+
+  - ROOT-22: An added declaration is that loosening: a head entry whose `entry` the base lacks is red in `quality
+    verdict` and in `quality merge` ([gate](gate.md#declared-loosenings), VERDICT-76 to VERDICT-81), while an inherited
+    entry, a changed `reason`, `ends` or ruling and a deleted entry loosen nothing.
 
   - ROOT-16: The rule reads names, never content, and writes nothing.
   - ROOT-17: No configuration switches it off.
 
   Named gaps: a submodule in the root counts as a file entry and no case of it is tested; marketplace's refusal of every
-  symlink in the tree stays that repository's own check.
+  symlink in the tree stays that repository's own check; a directory of projects is judged by its direct children only,
+  a Flux bootstrap deeper than `clusters/<name>/flux-system/` is unlisted, and a condition is met by the name alone, so
+  an empty or symlinked `frontend/package.json` meets it (ROOT-16).
 - `file-suffix`:
   - SUFFIX-1: a tracked file whose basename has no suffix is a finding,
   - SUFFIX-2: unless it is executable (index mode 100755), a symlink (120000) or a gitlink (160000),
@@ -744,16 +771,18 @@ It applies these rules:
   - SUFFIX-6: index data that cannot be read makes the `files` row `✗ not checked` with the reason (exit `2`).
   - SUFFIX-7: Names compare in exact case, in any folder.
   - SUFFIX-8: The list belongs to quality and changes with a quality version. A file is declared in
-    `quality/config.toml`, a table of its own beside `[[root.allow]]`,
+    `quality/config.toml`, a table of its own beside `[[root.allow]]` that holds the same keys beyond its identity (ROOT-8),
   - SUFFIX-9: one exact tracked path,
 
-  the rule and a one-line reason:
+  the rule, a one-line reason and `ends`, the open item whose landing removes the entry, and on an added entry the `item`
+  and `date` of the operator's ruling that lets it in:
 
   ```toml
   [[layout.allow]]
   path = "deploy/EDGE_SHA"
   rule = "file-suffix"
   reason = "the deploy script reads it by this name"
+  ends = "#123"
   ```
 
   - SUFFIX-10: The rule is `agents-md`, `file-suffix`, `script-name`, `script-header`, `test-layout` or `test-import`; a
@@ -763,14 +792,18 @@ It applies these rules:
   - SUFFIX-13: whose fix deletes every `[[layout.allow]]` entry of that path (an untracked path makes each of its
     entries stale; the fix names no rule); a declaration for a file that already complies is clean.
   - SUFFIX-14: A suffixless file says `tracked`
-  - SUFFIX-15: with both ways out, give it a suffix or declare it, in prose with no command;
+  - SUFFIX-15: with both ways out, give it a suffix or declare it with its keys, in prose with no command;
   - SUFFIX-16: findings are sorted by path and all printed.
-  - SUFFIX-17: The six rules' fixes that ask for an entry end with one clause naming the finding's own rule.
+  - SUFFIX-17: The six rules' fixes that ask for an entry end with one clause naming the finding's own rule and what the
+    entry needs: a reason, the item that ends it, and the item and date of the operator's ruling that lets it in.
   - SUFFIX-18: A duplicate `(rule, path)`, a folder (a trailing `/`), a pattern (`*`, `?`, `[`), `..`, a leading `./`,
     an empty component, a blank path, an absolute path, a path that is not text, an unknown rule, an unknown key, a
-    missing key or a reason that is not one-line text makes the `files` row `✗ not checked` with the reason, and `next:`
-    shows a `[[layout.allow]]` example; a malformed `[layout]` table is the same.
+    missing key, a reason that is not one-line text, an `ends` that is missing or no item reference, or an `item` without
+    a `date` or a `date` without an `item` makes the `files` row `✗ not checked` with the reason, and `next:` shows a
+    `[[layout.allow]]` example; a malformed `[layout]` table is the same.
   - SUFFIX-19: The rule writes nothing and no configuration switches it off.
+  - SUFFIX-20: An added entry is a loosening as ROOT-22 has it, told apart by its rule and its path: an entry whose `rule`
+    changes is a new entry, and git's renames move the path of an inherited one (VERDICT-81).
 
   Ruled by the operator: quality checks in CI where files sit below the root (`tests/`, `scripts/`, file names).
 - `script-name` and `script-header` judge a script:
@@ -1166,9 +1199,10 @@ It applies these rules:
   - BASELINE-16: The allowance moves rather than being copied: while the head baseline still names the old path, nothing
     moves and the new path's entries are adds.
   - BASELINE-17: A pair whose files moved is the same pair, and a renamed function is a new entry.
-  - BASELINE-18: Renames are read only when the base and the head both hold a baseline: without a base, or without a
-    baseline on either side, nothing is read.
-  - BASELINE-19: `merge` fetches the same two commits; it reads the same renames.
+  - BASELINE-18: Renames are read only when the base and the head both hold a baseline, or when the head holds a
+    `[[root.allow]]` or `[[layout.allow]]` entry whose identity the base lacks (VERDICT-81): without a base, or with
+    neither, nothing is read.
+  - BASELINE-19: `merge` fetches the same two commits; it reads the same renames, for an added entry too.
 
   How `check` and `check --fix` treat the renames is told in the `size` rule's `--fix` paragraph above.
 

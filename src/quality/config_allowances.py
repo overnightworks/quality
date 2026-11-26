@@ -1,14 +1,20 @@
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import PurePosixPath
 
 from quality import config_entries
-from quality.config_entries import ONE_LINE_REASON, is_exact_file_path
+from quality.config_entries import ONE_LINE_REASON, RULING_KEYS, Ruling, is_exact_file_path
 from quality.rules import Rule
 
 ROOT_ALLOWANCE_KEYS = {"entry", "reason"}
 NOT_ROOT_ENTRY_NAMES = {".", "..", ".git"}
 LAYOUT_ALLOWANCE_KEYS = {"path", "rule", "reason"}
+HEAD_ENTRY_EXTRA_KEYS = {"ends"} | RULING_KEYS
+ENDS_EXPECTED = "ends as the open item whose landing removes it: #<number> or <owner>/<repo>#<number>"
+RULING_TOGETHER = "an item and a date together or not at all"
+# What a person writes for an entry of the two tables, as a fix asking for one names it.
+DECLARATION_NEEDS = "a reason, the item that ends it, and the item and date of the operator's ruling that lets it in"
 PYTHON_ALLOWANCE_KEYS = {"path", "reason"}
 COMPOSE_ALLOWANCE_KEYS = {"file", "service", "reason"}
 WORKFLOW_ALLOWANCE_KEYS = {"file", "reason"}
@@ -19,14 +25,16 @@ COMPOSE_ALLOWANCE_HEADING = "[[compose.allow]]"
 WORKFLOW_ALLOWANCE_HEADING = "[[workflow.allow]]"
 ROOT_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
     ROOT_ALLOWANCE_HEADING,
-    'entry = "frontend/"',
-    'reason = "the web client, built apart from the Python package"',
+    'entry = "specs/"',
+    'reason = "the written requirements, kept apart from the code"',
+    'ends = "#123"',
 )
 LAYOUT_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
     LAYOUT_ALLOWANCE_HEADING,
     'path = "deploy/EDGE_SHA"',
     'rule = "file-suffix"',
     'reason = "the deploy script reads it by this name"',
+    'ends = "#123"',
 )
 PYTHON_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
     PYTHON_ALLOWANCE_HEADING,
@@ -46,12 +54,33 @@ WORKFLOW_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
 )
 
 
+class ConfigSide(Enum):
+    """Which side of a pull request a config is read as: the head must carry every key, the base is read by identity only."""
+
+    HEAD = "head"
+    BASE = "base"
+
+
 @dataclass(frozen=True)
-class RootAllowance:
-    """A root entry the repository declares beyond quality's base list: a file `Makefile` or a directory `frontend/`."""
+class RootEntry:
+    """A root entry as the base reads it: its name, such as the directory `specs/`, and nothing else."""
 
     entry: str
+
+    @property
+    def identity(self) -> tuple[str, str]:
+        """The path and the qualifier that tell the entry from every other."""
+        return self.entry, ""
+
+
+@dataclass(frozen=True)
+class RootAllowance(RootEntry):
+    """A root entry the head declares beyond quality's base list and its cases: why, the open item whose landing removes
+    it and, once an added entry is ruled in, the operator's ruling."""
+
     reason: str
+    ends: str
+    ruling: Ruling | None = None
 
 
 @dataclass(frozen=True)
@@ -68,15 +97,29 @@ LAYOUT_RULES = (
 
 
 @dataclass(frozen=True)
-class LayoutAllowance:
-    """A tracked file, by its exact path, the repository declares against one layout rule."""
+class LayoutEntry:
+    """A layout entry as the base reads it: the exact path of a tracked file and the rule it is declared against."""
 
     path: str
-    rule: Rule
+    rule: str
+
+    @property
+    def identity(self) -> tuple[str, str]:
+        """The path and the qualifier that tell the entry from every other."""
+        return self.path, self.rule
+
+
+@dataclass(frozen=True)
+class LayoutAllowance(LayoutEntry):
+    """A tracked file, by its exact path, the head declares against one layout rule: why, the open item whose landing
+    removes it and, once an added entry is ruled in, the operator's ruling."""
+
     reason: str
+    ends: str
+    ruling: Ruling | None = None
 
 
-def declared_paths(allowances: Sequence[LayoutAllowance], rule: Rule) -> set[str]:
+def declared_paths(allowances: Sequence[LayoutEntry], rule: Rule) -> set[str]:
     return {allowance.path for allowance in allowances if allowance.rule is rule}
 
 
@@ -111,24 +154,46 @@ def _is_root_entry(entry: object) -> bool:
     return bool(name.strip()) and "/" not in name and name not in NOT_ROOT_ENTRY_NAMES
 
 
+def _head_entry(refuse: Callable[[str], config_entries.ConfigError], entry: object, keys: set[str], need: str) -> dict:
+    """`entry` as a table of `keys`, beside which it may hold only `ends` and a ruling's `item` and `date`."""
+    if not isinstance(entry, dict) or not keys <= set(entry) <= keys | HEAD_ENTRY_EXTRA_KEYS:
+        raise refuse(need)
+    return entry
+
+
+def _read_ends(refuse: Callable[[str], config_entries.ConfigError], entry: dict) -> str:
+    ends = entry.get("ends")
+    if not (isinstance(ends, str) and config_entries.ITEM_REFERENCE.fullmatch(ends)):
+        raise refuse(ENDS_EXPECTED)
+    return ends
+
+
 def _read_root_allowance(entry: object, position: int) -> RootAllowance:
     refuse = config_entries.entry_refusal(ROOT_ALLOWANCE_HEADING, position, ROOT_ALLOWANCE_EXAMPLE)
-    if not isinstance(entry, dict) or set(entry) != ROOT_ALLOWANCE_KEYS:
-        raise refuse("exactly an entry and a reason")
-    name, reason = entry["entry"], entry["reason"]
+    table = _head_entry(refuse, entry, ROOT_ALLOWANCE_KEYS, f"exactly an entry, a reason and an ends, and {RULING_TOGETHER}")
+    name, reason = table["entry"], table["reason"]
     if not _is_root_entry(name):
         raise refuse("entry as one name directly in the root, a directory with a trailing /, not a path")
     if not config_entries.is_one_line_text(reason):
         raise refuse(ONE_LINE_REASON)
-    return RootAllowance(name, reason)
+    return RootAllowance(name, reason, _read_ends(refuse, table), config_entries.optional_ruling(refuse, table))
 
 
-def layout_allowances(layout: dict) -> tuple[LayoutAllowance, ...]:
+def _read_root_entry(entry: object, position: int) -> RootEntry:
+    """The identity of a root entry, which is all a base is read for."""
+    if not isinstance(entry, dict) or not isinstance(entry.get("entry"), str):
+        raise config_entries.entry_refusal(ROOT_ALLOWANCE_HEADING, position, ROOT_ALLOWANCE_EXAMPLE)("an entry as text")
+    return RootEntry(entry["entry"])
+
+
+def layout_allowances(layout: dict, side: ConfigSide) -> tuple[LayoutEntry, ...]:
+    if side is ConfigSide.BASE:
+        return config_entries.declared_entries(layout, "allow", LAYOUT_ALLOWANCE_HEADING, LAYOUT_ALLOWANCE_EXAMPLE, _read_layout_entry)
     return config_entries.unique_entries(
         layout, "allow", LAYOUT_ALLOWANCE_HEADING, LAYOUT_ALLOWANCE_EXAMPLE, _read_layout_allowance,
-        lambda allowance: (allowance.rule, allowance.path),
+        lambda allowance: allowance.identity,
         lambda allowance: f"declares path = {config_entries.toml_string(allowance.path)} for rule = "
-        f"{config_entries.toml_string(allowance.rule.value)} twice; one declaration per rule and path",
+        f"{config_entries.toml_string(str(allowance.rule))} twice; one declaration per rule and path",
     )
 
 
@@ -146,16 +211,22 @@ def _read_python_allowance(entry: object, position: int) -> PythonAllowance:
 
 def _read_layout_allowance(entry: object, position: int) -> LayoutAllowance:
     refuse = config_entries.entry_refusal(LAYOUT_ALLOWANCE_HEADING, position, LAYOUT_ALLOWANCE_EXAMPLE)
-    if not isinstance(entry, dict) or set(entry) != LAYOUT_ALLOWANCE_KEYS:
-        raise refuse("exactly a path, a rule and a reason")
-    path, rule, reason = entry["path"], entry["rule"], entry["reason"]
+    table = _head_entry(refuse, entry, LAYOUT_ALLOWANCE_KEYS, f"exactly a path, a rule, a reason and an ends, and {RULING_TOGETHER}")
+    path, rule, reason = table["path"], table["rule"], table["reason"]
     if not is_exact_file_path(path):
         raise refuse("path as the exact tracked path of one file: no folder, pattern, .. or absolute path")
     if rule not in LAYOUT_RULES:
         raise refuse(f"rule as one of {', '.join(sorted(str(known) for known in LAYOUT_RULES))}")
     if not config_entries.is_one_line_text(reason):
         raise refuse(ONE_LINE_REASON)
-    return LayoutAllowance(path, Rule(rule), reason)
+    return LayoutAllowance(path, Rule(rule), reason, _read_ends(refuse, table), config_entries.optional_ruling(refuse, table))
+
+
+def _read_layout_entry(entry: object, position: int) -> LayoutEntry:
+    """The identity of a layout entry, which is all a base is read for."""
+    if not isinstance(entry, dict) or not all(isinstance(entry.get(key), str) for key in ("path", "rule")):
+        raise config_entries.entry_refusal(LAYOUT_ALLOWANCE_HEADING, position, LAYOUT_ALLOWANCE_EXAMPLE)("a path and a rule as text")
+    return LayoutEntry(entry["path"], entry["rule"])
 
 
 def compose_allowances(compose: dict) -> tuple[ComposeAllowance, ...]:
@@ -203,6 +274,11 @@ def _one_per_field[Allowance](
     )
 
 
-root_allowances = _one_per_field(ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE, _read_root_allowance, "entry", "root entry")
+def root_allowances(root: dict, side: ConfigSide) -> tuple[RootEntry, ...]:
+    if side is ConfigSide.BASE:
+        return config_entries.declared_entries(root, "allow", ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE, _read_root_entry)
+    return _one_per_field(ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE, _read_root_allowance, "entry", "root entry")(root)
+
+
 python_allowances = _one_per_field(PYTHON_ALLOWANCE_HEADING, PYTHON_ALLOWANCE_EXAMPLE, _read_python_allowance, "path", "path")
 workflow_allowances = _one_per_field(WORKFLOW_ALLOWANCE_HEADING, WORKFLOW_ALLOWANCE_EXAMPLE, _read_workflow_allowance, "file", "workflow")

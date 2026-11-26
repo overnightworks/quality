@@ -28,6 +28,7 @@ from tests.support.check import (
     refusals,
 )
 from tests.support.door import CHECK_WORD, STAGED_WORDS, check_door, door_in
+from tests.support.layout import root_declaring
 from tests.support.scanners import (
     FINDING_EXIT,
     NOT_INSTALLED,
@@ -676,7 +677,7 @@ def test_mise_is_asked_in_the_manifest_directory_under_its_ceiling(build_repo, u
     (elsewhere / "link").symlink_to(scanners.MANIFEST_DIRECTORY.parent)
     monkeypatch.setattr(scanners, "MANIFEST_DIRECTORY", elsewhere / "link" / scanners.MANIFEST_DIRECTORY.name)
     use_mise(recording(record, serving(served_scanners)))
-    declared = '[[root.allow]]\nentry = "mise.toml"\nreason = "the scanned repository holds a mise config"\n'
+    declared = root_declaring("mise.toml", "the scanned repository holds a mise config")
     repo = build_repo({**WORKFLOW_AND_LOCK, "mise.toml": "[env]\nMISE_X = '1'\n", "quality/config.toml": declared})
     assert check_door(repo, locate_zizmor=fake_zizmor(elsewhere, "echo '[]'")) == 0
     directory, ceiling = scanners.MANIFEST_DIRECTORY, scanners.MANIFEST_DIRECTORY.resolve().parent

@@ -1,4 +1,4 @@
-"""The root-layout rule: every root entry on quality's base list or declared with a reason."""
+"""The root-layout rule: every root entry on quality's base list, accepted by its case or declared with a reason."""
 
 import re
 import subprocess
@@ -11,28 +11,27 @@ from quality.output import FIX_LABEL, Glyph
 from quality.report import FindingEvent
 from quality.root_layout import ROOT_BASE_DIRECTORIES, ROOT_BASE_ENTRIES, ROOT_BASE_FILES
 from quality.rules import Rule
+from tests.support.allowances import RULED, RULING
 from tests.support.check import check_output, copy_block, env_row_stands, finding_rows, rows_of, rule_findings
-from tests.support.config_refusals import KNOWN_KEYS, ONE_LINE_NEED
+from tests.support.config_refusals import DATE_NEED, ENDS_NEED, KNOWN_KEYS, ONE_LINE_NEED, ROOT_KEYS_NEED
 from tests.support.git_repositories import put
 from tests.support.layout import (
     CONTROL_CHARACTERS,
+    assert_fix_names_what_a_declaration_needs,
     assert_prints_as_kind,
     assert_prints_escaped_row,
     assert_row_is_kind,
     red,
+    root_declaring,
     rule_ids_in,
 )
 from tests.support.merge import ONE_JOB
-from tests.support.verdict import verdict_of
+from tests.support.verdict import ONLY_DECLARED, declared, viewed
 
 pytestmark = pytest.mark.integration
 
 CONFIG = "quality/config.toml"
 GUIDANCE = {"HEART.md": "# guidance\n"}
-
-
-def declaring(entry: str, reason: str = "built apart from the package") -> str:
-    return f'[[root.allow]]\nentry = "{entry}"\nreason = "{reason}"\n'
 
 
 def test_two_strays_are_two_findings_and_a_directory_counts_once(build_repo, capsys):
@@ -60,6 +59,17 @@ def test_every_base_list_entry_is_green_without_a_config(build_repo):
     assert red(build_repo(files), Rule.ROOT_LAYOUT) == []
 
 
+PROJECTS_CONDITION = "holds folders and each holds a package.json or pyproject.toml"
+FLUX_CONDITION = "clusters/<name>/flux-system/"
+
+
+def unlisted_facts(repo) -> dict[str, str]:
+    """The root-layout rule's finding facts by entry, each one an `unlisted` finding."""
+    findings = rule_findings(repo, Rule.ROOT_LAYOUT)
+    assert {finding.event for finding in findings} <= {FindingEvent.UNLISTED}
+    return {finding.path: finding.fact for finding in findings}
+
+
 ROOT = f"{CONFIG_PATH} [[root.allow]]"
 ROOT_NAME_NEED = "entry as one name directly in the root, a directory with a trailing /, not a path"
 
@@ -71,7 +81,7 @@ ROOT_NAME_NEED = "entry as one name directly in the root, a directory with a tra
 )
 def test_an_invalid_declaration_cannot_be_judged_and_shows_an_example(build_repo, capsys, entry):
     """ROOT-15, REFUSAL-24."""
-    repo = build_repo({**GUIDANCE, CONFIG: declaring(entry)})
+    repo = build_repo({**GUIDANCE, CONFIG: root_declaring(entry)})
     code, output = check_output(capsys, repo)
     assert code == 2
     assert f"{ROOT} entry 1 needs {ROOT_NAME_NEED}" in output
@@ -81,14 +91,19 @@ def test_an_invalid_declaration_cannot_be_judged_and_shows_an_example(build_repo
 @pytest.mark.parametrize(
     ("config", "fact"),
     [
-        ('[[root.allow]]\nentry = "x/"\nreason = "two\\nlines"\n', f"{ROOT} entry 1 needs {ONE_LINE_NEED}"),
-        ('[[root.allow]]\nentry = "x/"\nreason = "r"\nextra = 1\n', f"{ROOT} entry 1 needs exactly an entry and a reason"),
-        ('[[root.allow]]\nentry = "x/"\n', f"{ROOT} entry 1 needs exactly an entry and a reason"),
-        ('[[root.allow]]\nentry = 3\nreason = "r"\n', f"{ROOT} entry 1 needs {ROOT_NAME_NEED}"),
+        ('[[root.allow]]\nentry = "x/"\nreason = "two\\nlines"\nends = "#2"\n', f"{ROOT} entry 1 needs {ONE_LINE_NEED}"),
+        ('[[root.allow]]\nentry = "x/"\nreason = "r"\nends = "#2"\nextra = 1\n', f"{ROOT} entry 1 needs {ROOT_KEYS_NEED}"),
+        ('[[root.allow]]\nentry = "x/"\n', f"{ROOT} entry 1 needs {ROOT_KEYS_NEED}"),
+        ('[[root.allow]]\nentry = "x/"\nreason = "r"\n', f"{ROOT} entry 1 needs {ENDS_NEED}"),
+        ('[[root.allow]]\nentry = "x/"\nreason = "r"\nends = "#2"\nitem = "#3"\n', f"{ROOT} entry 1 needs {DATE_NEED}"),
+        ('[[root.allow]]\nentry = 3\nreason = "r"\nends = "#2"\n', f"{ROOT} entry 1 needs {ROOT_NAME_NEED}"),
         ("[root]\nignore = []\n", f"{CONFIG_PATH} has unknown key ignore - {KNOWN_KEYS}"),
         ('[root]\nallow = "x"\n', f"{CONFIG_PATH} needs [[root.allow]] as an array of tables"),
     ],
-    ids=["multi-line reason", "unknown key", "no reason", "entry not text", "unknown table key", "allow not a list"],
+    ids=[
+        "multi-line reason", "unknown key", "no reason", "no ends", "an item without a date", "entry not text", "unknown table key",
+        "allow not a list",
+    ],
 )
 def test_a_malformed_root_table_cannot_be_judged(build_repo, capsys, config, fact):
     """ROOT-15, REFUSAL-24."""
@@ -100,7 +115,7 @@ def test_a_malformed_root_table_cannot_be_judged(build_repo, capsys, config, fac
 
 def test_a_declared_collecting_directory_is_green(build_repo):
     """ROOT-1, ROOT-8."""
-    repo = build_repo({**GUIDANCE, "misc/a.py": "x", CONFIG: declaring("misc/")})
+    repo = build_repo({**GUIDANCE, "misc/a.py": "x", CONFIG: root_declaring("misc/")})
     assert red(repo, Rule.ROOT_LAYOUT) == []
 
 
@@ -130,7 +145,7 @@ def test_a_root_symlink_counts_by_its_own_name(build_repo):
 
 def test_the_same_entry_declared_twice_cannot_be_judged_and_is_named(build_repo, capsys):
     """ROOT-15, REFUSAL-24."""
-    repo = build_repo({**GUIDANCE, "plans/a.md": "x", CONFIG: declaring("plans/") + declaring("plans/", "again")})
+    repo = build_repo({**GUIDANCE, "plans/a.md": "x", CONFIG: root_declaring("plans/") + root_declaring("plans/", "again")})
     code, output = check_output(capsys, repo)
     assert code == 2
     assert f'{ROOT} declares entry = "plans/" twice; one entry per root entry' in output
@@ -158,13 +173,13 @@ def test_the_rule_is_on_in_a_repository_without_a_config(build_repo, capsys):
 
 def test_a_declared_entry_is_green_and_a_base_list_entry_may_be_declared(build_repo):
     """ROOT-8, ROOT-10."""
-    repo = build_repo({**GUIDANCE, "Makefile": "x", CONFIG: declaring("Makefile") + declaring("HEART.md")})
+    repo = build_repo({**GUIDANCE, "notes.txt": "x", CONFIG: root_declaring("notes.txt") + root_declaring("HEART.md")})
     assert red(repo, Rule.ROOT_LAYOUT) == []
 
 
 def test_a_declaration_matching_no_tracked_entry_is_red_and_names_it(build_repo, capsys):
     """ROOT-9, ROOT-13."""
-    repo = build_repo({**GUIDANCE, CONFIG: declaring("plans/")})
+    repo = build_repo({**GUIDANCE, CONFIG: root_declaring("plans/")})
     code = check_output(capsys, repo)[0]
     assert (code, red(repo, Rule.ROOT_LAYOUT)) == (1, ["plans/"])
     assert_prints_as_kind(capsys, repo, Rule.ROOT_LAYOUT, FindingEvent.UNUSED)
@@ -172,24 +187,25 @@ def test_a_declaration_matching_no_tracked_entry_is_red_and_names_it(build_repo,
 
 def test_a_directory_declared_without_its_slash_is_told_the_slash_is_what_is_tracked(build_repo, capsys):
     """ROOT-13."""
-    repo = build_repo({**GUIDANCE, "frontend/a.js": "x", CONFIG: declaring("frontend")})
+    repo = build_repo({**GUIDANCE, "frontend/a.js": "x", CONFIG: root_declaring("frontend")})
     stale = next(finding for finding in rule_findings(repo, Rule.ROOT_LAYOUT) if finding.event is FindingEvent.UNUSED)
     assert_row_is_kind(check_output(capsys, repo)[1], stale, FindingEvent.UNUSED, "frontend/")
 
 
 def test_a_finding_names_the_entry_and_both_ways_out_without_a_local_path(build_repo, capsys):
-    """ROOT-11, ROOT-12."""
+    """ROOT-11, ROOT-12: the fix names what a declaration needs."""
     repo = build_repo({**GUIDANCE, "notes.txt": "x"})
     finding = assert_prints_as_kind(capsys, repo, Rule.ROOT_LAYOUT, FindingEvent.UNLISTED)
+    assert_fix_names_what_a_declaration_needs(finding.fix)
     assert (finding.path, str(repo) in f"{finding.fact} {finding.fix}") == ("notes.txt", False)
     assert rule_ids_in(finding.fix) == set()
-    put(repo / CONFIG, ONE_JOB + declaring(finding.path))
+    put(repo / CONFIG, ONE_JOB + root_declaring(finding.path))
     assert red(repo, Rule.ROOT_LAYOUT) == []
 
 
 def test_removing_a_declaration_makes_the_entry_red(build_repo):
     """ROOT-8."""
-    repo = build_repo({**GUIDANCE, "misc/a.py": "x", CONFIG: declaring("misc/")})
+    repo = build_repo({**GUIDANCE, "misc/a.py": "x", CONFIG: root_declaring("misc/")})
     assert red(repo, Rule.ROOT_LAYOUT) == []
     put(repo / CONFIG, None)
     assert red(repo, Rule.ROOT_LAYOUT) == ["misc/"]
@@ -197,7 +213,7 @@ def test_removing_a_declaration_makes_the_entry_red(build_repo):
 
 def test_moving_an_entry_without_its_declaration_leaves_the_declaration_red(build_repo):
     """ROOT-9."""
-    repo = build_repo({**GUIDANCE, "docs/misc/a.py": "x", CONFIG: declaring("misc/")})
+    repo = build_repo({**GUIDANCE, "docs/misc/a.py": "x", CONFIG: root_declaring("misc/")})
     assert red(repo, Rule.ROOT_LAYOUT) == ["misc/"]
 
 
@@ -217,11 +233,6 @@ def test_a_tracked_env_file_is_red_under_env_file_and_under_root_layout(build_re
     assert (red(repo, Rule.ROOT_LAYOUT), env_row_stands(check_output(capsys, repo)[1])) == ([".env"], True)
 
 
-def test_tsconfig_in_the_root_is_red_unless_declared(build_repo):
-    """ROOT-7."""
-    assert red(build_repo({**GUIDANCE, "tsconfig.json": "{}"}), Rule.ROOT_LAYOUT) == ["tsconfig.json"]
-
-
 def test_a_hundred_strays_print_a_hundred_sorted_findings(build_repo, capsys):
     """ROOT-14."""
     names = [f"stray{number:03d}.txt" for number in range(100)]
@@ -233,9 +244,110 @@ def test_a_hundred_strays_print_a_hundred_sorted_findings(build_repo, capsys):
     assert output.count(f" {FIX_LABEL} {rule_findings(repo, Rule.ROOT_LAYOUT)[0].fix}") == 1
 
 
-def test_a_declaration_is_no_loosening_at_the_verdict(pull_request, capsys):
+@pytest.mark.parametrize("ruled", [True, False], ids=["with its ruling", "without a ruling"])
+def test_an_added_declaration_is_a_loosening_at_the_verdict(pull_request, capsys, ruled):
+    """ROOT-22, VERDICT-76: a pull request that adds a declaration is red; with the ruling written on it only the
+    door, on the operator's consent, lands it, without it nothing does."""
     repo, commit_base = pull_request
     commit_base(None, ONE_JOB)
-    put(repo / CONFIG, ONE_JOB + declaring("frontend/"))
-    code, output = verdict_of(repo, capsys)
-    assert (code, "loosened" in output, "✓ green" in output) == (0, False, True)
+    put(repo / CONFIG, ONE_JOB + root_declaring("frontend/", ruling=RULING if ruled else None))
+    what = "root allowance adds frontend/ until #2"
+    expected = [declared(what, RULED), ONLY_DECLARED] if ruled else [f"    ! {what}", "! red"]
+    assert viewed(repo, capsys) == (1, expected)
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        {"frontend/package.json": "{}"},
+        {"packages/client/pyproject.toml": "x", "packages/web/package.json": "{}"},
+        {"legal/datenschutz.html": "x", "legal/nutzungsbedingungen.html": "x"},
+        {"clusters/pc/flux-system/gotk-sync.yaml": "x", "apps/x.yaml": "x", "infrastructure/y.yaml": "x"},
+        {"packages/a/pyproject.toml": "x", "packages/README.md": "x"},
+        {"src/frontend/package.json": "{}"},
+    ],
+    ids=[
+        "frontend with its package.json",
+        "packages of two projects",
+        "legal with its privacy page",
+        "the three Flux directories",
+        "packages with a project and a file beside it",
+        "frontend below the root",
+    ],
+)
+def test_a_directory_whose_case_condition_is_met_is_green_without_a_declaration(build_repo, files):
+    """ROOT-1, ROOT-18, ROOT-19, ROOT-20, ROOT-21."""
+    assert red(build_repo({**GUIDANCE, **files}), Rule.ROOT_LAYOUT) == []
+
+
+@pytest.mark.parametrize(
+    ("files", "facts"),
+    [
+        ({"frontend/index.html": "x"}, {"frontend/": "frontend/package.json"}),
+        ({"frontend/Package.json": "{}"}, {"frontend/": "frontend/package.json"}),
+        ({"frontend/app/package.json": "{}"}, {"frontend/": "frontend/package.json"}),
+        ({"legal/impressum.html": "x"}, {"legal/": "legal/datenschutz.html"}),
+        ({"providers/a/pyproject.toml": "x", "providers/b/readme.md": "x"}, {"providers/": PROJECTS_CONDITION}),
+        ({"packages/readme.md": "x"}, {"packages/": PROJECTS_CONDITION}),
+        (
+            {"apps/x.yaml": "x", "infrastructure/y.yaml": "x"},
+            {"apps/": FLUX_CONDITION, "infrastructure/": FLUX_CONDITION},
+        ),
+        ({"clusters/pc/apps.yaml": "x"}, {"clusters/": FLUX_CONDITION}),
+        ({"apps/x/flux-system/y.yaml": "x"}, {"apps/": FLUX_CONDITION}),
+        ({"clusters/pc/flux-system": "x"}, {"clusters/": FLUX_CONDITION}),
+    ],
+    ids=[
+        "frontend without a package.json",
+        "frontend with a wrongly cased package.json",
+        "frontend whose package.json lies deeper",
+        "legal without the privacy page",
+        "providers with a folder that is no project",
+        "packages with files only directly inside",
+        "apps and infrastructure without clusters",
+        "clusters without flux-system",
+        "flux-system below another root directory than clusters",
+        "a file named flux-system directly in a cluster",
+    ],
+)
+def test_a_directory_whose_case_condition_fails_is_unlisted_and_its_fact_names_the_condition(build_repo, files, facts):
+    """ROOT-3, ROOT-11, ROOT-18, ROOT-19, ROOT-20, ROOT-21."""
+    found = unlisted_facts(build_repo({**GUIDANCE, **files}))
+    assert {entry: condition in found[entry] for entry, condition in facts.items()} == dict.fromkeys(facts, True)
+    assert set(found) == set(facts)
+
+
+@pytest.mark.parametrize(
+    "files",
+    [{"Frontend/package.json": "{}"}, {"Frontend/index.html": "x", "frontend/package.json": "{}"}],
+    ids=["its condition fails too", "its condition is met by the exactly spelled entry"],
+)
+def test_a_case_directory_in_another_case_names_its_case_spelling_and_condition(build_repo, files):
+    """ROOT-3, ROOT-11, ROOT-18."""
+    found = unlisted_facts(build_repo({**GUIDANCE, **files}))
+    fact = found["Frontend/"]
+    hint = "its case spells it frontend/"
+    assert (list(found), hint in fact, "the list spells" in fact, fact.index(hint) < fact.index("frontend/package.json")) == (
+        ["Frontend/"], True, False, True,
+    )
+
+
+def test_a_root_symlink_named_like_a_case_directory_is_a_file_entry_and_unlisted(build_repo):
+    """ROOT-4, ROOT-5, ROOT-18."""
+    repo = build_repo({**GUIDANCE, "frontend/package.json": "{}"})
+    subprocess.run(["git", "-C", str(repo), "rm", "-rq", "--", "frontend"], check=True)
+    (repo / "frontend").symlink_to("HEART.md")
+    subprocess.run(["git", "-C", str(repo), "add", "--", "frontend"], check=True)
+    facts = unlisted_facts(repo)
+    assert (list(facts), "accepted where" in facts["frontend"]) == (["frontend"], False)
+
+
+@pytest.mark.parametrize(
+    "files",
+    [{"frontend/package.json": "{}"}, {"frontend/index.html": "x"}],
+    ids=["a case entry whose condition is met", "a case entry whose condition fails"],
+)
+def test_a_declared_case_entry_is_green_and_never_unused(build_repo, files):
+    """ROOT-10, ROOT-18."""
+    repo = build_repo({**GUIDANCE, **files, CONFIG: root_declaring("frontend/")})
+    assert red(repo, Rule.ROOT_LAYOUT) == []

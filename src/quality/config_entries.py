@@ -2,12 +2,18 @@ import datetime
 import re
 import unicodedata
 from collections.abc import Callable, Hashable, Iterator
+from dataclasses import dataclass
 
 from quality import repository
 
 CONFIG_PATH = "quality/config.toml"
 BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 ONE_LINE_REASON = "a non-empty one-line reason"
+# ASCII only, so a lookalike name (a Cyrillic letter in it) is no repository.
+REPOSITORY_NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+ITEM_REFERENCE = re.compile(rf"(?:{REPOSITORY_NAME.pattern})?#[1-9][0-9]*")
+ITEM_REFERENCE_EXPECTED = "item as #<number> or <owner>/<repo>#<number>"
+RULING_KEYS = {"item", "date"}
 PATH_PATTERN_CHARACTERS = "*?["
 type ExampleLines = tuple[str, *tuple[str, ...]]
 
@@ -82,6 +88,13 @@ def unique_entries[Entry](
         entries[identity(entry)] = entry
     return tuple(entries.values())
 
+def declared_entries[Entry](
+    table: dict, key: str, heading: str, example: ExampleLines, read: Callable[[object, int], Entry]
+) -> tuple[Entry, ...]:
+    """The entries of a list in `table`, each read by `read`, a repeated one kept as declared: a reading by identity
+    alone has no say on how often an entry is declared, and the base's entries are only looked up."""
+    return tuple(read(raw, position) for position, raw in numbered_entries(table, key, heading, example))
+
 def entry_name(heading: str, position: int) -> str:
     """How a message names one entry of a list: its heading and 1-based position."""
     return f"{heading} entry {position}"
@@ -101,6 +114,37 @@ def is_one_line_text(value: object) -> bool:
 def is_date_without_time(value: object) -> bool:
     """A TOML date: tomllib reads a date with a time as a datetime, which is a date too."""
     return isinstance(value, datetime.date) and not isinstance(value, datetime.datetime)
+
+
+@dataclass(frozen=True)
+class Ruling:
+    """The operator's ruling that let an entry in: the item holding it and its day."""
+
+    item: str
+    date: datetime.date
+
+
+def refuse_unless_ruling(refuse: Callable[[str], ConfigError], item: object, date: object) -> None:
+    """The item and date every declaration that carries its own ruling needs."""
+    if not (isinstance(item, str) and ITEM_REFERENCE.fullmatch(item)):
+        raise refuse(ITEM_REFERENCE_EXPECTED)
+    if not is_date_without_time(date):
+        raise refuse("date as a TOML date without a time")
+
+
+def refuse_unless_ruled(refuse: Callable[[str], ConfigError], item: object, date: object, reason: object) -> None:
+    """The item, date and reason every declaration that carries its own ruling needs."""
+    refuse_unless_ruling(refuse, item, date)
+    if not is_one_line_text(reason):
+        raise refuse(ONE_LINE_REASON)
+
+
+def optional_ruling(refuse: Callable[[str], ConfigError], entry: dict) -> Ruling | None:
+    """The ruling an entry carries as `item` and `date` together, None when it carries neither; one of them alone is refused."""
+    if RULING_KEYS.isdisjoint(entry):
+        return None
+    refuse_unless_ruling(refuse, entry.get("item"), entry.get("date"))
+    return Ruling(entry["item"], entry["date"])
 
 
 def is_exact_file_path(path: object) -> bool:

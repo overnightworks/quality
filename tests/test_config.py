@@ -1,4 +1,5 @@
 import datetime
+import functools
 import json
 import os
 import re
@@ -21,7 +22,7 @@ from quality.config import (
     read_declarations,
     read_gate_settings,
 )
-from quality.config_allowances import LayoutAllowance
+from quality.config_allowances import ConfigSide, LayoutAllowance
 from quality.config_entries import CONFIG_PATH, ConfigError
 from quality.report import printable
 from quality.rules import Rule
@@ -43,10 +44,12 @@ from tests.support.door import CHECK_WORD, STAGED_WORDS, check_door, door_in
 from tests.support.generated_files import TYPES_FILE, generated_config
 from tests.support.specs import declaring, foreign_entry, implemented_entry
 
+load_head_settings = functools.partial(load_gate_settings, side=ConfigSide.HEAD)
+
 
 def test_reads_the_mandatory_job_names():
     """VERDICT-2, VERDICT-3: the mandatory job names come from [gate] mandatory_jobs."""
-    settings = load_gate_settings('[gate]\nmandatory_jobs = ["checks", "checks (3.12)"]')
+    settings = load_head_settings('[gate]\nmandatory_jobs = ["checks", "checks (3.12)"]')
     assert settings.mandatory_jobs == ("checks", "checks (3.12)")
 
 
@@ -70,7 +73,7 @@ def test_reads_the_mandatory_job_names():
 def test_refuses_a_config_that_does_not_name_mandatory_jobs(text):
     """VERDICT-3, VERDICT-4: a config without a non-empty mandatory_jobs list is refused."""
     with pytest.raises(ConfigError, match="mandatory_jobs"):
-        load_gate_settings(text)
+        load_head_settings(text)
 
 
 def test_a_repository_without_the_file_is_refused(tmp_path):
@@ -140,7 +143,7 @@ def test_reads_every_allowed_value_with_its_reason():
     """SECRET-16: [secrets] allow maps each rule, file and value hash to its reason, beside the gate keys."""
     text = f'[gate]\nmandatory_jobs = ["checks"]\n[secrets]\nallow = [{ENTRY}]'
     assert load_declarations(text).allow_lists.secrets == {Allowance("aws-access-token", "tests/fixture.py", HASH): "fixture value"}
-    assert load_gate_settings(text).mandatory_jobs == ("checks",)
+    assert load_head_settings(text).mandatory_jobs == ("checks",)
 
 
 @pytest.mark.parametrize("text", [None, '[gate]\nmandatory_jobs = ["checks"]'])
@@ -218,14 +221,14 @@ def test_a_repository_without_the_file_allows_nothing(tmp_path):
 )
 def test_legacy_findings_only_fail_when_the_repository_switched_them_on(text, expected):
     """SONAR-40: [gate] legacy is "report" unless the config says "fail"."""
-    assert load_gate_settings(text).legacy is expected
+    assert load_head_settings(text).legacy is expected
 
 
 @pytest.mark.parametrize("value", ['"warn"', '"FAIL"', '""', "true", "1"])
 def test_any_other_legacy_value_is_a_config_error(value):
     """SONAR-42: any value but "report" or "fail" is refused, naming the fix."""
     with pytest.raises(ConfigError, match='legacy.*"report" or "fail"'):
-        load_gate_settings(f'[gate]\nmandatory_jobs = ["checks"]\nlegacy = {value}')
+        load_head_settings(f'[gate]\nmandatory_jobs = ["checks"]\nlegacy = {value}')
 
 
 @pytest.mark.parametrize(
@@ -239,7 +242,7 @@ def test_any_other_legacy_value_is_a_config_error(value):
 )
 def test_the_sonar_key_turns_sonar_off_and_defaults_to_on(text, expected):
     """VERDICT-15, VERDICT-16: [gate] sonar is true unless the config says false."""
-    assert load_gate_settings(text).sonar is expected
+    assert load_head_settings(text).sonar is expected
 
 
 def test_one_read_of_the_config_gives_the_mandatory_jobs_and_the_legacy_mode(tmp_path):
@@ -262,7 +265,7 @@ def test_an_advisory_allowance_is_read_by_every_loader_that_reads_the_whole_conf
     text = f'[gate]\nmandatory_jobs = ["checks"]\n{allowance_config()}'
     (tmp_path / "quality").mkdir()
     (tmp_path / CONFIG_PATH).write_text(text)
-    assert load_gate_settings(text).advisory_allowances == (QWEN_ALLOWANCE,)
+    assert load_head_settings(text).advisory_allowances == (QWEN_ALLOWANCE,)
     assert read_declarations(tmp_path).allow_lists.advisories == load_declarations(text).allow_lists.advisories == (QWEN_ALLOWANCE,)
     assert load_declarations(text).allow_lists.secrets == {}
 
@@ -297,7 +300,7 @@ def test_a_declared_loosening_is_read_with_its_ruling(tmp_path):
 
 def test_a_config_without_declarations_declares_nothing():
     """VERDICT-52: a config with no [[gate.loosened]] entry declares no loosening."""
-    assert load_gate_settings('[gate]\nmandatory_jobs = ["checks"]').loosened == ()
+    assert load_head_settings('[gate]\nmandatory_jobs = ["checks"]').loosened == ()
 
 
 CHECK = [CHECK_WORD]
@@ -419,15 +422,15 @@ LAYOUT_RULE_IDS = "agents-md, file-suffix, script-header, script-name, test-impo
     ("entries", "message"),
     [
         (
-            '[[layout.allow]]\npath = "NOTES"\nrule = "size"\nreason = "r"\n',
+            '[[layout.allow]]\npath = "NOTES"\nrule = "size"\nreason = "r"\nends = "#2"\n',
             f"{CONFIG_PATH} [[layout.allow]] entry 1 needs rule as one of {LAYOUT_RULE_IDS}",
         ),
         (
-            '[[layout.allow]]\npath = "NOTES"\nrule = "file-suffix"\nreason = "r"\n' * 2,
+            '[[layout.allow]]\npath = "NOTES"\nrule = "file-suffix"\nreason = "r"\nends = "#2"\n' * 2,
             f'{CONFIG_PATH} [[layout.allow]] declares path = "NOTES" for rule = "file-suffix" twice; one declaration per rule and path',
         ),
         (
-            '[[layout.allow]]\npath = "NOTES"\nrule = [1]\nreason = "r"\n',
+            '[[layout.allow]]\npath = "NOTES"\nrule = [1]\nreason = "r"\nends = "#2"\n',
             f"{CONFIG_PATH} [[layout.allow]] entry 1 needs rule as one of {LAYOUT_RULE_IDS}",
         ),
     ],
@@ -442,11 +445,11 @@ def test_a_layout_allowance_refusal_names_the_rules_in_plain_words(entries, mess
 
 def test_a_layout_declaration_for_agents_md_is_read_as_written():
     """AGENTS-20: `agents-md` is a layout rule, so its entry is accepted by the one reader of `[[layout.allow]]`."""
-    entry = '[[layout.allow]]\npath = "docs/AGENTS.md"\nrule = "agents-md"\nreason = "r"\n'
-    assert load_declarations(entry).allow_lists.layout == (LayoutAllowance("docs/AGENTS.md", Rule.AGENTS_MD, "r"),)
+    entry = '[[layout.allow]]\npath = "docs/AGENTS.md"\nrule = "agents-md"\nreason = "r"\nends = "#2"\n'
+    assert load_declarations(entry).allow_lists.layout == (LayoutAllowance("docs/AGENTS.md", Rule.AGENTS_MD, "r", "#2"),)
 
 
-BAD_LAYOUT_ENTRY = '[[layout.allow]]\npath = "dir/"\nrule = "agents-md"\nreason = "r"\n'
+BAD_LAYOUT_ENTRY = '[[layout.allow]]\npath = "dir/"\nrule = "agents-md"\nreason = "r"\nends = "#2"\n'
 
 
 @pytest.mark.integration
@@ -470,7 +473,7 @@ def test_a_generated_file_is_read_by_every_loader_that_reads_the_whole_config(tm
     text = GATE_WITH_CHECKS + generated_config()
     (tmp_path / "quality").mkdir()
     (tmp_path / CONFIG_PATH).write_text(text)
-    assert load_gate_settings(text).generated_files == (TYPES_DECLARATION,)
+    assert load_head_settings(text).generated_files == (TYPES_DECLARATION,)
     assert read_declarations(tmp_path).allow_lists.generated == load_declarations(text).allow_lists.generated == (TYPES_DECLARATION,)
 
 
@@ -513,7 +516,7 @@ MALFORMED_GENERATED_IDS = [
 def test_a_malformed_generated_file_is_refused_with_the_entry_and_the_example(entry, named):
     """GENERATED-6: each malformed declaration is refused by both loaders, naming the entry and carrying the example."""
     text = entry + GATE_WITH_CHECKS
-    for load in (load_declarations, load_gate_settings):
+    for load in (load_declarations, load_head_settings):
         with pytest.raises(ConfigError) as refused:
             load(text)
         assert (refused.value.fact, refused.value.example) == (named, config.GENERATED_FILE_EXAMPLE)
@@ -536,7 +539,7 @@ def test_a_generated_file_needs_mandatory_jobs_that_are_non_empty_names(jobs, jo
     """GENERATED-6: a job is compared only with valid job names, so an unusable `mandatory_jobs` refuses a declaration
     in every loader."""
     text = f"[gate]\nmandatory_jobs = {jobs}\n" + generated_config(job=None) + f"job = {job}\n"
-    for load in (load_declarations, load_gate_settings):
+    for load in (load_declarations, load_head_settings):
         with pytest.raises(ConfigError, match="job as one of") as refused:
             load(text)
         assert "[[size.generated]] entry" in str(refused.value)
@@ -582,7 +585,7 @@ def test_spec_citation_declarations_are_read_as_written_by_every_loader_that_rea
     prefixes = (ForeignPrefix("LANG", "overnightworks/design"), ForeignPrefix("REQ-AUTH", "overnightworks/design"))
     allow_lists = read_declarations(tmp_path).allow_lists
     assert (allow_lists.foreign_prefixes, allow_lists.implemented_documents) == (prefixes, documents)
-    assert load_gate_settings(text).implemented_documents == documents
+    assert load_head_settings(text).implemented_documents == documents
 
 
 @pytest.mark.parametrize("text", [None, GATE_WITH_CHECKS], ids=["no config", "no declaration"])
@@ -609,7 +612,7 @@ def refused_by(refusal: Refusal, loader: str, tmp_path) -> ConfigError:
         read = {"allow_lists": read_declarations, "gate": read_gate_settings}[loader]
         argument = tmp_path
     else:
-        read = {"allow_lists": load_declarations, "gate": load_gate_settings, "staged": load_staged_secret_allowances}[loader]
+        read = {"allow_lists": load_declarations, "gate": load_head_settings, "staged": load_staged_secret_allowances}[loader]
         argument = refusal.text
     with pytest.raises(ConfigError) as refused:
         read(argument)
@@ -669,15 +672,15 @@ def test_an_example_entry_is_accepted_beside_a_gate_that_lists_its_job(table):
     document = tomllib.loads("\n".join(lines))
     job = document.get("size", {}).get("generated", [{}])[0].get("job", "checks")
     text = f"[gate]\nmandatory_jobs = [{json.dumps(job)}]\n" + "\n".join(lines)
-    assert load_gate_settings(text).mandatory_jobs == (job,)
-    entries_read = len(load_gate_settings(text).loosened) + sum(len(read) for read in vars(load_declarations(text).allow_lists).values())
+    assert load_head_settings(text).mandatory_jobs == (job,)
+    entries_read = len(load_head_settings(text).loosened) + sum(len(read) for read in vars(load_declarations(text).allow_lists).values())
     assert entries_read == 1
 
 
 def test_the_gate_example_is_accepted():
     """REFUSAL-18, VERDICT-4: the example of a missing or malformed [gate] is a valid gate."""
     text = "\n".join(config.EXAMPLE)
-    assert load_gate_settings(text).mandatory_jobs == tuple(tomllib.loads(text)["gate"]["mandatory_jobs"])
+    assert load_head_settings(text).mandatory_jobs == tuple(tomllib.loads(text)["gate"]["mandatory_jobs"])
 
 
 def test_the_secrets_example_holds_a_placeholder_hash_a_person_fills():
@@ -713,7 +716,7 @@ QUOTED = r'"(?:[^"\\]|\\.)*"'
 def test_a_repeated_value_is_quoted_so_that_its_printed_form_reads_back_as_the_value(character):
     """REFUSAL-20: the fact passed through the one escaping holds the value as a TOML string."""
     value = f"a{character}b"
-    entries = f'[[root.allow]]\nentry = "{toml_escaped(value)}"\nreason = "r"\n' * 2
+    entries = f'[[root.allow]]\nentry = "{toml_escaped(value)}"\nreason = "r"\nends = "#2"\n' * 2
     with pytest.raises(ConfigError) as refused:
         load_declarations(entries)
     printed = printable(refused.value.fact)
