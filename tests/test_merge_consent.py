@@ -90,8 +90,11 @@ def test_the_door_passes_an_owners_latest_review_at_the_head_with_the_printed_te
     code, out, err = run(gh, capsys, words=words)
     assert (code, err) == (0, "")
     assert out.startswith(rows_before_the_consent() + consent_row(review_id))
-    expected = (0, 0) if words else (1, 1)
-    assert (len(gh.merge_calls), len(gh.comments)) == expected
+    if words:
+        changed_nothing(gh)
+        assert gh.comments == []
+    else:
+        assert (len(gh.merge_calls), len(gh.comments)) == (1, 1)
 
 
 @pytest.mark.parametrize("words", [[], ["--dry-run"]], ids=["a run", "a dry run"])
