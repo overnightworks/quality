@@ -1,0 +1,8 @@
+claim_id = "efd712e2049a480594fc85ebf378bec7"
+agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
+role = "builder"
+base = "50e0e2be4303f0b5a25d1e15bc5e280ef7f48d86"
+branch = "dependabot/github_actions/actions-0f2f268ece"
+scope = [".github/workflows/ci.yml", ".github/workflows/gate.yml", ".github/workflows/release.yml", ".github/workflows/report.yml"]
+opened_commit = "4b7dfcaa66d967a866e64fbef3dcf358ad509cd1"
+whole_reason = "One Dependabot group bumps two pinned actions across the four workflows that use them; the pins move together."
