@@ -5,26 +5,43 @@ runs `quality merge`, or reads `quality --help` or a wrong invocation's pair.
 
 ## Help and wrong invocations
 
-`quality --help` shows the command tree wrapped at 80 columns (HELP-1), with `verdict` and `sonar` apart under "run by
-the gate" (HELP-2), and `quality check --help` explains each area in one entry and says which rules an area holds
-(HELP-3); every other command's help, `quality sonar --help` and its three commands' included, stands in a frame of its
-own (HELP-4); `quality --version` prints the installed version and what this repository's gate pins: its release, read
-from the tag comment of the pin (`@<commit sha> # v<tag>`), or why none is known (HELP-5); exit `0` (HELP-6). A call of
-a repository's own `gate.yml` counts only in quality's checkout, told by a git remote that names
-`overnightworks/quality` (HELP-7). Help goes to stdout with exit `0` (HELP-8), plain (HELP-9) and whole (HELP-10) in
-every stream. `-h` prints the same help as `--help` (HELP-11).
-A wrong invocation runs nothing, prints the `error:`/`next:` pair on stderr and exits `2` (HELP-12):
-`no command <word> · commands: …` for a first word that names no command (HELP-13), `no command · commands: …` for
-none (HELP-14), `quality sonar` refuses a word that names none of its commands, or none, the same way, with `next:`
-naming `quality sonar --help` (HELP-15), `no area <word> · areas: …` for the first word `quality check` does not know
-as an area (HELP-16) (an option may stand between areas) (HELP-17),
-`no pull request <word> · a pull request reads OWNER/REPO#N` for a `quality merge` argument of another form (HELP-18)
-(`no pull request · …` for none, `next:` naming `quality merge --help`) (HELP-19),
-`unknown argument · <what is left over>` for what the command does not take (HELP-20), and otherwise the parser's own
-sentence (HELP-21); `--dry-run needs --fix · nothing checked` for `--dry-run` without `--fix` (`next:` names
-`quality check --fix --dry-run`) (HELP-22); `--staged checks only secrets · nothing checked` for `--staged` with other
-areas or none (`next:` names `quality check secrets --staged`) (HELP-23); `next:` otherwise names the help of the
-command that took the stray word, or of the parser that refused (HELP-24).
+- HELP-1: `quality --help` shows the command tree wrapped at 80 columns,
+- HELP-2: with `verdict` and `sonar` apart under "run by
+  the gate",
+- HELP-3: and `quality check --help` explains each area in one entry and says which rules an area holds;
+- HELP-4: every other command's help, `quality sonar --help` and its three commands' included, stands in a frame of its
+  own;
+- HELP-5: `quality --version` prints the installed version and what this repository's gate pins: its release, read
+  from the tag comment of the pin (`@<commit sha> # v<tag>`), or why none is known;
+- HELP-6: exit `0`.
+- HELP-7: A call of
+  a repository's own `gate.yml` counts only in quality's checkout, told by a git remote that names
+  `overnightworks/quality`.
+- HELP-8: Help goes to stdout with exit `0`,
+- HELP-9: plain
+- HELP-10: and whole in
+  every stream.
+- HELP-11: `-h` prints the same help as `--help`.
+- HELP-12: A wrong invocation runs nothing, prints the `error:`/`next:` pair on stderr and exits `2`:
+- HELP-13: `no command <word> · commands: …` for a first word that names no command,
+- HELP-14: `no command · commands: …` for
+  none,
+- HELP-15: `quality sonar` refuses a word that names none of its commands, or none, the same way, with `next:`
+  naming `quality sonar --help`,
+- HELP-16: `no area <word> · areas: …` for the first word `quality check` does not know
+  as an area
+- HELP-17: (an option may stand between areas),
+- HELP-18: `no pull request <word> · a pull request reads OWNER/REPO#N` for a `quality merge` argument of another form
+- HELP-19: (`no pull request · …` for none, `next:` naming `quality merge --help`),
+- HELP-20: `unknown argument · <what is left over>` for what the command does not take,
+- HELP-21: and otherwise the parser's own
+  sentence;
+- HELP-22: `--dry-run needs --fix · nothing checked` for `--dry-run` without `--fix` (`next:` names
+  `quality check --fix --dry-run`);
+- HELP-23: `--staged checks only secrets · nothing checked` for `--staged` with other
+  areas or none (`next:` names `quality check secrets --staged`);
+- HELP-24: `next:` otherwise names the help of the
+  command that took the stray word, or of the parser that refused.
 
 Ruled by the operator:
 
@@ -37,53 +54,96 @@ Ruled by the operator:
 What a run that names areas judges and prints is in [rules](rules.md).
 
 ## Which release judges
+- PIN-1: `quality check` judges only where the running quality is the commit the repository's gate pins,
+- PIN-2: or quality's own
+  checkout run from its code.
+- PIN-3: The running commit is the one its installer recorded (`direct_url.json`),
+- PIN-4: or,
+  for an editable directory installation, that directory's HEAD while its work tree is clean and the version's release
+  tag names that HEAD.
+- PIN-5: Its first row names the release (`· release  v0.10.0  pinned in .github/workflows/ci.yml`,
+- PIN-6: with `fetched now · ` before `pinned in` when the run fetched it),
+- PIN-7: or `this checkout` with the running
+  version in quality's checkout.
+- PIN-8: Where no workflow calls the gate,
+- PIN-9: the pin is unknown,
+- PIN-10: its comment
+  misnames its commit
+- PIN-11: or it is below v0.10.0, the run is exit `2` with the `error:`/`next:` pair and no
+  row.
+- PIN-12: The one exception is the commit hook: where no workflow calls the gate, `quality check secrets --staged` judges
+  with the installed release and its row says `installed · no gate pins a release here`.
 
-`quality check` judges only where the running quality is the commit the repository's gate pins (PIN-1), or quality's own
-checkout run from its code (PIN-2). The running commit is the one its installer recorded (`direct_url.json`) (PIN-3),
-or, for an editable directory installation, that directory's HEAD while its work tree is clean and the version's release
-tag names that HEAD (PIN-4). Its first row names the release (`· release  v0.10.0  pinned in .github/workflows/ci.yml`
-(PIN-5), with `fetched now · ` before `pinned in` when the run fetched it (PIN-6)), or `this checkout` with the running
-version in quality's checkout (PIN-7). Where no workflow calls the gate (PIN-8), the pin is unknown (PIN-9), its comment
-misnames its commit (PIN-10) or it is below v0.10.0 (PIN-11), the run is exit `2` with the `error:`/`next:` pair and no
-row. The one exception is the commit hook: where no workflow calls the gate, `quality check secrets --staged` judges
-with the installed release and its row says `installed · no gate pins a release here` (PIN-12).
+- PIN-13: Where the gate pins another commit, `check` runs as that release:
+- PIN-14: the same process
+- PIN-15: with the
+  same words, folder, environment and terminal
+- PIN-16: and its exit;
+- PIN-17: `QUALITY_RUN_AT_PIN` marks that run,
+- PIN-18: which never runs another,
+- PIN-19: and a value of it that quality never sets is refused with the pair that names the
+  value and asks to unset the variable and run the command again.
+- PIN-20: It first makes sure the pinned commit is the
+  release the pin's comment names:
+- PIN-21: the first time on a machine by asking quality's remote,
+- PIN-22: which then
+  leaves an empty record per commit and release
+- PIN-23: in the user's cache directory (`$XDG_CACHE_HOME` where it is an
+  absolute path, else `~/.cache`, under `overnightworks-quality/releases`); removing it costs one more question
+  per release.
+- PIN-24: Then uv prepares exactly that commit,
+- PIN-25: from its cache offline where a record stands,
+- PIN-26: else
+  fetched.
+- PIN-27: Offline, the pair
+  `error: cannot fetch quality v0.10.0, which the gate pins · github.com did not answer` with
+  `next: quality check, once online` (exit `2`)
+- PIN-28: stands for every release this machine cannot run without
+  github.com: one it has not yet checked on quality's remote, even one uv holds, and a checked one whose
+  environment uv no longer holds.
+- PIN-29: Where github.com answered but uv could not prepare the release (it exited, did not
+  finish in its time limit or left no `quality` executable in its environment), it is exit `2`
+  ([Exit codes](output.md#exit-codes)) with `error: cannot prepare quality v0.10.1, which the gate pins · uv exited 1` and
+  two steps under a bare `next:` ([Refusals](output.md#refusals)), the uv command that shows why, then the run again.
+- PIN-30: Where uv is not installed the pair is
+  `error: cannot fetch quality v0.10.1, which the gate pins · uv is not installed` with
+  `next: install uv, then run quality check again`;
+- PIN-31: where it cannot start, the pair names the cause after
+  `cannot run uv:` and its one step is the uv command;
+- PIN-32: where the prepared quality cannot start, the pair is
+  `error: cannot start quality v0.10.1 · <cause>` with `next: quality check again`. While quality fetches or
+  prepares the release, a terminal's stderr shows the live line ([output](output.md#colour-and-the-live-line)).
+- PIN-33: Ctrl-C or
+  SIGTERM while uv prepares ends quality, uv and every process uv started.
+- PIN-34: In quality's checkout an installation
+  runs the checkout's code, prepared through `uv run`;
+- PIN-35: a preparation that fails there is
+  `error: cannot prepare this checkout · uv exited 2` with `next: uv run quality check`.
 
-Where the gate pins another commit, `check` runs as that release (PIN-13): the same process (PIN-14) with the same
-words, folder, environment and terminal (PIN-15) and its exit (PIN-16); `QUALITY_RUN_AT_PIN` marks that run (PIN-17),
-which never runs another (PIN-18), and a value of it that quality never sets is refused with the pair that names the
-value and asks to unset the variable and run the command again (PIN-19). It first makes sure the pinned commit is the
-release the pin's comment names (PIN-20): the first time on a machine by asking quality's remote (PIN-21), which then
-leaves an empty record per commit and release (PIN-22) in the user's cache directory (`$XDG_CACHE_HOME` where it is an
-absolute path, else `~/.cache`, under `overnightworks-quality/releases`) (PIN-23); removing it costs one more question
-per release. Then uv prepares exactly that commit (PIN-24), from its cache offline where a record stands (PIN-25), else
-fetched (PIN-26). Offline, the pair
-`error: cannot fetch quality v0.10.0, which the gate pins · github.com did not answer` with
-`next: quality check, once online` (exit `2`) (PIN-27) stands for every release this machine cannot run without
-github.com: one it has not yet checked on quality's remote, even one uv holds (PIN-28), and a checked one whose
-environment uv no longer holds. Where github.com answered but uv could not prepare the release (it exited, did not
-finish in its time limit or left no `quality` executable in its environment), it is exit `2`
-([Exit codes](output.md#exit-codes)) with `error: cannot prepare quality v0.10.1, which the gate pins · uv exited 1` and
-two steps under a bare `next:` ([Refusals](output.md#refusals)), the uv command that shows why, then the run again
-(PIN-29). Where uv is not installed the pair is
-`error: cannot fetch quality v0.10.1, which the gate pins · uv is not installed` with
-`next: install uv, then run quality check again` (PIN-30); where it cannot start, the pair names the cause after
-`cannot run uv:` and its one step is the uv command (PIN-31); where the prepared quality cannot start, the pair is
-`error: cannot start quality v0.10.1 · <cause>` with `next: quality check again` (PIN-32). While quality fetches or
-prepares the release, a terminal's stderr shows the live line ([output](output.md#colour-and-the-live-line)). Ctrl-C or
-SIGTERM while uv prepares ends quality, uv and every process uv started (PIN-33). In quality's checkout an installation
-runs the checkout's code, prepared through `uv run` (PIN-34); a preparation that fails there is
-`error: cannot prepare this checkout · uv exited 2` with `next: uv run quality check` (PIN-35).
-
-`quality merge` judges at the release its target's gate pins at the pull request's merge commit (PIN-36), read through
-`gh` before its first row (PIN-37) (each listed workflow's name checked before it shapes a request (PIN-38) and sent
-percent-encoded (PIN-39), every read at that commit (PIN-40)) and prepared as `check`'s is (PIN-41); its first row
-names it (PIN-42). A pull request refused from its own read (no admin right, closed, a draft: see
-[the door's refusals](#quality-merge)) stops at its row before the pin is read (PIN-43). No merge commit (PIN-44), no
-gate (PIN-45), an unknown pin (PIN-46), a pin below v0.10.0 (PIN-47) and a preparation that fails are the pair alone,
-nothing changed; so are a merge commit `gh` names that is no commit sha (PIN-48), a workflow listing or file `gh`
-cannot read, a listing that is no list of files and a workflow that is a symlink (PIN-49). For quality itself, where
-its gate calls its own `gate.yml`, the installed quality judges, never the pull request's own code:
-`· release  installed  <version> · quality's gate pins no release` (PIN-50).
+- PIN-36: `quality merge` judges at the release its target's gate pins at the pull request's merge commit,
+- PIN-37: read through
+  `gh` before its first row
+- PIN-38: (each listed workflow's name checked before it shapes a request
+- PIN-39: and sent
+  percent-encoded,
+- PIN-40: every read at that commit)
+- PIN-41: and prepared as `check`'s is;
+- PIN-42: its first row
+  names it.
+- PIN-43: A pull request refused from its own read (no admin right, closed, a draft: see
+  [the door's refusals](#quality-merge)) stops at its row before the pin is read.
+- PIN-44: No merge commit,
+- PIN-45: no
+  gate,
+- PIN-46: an unknown pin,
+- PIN-47: a pin below v0.10.0
+- PIN-48: and a preparation that fails are the pair alone,
+  nothing changed; so are a merge commit `gh` names that is no commit sha,
+- PIN-49: a workflow listing or file `gh`
+  cannot read, a listing that is no list of files and a workflow that is a symlink.
+- PIN-50: For quality itself, where
+  its gate calls its own `gate.yml`, the installed quality judges, never the pull request's own code:
+  `· release  installed  <version> · quality's gate pins no release`.
 
 Ruled by the operator:
 
