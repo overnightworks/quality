@@ -748,9 +748,10 @@ It applies these rules:
   as UTF-8 (a PEP 263 cookie such as utf-7) (SECURITY-21), [a missing or mismatched ruff](commands.md#scanners),
   ruff exiting other than 0 or 1
   (SECURITY-22), a `Failed to lint` warning (SECURITY-23), a report quality cannot read (SECURITY-24), a time-out
-  (SECURITY-25), two tracked files whose names ruff's report prints alike, as names that differ only in bytes that are not UTF-8 do (SECURITY-30), or a file with a finding whose comments Python's tokenizer cannot read (SECURITY-26) is `cannot judge`
-  (exit 2). One such file makes the whole rule `cannot judge` or `unparsable`, so the S findings of the other files are
-  not printed in that run (SECURITY-27); everything here but the tokenizer refuses the shared run, so `python-print`
+  (SECURITY-25), two tracked files whose names ruff's report prints alike, as names that differ only in bytes that are
+  not UTF-8 do (SECURITY-30), or a file with a finding whose comments Python's tokenizer cannot read (SECURITY-26) is
+  `cannot judge` (exit 2). One such file makes the whole rule `cannot judge` or `unparsable`, so the S findings of the
+  other files are not printed in that run (SECURITY-27); everything here but the tokenizer refuses the shared run, so `python-print`
   refuses with it (SECURITY-28). The other rules are judged either way. A deliberately invalid Python fixture takes
   another suffix, since a `.py` file is Python. No configuration switches the rule off, and a reasoned noqa asks
   `quality verdict` for no `[[gate.loosened]]` entry. Not judged, and waiting for usage evidence: notebooks, `.pyi`
@@ -933,7 +934,7 @@ It applies these rules:
 The `secret` rule scans the whole history reachable from `HEAD` with gitleaks (a key removed later is still found
 (SECRET-1); other branches the checkout fetched are not scanned (SECRET-2)), always with quality's own config
 (`src/quality/gitleaks.toml`): the repository's `.gitleaks.toml`, `.gitleaksignore` and `gitleaks:allow` comments have
-no effect (SECRET-3).
+no effect (SECRET-3). A repository with no commit has no history to scan, so it is exit `2` (SECRET-28).
 A known false positive is allowed by the value, not the place: the repository's
 `quality/config.toml` names the gitleaks rule, the file and the SHA-256 of the finding's secret (UTF-8, lowercase hex)
 with a reason (SECRET-16):
@@ -974,8 +975,9 @@ values, so it is shown only as the vet allows ([the vet](output.md#the-vet)); th
 
 The scan runs git without any attributes (not the repository's `.gitattributes` (SECRET-11), not `info/attributes`
 (SECRET-12), not the system or global file (SECRET-13)), so a `-diff` or `binary` line cannot hide a key. That needs
-git 2.41 or newer; an older git, or one whose version cannot be read, is exit `2` (SECRET-14), and so is a repository with no commit, which has no history to scan (SECRET-28). The system file is excluded by `GIT_ATTR_NOSYSTEM`, git's
-documented switch; that is pinned as an environment contract, not by a root-only real-file test (SECRET-15).
+git 2.41 or newer; an older git, or one whose version cannot be read, is exit `2` (SECRET-14). The system file is
+excluded by `GIT_ATTR_NOSYSTEM`, git's documented switch; that is pinned as an environment contract, not by a root-only
+real-file test (SECRET-15).
 
 Every allowed finding is a row `· <path:line>  allowed  <rule> · <reason>` (SECRET-26), and
 [the clean row](output.md#notes) counts them (`· 1 allowed`). An allowance that matched nothing is a row too, so a
