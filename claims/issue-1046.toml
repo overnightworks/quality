@@ -1,0 +1,8 @@
+claim_id = "87e79ec95cf04350a20d1259536a5864"
+agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
+role = "builder"
+base = "77828f510e261ec8deebcbbeefe7381a418058ce"
+branch = "claude/issue-1046-sonar-md-and-commands-md-help-and-releas"
+scope = ["docs/commands.md", "docs/sonar.md", "tests"]
+opened_commit = "69862913e01c306cafe2cc0be5bbe31fb2b08ec2"
+whole_reason = "One document and two sections of another converted to one form, plus at most the test docstrings that already prove their uncited IDs."
