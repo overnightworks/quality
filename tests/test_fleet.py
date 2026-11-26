@@ -374,7 +374,7 @@ def test_no_temporary_clone_outlives_a_stopped_run(public, scratch, tmp_path, st
     assert list(scratch.iterdir()) == []
 
 
-def test_the_heading_names_date_version_and_languages(fleet_report, public):
+def test_the_heading_names_date_and_version(fleet_report, public):
     """FLEET-41: the date of the run and the quality version."""
     before = datetime.now(UTC).date()
     _, output = fleet_report(public("dated", {}))

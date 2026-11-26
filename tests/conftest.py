@@ -28,19 +28,6 @@ from tests.support.secrets import FAKE_KEY
 from tests.support.terminal import PseudoTerminal
 from tests.support.verdict import set_gate_variables
 
-PROCESS_OR_SOCKET_FIXTURES = frozenset(
-    {
-        "build_repo",
-        "public",
-        "fake_git",
-        "stub_server",
-        "use_mise",
-        "installed_scanners",
-        "loopback",
-        "serve",
-        "release_checkout",
-    }
-)
 REAL_DATABASE_ROOT = advisories.DATABASE_ROOT
 MISE_DIRECTORIES = (
     ("MISE_DATA_DIR", "XDG_DATA_HOME", ".local/share"),
@@ -48,7 +35,6 @@ MISE_DIRECTORIES = (
     ("MISE_STATE_DIR", "XDG_STATE_HOME", ".local/state"),
 )
 REAL_XDG_VARIABLES = {variable: os.environ.get(variable) for _, variable, _ in MISE_DIRECTORIES}
-KIND_MARKERS = frozenset({"unit", "integration"})
 # The one owner of the audit event names that define `integration`.
 STARTING_EVENTS = frozenset(
     {
@@ -109,23 +95,12 @@ def _describe(event: str, detail: tuple) -> str:
 def _stop_recording_and_judge(item) -> None:
     global _recording
     events, _recording = _recording, None
-    if events and item.get_closest_marker("unit"):
+    if events and not item.get_closest_marker("integration"):
         pytest.fail(
-            f"unit test started a process or opened a socket: {_describe(*events[0])}. "
-            "Request a fixture that does (build_repo, ...) or mark the test @pytest.mark.integration.",
+            f"a test without the integration mark started a process or opened a socket: {_describe(*events[0])}. "
+            "Add @pytest.mark.integration to the test, its class or the module's pytestmark.",
             pytrace=False,
         )
-
-
-@pytest.hookimpl(tryfirst=True)
-def pytest_collection_modifyitems(session, config, items):
-    for item in items:
-        hand_marked = KIND_MARKERS & {mark.name for mark in item.iter_markers()}
-        if len(hand_marked) == 2:
-            raise pytest.UsageError(f"{item.nodeid} carries both unit and integration")
-        if not hand_marked:
-            starts_process = PROCESS_OR_SOCKET_FIXTURES.intersection(item.fixturenames) or item.get_closest_marker("scanner")
-            item.add_marker("integration" if starts_process else "unit")
 
 
 @pytest.hookimpl(wrapper=True)

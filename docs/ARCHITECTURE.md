@@ -154,10 +154,10 @@ when the server's ETag and the copy's own md5 agree ([rules](rules.md)). Agents 
 `gh` login, so the door is the agreed path, not a lock; a real lock (a token without admin rights) belongs to the
 machine's setup, not to quality.
 
-**Proof strategy.** A test's kind, `unit` or `integration`, follows from the markers in `pyproject.toml`, and
-`tests/conftest.py` fails a unit test that starts a process or opens a socket. A fake `mise` serves the scanners unless a
-test is marked `scanner`. Workflow tests sit in `tests/workflows/`. CI runs the whole suite with coverage and the gate on
-quality itself.
+**Proof strategy.** A test's layer is the `integration` mark in its own source, in the module's `pytestmark` or on the
+test or its class; a test without it is a unit test. `tests/conftest.py` fails a test without the mark that starts a
+process or opens a socket. A fake `mise` serves the scanners unless a test is marked `scanner`. Workflow tests sit in
+`tests/workflows/`. CI runs the whole suite with coverage and the gate on quality itself.
 
 **Errors.** The [exit contract](output.md#exit-codes) is 0 clean, 1 findings, 2 cannot judge, 130 interrupted.
 Cannot judge is never clean, and a rule that cannot judge refuses only itself.
