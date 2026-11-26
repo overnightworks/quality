@@ -1,6 +1,6 @@
 # Runbook: a pull request the gate keeps red and only the operator's consent merges
 
-Runbook for the operator and for the agent that runs the door. What the command does and refuses is in [commands.md](../commands.md#quality-merge).
+Runbook for the operator. What the command does and refuses is in [commands.md](../commands.md#quality-merge).
 
 Symptom: `quality / verdict` is red on a pull request and no change to the pull request can turn it green. Two cases:
 
