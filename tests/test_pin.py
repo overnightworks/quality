@@ -1,3 +1,4 @@
+import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -101,6 +102,10 @@ def check_out_later(scene: Scene, _monkeypatch: pytest.MonkeyPatch) -> None:
 
 def tag_the_dev_version(scene: Scene, _monkeypatch: pytest.MonkeyPatch) -> None:
     git(scene.tool, "tag", f"v{dev_version()}", scene.tagged)
+
+
+def without_a_work_tree(scene: Scene, _monkeypatch: pytest.MonkeyPatch) -> None:
+    shutil.rmtree(scene.tool / ".git")
 
 
 def inside_a_commit_hook(scene: Scene, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -219,6 +224,10 @@ CASES = [
         id="a directory installation checked out at another commit",
     ),
     pytest.param(
+        pinned_at(at_tagged), (), from_tool(), without_a_work_tree, False, reexecutes_at(at_tagged),
+        id="a directory installation that is no work tree",
+    ),
+    pytest.param(
         pinned_at(at_tagged), (), built_elsewhere, nothing, False, reexecutes_at(at_tagged), id="a directory installation built into another place",
     ),
     pytest.param(
@@ -265,6 +274,32 @@ def test_the_release_that_judges_here_is_decided_from_the_gate_pin(build_repo, t
         with pytest.raises(CannotJudge) as refused:
             pin.judging_release(judged, CHECK, staged, {}, running=running_here)
         assert (refused.value.reason.fact, refused.value.reason.next_steps) == wanted
+
+
+@pytest.mark.integration
+def test_a_directory_installation_whose_git_answers_with_what_is_not_text_re_executes(build_repo, tool, fake_git):
+    """PIN-4: a directory installation is the pinned commit only where git shows its work tree clean, and a git whose
+    answer cannot be read shows nothing."""
+    directory, tagged, later = tool
+    judged = build_repo(gate_call(tagged, "v0.10.0"))
+    fake_git("case \" $* \" in *\" status \"*) printf '\\377'; exit 0;; esac")
+    judging = pin.judging_release(judged, CHECK, False, {}, running=from_tool()(Scene(judged, directory, tagged, later)))
+    assert judging == ReleaseAtPin(Release("v0.10.0"), tagged)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("fetch", list(pin.Fetch))
+def test_a_child_in_quality_s_checkout_that_runs_other_code_refuses(build_repo, fetch):
+    """PIN-18, PIN-34: a run the guard marks in quality's checkout never re-executes, and where it is not the
+    checkout's code it refuses with the step that runs the checkout's."""
+    judged = build_repo(own_gate())
+    git(judged, "remote", "add", "remote0", f"https://github.com/{checkout.GATE_REPOSITORY}")
+    running = vcs("0.10.0", pinned_commit())(None)
+    with pytest.raises(CannotJudge) as refused:
+        pin.judging_release(judged, CHECK, False, {pin.RUN_AT_PIN_VARIABLE: fetch.value}, running=running)
+    assert (refused.value.reason.fact, refused.value.reason.next_steps) == (
+        "this is quality 0.10.0, not this checkout's code", (Command(f"uv run {CHECK}"),),
+    )
 
 
 def release_source(commit: str) -> str:
