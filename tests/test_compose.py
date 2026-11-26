@@ -24,11 +24,19 @@ from tests.support.merge import ONE_JOB
 
 
 @pytest.mark.integration
-def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys):
+@pytest.mark.parametrize(
+    ("body", "code", "open_ports"),
+    [
+        ('services:\n  web:\n    image: x\n    ports: !override\n      - "127.0.0.1:80:80"\n    profiles: !reset []\n', 0, 0),
+        ('services:\n  web: !override\n    image: x\n    ports:\n      - "0.0.0.0:80:80"\n', 1, 1),
+    ],
+    ids=["a list under a tag", "a mapping under a tag"],
+)
+def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys, body, code, open_ports):
     """COMPOSE-8: valid Compose YAML tags are read, and their ports still checked."""
-    body = 'services:\n  web:\n    image: x\n    ports: !override\n      - "127.0.0.1:80:80"\n    profiles: !reset []\n'
-    code, output = run(capsys, build_repo({"compose.yaml": body}))
-    assert (code, is_clean(output)) == (0, True)
+    repo = build_repo({"compose.yaml": body})
+    exit_code, output = run(capsys, repo)
+    assert (exit_code, len(rule_findings(repo, Rule.COMPOSE_PORT)), is_clean(output)) == (code, open_ports, code == 0)
 
 
 @pytest.mark.integration
@@ -37,6 +45,18 @@ def test_reset_clears_ports_and_is_clean(build_repo, capsys, tagged):
     """COMPOSE-8: `ports: !reset null` is valid Compose that clears the ports, so it is clean."""
     code, _ = run(capsys, build_repo({"compose.yaml": f"services:\n  web:\n    image: x\n    ports: {tagged}\n"}))
     assert code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "body",
+    ["volumes:\n  data: {}\n", "services: []\n", "services:\n  web:\n  worker: ~\n"],
+    ids=["no services", "services that is no mapping", "a service that is no mapping"],
+)
+def test_a_compose_file_without_a_service_mapping_has_nothing_to_judge(build_repo, capsys, body):
+    """COMPOSE-1: only the ports and network mode of a service are judged."""
+    code, output = run(capsys, build_repo({"compose.yaml": body}))
+    assert (code, is_clean(output)) == (0, True)
 
 
 @pytest.mark.integration

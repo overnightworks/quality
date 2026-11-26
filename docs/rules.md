@@ -1068,7 +1068,8 @@ The `pytest-workers` rule judges every pytest call that runs tests in a `run:` s
 not a pull request triggers it; only the `run:` of a step is read, as POSIX shell whatever its `shell:` says, and a composite
 action is not (PYTEST-1). The script is never run. The value is read line by line, as the shell reads it: a literal
 block scalar at each file line, a folded or quoted one with each line break kept at the scalar's first line; each `${{
-}}` on a line becomes one dynamic word; a line ending in a backslash joins the next; a `#` that starts a word outside
+}}` on a line becomes one dynamic word; a line ending in a backslash joins the next, and one that ends the
+script joins nothing; a `#` that starts a word outside
 quotes ends the command text; a pair of backticks that no quote or backslash protects is read as `$(` and `)`, and a
 last backtick left without a partner on the line is read as `$(` when a word follows it (a substitution that spans
 lines) and dropped otherwise; the words are split by Python's `shlex`, and `&&`, `||`, `;`, `|`, `&`, `(` and `)`,
@@ -1252,7 +1253,8 @@ extra `catalogs` in `[project] dependencies`, in a group of `[project.optional-d
 `[dependency-groups]`; the name and the extra are compared canonicalised, a version, a marker or a URL does not count, and
 an `{include-group}` entry is skipped (CATALOG-1). Only the root file counts, so a nested project is a named gap, and
 `[tool.design-catalogs]` without the declaration does not cover (CATALOG-6). A repository that is not covered sees no row
-and no workflow is read (CATALOG-3). A `pyproject.toml` that is not UTF-8 TOML, whose dependency list is no list or whose
+and no workflow is read (CATALOG-3). A `pyproject.toml` that is not UTF-8 TOML, whose dependency list is no list,
+whose group table is no table or whose
 entry is neither a requirement string nor an `{include-group}` table is exit `2` naming the file (CATALOG-4). The whole
 `[tool.design-catalogs]` table is design's to judge: a covered repository whose table design's `catalog_directory` refuses
 (any key, not only `catalogs`) is exit `2` naming `pyproject.toml` for each rule that needs the directory, `render-pass`

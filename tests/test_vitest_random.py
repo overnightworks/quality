@@ -88,6 +88,9 @@ def test_a_number_seed_is_unshuffled_and_its_fix_draws_the_seed_at_run_time(buil
         pytest.param("export default { test: { include: [] } }\n", id="plain object"),
         pytest.param("export default defineConfig({})\n", id="no test"),
         pytest.param("export default shared\n", id="an imported config"),
+        pytest.param("export default\n", id="nothing after export default"),
+        pytest.param("module.exports = { test: { sequence: { shuffle: true } } }\n", id="no export default and no defineConfig"),
+        pytest.param("export default { test: { sequence: {", id="an object that never closes"),
         pytest.param(
             "const other = defineConfig({ test: { sequence: { shuffle: true } } })\nexport default defineConfig({ test: {} })\n",
             id="a shuffling config that is not the exported one",
@@ -97,6 +100,12 @@ def test_a_number_seed_is_unshuffled_and_its_fix_draws_the_seed_at_run_time(buil
 def test_a_sequence_that_is_not_the_root_test_sequence_counts_for_nothing(build_repo, text):
     """VITEST-2: a project's own or a misplaced `sequence` is no shuffle, and a config the file does not hold is none."""
     assert shape(judged(build_repo, {PACKAGE: VITEST, CONFIG: text})) == [(UNSHUFFLED, CONFIG)]
+
+
+def test_a_file_without_export_default_reads_the_argument_of_its_first_define_config(build_repo):
+    """VITEST-2: only a file without `export default` falls back to its first `defineConfig(` argument."""
+    text = "module.exports = defineConfig({ test: { sequence: { shuffle: true } } })\n"
+    assert judged(build_repo, {PACKAGE: VITEST, CONFIG: text}) == []
 
 
 @pytest.mark.parametrize(

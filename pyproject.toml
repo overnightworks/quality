@@ -68,7 +68,7 @@ patch = ["subprocess", "execv"]
 relative_files = true
 
 [tool.coverage.report]
-fail_under = 99.22
+fail_under = 99.39
 precision = 2
 
 [tool.importlinter]
