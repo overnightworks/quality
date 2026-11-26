@@ -185,10 +185,12 @@ def test_a_cache_directory_that_cannot_be_written_is_a_run_without_a_copy(run, p
 
 
 @pytest.mark.integration
-def test_a_copy_that_cannot_be_read_counts_as_none_and_is_replaced(run, published_databases, copy_of, database_root):
-    """ADVISORY-43, ADVISORY-46: a copy that cannot be opened is no copy."""
+@pytest.mark.parametrize("unreadable", ["a link to itself", "a file whose read fails"])
+def test_a_copy_that_cannot_be_read_counts_as_none_and_is_replaced(run, published_databases, copy_of, database_root, unreadable):
+    """ADVISORY-43, ADVISORY-46: a copy that cannot be opened or read is no copy."""
     copy_of().parent.mkdir(parents=True)
-    copy_of().symlink_to(copy_of())  # a link to itself: opening it fails
+    # opening a link to itself fails; reading the process's own memory from offset 0 fails after the open
+    copy_of().symlink_to(copy_of() if unreadable == "a link to itself" else "/proc/self/mem")
     code, _ = run()
     assert (code, statuses(published_databases), copy_of().read_bytes()) == (0, [200], published_bytes(database_root))
 
