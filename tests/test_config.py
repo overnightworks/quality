@@ -625,7 +625,7 @@ REFUSALS = all_refusals()
     ids=[f"{refusal.id} ({loader})" for refusal in REFUSALS for loader in refusal.loaders],
 )
 def test_a_config_refusal_carries_its_whole_fact_and_its_example_apart(refusal, loader, tmp_path):
-    """O10, O11, REFUSAL-20, REFUSAL-21: every refusal names its table, entry position and unmet need as the fact,
+    """REFUSAL-20, REFUSAL-21, O10, O11: every refusal names its table, entry position and unmet need as the fact,
     without a Python repr, and carries the example the table owns as TOML lines, or none."""
     error = refused_by(refusal, loader, tmp_path)
     assert (error.fact, error.example) == (refusal.fact, refusal.example)

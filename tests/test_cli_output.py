@@ -332,7 +332,7 @@ def test_a_run_without_a_baseline_notes_the_debt_as_not_recorded_and_says_it_is_
 
 
 def test_a_baseline_without_clones_is_partly_measured_only(build_repo, capsys):
-    """O21, CLOSING-9: a ceiling file with no clones table makes the debt row count the clone pairs and end in the
+    """CLOSING-9, O21: a ceiling file with no clones table makes the debt row count the clone pairs and end in the
     partly mode, and the verdict says `debt ceiling partly measured, not enforced`."""
     repo = build_repo({**CLEAN_FILES, **KEPT_CONTRACT, BASELINE_PATH: "", "src/a.py": function("first", "a", "b"), "src/b.py": function("second", "c", "d")})
     code, out, err = frame_run(capsys, repo)
