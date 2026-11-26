@@ -810,6 +810,7 @@ It applies these rules:
     an index record that cannot be read makes the `files` row `✗ not checked` (exit `2`).
   - LAYOUT-9: Names compare in exact case,
   - LAYOUT-10: all findings print sorted by path and no configuration switches the rule off.
+
   Named gaps, waiting for usage evidence: a `tests/` folder elsewhere (`src/p/tests/`), a project with only `setup.py`,
   a project whose `src/` holds only modules, and a package named `support` or `fixtures`.
 
@@ -983,6 +984,7 @@ It applies these rules:
   - NAMING-12: a manifest with no name has nothing to judge.
   - NAMING-13: The repository's own name is red with a capital or with a role suffix (`-runtime`, `-service`, `-client`,
     `-server`, `-lib`, `-sdk`, `-api`), at `.git/config`, whatever files it tracks.
+
   `sonar.projectKey` stays SONAR-59's.
 
   - NAMING-14: One finding per name, `misnamed`, at its file, says the kind (`distribution`, `import`, `CLI`, `npm` or
