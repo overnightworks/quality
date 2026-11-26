@@ -974,7 +974,7 @@ values, so it is shown only as the vet allows ([the vet](output.md#the-vet)); th
 
 The scan runs git without any attributes (not the repository's `.gitattributes` (SECRET-11), not `info/attributes`
 (SECRET-12), not the system or global file (SECRET-13)), so a `-diff` or `binary` line cannot hide a key. That needs
-git 2.41 or newer; an older git is exit `2` (SECRET-14). The system file is excluded by `GIT_ATTR_NOSYSTEM`, git's
+git 2.41 or newer; an older git, or one whose version cannot be read, is exit `2` (SECRET-14), and so is a repository with no commit, which has no history to scan (SECRET-28). The system file is excluded by `GIT_ATTR_NOSYSTEM`, git's
 documented switch; that is pinned as an environment contract, not by a root-only real-file test (SECRET-15).
 
 Every allowed finding is a row `· <path:line>  allowed  <rule> · <reason>` (SECRET-26), and
