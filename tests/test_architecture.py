@@ -318,8 +318,9 @@ def test_a_config_linked_out_of_the_repository_cannot_be_judged(build_repo, else
 @pytest.mark.parametrize(
     ("link", "target", "refused"),
     [("src/shop/ext", "{elsewhere}", "src/shop/ext"),
-     ("src/shop/ext", "../../vendor", "src/shop/ext/out")],
-    ids=["a direct link", "a chain through a link inside the repository"],
+     ("src/shop/ext", "../../vendor", "src/shop/ext/out"),
+     ("src/shop/data.txt", "{elsewhere}/leak.py", "src/shop/data.txt")],
+    ids=["a direct link", "a chain through a link inside the repository", "a file link that is no .py name"],
 )
 def test_a_symlink_out_of_a_root_package_is_refused_before_grimp_reads(build_repo, elsewhere, capsys, monkeypatch,
                                                                        link, target, refused):
