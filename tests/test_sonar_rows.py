@@ -197,7 +197,7 @@ def test_an_empty_token_is_the_pair_with_its_own_step(capsys, properties_checkou
     "refusal", [refusal for refusal in all_refusals() if "gate" in refusal.loaders and refusal.text is not None], ids=lambda refusal: refusal.id
 )
 def test_every_config_sonar_cannot_read_is_its_fact_and_example_with_the_push_step(capsys, findings_checkout, refusal):
-    """O10, SONAR-39, SONAR-42, SONAR-102, SONAR-109, VERDICT-17."""
+    """SONAR-102, SONAR-109, O10, SONAR-39, SONAR-42, VERDICT-17."""
     findings_checkout(refusal.text)
     fake = sonar_answering()
     code, out, err = drive(capsys, ["findings"], PULL_REQUEST_ENVIRONMENT, fake)
@@ -215,7 +215,7 @@ def test_every_config_sonar_cannot_read_is_its_fact_and_example_with_the_push_st
 @pytest.mark.integration
 @pytest.mark.parametrize("step", ["properties", "findings"])
 def test_a_config_reads_alike_in_both_steps(capsys, properties_checkout, findings_checkout, step):
-    """O10, SONAR-102, VERDICT-17."""
+    """SONAR-102, O10, VERDICT-17."""
     if step == "properties":
         properties_checkout({"quality/config.toml": sonar_string_config(), "sonar-project.properties": CLEAN_PROPERTIES})
     else:
