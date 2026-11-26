@@ -6,30 +6,17 @@ import pytest
 from quality import cli
 from tests.support.door import RELEASE_ROW
 from tests.support.merge import (
-    B_REMOVED,
     LEGACY_RED,
     MERGE_SHA,
-    ONE_JOB,
-    SONAR_GREEN,
-    TWO_JOBS,
     FakeGh,
     Reexecuted,
     ReexecutionPort,
-    consenting,
-    declaring,
+    declared_loosening,
     door_ports,
     drive,
     gate_workflow,
-    loosened,
     run,
 )
-
-
-def declared_loosening(**consent):
-    return {
-        "checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED),
-        "reviews": consenting(declared=(loosened(B_REMOVED),), legacy_branch=None, **consent),
-    }
 
 
 def writes(gh):

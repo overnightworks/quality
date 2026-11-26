@@ -1,25 +1,20 @@
-from datetime import date
-
 import pytest
 
-from quality.config import Declaration
 from tests.support.merge import (
     B_REMOVED,
-    ONE_JOB,
     OWNER,
     REPO,
     REVIEW_ID,
     SHA,
-    SONAR_GREEN,
-    TWO_JOBS,
     FakeGh,
     changed_nothing,
     consent_block,
     consent_missing_pair,
     consent_missing_rows,
     consent_row,
-    declaring,
+    declared_loosening,
     log_body,
+    review,
     rows_before_the_consent,
     run,
 )
@@ -27,24 +22,19 @@ from tests.support.merge import (
 BLOCK = consent_block()
 OTHER = "reviewer"
 EARLIER_COMMIT = "c" * 40
-MEMBERS = {OWNER: "admin", OTHER: "member"}
-RULING = Declaration(B_REMOVED, "overnightworks/songmaker#1345", date(2026, 10, 20), "ruled")
+MEMBERS = {OWNER: ("admin", "active"), OTHER: ("member", "active")}
+
+
+def reviewed(*reviews, memberships=MEMBERS):
+    return {"reviews": list(reviews), "memberships": memberships}
 
 
 def owner_review(body=BLOCK, **fields):
-    return {"id": REVIEW_ID, "user": {"login": OWNER}, "state": "COMMENTED", "commit_id": SHA, "body": body, **fields}
+    return review(body, **fields)
 
 
-def reviewed(*reviews):
-    return {"reviews": list(reviews), "memberships": MEMBERS}
-
-
-def declared_loosening(**arguments):
-    return {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED, **arguments)}
-
-
-def a_later_review(**fields):
-    return owner_review(id=REVIEW_ID + 1, **fields)
+def a_later_review(body=BLOCK, **fields):
+    return review(body, review_id=REVIEW_ID + 1, **fields)
 
 
 MERGES = [
@@ -58,14 +48,14 @@ MERGES = [
         id="a push after the first review and a new review at the head",
     ),
     pytest.param(
-        reviewed(owner_review(), {**owner_review("fine"), "id": 9, "user": {"login": OTHER}, "state": "APPROVED"}), REVIEW_ID,
+        reviewed(owner_review(), review("fine", OTHER, "APPROVED", review_id=9)), REVIEW_ID,
         id="a later review by a member who is no owner leaves the owner's standing",
     ),
 ]
 REFUSALS = [
     pytest.param(reviewed(), id="no review at all"),
-    pytest.param(reviewed({**owner_review(), "user": {"login": OTHER}}), id="the latest review by a member who is no owner"),
-    pytest.param({"reviews": [owner_review(user={"login": "stranger"})], "memberships": MEMBERS}, id="a review by a login that is no member"),
+    pytest.param(reviewed(owner_review(login=OTHER)), id="the latest review by a member who is no owner"),
+    pytest.param(reviewed(owner_review(login="stranger")), id="a review by a login that is no member"),
     pytest.param(reviewed(owner_review(), a_later_review(body="LGTM")), id="an earlier owner review matches and the latest differs"),
     pytest.param(reviewed(owner_review(state="PENDING")), id="the owner's review pending"),
     pytest.param(reviewed(owner_review(state="DISMISSED")), id="the owner's review dismissed"),
@@ -77,6 +67,9 @@ REFUSALS = [
     pytest.param(reviewed(owner_review(f"{BLOCK}\nThanks.")), id="content after the block"),
     pytest.param(reviewed(owner_review(consent_block(legacy_branch=None))), id="the block without the legacy line where Sonar failed"),
     pytest.param(reviewed(owner_review(None)), id="a review without a body"),
+    pytest.param(
+        reviewed(owner_review(), memberships={OWNER: ("admin", "pending")}), id="the latest review by an owner whose membership is pending",
+    ),
 ]
 
 
@@ -111,9 +104,9 @@ def test_the_door_refuses_every_other_consent_with_the_text_and_the_pair(gh_kwar
 @pytest.mark.parametrize(
     ("gh_kwargs", "block"),
     [
-        pytest.param({}, f"```\nquality merge consent for {REPO}#7 at {SHA}\nlegacy findings on main\n```", id="Sonar failed"),
+        pytest.param({"reviews": []}, f"```\nquality merge consent for {REPO}#7 at {SHA}\nlegacy findings on main\n```", id="Sonar failed"),
         pytest.param(
-            declared_loosening(),
+            declared_loosening(reviews=[]),
             f"```\nquality merge consent for {REPO}#7 at {SHA}\n{B_REMOVED} · overnightworks/songmaker#1345 of 2026-10-20\nreason: ruled\n```",
             id="a declared loosening with Sonar green",
         ),
@@ -122,7 +115,7 @@ def test_the_door_refuses_every_other_consent_with_the_text_and_the_pair(gh_kwar
 def test_the_block_is_the_fenced_header_the_legacy_line_and_each_declaration(gh_kwargs, block, capsys):
     """MERGE-119: the consent text is one fenced block: the header naming the pull request and its head, `legacy findings on
     <default branch>` where Sonar failed and each declared loosening with its reason."""
-    code, out, _ = run(FakeGh(reviews=[], **gh_kwargs), capsys)
+    code, out, _ = run(FakeGh(**gh_kwargs), capsys)
     assert (code, out.endswith(f"\n{block}\n")) == (1, True)
 
 
@@ -130,20 +123,18 @@ def test_a_reason_with_fences_a_mention_and_a_control_character_stays_inside_the
     """MERGE-119, MERGE-123: every line of the block carries its own words, a reason is escaped on its line so none closes the
     fence early or mentions anyone, and the log comment names the review and its commit and carries no declaration."""
     reason = "``` @someone\x1b[8m hidden ```"
-    gh_kwargs = declared_loosening(reason=reason)
-    refused = run(FakeGh(reviews=[], **gh_kwargs), capsys)[1]
+    refused = run(FakeGh(**declared_loosening(reviews=[], reason=reason)), capsys)[1]
     block = refused[refused.index("\n```\nquality merge consent") + 1 :].splitlines()
     assert (block[0], block[-1], [line for line in block[1:-1] if set(line) <= {"`", " "}]) == ("```", "```", [])
     assert block[-2] == "reason: ``` @someone\\x1b[8m hidden ```"
-    consent = consent_block(declared=(Declaration(B_REMOVED, RULING.item, RULING.date, reason),), legacy_branch=None)
-    gh = FakeGh(reviews=[owner_review(consent)], **gh_kwargs)
+    gh = FakeGh(**declared_loosening(reason=reason))
     assert run(gh, capsys)[0] == 0
     assert gh.comments == [log_body(findings="")]
 
 
 def test_the_log_comment_stays_one_line_that_names_the_review_and_its_commit(capsys):
     """MERGE-123: the log comment names the consent review and the commit it was written at."""
-    gh = FakeGh(reviews=[owner_review(id=77)], memberships=MEMBERS)
+    gh = FakeGh(reviews=[owner_review(review_id=77)], memberships=MEMBERS)
     assert run(gh, capsys)[0] == 0
     assert gh.comments == [log_body(review_id=77)]
 

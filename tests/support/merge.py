@@ -125,12 +125,22 @@ def loosened(what, reason="ruled", item="overnightworks/songmaker#1345", day=dat
     return Declaration(what, item, day, reason)
 
 
+def declared_loosening(reviews=None, reason="ruled", **consent):
+    """The `FakeGh` arguments of a pull request that removes a mandatory job with one declaration, Sonar green; the owner
+    consents to its text (as `consent` shapes it) unless `reviews` names the reviews."""
+    declared = loosened(B_REMOVED, reason=reason)
+    return {
+        "checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED, reason),
+        "reviews": consenting(declared=(declared,), legacy_branch=None, **consent) if reviews is None else reviews,
+    }
+
+
 class FakeGh:
     """Answers the gh calls the command makes and records every one; `fail_on` names a call to break. `base_sha` is the
     live tip of the base branch, `pull_base_sha` the base sha the pull request still names (the tip when None), and
     `later_compare` the (tip, behind_by) the comparison answers from its second read on. `reviews` are the pull request's
-    reviews in the order GitHub lists them (an owner's consenting comment when None) and `memberships` the role of each
-    login in the organisation (the operator an owner when None); a login it does not hold is no member."""
+    reviews in the order GitHub lists them (an owner's consenting comment when None) and `memberships` the (role, state) of each
+    login in the organisation (the operator an active owner when None); a login it does not hold is no member."""
 
     def __init__(
         self, admin=True, checks=None, statuses=None, state="open", fail_on=(), interrupt_on=(), merge_lands=False,
@@ -158,7 +168,7 @@ class FakeGh:
         self.body, self.later_body, self.draft, self.pulls_read = body, later_body, draft, 0
         self.merged = False
         self.reviews = consenting() if reviews is None else reviews
-        self.memberships = {OWNER: "admin"} if memberships is None else memberships
+        self.memberships = {OWNER: ("admin", "active")} if memberships is None else memberships
         self.raw_answers = raw_answers or {}
         # the workflow files by commit and name; `listing` stands for the merge commit's listing as GitHub answers it
         self.workflows = {merge_sha: {"ci.yml": gate_workflow()}} if workflows is None else workflows
@@ -287,7 +297,8 @@ class FakeGh:
     def membership_answer(self, login):
         if login not in self.memberships:
             raise GhFailed("gh api failed: HTTP 404", not_found=True)
-        return json.dumps({"role": self.memberships[login], "state": "active"})
+        role, state = self.memberships[login]
+        return json.dumps({"role": role, "state": state})
 
     def compare_answer(self):
         tip, behind_by = self.later_compare if self.compares_read and self.later_compare else (self.base_sha, self.behind_by)
