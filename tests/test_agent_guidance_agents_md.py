@@ -9,6 +9,7 @@ from tests.support.check import check_output as run
 from tests.support.check import env_row_stands, is_clean, refusal_row, refusals, rule_findings
 from tests.support.git_repositories import git
 from tests.support.github_remote import HTTPS, SCP, SSH_URL, with_github_remote
+from tests.support.layout import declaring
 
 pytestmark = pytest.mark.integration
 
@@ -498,10 +499,6 @@ UNUSED_FIX = "delete every [[layout.allow]] entry for it from quality/config.tom
 MISPLACED, MISNAMED, UNUSED = FindingEvent.MISPLACED, FindingEvent.MISNAMED, FindingEvent.UNUSED
 
 
-def declaring(path: str, rule: str = "agents-md") -> str:
-    return f'[[layout.allow]]\npath = "{path}"\nrule = "{rule}"\nreason = "the tool reads it"\nends = "#2"\n'
-
-
 def placed(repo: Path, rule: Rule = Rule.AGENTS_MD) -> list[tuple[str, FindingEvent, str, str]]:
     """The path, event, fact and fix of each `rule` finding over `repo`."""
     return [(finding.path, finding.event, finding.fact, finding.fix) for finding in rule_findings(repo, rule)]
@@ -562,7 +559,7 @@ def test_a_root_agents_md_without_a_remote_refuses_the_whole_rule_nested_finding
 @pytest.mark.parametrize("rule", ["agents-md", "file-suffix"])
 def test_only_a_declaration_for_agents_md_clears_the_nested_path(build_repo, rule):
     """AGENTS-17: an entry with the rule `agents-md` and the exact path; the same path under another rule does not."""
-    config = ONE_JOB + declaring("docs/AGENTS.md", rule)
+    config = ONE_JOB + declaring("docs/AGENTS.md", rule=rule)
     repo = with_github_remote(build_repo({**ROOT, "docs/AGENTS.md": "x\n", CONFIG: config}))
     expected = [] if rule == "agents-md" else misplaced("docs/AGENTS.md")
     assert placed(repo) == expected
@@ -570,7 +567,7 @@ def test_only_a_declaration_for_agents_md_clears_the_nested_path(build_repo, rul
 
 def test_a_declaration_leaves_the_other_nested_file_reported(build_repo):
     """AGENTS-17."""
-    config = ONE_JOB + declaring("docs/AGENTS.md")
+    config = ONE_JOB + declaring("docs/AGENTS.md", rule=Rule.AGENTS_MD)
     repo = with_github_remote(build_repo({**ROOT, "docs/AGENTS.md": "x\n", "a/AGENTS.md": "x\n", CONFIG: config}))
     assert placed(repo) == misplaced("a/AGENTS.md")
 
@@ -580,19 +577,19 @@ def test_the_fix_s_clause_entered_as_written_clears_the_finding(build_repo):
     repo = with_github_remote(build_repo({**ROOT, "docs/AGENTS.md": "x\n"}))
     assert placed(repo) == misplaced("docs/AGENTS.md")
     (repo / CONFIG).parent.mkdir(exist_ok=True)
-    (repo / CONFIG).write_text(ONE_JOB + declaring("docs/AGENTS.md"))
+    (repo / CONFIG).write_text(ONE_JOB + declaring("docs/AGENTS.md", rule=Rule.AGENTS_MD))
     assert placed(repo) == []
 
 
 def test_a_declared_root_agents_md_is_no_finding_and_its_shape_is_still_judged(build_repo):
     """AGENTS-17."""
-    repo = with_github_remote(build_repo({"AGENTS.md": "# other\n", CONFIG: ONE_JOB + declaring("AGENTS.md")}))
+    repo = with_github_remote(build_repo({"AGENTS.md": "# other\n", CONFIG: ONE_JOB + declaring("AGENTS.md", rule=Rule.AGENTS_MD)}))
     assert [event for _, event, _, _ in placed(repo)] == [TITLE]
 
 
 def test_a_declared_root_agents_md_in_another_case_stays_misnamed(build_repo):
     """AGENTS-17, AGENTS-16."""
-    repo = build_repo({"agents.md": "x\n", CONFIG: ONE_JOB + declaring("agents.md")})
+    repo = build_repo({"agents.md": "x\n", CONFIG: ONE_JOB + declaring("agents.md", rule=Rule.AGENTS_MD)})
     assert placed(repo) == [("agents.md", MISNAMED, MISNAMED_FACT, MISNAMED_FIX)]
 
 
@@ -607,7 +604,7 @@ def test_a_root_agents_md_in_another_case_is_misnamed_and_its_content_is_never_j
 
 def test_a_declaration_no_tracked_file_has_is_one_unused_finding_and_deleting_it_clears_it(build_repo):
     """AGENTS-18."""
-    repo = with_github_remote(build_repo({**ROOT, CONFIG: ONE_JOB + declaring("docs/AGENTS.md")}))
+    repo = with_github_remote(build_repo({**ROOT, CONFIG: ONE_JOB + declaring("docs/AGENTS.md", rule=Rule.AGENTS_MD)}))
     assert placed(repo) == [("docs/AGENTS.md", UNUSED, UNUSED_FACT, UNUSED_FIX)]
     (repo / CONFIG).write_text(ONE_JOB)
     assert placed(repo) == []
@@ -615,7 +612,7 @@ def test_a_declaration_no_tracked_file_has_is_one_unused_finding_and_deleting_it
 
 def test_a_path_declared_untracked_under_two_rules_is_one_unused_finding_per_rule(build_repo):
     """AGENTS-18."""
-    config = ONE_JOB + declaring("docs/AGENTS.md") + declaring("docs/AGENTS.md", "file-suffix")
+    config = ONE_JOB + declaring("docs/AGENTS.md", rule=Rule.AGENTS_MD) + declaring("docs/AGENTS.md")
     repo = with_github_remote(build_repo({**ROOT, CONFIG: config}))
     assert [placed(repo, rule) for rule in (Rule.AGENTS_MD, Rule.FILE_SUFFIX)] == [
         [("docs/AGENTS.md", UNUSED, UNUSED_FACT, UNUSED_FIX)]
@@ -624,7 +621,7 @@ def test_a_path_declared_untracked_under_two_rules_is_one_unused_finding_per_rul
 
 def test_a_declaration_of_a_tracked_complying_file_is_clean(build_repo, capsys):
     """AGENTS-18."""
-    repo = with_github_remote(build_repo({**ROOT, "README.md": "x\n", CONFIG: ONE_JOB + declaring("README.md")}))
+    repo = with_github_remote(build_repo({**ROOT, "README.md": "x\n", CONFIG: ONE_JOB + declaring("README.md", rule=Rule.AGENTS_MD)}))
     code, output = run(capsys, repo)
     assert (code, placed(repo)) == (0, []), output
 

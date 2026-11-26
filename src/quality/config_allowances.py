@@ -63,7 +63,7 @@ class ConfigSide(Enum):
 
 @dataclass(frozen=True)
 class RootEntry:
-    """A root entry as the base reads it: its name, a file `Makefile` or a directory `specs/`, and nothing else."""
+    """A root entry as the base reads it: its name, such as the directory `specs/`, and nothing else."""
 
     entry: str
 

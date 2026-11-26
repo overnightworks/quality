@@ -1,6 +1,5 @@
 """The root-layout rule: every root entry on quality's base list, accepted by its case or declared with a reason."""
 
-import datetime
 import re
 import subprocess
 
@@ -12,6 +11,7 @@ from quality.output import FIX_LABEL, Glyph
 from quality.report import FindingEvent
 from quality.root_layout import ROOT_BASE_DIRECTORIES, ROOT_BASE_ENTRIES, ROOT_BASE_FILES
 from quality.rules import Rule
+from tests.support.allowances import RULED, RULING
 from tests.support.check import check_output, copy_block, env_row_stands, finding_rows, rows_of, rule_findings
 from tests.support.config_refusals import DATE_NEED, ENDS_NEED, KNOWN_KEYS, ONE_LINE_NEED, ROOT_KEYS_NEED
 from tests.support.git_repositories import put
@@ -250,9 +250,9 @@ def test_an_added_declaration_is_a_loosening_at_the_verdict(pull_request, capsys
     operator's door lands it, without it nothing does."""
     repo, commit_base = pull_request
     commit_base(None, ONE_JOB)
-    put(repo / CONFIG, ONE_JOB + root_declaring("frontend/", ruling=("#9", datetime.date(2026, 11, 24)) if ruled else None))
+    put(repo / CONFIG, ONE_JOB + root_declaring("frontend/", ruling=RULING if ruled else None))
     what = "root allowance adds frontend/ until #2"
-    expected = [declared(what, "#9 of 2026-11-24"), ONLY_DECLARED] if ruled else [f"    ! {what}", "! red"]
+    expected = [declared(what, RULED), ONLY_DECLARED] if ruled else [f"    ! {what}", "! red"]
     assert viewed(repo, capsys) == (1, expected)
 
 

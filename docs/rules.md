@@ -18,13 +18,14 @@ Reference for the engineer or operator who needs the exact behaviour of `quality
 
 The gate runs all seven ([gate](gate.md#gateyml)).
 
-Three statements hold for each of six declaration tables of `quality/config.toml` and the rule that reads it:
+Two statements hold for each of six declaration tables of `quality/config.toml` and the rule that reads it:
 `[[compose.allow]]`, `[[root.allow]]`, `[[layout.allow]]`, `[[python.allow]]`, `[[workflow.allow]]` and
 `[[spec_citations.foreign]]`. A malformed
 table other than the rule's own is forwarded with its validation error; the values of `[gate]` stay the verdict's to
-judge. For the four others a declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]` entry; an
-added `[[root.allow]]` or `[[layout.allow]]` entry is one, which [the verdict](gate.md#declared-loosenings) judges
-(VERDICT-76). A config reader older than the rule refuses its table as an unknown key.
+judge. A config reader older than the rule refuses its table as an unknown key. In the four tables other than
+`[[root.allow]]` and `[[layout.allow]]` a declaration is no loosening, so `quality verdict` asks for no `[[gate.loosened]]`
+entry; an added `[[root.allow]]` or `[[layout.allow]]` entry is one, which [the verdict](gate.md#declared-loosenings)
+judges (VERDICT-76).
 
 It applies these rules:
 
