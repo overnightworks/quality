@@ -395,7 +395,7 @@ It applies these rules:
     [note row](output.md#notes) `· <config>  unused  contract <name> ignores a -> b`, `none` nothing.
   - IMPORT-7: Each root
     package is the one tracked `<dir>/<name>/__init__.py` outside the tests,
-  - IMPORT-26: and grimp reads it from there
+    and grimp reads it from there
     even when quality itself has imported a package of that name or an untracked copy comes first on `sys.path` (IMPORT-7).
   - IMPORT-8: The rule cannot judge (exit `2`,
     before any caller code runs or any file outside is read)
@@ -432,7 +432,7 @@ It applies these rules:
   - IMPORT-25: a warning grimp gives while building the graph is a
     [note row](output.md#notes) `· <config>  warning  <grimp's message>`, before the contracts' notes.
 
-  No message quality writes names an absolute local path (IMPORT-26); grimp's own panic text is the named gap below.
+  - IMPORT-26: No message quality writes names an absolute local path; grimp's own panic text is the named gap below.
 
   Named gaps, waiting for usage evidence: when grimp panics, its native panic text, which names an absolute path, reaches
   stderr before quality's refusal; #1066 owns it, and it ends when quality captures that descriptor during the build
