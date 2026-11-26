@@ -624,8 +624,8 @@ def _stat_refusing_links(repository: str, path: str) -> os.stat_result:
 
 def _refuse_unreadable_source(repository: str, path: str, file_status: os.stat_result) -> None:
     """grimp opens and decodes every .py file it finds, and a stat succeeds on a file whose mode forbids the read or
-    that blocks an open (a FIFO), so all refusals come here first, in that order: file type, name, content. A coding cookie outside READABLE_COOKIES is refused, because quality
-    reads every source as UTF-8."""
+    that blocks an open (a FIFO), so all refusals come here first, in that order: file type, name, content.
+    A coding cookie outside READABLE_COOKIES is refused, because quality reads every source as UTF-8."""
     if not stat.S_ISREG(file_status.st_mode):
         raise _cannot_be_examined(repository, path, "not a regular file")
     try:
