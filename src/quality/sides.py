@@ -12,6 +12,7 @@ from types import MappingProxyType
 from quality import adapter_imports, architecture, checkout, layout, process, repository
 from quality.baseline_file import BASELINE_PATH, Baseline, SizeError, load_baseline, read_baseline
 from quality.config import GateSettings, LegacyMode, load_gate_settings, read_gate_settings
+from quality.config_allowances import ConfigSide
 from quality.config_entries import CONFIG_PATH, ConfigError
 from quality.ratchet import NO_RENAMES, Renames, head_step, renames_of
 from quality.report import CannotJudge, Step
@@ -88,7 +89,9 @@ def read_base(repo: Path, base_sha: str) -> Side:
         }
     except process.ProcessError as error:
         raise CannotJudge(str(error)) from error
-    return side_of(texts[CONFIG_PATH], texts[BASELINE_PATH], where, {name: texts[name] for name in architecture.CONFIG_FILES})
+    return side_of(
+        texts[CONFIG_PATH], texts[BASELINE_PATH], where, {name: texts[name] for name in architecture.CONFIG_FILES}, side=ConfigSide.BASE
+    )
 
 
 def _reads_tree(base: Side | None, head: Side) -> bool:
@@ -98,15 +101,16 @@ def _reads_tree(base: Side | None, head: Side) -> bool:
 
 def pull_files(
     base: Side | None, head: Side, read_tree: Callable[[bool], architecture.PullTree],
-    read_renames_listing: Callable[[bool], Renames],
+    read_renames_listing: Callable[[bool], Renames], renames_can_change_entries: bool,
 ) -> tuple[architecture.PullTree | None, Renames]:
     """What the pull request's two commits add to the judgement, read by the caller's readers: the tree when a module is
-    struck (its renames serve the baselines), else the renames when two baselines are compared, else nothing. A reader
-    is told whether to read the test modules' marks, which only a base that holds `[adapter_imports]` carries."""
+    struck (its renames serve the baselines), else the renames when two baselines are compared or the caller says they can
+    change the head's allow entries (`loosenings.renames_can_change`), else nothing. A reader is told whether to read the
+    test modules' marks, which only a base that holds `[adapter_imports]` carries."""
     carries_marks = base is not None and base.baseline is not None and base.baseline.adapter_imports is not None
     if _reads_tree(base, head):
         return read_tree(carries_marks), NO_RENAMES
-    if compares_baselines(base, head):
+    if compares_baselines(base, head) or renames_can_change_entries:
         return None, read_renames_listing(carries_marks)
     return None, NO_RENAMES
 
@@ -290,12 +294,15 @@ def read_pull_tree_of_pull(
         return read_pull_tree(repository, base_sha, merge_sha, isolated, FETCH_TIMEOUT_SECONDS, DOOR_WORDS, marks)
 
 
-def side_of(config: str | None, baseline: str | None, where: str, import_configs: Mapping[str, str | None] = MappingProxyType({})) -> Side:
-    """One side from its file texts, None where the side lacks the file; an unreadable file names `where`.
+def side_of(
+    config: str | None, baseline: str | None, where: str, import_configs: Mapping[str, str | None] = MappingProxyType({}), *, side: ConfigSide
+) -> Side:
+    """One side from its file texts, None where the side lacks the file; an unreadable file names `where`. The config is
+    read as `side` says, the head strictly and the base by its entries' identity.
 
     `import_configs` holds the text of each import-linter config file the side may have."""
     try:
-        settings = NO_BASE_SETTINGS if config is None else load_gate_settings(config)
+        settings = NO_BASE_SETTINGS if config is None else load_gate_settings(config, side=side)
     except ConfigError as error:
         raise UnusableConfig(where, error) from error
     try:

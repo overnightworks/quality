@@ -17,6 +17,9 @@ WHOLE_AND_STAGED: tuple[Loader, ...] = ("allow_lists", "gate", "staged")
 ITEM_NEED = "item as #<number> or <owner>/<repo>#<number>"
 DATE_NEED = "date as a TOML date without a time"
 ONE_LINE_NEED = "a non-empty one-line reason"
+ENDS_NEED = "ends as the open item whose landing removes it: #<number> or <owner>/<repo>#<number>"
+RULING_TOGETHER = "an item and a date together or not at all"
+ROOT_KEYS_NEED = f"exactly an entry, a reason and an ends, and {RULING_TOGETHER}"
 WORKFLOW_FILE_NEED = "file as the exact tracked path of one workflow: no folder, pattern, .. or absolute path"
 FILE_PATH_NEED = "path as the exact tracked path of one file: no folder, pattern, .. or absolute path"
 LAYOUT_RULE_NEED = "rule as one of agents-md, file-suffix, script-header, script-name, test-import, test-layout"
@@ -75,6 +78,10 @@ class ArrayTable:
 
 
 DATE = datetime.date(2026, 10, 21)
+ENDS_AND_RULING_NEEDS = (
+    ({"ends": None}, ENDS_NEED), ({"ends": "soon"}, ENDS_NEED), ({"ends": "#0"}, ENDS_NEED),
+    ({"item": "#2"}, DATE_NEED), ({"date": DATE}, ITEM_NEED), ({"item": "siehe Chat", "date": DATE}, ITEM_NEED),
+)
 ARRAY_TABLES = (
     ArrayTable(
         "gate.loosened", config.LOOSENED_EXAMPLE,
@@ -95,19 +102,20 @@ ARRAY_TABLES = (
         duplicate_example=False,
     ),
     ArrayTable(
-        "root.allow", config_allowances.ROOT_ALLOWANCE_EXAMPLE, {"entry": "plans/", "reason": "ruled"},
-        "exactly an entry and a reason",
+        "root.allow", config_allowances.ROOT_ALLOWANCE_EXAMPLE, {"entry": "plans/", "reason": "ruled", "ends": "#1"},
+        ROOT_KEYS_NEED,
         (({"entry": "a/b"}, "entry as one name directly in the root, a directory with a trailing /, not a path"),
-         ({"reason": ""}, ONE_LINE_NEED)),
+         ({"reason": ""}, ONE_LINE_NEED), *ENDS_AND_RULING_NEEDS),
         'declares entry = "plans/" twice; one entry per root entry',
     ),
     ArrayTable(
-        "layout.allow", config_allowances.LAYOUT_ALLOWANCE_EXAMPLE, {"path": "NOTES", "rule": "file-suffix", "reason": "ruled"},
-        "exactly a path, a rule and a reason",
+        "layout.allow", config_allowances.LAYOUT_ALLOWANCE_EXAMPLE,
+        {"path": "NOTES", "rule": "file-suffix", "reason": "ruled", "ends": "#1"},
+        f"exactly a path, a rule, a reason and an ends, and {RULING_TOGETHER}",
         (({"path": "dir/"}, FILE_PATH_NEED),
          ({"rule": "size"}, LAYOUT_RULE_NEED),
          ({"rule": [1]}, LAYOUT_RULE_NEED),
-         ({"reason": ""}, ONE_LINE_NEED)),
+         ({"reason": ""}, ONE_LINE_NEED), *ENDS_AND_RULING_NEEDS),
         'declares path = "NOTES" for rule = "file-suffix" twice; one declaration per rule and path',
     ),
     ArrayTable(

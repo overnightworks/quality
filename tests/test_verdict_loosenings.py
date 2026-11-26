@@ -8,6 +8,7 @@ import pytest
 from quality import output, verdict
 from quality.architecture import ADAPTER_CONTRACT_ID
 from quality.baseline_file import BASELINE_PATH
+from quality.config_allowances import ConfigSide
 from quality.ratchet import NO_RENAMES
 from quality.report import CannotJudge
 from quality.sides import side_of
@@ -51,8 +52,8 @@ def secret_blocks(*allowances: tuple[str, str, str, str]) -> str:
 
 
 def judged(base_config, head_config, baselines, imports):
-    base = side_of(base_config, baselines[0], "the base", {".importlinter": imports[0]})
-    head = side_of(head_config, baselines[1], "the head", {".importlinter": imports[1]})
+    base = side_of(base_config, baselines[0], "the base", {".importlinter": imports[0]}, side=ConfigSide.BASE)
+    head = side_of(head_config, baselines[1], "the head", {".importlinter": imports[1]}, side=ConfigSide.HEAD)
     return judge(head, base, [job(), job("B")], {}, 1, NO_RENAMES)
 
 
@@ -311,12 +312,12 @@ def test_a_spec_citation_table_loosens_only_by_an_added_id_or_its_removal(baseli
 def test_a_malformed_job_table_on_either_side_cannot_be_judged_naming_the_side(side, table):
     """TIMEOUT-18, BASELINE-20."""
     with pytest.raises(CannotJudge, match=rf"{BASELINE_PATH} at the {side}: "):
-        side_of(CHECKS, table, f"the {side}")
+        side_of(CHECKS, table, f"the {side}", side=ConfigSide(side))
 
 
 def test_a_job_limit_raise_judged_without_a_base_loosens_nothing():
     """TIMEOUT-18, BASELINE-27: a push or a merge group has no base, so no loosening is judged."""
-    head = side_of(CHECKS, jobs(e2e=45), "the head")
+    head = side_of(CHECKS, jobs(e2e=45), "the head", side=ConfigSide.HEAD)
     assert judge(head, None, [job(), job("B")], {}, 1, NO_RENAMES).loosenings == ()
 
 

@@ -7,6 +7,7 @@ from quality.report import FindingEvent
 from quality.rules import Area
 from tests.support.check import area_fact, area_finding_rows
 from tests.support.door import check_door
+from tests.support.layout import root_declaring
 from tests.support.scanners import fake_scanner, fake_zizmor, recording
 
 
@@ -107,7 +108,7 @@ def test_actionlint_is_never_handed_an_action_file(build_repo, served_scanners, 
 def test_an_action_file_under_a_name_like_an_option_is_judged(build_repo, installed_scanners, capsys):
     """WORKFLOW-6: a tracked name that begins like an option reaches zizmor as a file, so its finding is not lost."""
     action = "--gh-token=x/action.yml"
-    declared = '[[root.allow]]\nentry = "--gh-token=x/"\nreason = "a name zizmor must not read as an option"\n'
+    declared = root_declaring("--gh-token=x/", "a name zizmor must not read as an option")
     repo = build_repo({action: action_using("actions/checkout@v4"), "quality/config.toml": declared})
     assert check_door(repo) == 1
     assert (f"{action}:6", FindingEvent.INSECURE) in workflow_rows(capsys)

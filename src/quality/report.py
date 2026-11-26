@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from quality.config import Allowance
-from quality.config_allowances import LAYOUT_ALLOWANCE_HEADING
+from quality.config_allowances import DECLARATION_NEEDS, LAYOUT_ALLOWANCE_HEADING
 from quality.config_entries import CONFIG_PATH, ConfigError
 
 
@@ -85,7 +85,7 @@ CONFIG_EXAMPLE_LABEL = f"write it in {CONFIG_PATH} like this"
 
 
 def allowance_clause(rule: str) -> str:
-    return f"declare it in {CONFIG_PATH} with {LAYOUT_ALLOWANCE_HEADING}, its path, the rule {rule} and a reason"
+    return f"declare it in {CONFIG_PATH} with {LAYOUT_ALLOWANCE_HEADING}: its path, the rule {rule}, {DECLARATION_NEEDS}"
 
 
 def stale_declaration(path: str, rule: str) -> Finding:

@@ -55,7 +55,7 @@ from quality.cli_help import (
     SONAR_SCANNER_HELP,
     VERDICT_HELP,
 )
-from quality.config import REPOSITORY_NAME
+from quality.config_entries import REPOSITORY_NAME
 from quality.gh import GhRunner, run_gh
 from quality.merge import RemoteFor, github_remote, run_merge
 from quality.merge_run import PullRequestName, StartChild, run_merge_names

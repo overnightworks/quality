@@ -21,7 +21,7 @@ MAKEFILE = "Makefile"
 GNU_MAKEFILE = "GNUmakefile"
 CONFIG = "quality/config.toml"
 ROOT_MAKEFILE_ALLOWANCE = (
-    '[[root.allow]]\nentry = "Makefile"\nreason = "the root Makefile holds the make goals of the workflows"\n'
+    '[[root.allow]]\nentry = "Makefile"\nreason = "the root Makefile holds the make goals of the workflows"\nends = "#2"\n'
 )
 COVERED_MAKEFILE = (
     ".PHONY: lint wire-check words-check\n"

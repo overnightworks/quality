@@ -223,7 +223,8 @@ reason = "the operator ruled the requirement shelf machinery out"
 ```
 
 - VERDICT-53: `what` is exactly the text the verdict prints after `! ` for an undeclared loosening under its `loosenings` row,
-  unescaped; a declared line is never copied, since its ` · <item> of <date>` is no part of the `what`.
+  unescaped; a declared line is never copied, since its ` · <item> of <date>` is no part of the `what`, and neither is the
+  line of an added root or layout entry, which a ruling written on the entry declares (VERDICT-76).
 - VERDICT-54: The
   verdict prints a job name escaped as [Masking](output.md#masking) says, so a printed backslash is either such an
   escape or one the name holds itself; the head's files show which.
@@ -244,7 +245,8 @@ reason = "the operator ruled the requirement shelf machinery out"
 - VERDICT-60: A new entry that matches no
   loosening of the pull request is red: it stands under `! declarations  1 unmatched` as the door shows it. A base
   without `quality/config.toml` (the adoption) holds no entry, so every entry there is new and matches nothing.
-- VERDICT-61: Without a base (push, `merge_group`) no entry, allowance, generated-file or implemented-document declaration is judged.
+- VERDICT-61: Without a base (push, `merge_group`) no entry, allowance, root or layout entry, generated-file or
+  implemented-document declaration is judged.
 - VERDICT-62: A declared loosening stays red (exit `1`) and says so: below its row it stands as
   `! mandatory job "…" removed · overnightworks/songmaker#1345 of 2026-10-20`, with `reason: …` beneath.
 - VERDICT-63: When nothing else is red, the closing line is `! red · only declared loosenings · only the operator merges it · 4s`,
@@ -286,6 +288,32 @@ reason = "the operator ruled the requirement shelf machinery out"
   `spec citation leaves <path> to its implementers · <item> of <date>`, after the generated-file lines, and every other case
   of the bullet above holds for it (CITE-18). A [malformed `[spec_citations]` entry](rules.md) is exit `2` in the verdict and
   the door, naming the side. An implementer's `[[spec_citations.foreign]]` entry is no loosening.
+- VERDICT-76: A root or layout entry (`[[root.allow]]` and `[[layout.allow]]`, see the `root-layout` rule and the layout rules
+  under `quality check`) is a loosening of its own when it is added: a head `entry` the base lacks prints
+  `root allowance adds <entry> until <ends>`, a head `rule` and `path` the base lacks prints
+  `layout allowance adds <path> for <rule> until <ends>`, both after the implemented-document lines. `until` names the
+  open item whose landing removes the entry and is never compared. Every entry of an adoption (a base without
+  `quality/config.toml`) is added.
+- VERDICT-77: With `item` and `date` written on the entry, the operator's ruling that lets it in, the line is declared by
+  them, as `· <item> of <date>` with `reason: …` beneath. Without them the line is undeclared and has
+  `fix: write the operator's ruling that lets it in on the entry in quality/config.toml, its item and its date` beneath,
+  where `reason:` stands for a declared line. The verdict is red either way, and only [the operator's
+  door](commands.md#quality-merge) lands a declared one: an undeclared one stops the door, whose blocking row shows the
+  same line with the same `fix:`.
+- VERDICT-78: An inherited entry, a changed `reason`, `ends` or ruling and a deleted entry loosen nothing; a layout entry
+  whose `rule` changes is a new entry.
+- VERDICT-79: The base side of the two tables is read by identity only, `entry` for root and `rule` and `path` for
+  layout, and every other key and value is ignored, a repeated identity included, so a base written before `ends`
+  existed, or with a reason or a key this release refuses, is read, and the pull request that writes `ends` is no
+  loosening. A base entry without its identity keys, or with one that is not text, is exit `2` naming the base. The head
+  side is read strictly: an entry without `ends`, with an `ends` that is no item reference, or with only one of `item`
+  and `date` is a config it cannot read (VERDICT-39 to VERDICT-41), and `next:` shows the table's example.
+- VERDICT-80: A `[[gate.loosened]]` entry whose `what` is the text of such a line matches nothing and is red.
+- VERDICT-81: A layout `path`, and a root entry that names a file, moves when git's rename listing (BASELINE-11) maps the
+  base path to the head path: the head entry at the new path is inherited, not added. While the head still declares the
+  old name, the new one is added. A root directory has no rename git reports, so a directory declared under a new name
+  is added. The listing is read only when the head holds an entry whose identity the base lacks, so a run with no added
+  entry reads and fetches nothing more than before.
 - A baseline loosening (`size baseline raises …`, `clone baseline adds …`, `job limit baseline raises …`, `spec citation
   baseline adds …`, and `adapter import baseline raises <directory> <from> -> <to>`, `adapter import baseline adds
   <directory> <count>` or `adapter import baseline removed`, see "The baseline only falls" in [rules](rules.md)) is declared
