@@ -42,15 +42,20 @@ def file_text(name):
     return "".join(f"{name} row {number} that no other file shares\n" for number in range(30))
 
 
-def moves_in_head(pull_request, base, head, moves):
-    """The base commit holds every old path and `base`; the head commit moves each (old, new) and holds `head`."""
+def moves_in_head(pull_request, base, head, moves, appended="", head_files=None, text=file_text):
+    """The base commit holds every old path and `base`; the head commit moves each (old, new), appends `appended` to its
+    text, `text(path)` for a path, and holds `head` and `head_files`."""
     repo, commit_base = pull_request
     for old, _ in moves:
-        put(repo / old, file_text(old))
+        put(repo / old, text(old))
     commit_base(base)
     for old, new in moves:
+        (repo / new).parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "-C", str(repo), "mv", old, new], check=True)
+        put(repo / new, text(old) + appended)
     put(repo / BASELINE_PATH, head)
+    for path, contents in (head_files or {}).items():
+        put(repo / path, contents)
     commit_all(repo, "head moves the files")
 
 

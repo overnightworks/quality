@@ -69,8 +69,8 @@ It applies these rules:
     as the value they wrap;
   - COMPOSE-9: any other tag (`!foo`) and any YAML error is `cannot judge`,
   - COMPOSE-10: in one
-    line with its line and column (or its position for a character YAML refuses, `nested too deeply`, `a value does not
-    fit its tag`, or `not valid YAML`).
+    line with its line and column (or its position for a character YAML refuses, `nested too deeply`, or `a value does not
+    fit its tag`).
   - COMPOSE-11: A port that is neither text, a number nor a mapping whose `published` (or, without one, `target`) is text or a number
     is a finding.
   - COMPOSE-12: A `ports` that is neither a list nor empty, `0` or `false` is a finding too.

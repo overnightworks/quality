@@ -2,6 +2,7 @@
 and the door read the mark and the registration from the head commit."""
 
 import subprocess
+from pathlib import PurePosixPath
 
 import pytest
 
@@ -11,7 +12,7 @@ from tests.support.baselines import adapter_table, ceiling
 from tests.support.git_repositories import put
 from tests.support.merge import GATE_CONFIG, drive
 from tests.support.verdict import verdict_of
-from tests.support.verdict_renames import commit_all, moved_in_head, pulled
+from tests.support.verdict_renames import commit_all, moved_in_head, moves_in_head, pulled
 
 OLD, NEW = "tests/core/test_config.py", "tests/test_config.py"
 MARK = "pytestmark = pytest.mark.imports_adapter\n"
@@ -24,6 +25,12 @@ STRIKES_A_MODULE = {
     ".importlinter": contracts_ini({"guarded": IMPORT_CONTRACT}), "src/shop/__init__.py": "", "src/shop/db.py": "", DEAD_MODULE: "",
 }
 STRUCK = {".importlinter": contracts_ini({"guarded": {**IMPORT_CONTRACT, "source_modules": ["shop.db"]}}), DEAD_MODULE: None}
+
+
+def python_module(path: str) -> str:
+    """A Python module whose text no other path's shares, so git matches its rename."""
+    stem = PurePosixPath(path).stem
+    return "".join(f"{stem}_{number} = {number}\n" for number in range(30))
 
 
 def moved(counts: dict[str, int], pyproject: str) -> tuple[str, str, dict[str, str]]:
@@ -97,3 +104,26 @@ def test_a_moved_module_the_verdict_cannot_read_is_never_refused_for_it(capsys, 
     moved_unreadable(pull_request, base, adapter_table({"tests": 1}), unreadable)
     actual, output = verdict_of(pull_request[0], capsys)
     assert (actual, line is None or line in output, "cannot read" in output) == (code, True, False)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(("moves", "base_count", "code", "line"), [
+    pytest.param(
+        [("tests/core/test_a.py", "tests/test_a.py"), ("tests/core/test_b.py", "tests/test_b.py")], 2, 0, None,
+        id="modules that leave a directory together share its count",
+    ),
+    pytest.param(
+        [("tests/core/test_a.py", "scripts/a.py")], 1, 1, "adapter import baseline adds tests 1",
+        id="a module renamed out of every test project carries no count",
+    ),
+])
+def test_the_verdict_carries_counts_only_to_the_test_modules_that_hold_the_mark(capsys, pull_request, moves, base_count, code, line):
+    """BASELINE-19, ADAPTERIMPORT-29: each renamed module that carries the registered mark at the head takes one count
+    of its old directory to its new one, and a rename to a path no test project holds takes none."""
+    moves_in_head(
+        pull_request, adapter_table({"tests/core": base_count}), adapter_table({"tests": base_count}), moves, appended=MARK,
+        head_files={"pyproject.toml": REGISTERED},
+        text=python_module,
+    )
+    actual, output = verdict_of(pull_request[0], capsys)
+    assert (actual, line is None or line in output) == (code, True)
