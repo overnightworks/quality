@@ -86,8 +86,7 @@ PANIC_MODULE = "pyo3_runtime"
 MAX_ECHOED_SOURCE = 200
 PACKAGE_INIT = "__init__.py"
 # quality reads every source as UTF-8 (the content check and the contract refinement), so the walk judges only a
-# source that it and grimp read alike. The set holds the spellings both read as UTF-8 or ASCII; grimp's reader is not
-# readable from Python and maps names differently from it (U8 and cp65001 raise there), so the set stays a list of
+# source that it and grimp read alike. The set holds the spellings both read as UTF-8 or ASCII, so it stays a list of
 # probed spellings and every other spelling is refused.
 READABLE_COOKIES = frozenset({"utf-8", "utf8", "ascii", "us-ascii", "ansi_x3.4-1968"})
 NUL_IN_SOURCE = "source code cannot contain null bytes"
@@ -624,9 +623,8 @@ def _stat_refusing_links(repository: str, path: str) -> os.stat_result:
 
 
 def _refuse_unreadable_source(repository: str, path: str, file_status: os.stat_result) -> None:
-    """grimp opens and decodes every .py file it finds and panics on a name or content it cannot take, and a stat
-    succeeds on a file whose mode forbids the read or that blocks an open (a FIFO), so all refusals come here first,
-    in that order: file type, name, content. A coding cookie outside READABLE_COOKIES is refused, because quality
+    """grimp opens and decodes every .py file it finds, and a stat succeeds on a file whose mode forbids the read or
+    that blocks an open (a FIFO), so all refusals come here first, in that order: file type, name, content. A coding cookie outside READABLE_COOKIES is refused, because quality
     reads every source as UTF-8."""
     if not stat.S_ISREG(file_status.st_mode):
         raise _cannot_be_examined(repository, path, "not a regular file")

@@ -541,8 +541,8 @@ def _non_utf8_file_name(package):
                                      *map(_python_alias_of_utf8, ["utf_8", "UTF_8", "utf-8-sig", "U8", "cp65001",
                                                                   "UTF-8-unix"])])
 def test_a_source_grimp_cannot_take_is_refused_before_grimp_can_panic(build_repo, capfd, bounded, arrange):
-    """IMPORT-20, IMPORT-21, IMPORT-22, IMPORT-26: a .py file that is no regular file, has a name or content grimp
-    cannot decode, or declares an encoding other than UTF-8 is exit 2 naming it, with no Rust panic text, no absolute
+    """IMPORT-20, IMPORT-21, IMPORT-22, IMPORT-26: a .py file that is no regular file, has a name or content that
+    is not valid UTF-8, or declares an encoding other than UTF-8 is exit 2 naming it, with no Rust panic text, no absolute
     path, no hang."""
     repo = build_repo({**SHOP, ".importlinter": ini(FORBIDDEN)})
     named, reason = arrange(repo / "src" / "shop")
