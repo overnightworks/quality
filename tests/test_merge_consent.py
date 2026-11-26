@@ -132,6 +132,15 @@ def test_a_reason_with_fences_a_mention_and_a_control_character_stays_inside_the
     assert gh.comments == [log_body(findings="")]
 
 
+def test_a_review_holding_the_block_as_the_door_printed_it_consents_where_the_reason_holds_a_control_character(capsys):
+    """MERGE-119: the text the door requires is the block it prints, so an owner who pastes the printed block consents."""
+    reason = "ruled\x1b[8m hidden"
+    refused = run(FakeGh(**declared_loosening(reviews=[], reason=reason)), capsys)[1]
+    printed = refused[refused.index("```\nquality merge consent") :].rstrip("\n")
+    gh = FakeGh(**declared_loosening(reviews=[review(printed)], reason=reason))
+    assert run(gh, capsys)[0] == 0
+
+
 def test_the_log_comment_stays_one_line_that_names_the_review_and_its_commit(capsys):
     """MERGE-123: the log comment names the consent review and the commit it was written at."""
     gh = FakeGh(reviews=[review(BLOCK, review_id=77)], memberships=MEMBERS)
