@@ -157,3 +157,11 @@ def test_any_other_exception_of_the_check_is_not_caught(build_repo, covered, mon
     monkeypatch.setattr(logline_check, "check", broken_check)
     with pytest.raises(ArithmeticError):
         check_result(repo)
+
+
+def test_a_file_that_assigns_sys_unraisablehook_gets_an_open_note_for_its_own_setup(build_repo, covered):
+    """The host's own `sys.unraisablehook` is one of the setup assignments logline's check reports."""
+    path = "src/app/setup.py"
+    repo = build_repo(covered("import sys\n\nsys.unraisablehook = print\n", path))
+    notes = [note for note in rule_notes(repo, Rule.LOGGING) if note.path == path]
+    assert [(note.line, note.event, note.fact) for note in notes] == [(3, NoteEvent.OPEN, logline_check.Rule.OWN_SETUP.value)]
