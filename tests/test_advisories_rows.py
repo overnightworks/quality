@@ -202,6 +202,7 @@ def rows_and_fixes_of(block: list[BlockLine]) -> tuple[int, int]:
     return sum(isinstance(line, FindingLine) for line in block), sum(isinstance(line, FixLine) for line in block)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("edit", "name", "fixed", "fix_is"),
     [
@@ -239,12 +240,14 @@ def test_each_kind_of_advisory_finding_carries_its_event_fact_and_fix(drive_advi
     assert (run.code, run.err) == (1, "")
 
 
+@pytest.mark.integration
 def test_the_row_names_one_id_of_a_group_with_aliases(drive_advisories):
     """O42: the row holds the group's first id and no alias."""
     run = drive_advisories({"uv.lock": uv_lock()})
     assert (FIRST_ID in run.out, ALIAS in run.out + run.err, run.err) == (True, False, "")
 
 
+@pytest.mark.integration
 def test_the_dependencies_block_prints_what_the_rule_returned(drive_advisories):
     """ROW-2: the rows and the fix equal the rule's findings."""
     run = drive_advisories({"uv.lock": uv_lock()})
@@ -252,6 +255,7 @@ def test_the_dependencies_block_prints_what_the_rule_returned(drive_advisories):
     assert (run.out.splitlines()[0].split()[1], run.code, run.err) == (next(iter(Area)), 1, "")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(("config", "code"), [(None, 1), (entry(), 0)], ids=["no allowance", "an allowance"])
 def test_no_printed_line_starts_with_the_rule_id(drive_advisories, config, code):
     """ROW-7: no printed line starts with the rule id, whether a finding or a note stands."""
@@ -263,6 +267,7 @@ def test_no_printed_line_starts_with_the_rule_id(drive_advisories, config, code)
 PNPM_PACKAGE = npm_report("lodash", "lodash")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "edit", "rows_and_fixes"),
     [
@@ -281,6 +286,7 @@ def test_equal_fixes_share_one_fix_line_and_different_ones_do_not(drive_advisori
     assert (rows_and_fixes_of(block), run.code, run.err) == (rows_and_fixes, 1, "")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("lock", "files", "edit", "package"),
     [
@@ -302,6 +308,7 @@ def test_the_fix_of_each_lock_kind_holds_its_hint_and_its_folder(drive_advisorie
     assert (run.code, run.err) == (1, "")
 
 
+@pytest.mark.integration
 def test_a_nested_lock_keeps_its_folder_when_the_package_has_no_shell_word(drive_advisories, edited_report):
     """ADVISORY-29, O41, O43: the link replaces the command, and the folder stays."""
     name, lock = "py\x1byaml", "src/speech/uv.lock"
@@ -312,6 +319,7 @@ def test_a_nested_lock_keeps_its_folder_when_the_package_has_no_shell_word(drive
     assert (run.code, run.err) == (1, "")
 
 
+@pytest.mark.integration
 def test_two_tracked_names_of_one_lock_print_one_row_each_and_align(drive_advisories, build_repo):
     """ADVISORY-23, ADVISORY-24: one row per tracked name, the events at one column."""
     run = drive_advisories(linked_lock_repo(build_repo))
@@ -320,6 +328,7 @@ def test_two_tracked_names_of_one_lock_print_one_row_each_and_align(drive_adviso
     assert (sorted(line.location for line in rows), len(columns), run.err) == (["speech/uv.lock", "uv.lock"], 1, "")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("with_lock", "config", "expected", "words"),
     [
@@ -351,6 +360,7 @@ def test_each_allowance_finding_stands_as_a_row(drive_advisories, with_lock, con
     assert (run.code, run.err) == (1, "")
 
 
+@pytest.mark.integration
 def test_a_lock_path_and_an_allowance_with_control_characters_print_escaped_and_forge_no_line(drive_advisories, build_repo, tmp_path):
     """MASK-2, MASK-6, MASK-7: the location, the fix's folder and an allowance's fact print escaped and forge no
     line."""
@@ -368,6 +378,7 @@ def test_a_lock_path_and_an_allowance_with_control_characters_print_escaped_and_
     assert (run.code, run.err) == (1, "")
 
 
+@pytest.mark.integration
 def test_a_refused_area_leaves_the_dependencies_rows_and_the_pair_names_them_in_the_others(drive_advisories, use_mise, served_scanners):
     """REFUSAL-3, REFUSAL-10: another area's refusal leaves the dependencies rows standing and names its one step."""
     use_mise(lacking(served_scanners, scanners.GITLEAKS))
@@ -376,6 +387,7 @@ def test_a_refused_area_leaves_the_dependencies_rows_and_the_pair_names_them_in_
     assert (run.code, run.err) == (2, f"error: {cli.refusal_error(run.areas)}\nnext: {scanners.install_command()}\n")
 
 
+@pytest.mark.integration
 def test_a_refusing_osv_scanner_prints_no_note_and_no_extent_and_the_exact_pair(drive_advisories):
     """ADVISORY-13, REFUSAL-1, REFUSAL-2, REFUSAL-13: an osv-scanner that cannot judge refuses only itself: its row
     names the reason with no extent, and neither a note nor a line of its own stands for it."""
@@ -386,6 +398,7 @@ def test_a_refusing_osv_scanner_prints_no_note_and_no_extent_and_the_exact_pair(
     assert (run.code, run.err) == (2, f"error: {cli.refusal_error(run.areas)}\nnext: {cli.REFUSED_AREAS_NEXT.text}\n")
 
 
+@pytest.mark.integration
 def test_a_refused_area_leaves_the_note_row_and_the_exact_pair(drive_advisories, use_mise, served_scanners):
     """REFUSAL-3, REFUSAL-10: another area's refusal leaves the dependencies note standing and names its one step."""
     use_mise(lacking(served_scanners, scanners.GITLEAKS))
@@ -394,6 +407,7 @@ def test_a_refused_area_leaves_the_note_row_and_the_exact_pair(drive_advisories,
     assert (len(run.area.notes), run.code, run.err) == (1, 2, f"error: {cli.refusal_error(run.areas)}\nnext: {scanners.install_command()}\n")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "edit", "counts"),
     [
@@ -426,6 +440,7 @@ def test_a_clean_row_counts_the_lockfiles_and_the_packages_the_report_lists(driv
     assert (run.code, run.err) == (0, "")
 
 
+@pytest.mark.integration
 def test_a_report_with_two_malformed_packages_refuses_with_the_fact_of_the_first(drive_advisories, build_repo):
     """ADVISORY-15: the packages are read in order: the first malformed one names the refusal, whatever a later one
     lacks."""
@@ -448,6 +463,7 @@ def test_a_report_with_two_malformed_packages_refuses_with_the_fact_of_the_first
     assert facts[0] == facts[1]
 
 
+@pytest.mark.integration
 def test_the_packages_of_two_lock_files_add_up(drive_advisories, build_repo):
     """ADVISORY-20, O48: each tracked lock counts the packages the report lists for it."""
     other = "src/speech/uv.lock"
@@ -476,6 +492,7 @@ def test_a_lock_reached_by_two_tracked_names_counts_for_each(drive_advisories, b
     assert (run.code, run.err) == (0, "")
 
 
+@pytest.mark.integration
 def test_a_package_a_requirements_file_lists_as_a_pin_and_as_a_wheel_counts_once(drive_advisories, build_repo):
     """ADVISORY-21, O48: the pin and the wheel line of one package are read from two files under one tracked name."""
     wheel = f"{PACKAGE_NAME} @ https://example.invalid/{PACKAGE_NAME}-6.0.2-py3-none-any.whl --hash=sha256:{'ab' * 32}"
@@ -491,6 +508,7 @@ def test_a_package_a_requirements_file_lists_as_a_pin_and_as_a_wheel_counts_once
     assert (run.code, run.err) == (0, "")
 
 
+@pytest.mark.integration
 def test_two_packages_that_differ_only_in_their_ecosystem_stay_two_findings(drive_advisories, edited_report):
     """ADVISORY-23: the finding's identity is its lock, ecosystem, ids, fact and fix: equal facts in two ecosystems are
     two findings."""
@@ -504,6 +522,7 @@ def second_group_id(report_file: Path) -> str:
     return package_of(json.loads(report_file.read_text(encoding="utf-8")))["groups"][1]["ids"][0]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("lock", "files", "edit", "package", "version"),
     [
@@ -534,6 +553,7 @@ def test_an_allowed_advisory_stands_as_a_note_row_under_the_clean_row(drive_advi
     assert note.fact.startswith(f"{finding.fact}{SEPARATOR}")
 
 
+@pytest.mark.integration
 def test_two_allowed_advisories_stand_as_two_note_rows_and_the_row_counts_them(drive_advisories, edited_report):
     """ALLOW-6, O15, O49: one note per allowed group, in the order of the groups, and the row counts them."""
     report = edited_report("osv-scanner-finding.json", add_second_group)
@@ -546,6 +566,7 @@ def test_two_allowed_advisories_stand_as_two_note_rows_and_the_row_counts_them(d
     assert (run.code, run.err) == (0, "")
 
 
+@pytest.mark.integration
 def test_an_allowed_advisory_stands_after_the_findings_and_their_fix(drive_advisories, edited_report):
     """ALLOW-6, O15, ROW-10: the note follows the last `fix:`, and an area with a finding keeps its row without an
     extent."""
@@ -556,6 +577,7 @@ def test_an_allowed_advisory_stands_after_the_findings_and_their_fix(drive_advis
     assert (len(run.area.findings), len(run.area.notes), run.code, run.err) == (1, 1, 1, "")
 
 
+@pytest.mark.integration
 def test_an_allowance_that_ran_out_leaves_no_note(drive_advisories):
     """ALLOW-4, O45: an allowance past its date is an affected row, and no note stands for it."""
     run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry(until=datetime.date(2000, 1, 1))})
@@ -563,12 +585,14 @@ def test_an_allowance_that_ran_out_leaves_no_note(drive_advisories):
     assert (run.area.notes, [row.row.event for row in rows], run.err) == ((), [FindingEvent.AFFECTED], "")
 
 
+@pytest.mark.integration
 def test_an_allowed_advisory_leaves_no_line_before_the_area_rows(drive_advisories):
     """After the release row, the first line of the output is the first area's row."""
     run = drive_advisories({"uv.lock": uv_lock(), "quality/config.toml": entry()})
     assert (run.out.splitlines()[0].split()[1], run.err) == (next(iter(Area)), "")
 
 
+@pytest.mark.integration
 def test_an_owner_and_an_allowed_advisory_stand_under_their_own_rows(drive_advisories):
     """O15: the output owner stands under the code row and the allowed advisory under its own."""
     owner = "# ruff: noqa: T201 - the command line owns its output\nprint(1)\n"
@@ -579,6 +603,7 @@ def test_an_owner_and_an_allowed_advisory_stand_under_their_own_rows(drive_advis
     assert_block_prints(area_block(run.out, Area.DEPENDENCIES), (), run.area.notes)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("name", "identifier", "reason"),
     [

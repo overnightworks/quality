@@ -24,6 +24,7 @@ def held_ceiling(value: int = 62, clones: bool = True) -> str:
     return rendered(f'[function_lines."src/a.py"]\nlong_one = {value}\n' + ("\n[clones]\n" if clones else ""))
 
 
+@pytest.mark.integration
 def test_a_fix_lowers_each_entry_and_judges_the_tree_against_the_lowered_file(build_repo, capsys):
     """FIX-2, FIX-3: each entry falls to its measured value and the tree is judged clean against the lowered file."""
     held = '[ccn."src/cart.py"]\nbranchy = 19\n\n[file_lines]\n"src/orders.py" = 826\n\n[clones]\n'
@@ -41,6 +42,7 @@ def test_a_fix_lowers_each_entry_and_judges_the_tree_against_the_lowered_file(bu
     }
 
 
+@pytest.mark.integration
 def test_a_first_recording_counts_the_entries_it_records_and_runs_clean(build_repo, capsys):
     """FIX-11, FIX-18: a repository with no ceiling gets one recorded, its row counts the entries and the pairs, and
     the run is clean."""
@@ -52,6 +54,7 @@ def test_a_first_recording_counts_the_entries_it_records_and_runs_clean(build_re
     assert fixed(capsys, repo, *FIX_WORDS) == (0, printed, "")
 
 
+@pytest.mark.integration
 def test_a_first_recording_counts_the_clone_pairs_it_records(build_repo, capsys):
     """FIX-11, FIX-18: the row of a first recording counts the clone pairs it records beside the entries."""
     repo = build_repo({"src/a.py": long_function(62), "tests/test_a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")})
@@ -62,6 +65,7 @@ def test_a_first_recording_counts_the_clone_pairs_it_records(build_repo, capsys)
     assert fixed(capsys, repo, *FIX_WORDS) == (0, printed, "")
 
 
+@pytest.mark.integration
 def test_adopting_the_clones_table_says_the_ceiling_was_recorded(build_repo, capsys):
     """FIX-15, FIX-18: a ceiling without a `[clones]` table takes the pairs, and the row says `recorded` with the pairs
     counted."""
@@ -74,6 +78,7 @@ def test_adopting_the_clones_table_says_the_ceiling_was_recorded(build_repo, cap
     assert fixed(capsys, repo, *FIX_WORDS) == (0, printed, "")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "held", "printed", "written"),
     [
@@ -109,6 +114,7 @@ def test_what_grew_stays_a_finding_and_what_fell_is_the_only_change(build_repo, 
     assert (repo / BASELINE_PATH).read_text().endswith(before if written is None else written)
 
 
+@pytest.mark.integration
 def test_a_ceiling_that_renders_byte_for_byte_keeps_its_bytes(build_repo, capsys):
     """FIX-31: a ceiling that renders byte for byte keeps its bytes, and the fix says there is nothing to lower."""
     repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: held_ceiling()})
@@ -117,6 +123,7 @@ def test_a_ceiling_that_renders_byte_for_byte_keeps_its_bytes(build_repo, capsys
     assert (code, out.splitlines()[-1], (repo / BASELINE_PATH).read_bytes()) == (0, "✓ clean · nothing to lower · 1 area · <1s", before)
 
 
+@pytest.mark.integration
 def test_a_new_entry_is_never_added_to_a_held_ceiling(build_repo, capsys):
     """FIX-6: a file that is new debt stays a finding and never enters the held ceiling."""
     repo = build_repo({"src/a.py": long_function(62), "src/b.py": long_file(850), BASELINE_PATH: held_ceiling()})
@@ -125,6 +132,7 @@ def test_a_new_entry_is_never_added_to_a_held_ceiling(build_repo, capsys):
     assert "src/b.py" not in (repo / BASELINE_PATH).read_text()
 
 
+@pytest.mark.integration
 def test_the_fixed_ceiling_is_what_the_check_then_holds(build_repo, capsys):
     """FIX-2, FIX-3: the fix judges the tree against the file it wrote, and a later check finds nothing to lower."""
     repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: '[function_lines."src/a.py"]\nlong_one = 80\n\n[clones]\n'})
@@ -133,6 +141,7 @@ def test_the_fixed_ceiling_is_what_the_check_then_holds(build_repo, capsys):
     assert (code, "can fall" in out) == (0, False)
 
 
+@pytest.mark.integration
 def test_a_held_pair_the_tree_lost_is_dropped(build_repo, capsys):
     """FIX-9: a held pair the tree lost is dropped and the ceiling holds no pair."""
     held = '[clones."src/a.py"]\nrun = [["src/gone.py", "run"]]\n'
@@ -248,6 +257,7 @@ def refused_pair(next_step: str, found: str = "") -> str:
     return f"error: 1 of 1 area could not check{found}\nnext: {next_step}\n"
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "arrange",
     [
@@ -308,6 +318,7 @@ def held_by_the_root_commit(build_repo) -> Path:
     return repo
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "arrange",
     [lost_by_hand, lost_in_a_commit, held_by_the_index_only, held_by_a_merge_alone, held_by_the_root_commit],
@@ -325,6 +336,7 @@ def test_a_clones_table_git_holds_is_not_recorded_again(build_repo, capsys, arra
     assert (err, digest(repo)) == (refused_pair(restore_step()), before)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("held", [None, held_ceiling(value=80, clones=False)], ids=["no ceiling", "no table"])
 def test_a_shallow_clone_cannot_prove_a_first_recording(build_repo, elsewhere, capsys, held):
     """FIX-14: a shallow clone that cannot show the ceiling is new refuses and names `git fetch --unshallow`, after
@@ -341,6 +353,7 @@ def test_a_shallow_clone_cannot_prove_a_first_recording(build_repo, elsewhere, c
     assert load_baseline((clone / BASELINE_PATH).read_text()).size == {Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 62}
 
 
+@pytest.mark.integration
 def test_a_shallow_clone_lowers_a_ceiling_that_holds_its_table(build_repo, elsewhere, capsys):
     """FIX-3: a shallow clone whose ceiling holds its `[clones]` table lowers it, with no need for the whole history."""
     origin = build_repo({"src/a.py": long_function(62)})
@@ -370,6 +383,7 @@ def no_ceiling_anywhere(build_repo) -> tuple[Path, str]:
     return build_repo({"src/a.py": long_function(62)}), "rev-parse --is-shallow-repository"
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("arrange", [an_unlisted_history, a_table_the_index_holds, no_ceiling_anywhere], ids=["log", "cat-file", "rev-parse"])
 def test_a_failing_git_quotes_nothing(build_repo, fake_git, capsys, arrange):
     repo, command = arrange(build_repo)
@@ -380,6 +394,7 @@ def test_a_failing_git_quotes_nothing(build_repo, fake_git, capsys, arrange):
     assert (f"git {command} exited 9" in out, "SECRET-OF-GIT" in out + err) == (True, False)
 
 
+@pytest.mark.integration
 def test_a_restored_ceiling_lowers_and_keeps_what_grew(build_repo, capsys):
     """FIX-3, FIX-5: a ceiling restored from git is lowered where the tree shrank and keeps the entry that grew."""
     held = '[function_lines."src/a.py"]\nlong_one = 80\n\n[function_lines."src/b.py"]\nlong_one = 64\n\n[clones]\n'
@@ -426,6 +441,7 @@ def a_version_in_the_index(build_repo) -> Path:
     return repo
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "arrange",
     [a_version_in_history(b"[clones\n"), a_version_in_the_index],
@@ -503,6 +519,7 @@ def a_path_that_is_no_utf8(build_repo, elsewhere) -> Path:
     return repo
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("arrange", "refusal"),
     [
@@ -554,6 +571,7 @@ def a_shallow_clone_and_a_grown_entry(build_repo, elsewhere) -> Path:
     return shallow_clone(build_repo({"src/a.py": long_function(71), BASELINE_PATH: held_ceiling(value=60, clones=False)}), elsewhere)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("arrange", "rows"),
     [
@@ -593,6 +611,7 @@ def test_a_refused_fix_keeps_what_each_rule_judged(build_repo, elsewhere, capsys
     assert (code, [row in out for row in rows], tree_of(repo)) == (2, [True] * len(rows), before)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("refusal", check_refusals(), ids=lambda refusal: refusal.id)
 def test_a_config_refusal_keeps_its_fact_and_its_example_apart(build_repo, capsys, refusal):
     repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: held_ceiling(value=80)})
@@ -624,6 +643,7 @@ def an_import_contract_config_linked_out(build_repo, elsewhere) -> Path:
     return repo
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("areas", "arrange"),
     [(("files", "debt"), a_compose_file_that_does_not_parse), (("debt", "imports"), an_import_contract_config_linked_out)],
@@ -638,6 +658,7 @@ def test_another_areas_refusal_leaves_the_fix_standing(build_repo, elsewhere, ca
     assert load_baseline((repo / BASELINE_PATH).read_text()).size == {Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 62}
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("when", ["before", "after"])
 @pytest.mark.parametrize("verbosity", [(), ("-v",)], ids=["quiet", "-v"])
 def test_an_interrupted_fix_leaves_the_old_file_or_the_new_one(build_repo, monkeypatch, capsys, when, verbosity):
@@ -659,6 +680,7 @@ def test_an_interrupted_fix_leaves_the_old_file_or_the_new_one(build_repo, monke
     assert "debt" not in capsys.readouterr().out
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("verbosity", [(), ("-v",)], ids=["quiet", "-v"])
 def test_under_v_a_fix_keeps_its_write_and_exit(build_repo, capsys, verbosity):
     """VERBOSE-10: under -v a fix keeps its write, its row and its exit."""
@@ -668,6 +690,7 @@ def test_under_v_a_fix_keeps_its_write_and_exit(build_repo, capsys, verbosity):
     assert (repo / BASELINE_PATH).read_text().endswith('[function_lines."src/a.py"]\n"long_one" = 62\n\n[clones]\n')
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("sources", "base", "head", "exit_code"),
     [

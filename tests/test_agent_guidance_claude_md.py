@@ -11,6 +11,8 @@ from tests.support.check import env_row_stands, is_clean, refusal_row, refusals,
 from tests.support.github_remote import with_github_remote
 from tests.support.layout import assert_prints_as_kind, rule_ids_in
 
+pytestmark = pytest.mark.integration
+
 GUIDANCE = {"AGENTS.md": "# guidance\n"}
 IMPORT = "@AGENTS.md\n"
 

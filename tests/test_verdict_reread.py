@@ -101,6 +101,7 @@ def test_a_failed_jobs_read_names_its_cause(error, kind, fact, steps):
     assert (type(classified), classified.reason.fact, classified.reason.next_steps) == (kind, fact, steps)
 
 
+@pytest.mark.integration
 def test_a_502_jobs_page_is_named_as_githubs(stub_server):
     """READ-5: the real fetcher names GitHub's 502 as GitHub's answer, a type the re-read retries."""
     origin, _ = stub_server(reply(502, b""))
@@ -159,6 +160,7 @@ def reread(capsys, monkeypatch, run_env, pull_request):
     return run
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("answers", "options", "code", "expected", "slept"),
     [
@@ -469,6 +471,7 @@ def test_the_verdict_judges_the_first_settled_read_and_never_lets_a_red_reason_g
     assert reread(*answers, **options) == (code, expected, slept)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("error", "fact", "steps"),
     [
@@ -483,6 +486,7 @@ def test_a_failed_read_that_is_not_githubs_server_error_ends_the_verdict_at_once
     assert reread(verdict.unreadable_jobs("u", error)) == (2, [f"error: {fact}", *NEXT_LINES[steps]], 0)
 
 
+@pytest.mark.integration
 def test_a_body_that_is_not_utf_8_after_a_stale_read_keeps_the_note(reread, stub_server):
     """READ-4: the real fetcher names a body that is not UTF-8 as unreadable, after the note."""
     origin, _ = stub_server(reply(200, b"\xff"))
@@ -531,6 +535,7 @@ def exhaustive_layers(*layers: str) -> dict:
     return {"a": {"type": "layers", "layers": list(layers), "containers": ["shop"], "exhaustive": True}}
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("base", "head", "declared", "expected"),
     [
@@ -593,6 +598,7 @@ def changes(field: str) -> list[str]:
 GREEN = ["✓ green"]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("base", "head", "declared", "expected"),
     [
@@ -645,6 +651,7 @@ def test_a_change_that_only_forbids_more_is_no_loosening_and_every_other_change_
     assert judged_contracts(base, head, declared) == (0 if expected == GREEN else 1, expected)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "side", "message"),
     [
@@ -668,6 +675,7 @@ def test_import_contracts_that_cannot_be_told_apart_cannot_be_judged_naming_the_
     assert re.fullmatch(f"error: import-linter config at {place}: {re.escape(message)}", lines[0]), lines
 
 
+@pytest.mark.integration
 def test_a_head_import_config_that_links_out_of_the_repository_cannot_be_judged_naming_the_head(build_repo, elsewhere):
     """LOOSE-18: a config the head's tree cannot hand over is named, not read through the link."""
     repo = build_repo({"quality/config.toml": gate_config("A")})

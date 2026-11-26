@@ -7,6 +7,8 @@ from quality.rules import Rule
 from quality.workflow_rules import UNREADABLE_FACT
 from tests.support.check import check_output, check_result, rule_findings, rule_notes
 
+pytestmark = pytest.mark.integration
+
 WORKFLOW = ".github/workflows/ci.yml"
 WORKFLOWS_DIRECTORY = ".github/workflows"
 MISSING_FACT = "no workflow step runs design-catalogs --check on a pull request, directly or through make"

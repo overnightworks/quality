@@ -17,6 +17,8 @@ from tests.support.check import (
 )
 from tests.support.door import CHECK_WORD, door_in
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def fixture_origin() -> str:

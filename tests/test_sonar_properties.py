@@ -18,6 +18,8 @@ from tests.support.sonar import (
     work_in_scratch_directory,
 )
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture(autouse=True)
 def scratch_working_directory(monkeypatch, tmp_path):

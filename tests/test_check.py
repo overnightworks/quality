@@ -67,6 +67,7 @@ def non_utf8_filename_repo(build_repo, tmp_path):
     return build_repo({"docs/\udcff.txt": "x\n"})
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("arrange", "expected_code", "expected_text"),
     [
@@ -106,6 +107,7 @@ def test_quality_tracks_no_env_or_compose_file():
     assert ".env" not in tracked
 
 
+@pytest.mark.integration
 def test_a_tracked_workflow_missing_from_disk_is_never_handed_to_a_scanner(build_repo, use_mise, served_scanners, capsys):
     """SCANNER-13: a tracked workflow the checkout does not hold is no workflow, so no actionlint is needed."""
     use_mise(lacking(served_scanners, scanners.ACTIONLINT))
@@ -133,6 +135,7 @@ def files(tracked: dict[str, str]):
     return lambda build_repo, elsewhere: build_repo(tracked)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("arrange", "expected_code", "expected_lines", "rows"),
     [
@@ -185,6 +188,7 @@ def test_every_rule_is_judged_and_the_exit_is_the_worst(
     assert [len(rows_of(output, found)) for found in repo_findings] == [1] * len(rows), output
 
 
+@pytest.mark.integration
 def test_a_python_file_with_a_non_utf8_name_the_size_rule_cannot_parse_is_one_escaped_note(build_repo, capsys):
     """O22, ROW-16, MASK-4: a Python file the size rule cannot parse is one note row at its escaped path, with the
     note's own event and fact."""
@@ -204,6 +208,7 @@ def uncovered_rules() -> list[Rule]:
     ]
 
 
+@pytest.mark.integration
 def test_a_run_without_flags_judges_every_rule(build_repo, capsys):
     """CHECK-3, LITERAL-15: no scan is ever skipped, so a plain run judges every rule in run order, the literal-text rule,
     the locator-text rule and the logging rule of a repository that is not covered excepted."""
@@ -214,6 +219,7 @@ def test_a_run_without_flags_judges_every_rule(build_repo, capsys):
     )
 
 
+@pytest.mark.integration
 def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, monkeypatch):
     """A finding under a rule the check was not given is never dropped into a clean exit."""
     foreign = Finding("workflow-other", ".env", None, "an unlisted rule", "none", event=FindingEvent.TRACKED)
@@ -223,6 +229,7 @@ def test_a_finding_under_a_rule_its_check_does_not_judge_fails_loud(build_repo, 
         check_door(repo)
 
 
+@pytest.mark.integration
 def test_a_refusing_workflow_scanner_stops_no_other_workflow_rule(build_repo, served_scanners, elsewhere, capsys):
     """CLOSING-12, CLOSING-14: when actionlint cannot judge, zizmor still runs and its finding prints under its own
     rule; stderr holds the refusal pair alone, its counts the scenario's one refused area and one finding in it."""
@@ -243,6 +250,7 @@ def test_a_refusing_workflow_scanner_stops_no_other_workflow_rule(build_repo, se
     assert [int(number) for number in re.findall(r"\d+", error)] == [1, len(Area), 1, 1]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("case", "reinstall_shown", "fragment"),
     [
@@ -289,6 +297,7 @@ def test_a_zizmor_quality_cannot_find_or_trust_refuses_only_workflow_security(
     assert fragment is None or fragment in output
 
 
+@pytest.mark.integration
 def test_a_zizmor_planted_in_the_scanner_directory_is_never_run(build_repo, served_scanners, elsewhere, capsys):
     """SCANNER-15: the verdict comes from quality's installation, not from the directory mise serves."""
     marker = elsewhere / "ran"
@@ -301,6 +310,7 @@ def test_a_zizmor_planted_in_the_scanner_directory_is_never_run(build_repo, serv
     assert (code, marker.exists()) == (0, False), capsys.readouterr()
 
 
+@pytest.mark.integration
 def test_an_index_record_quality_cannot_read_refuses_exactly_the_rules_that_read_index_modes(build_repo, fake_git):
     repo = build_repo({})
     fake_git(r"""case " $* " in *" -s "*) printf '100644 no-tab\0'; exit 0;; esac""")
@@ -378,6 +388,7 @@ def test_an_area_tells_whether_all_or_some_of_its_judging_rules_only_measured(ve
     assert area_of(*verdicts).measurement is expected
 
 
+@pytest.mark.integration
 def test_a_run_holds_one_area_verdict_per_area_in_area_order(build_repo):
     """ROW-8: a run holds one area verdict per area, in the order the rows stand."""
     result = check_result(build_repo({}), installed_ruff, never_located)
@@ -385,6 +396,7 @@ def test_a_run_holds_one_area_verdict_per_area_in_area_order(build_repo):
     assert [rule for area in result.areas for rule in (v.rule for v in area.verdicts)] == uncovered_rules()
 
 
+@pytest.mark.integration
 def test_the_run_hands_each_area_to_its_reporter_once_in_row_order(build_repo):
     """ROW-8: a run hands each area to its reporter once, in the order the rows stand."""
     reported = []
@@ -409,6 +421,7 @@ def events_of_run(build_repo, tmp_path, **keywords) -> list[tuple]:
     return events
 
 
+@pytest.mark.integration
 def test_the_run_takes_each_scanner_s_line_down_before_it_reports_its_area(build_repo, tmp_path):
     workflow_scanners = [scanner.name for scanner in scanners.WORKFLOW_SCANNERS.values()]
     scanned = [
@@ -424,6 +437,7 @@ def test_the_run_takes_each_scanner_s_line_down_before_it_reports_its_area(build
     assert events_of_run(build_repo, tmp_path) == expected
 
 
+@pytest.mark.integration
 def test_the_run_holds_the_line_up_only_around_a_named_areas_scanners(build_repo, tmp_path):
     expected = [
         ("up", Area.SECRETS, scanners.GITLEAKS),
@@ -436,6 +450,7 @@ def test_the_run_holds_the_line_up_only_around_a_named_areas_scanners(build_repo
     assert events_of_run(build_repo, tmp_path, named=(Area.CODE, Area.SECRETS)) == expected
 
 
+@pytest.mark.integration
 def test_every_rule_a_malformed_config_refuses_carries_its_fact_and_its_example_as_fields(build_repo):
     """O10, REFUSAL-20: the adapter turns a ConfigError into a refusal whose reason holds the error's fact and an
     Example step; the refusals of one run are all the same reason."""
@@ -445,6 +460,7 @@ def test_every_rule_a_malformed_config_refuses_carries_its_fact_and_its_example_
     assert reasons == {Reason(fact, (Example(report.CONFIG_EXAMPLE_LABEL, config.GENERATED_FILE_EXAMPLE),))}
 
 
+@pytest.mark.integration
 def test_a_config_refusal_without_an_example_carries_no_step(build_repo):
     """REFUSAL-19: an error without an example becomes a refusal without a step."""
     repo = build_repo({"quality/config.toml": "[secrets]\nignore = []\n"})
@@ -464,6 +480,7 @@ def check_over(build_repo, capsys, refusal: Refusal) -> tuple[int, list[str], li
     return code, captured.out.splitlines(), captured.err.splitlines()
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("refusal", check_refusals(), ids=lambda refusal: refusal.id)
 def test_check_names_a_config_refusal_on_its_rows_and_shows_the_example_once_under_next(build_repo, capsys, refusal):
     """O10, REFUSAL-8, REFUSAL-15, REFUSAL-16, REFUSAL-17, REFUSAL-19, REFUSAL-20: each refused area's row ends in the
@@ -486,6 +503,7 @@ def test_check_names_a_config_refusal_on_its_rows_and_shows_the_example_once_und
     assert Counter(line for line in err if line in indented) == Counter(indented)
 
 
+@pytest.mark.integration
 def test_a_path_in_conflict_counts_once_among_the_tracked_paths(build_repo):
     """O16: git lists an unmerged path once per stage; the extent counts distinct paths."""
     repo = build_repo({"README.md": "x\n", "a.txt": "x\n"})
@@ -565,6 +583,7 @@ def database_requests(monkeypatch) -> Iterator[list[str]]:
     server.server_close()
 
 
+@pytest.mark.integration
 def test_a_rule_with_no_time_left_starts_no_scan_and_cannot_judge(
     build_repo, served_scanners, use_mise, tmp_path, fake_git, database_requests
 ):
@@ -587,6 +606,7 @@ def test_a_rule_with_no_time_left_starts_no_scan_and_cannot_judge(
     assert database_requests == []
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("rule", DEADLINE_RULES, ids=lambda rule: rule.value)
 def test_a_scanner_still_running_when_the_time_ends_is_stopped_and_its_rule_cannot_judge(
     build_repo, served_scanners, tmp_path, monkeypatch, rule
@@ -619,6 +639,7 @@ def test_a_scanner_still_running_when_the_time_ends_is_stopped_and_its_rule_cann
 LOCATED_BY_MISE = (scanners.GITLEAKS, scanners.ACTIONLINT, scanners.OSV_SCANNER)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("rule", DEADLINE_RULES, ids=lambda rule: rule.value)
 def test_a_locate_or_version_call_still_running_when_the_time_ends_is_stopped_and_brings_no_step(
     build_repo, served_scanners, use_mise, tmp_path, monkeypatch, rule

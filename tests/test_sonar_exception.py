@@ -203,6 +203,7 @@ def scanner_properties(value: str) -> dict[str, str]:
     return {key: setting for key, _, setting in pairs}
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(("arrange", "excluded"), ARRANGEMENTS)
 def test_properties_hands_the_scan_one_exclusion_exactly_when_the_bot_config_exists(monkeypatch, capsys, build_repo, elsewhere, arrange, excluded):
     """SONAR-17, SONAR-18, SONAR-19, SONAR-20, SONAR-21, SONAR-28."""
@@ -222,6 +223,7 @@ def test_properties_hands_the_scan_one_exclusion_exactly_when_the_bot_config_exi
     assert len(declared) == 3
 
 
+@pytest.mark.integration
 def test_every_key_properties_writes_is_a_multicriteria_exclusion_key(monkeypatch, capsys, build_repo, elsewhere):
     """SONAR-16."""
     step_output = elsewhere / "output"
@@ -231,6 +233,7 @@ def test_every_key_properties_writes_is_a_multicriteria_exclusion_key(monkeypatc
     assert all(argument.startswith("-Dsonar.issue.ignore.") for argument in shlex.split(value))
 
 
+@pytest.mark.integration
 def test_properties_keeps_the_lines_the_output_file_already_holds(monkeypatch, capsys, build_repo, elsewhere):
     """SONAR-14."""
     step_output = elsewhere / "output"
@@ -241,12 +244,14 @@ def test_properties_keeps_the_lines_the_output_file_already_holds(monkeypatch, c
     assert lines[1].startswith(f"{output.SCANNER_ARGUMENTS_OUTPUT}=")
 
 
+@pytest.mark.integration
 def test_properties_outside_a_workflow_step_prints_and_exits_clean(monkeypatch, capsys, build_repo):
     """SONAR-15."""
     code, out, _ = run_properties(monkeypatch, capsys, build_repo, arrange=put_bot_config)
     assert (code, sonar_properties.DEPENDABOT_EXCEPTION_RULE in out) == (0, True)
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 path, so no permission is refused")
 def test_properties_with_an_unreachable_bot_config_is_exit_2_and_writes_nothing(monkeypatch, capsys, build_repo, elsewhere):
     """SONAR-22."""
@@ -265,6 +270,7 @@ def test_properties_with_an_unreachable_bot_config_is_exit_2_and_writes_nothing(
     assert ".github/dependabot.yml" in err
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "properties",
     [
@@ -281,6 +287,7 @@ def test_a_refused_properties_file_is_exit_2_and_writes_nothing_even_with_a_bot_
     assert (code, step_output.read_text()) == (2, "earlier=1\n")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("arrange", [put_bot_config, lambda root: None], ids=["with a bot config", "without a bot config"])
 def test_properties_with_an_unwritable_step_output_is_exit_2_and_claims_no_success(monkeypatch, capsys, build_repo, elsewhere, arrange):
     code, out, err = run_properties(monkeypatch, capsys, build_repo, arrange=arrange, step_output=elsewhere)

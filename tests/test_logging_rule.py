@@ -8,6 +8,8 @@ from quality.rules import Area, Rule
 from tests.support.check import check_output, check_result, installed_ruff, note_rows, refusals, rule_notes
 from tests.support.door import CHECK_WORD, door_in
 
+pytestmark = pytest.mark.integration
+
 
 @dataclass(frozen=True)
 class BrokenCall:

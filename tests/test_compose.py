@@ -23,6 +23,7 @@ from tests.support.github_remote import with_github_remote
 from tests.support.merge import ONE_JOB
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("body", "code", "open_ports"),
     [
@@ -38,6 +39,7 @@ def test_compose_specific_tags_are_judged_not_refused(build_repo, capsys, body, 
     assert (exit_code, len(rule_findings(repo, Rule.COMPOSE_PORT)), is_clean(output)) == (code, open_ports, code == 0)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("tagged", ["!reset null", "!reset []"], ids=["null", "empty-list"])
 def test_reset_clears_ports_and_is_clean(build_repo, capsys, tagged):
     """COMPOSE-8: `ports: !reset null` is valid Compose that clears the ports, so it is clean."""
@@ -45,6 +47,7 @@ def test_reset_clears_ports_and_is_clean(build_repo, capsys, tagged):
     assert code == 0
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "body",
     ["volumes:\n  data: {}\n", "services: []\n", "services:\n  web:\n  worker: ~\n"],
@@ -56,6 +59,7 @@ def test_a_compose_file_without_a_service_mapping_has_nothing_to_judge(build_rep
     assert (code, is_clean(output)) == (0, True)
 
 
+@pytest.mark.integration
 def test_unknown_yaml_tag_cannot_be_judged(build_repo, capsys):
     """COMPOSE-9: a tag Compose does not define is not read as a plain value."""
     code, output = run(capsys, build_repo({"compose.yaml": "services:\n  web:\n    image: !foo x\n"}))
@@ -63,6 +67,7 @@ def test_unknown_yaml_tag_cannot_be_judged(build_repo, capsys):
     assert refused(output, "files")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "refused_path"),
     [
@@ -99,6 +104,7 @@ def test_compose_ports_must_bind_loopback(build_repo, capsys, files, refused_pat
         assert_row_prints_finding(row, finding)
 
 
+@pytest.mark.integration
 def test_quoted_tagged_port_is_read_as_the_string_it_wraps(build_repo, capsys):
     """COMPOSE-7, COMPOSE-8: `!override "22:22"` is the string 22:22, not a sexagesimal number."""
     repo = build_repo(compose('- !override "22:22"'))
@@ -107,6 +113,7 @@ def test_quoted_tagged_port_is_read_as_the_string_it_wraps(build_repo, capsys):
     assert (code, finding.event, "22:22" in finding.fact) == (1, FindingEvent.PUBLISHED_PORT, True)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("port_line", "described"),
     [
@@ -128,6 +135,7 @@ def test_a_port_is_described_as_compose_reads_it(build_repo, capsys, port_line, 
     assert (code, finding.event, described in row.fact) == (1, FindingEvent.PUBLISHED_PORT, True)
 
 
+@pytest.mark.integration
 def test_a_loopback_port_with_an_ip_is_clean(build_repo, capsys):
     """COMPOSE-1: `127.0.0.1:22:22` stays clean."""
     assert run(capsys, build_repo(compose("- 127.0.0.1:22:22")))[0] == 0
@@ -136,6 +144,7 @@ def test_a_loopback_port_with_an_ip_is_clean(build_repo, capsys):
 OPEN_PORT = compose('- "0.0.0.0:1:1"')["compose.yaml"]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "name",
     [
@@ -157,6 +166,7 @@ def test_a_compose_name_is_judged(build_repo, capsys, name):
     assert len(rows_of(output, finding)) == 1
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "name",
     ["composer.yml", "composed.yaml", "decompose.yml", "compose2.yaml", "compose.yaml.example", "compose.json",
@@ -184,6 +194,7 @@ UNREADABLE_YAML = [
 ]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("text", "reason"),
     UNREADABLE_YAML,
@@ -205,6 +216,7 @@ def test_a_yaml_error_is_one_short_line(build_repo, capsys, text, reason):
 ALIAS_BOMB = "a0: &a0 [x, x, x]\n" + "".join(f"a{n}: &a{n} [*a{n - 1}, *a{n - 1}, *a{n - 1}]\n" for n in range(1, 6))
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "service",
     ["    ports: [*a5]\n", "    ports:\n      - target: 80\n        published: *a5\n"],
@@ -220,6 +232,7 @@ def test_a_port_that_is_a_container_is_one_short_finding(build_repo, capsys, ser
     assert max(len(line) for line in output.splitlines()) < 400
 
 
+@pytest.mark.integration
 def test_an_untracked_compose_file_is_not_judged_until_it_is_added(build_repo, capsys):
     """COMPOSE-3: only what git tracks counts, and a staged file is tracked."""
     repo = build_repo({"README.md": "x\n"})
@@ -229,12 +242,14 @@ def test_an_untracked_compose_file_is_not_judged_until_it_is_added(build_repo, c
     assert (untracked, run(capsys, repo)[0]) == (0, 1)
 
 
+@pytest.mark.integration
 def test_webauth_suite_compose_is_clean(build_repo, capsys):
     """COMPOSE-1: a short-syntax `127.0.0.1::8080` port (empty host port) binds loopback."""
     files = {"docs/oidc/suite-compose.yaml": compose('- "127.0.0.1::8080"')["compose.yaml"]}
     assert run(capsys, build_repo(files))[0] == 0
 
 
+@pytest.mark.integration
 def test_a_tracked_compose_symlink_leaving_the_repository_is_exit_2(build_repo, elsewhere, capsys):
     """A tracked compose file that resolves outside the repository is exit 2, never read, and the refusal names no absolute path."""
     repo = build_repo({})
@@ -260,6 +275,7 @@ def link_to_itself(repo: Path, elsewhere: Path) -> None:
     (repo / "compose.yaml").symlink_to("compose.yaml")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "link",
     [link_to_nowhere_inside, link_to_nowhere_outside, link_to_itself],
@@ -274,6 +290,7 @@ def test_a_tracked_compose_linked_to_nowhere_is_gone_not_unjudgeable(build_repo,
     assert (code, is_clean(output), str(repo) in output) == (0, True, False), output
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 file, so no permission is refused")
 def test_a_tracked_compose_the_filesystem_refuses_to_read_is_exit_2(build_repo, capsys):
     """COMPOSE-6: a compose file without read permission is never gone."""
@@ -307,6 +324,7 @@ KINDS = [
 ]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "declaration", "event"),
     KINDS,
@@ -329,6 +347,7 @@ def test_each_kind_of_finding_has_its_event_a_short_fact_and_a_fix_the_door_prin
 LOOPBACK_EXAMPLE = re.compile(r'"([^"]+)"')
 
 
+@pytest.mark.integration
 def test_the_loopback_fix_example_bound_to_the_services_own_ports_clears_the_finding(build_repo, capsys):
     """COMPOSE-1, O12: the printed example, its address kept and bound to the scenario's own ports, is what the rule accepts."""
     repo = build_repo(compose('- "8080:80"'))

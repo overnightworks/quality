@@ -16,6 +16,8 @@ from tests.support.git_repositories import git, head_commit, put, shallow_clone
 from tests.support.source_code import branchy_function, long_file, long_function
 from tests.support.terminal import Terminal, by_role, without_sgr
 
+pytestmark = pytest.mark.integration
+
 
 def ceiling(table: str) -> str:
     return rendered(table + "\n[clones]\n")

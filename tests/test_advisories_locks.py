@@ -24,6 +24,8 @@ from tests.support.check import area_fact, area_finding_rows, extent_counts, not
 from tests.support.door import check_door
 from tests.support.scanners import OUTPUTS, fake_scanner
 
+pytestmark = pytest.mark.integration
+
 LODASH = "GHSA-npm1-aaaa-bbbb"
 LODASH_ADVISORY = advisory(LODASH, fixed=("4.17.21",), aliases=("CVE-2020-2",), package="lodash", ecosystem="npm")
 FRONTEND_LOCK = "src/frontend/pnpm-lock.yaml"

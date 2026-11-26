@@ -13,6 +13,8 @@ from tests.support.source_code import long_function
 from tests.support.verdict import verdict_streams
 from tests.support.verdict_renames import commit_all
 
+pytestmark = pytest.mark.integration
+
 
 def ceiling(*entries: tuple[str, int]) -> str:
     """A ceiling holding `long_one` of each (path, value) and no clone pair."""

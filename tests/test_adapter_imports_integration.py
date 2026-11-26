@@ -17,6 +17,8 @@ from tests.support.check import check_output, check_result
 from tests.support.layout import CONFIG, assert_prints_as_kind, declaring
 from tests.support.merge import ONE_JOB
 
+pytestmark = pytest.mark.integration
+
 NON_CORE = "tests/test_main.py"
 SUPPORT = "tests/support/stores.py"
 REGISTERED = ("integration: reaches a real adapter",)

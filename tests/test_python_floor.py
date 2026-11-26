@@ -29,6 +29,8 @@ from tests.support.git_repositories import GIT_IDENTITY, head_commit, make_repo
 from tests.support.github_remote import with_github_remote
 from tests.support.layout import UNCOVERED_FILES_RULE_COUNT
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def fixture_origin() -> str:

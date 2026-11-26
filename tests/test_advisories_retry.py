@@ -121,6 +121,7 @@ def scan(build_repo, tmp_path):
     return run
 
 
+@pytest.mark.integration
 def test_a_gateway_timeout_is_tried_again_after_three_seconds_and_then_used(scan, scripted_server):
     """ADVISORY-9: a transient failure is retried; the first delay is 3 seconds."""
     scripted_server.script = [GATEWAY_TIMEOUT, SERVED]
@@ -129,6 +130,7 @@ def test_a_gateway_timeout_is_tried_again_after_three_seconds_and_then_used(scan
     assert (isinstance(result, ScannerError), len(scripted_server.requested), scan.state.slept) == (False, 2, [3])
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("status", [GATEWAY_TIMEOUT, 429])
 def test_a_database_that_never_arrives_is_refused_after_four_attempts_with_growing_delays(
     scan, scripted_server, status
@@ -146,6 +148,7 @@ def test_a_database_that_never_arrives_is_refused_after_four_attempts_with_growi
     assert (len(scripted_server.requested), scan.state.slept) == (4, [3, 9, 27])
 
 
+@pytest.mark.integration
 def test_a_missing_database_is_not_tried_again(scan, scripted_server):
     """ADVISORY-42: another 4xx is permanent."""
     scripted_server.script = [404]
@@ -157,6 +160,7 @@ def test_a_missing_database_is_not_tried_again(scan, scripted_server):
     assert (len(scripted_server.requested), scan.state.slept) == (1, [])
 
 
+@pytest.mark.integration
 def test_a_database_missing_from_a_local_root_is_not_tried_again(scan, database_root):
     """ADVISORY-42: a missing file is permanent."""
     (database_root / "PyPI" / "all.zip").unlink()
@@ -166,6 +170,7 @@ def test_a_database_missing_from_a_local_root_is_not_tried_again(scan, database_
     assert (*observed, scan.state.slept) == (True, True, [])
 
 
+@pytest.mark.integration
 def test_a_refused_connection_is_tried_again_until_the_server_listens(scan, scripted_server):
     """ADVISORY-9: a refused connection is transient."""
     scan.state.on_sleep = scripted_server.open
@@ -174,12 +179,14 @@ def test_a_refused_connection_is_tried_again_until_the_server_listens(scan, scri
     assert observed == (False, ["/PyPI/all.zip"], [3])
 
 
+@pytest.mark.integration
 def test_an_unreachable_network_is_tried_again_and_then_used(scan, flaky_network):
     """ADVISORY-9: ENETUNREACH is transient."""
     result = scan()
     assert (isinstance(result, ScannerError), flaky_network.count, scan.state.slept) == (False, 2, [3])
 
 
+@pytest.mark.integration
 def test_a_body_cut_short_is_tried_again(scan, scripted_server):
     """ADVISORY-9: a truncated body is transient."""
     scripted_server.script = [TRUNCATED, SERVED]
@@ -188,6 +195,7 @@ def test_a_body_cut_short_is_tried_again(scan, scripted_server):
     assert (isinstance(result, ScannerError), len(scripted_server.requested), scan.state.slept) == (False, 2, [3])
 
 
+@pytest.mark.integration
 def test_a_body_that_arrived_whole_but_is_not_a_zip_is_not_tried_again(scan, scripted_server):
     """ADVISORY-42: every error after the body is whole is permanent."""
     scripted_server.script = [NOT_A_ZIP]
@@ -197,6 +205,7 @@ def test_a_body_that_arrived_whole_but_is_not_a_zip_is_not_tried_again(scan, scr
     assert (len(scripted_server.requested), scan.state.slept) == (1, [])
 
 
+@pytest.mark.integration
 def test_the_last_wait_is_cut_to_the_time_left_and_the_deadline_is_the_refusal(scan, scripted_server):
     """ADVISORY-9, ADVISORY-34: the retries spend the existing deadline and add none."""
     scripted_server.script = [GATEWAY_TIMEOUT]
@@ -216,6 +225,7 @@ def test_the_attempts_of_one_database_and_their_waits_fit_the_download_deadline(
     assert spent <= advisories.DATABASE_DOWNLOAD_DEADLINE_SECONDS
 
 
+@pytest.mark.integration
 def test_a_run_that_ends_during_a_failed_attempt_cuts_the_wait_and_sends_no_further_request(
     scan, scripted_server, monkeypatch
 ):
@@ -231,6 +241,7 @@ def test_a_run_that_ends_during_a_failed_attempt_cuts_the_wait_and_sends_no_furt
         "the run's 100 seconds are spent", [0], 1)
 
 
+@pytest.mark.integration
 def test_a_not_modified_for_another_copy_and_the_failures_after_it_share_the_four_attempts(scan, scripted_server):
     """ADVISORY-9: the plain request after a 304 that does not name the copy is one of the four attempts of the
     database, not a fresh budget."""

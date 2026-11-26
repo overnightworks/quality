@@ -55,6 +55,7 @@ def judge(build_repo):
     return judging
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("name", "accepted"),
     [
@@ -72,6 +73,7 @@ def test_a_distribution_is_the_prefixed_stem_with_an_optional_component_after_pe
     assert (judge({"pyproject.toml": pyproject(name)}) == []) is accepted
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("name", "accepted"),
     [
@@ -85,6 +87,7 @@ def test_a_distribution_nothing_installs_may_keep_the_bare_stem(judge, name, acc
     assert (judge({"pyproject.toml": pyproject(name, uninstalled=True)}) == []) is accepted
 
 
+@pytest.mark.integration
 def test_a_member_of_a_workspace_is_a_component(judge):
     files = {
         "pyproject.toml": pyproject("overnightworks-shop"),
@@ -95,11 +98,13 @@ def test_a_member_of_a_workspace_is_a_component(judge):
     assert judge(files) == []
 
 
+@pytest.mark.integration
 def test_a_member_outside_the_stem_is_red_at_its_own_file(judge):
     files = {"pyproject.toml": pyproject(), "legal/pyproject.toml": pyproject("legal", uninstalled=True), **packages("legal", project="legal/src")}
     assert judge(files) == [("legal/pyproject.toml", "legal"), ("legal/pyproject.toml", "legal")]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("package", "accepted"),
     [
@@ -115,6 +120,7 @@ def test_an_import_package_is_the_stem_with_an_optional_underscore_component(jud
     assert (judge({"pyproject.toml": pyproject(), **packages(package)}) == []) is accepted
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("repository", "package", "accepted"),
     [
@@ -128,6 +134,7 @@ def test_an_import_writes_each_hyphen_of_the_stem_as_an_underscore(judge, reposi
     assert (judge(files, repository) == []) is accepted
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("script", "accepted"),
     [
@@ -143,6 +150,7 @@ def test_a_command_is_the_stem_with_an_optional_hyphenated_component(judge, scri
     assert (judge({"pyproject.toml": pyproject(scripts=(script,))}) == []) is accepted
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("name", "accepted"),
     [
@@ -160,6 +168,7 @@ def test_an_npm_name_is_a_stem_form_or_an_ecosystem_form(judge, name, accepted):
     assert (judge({"web/package.json": package_json(name)}) == []) is accepted
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "path",
     [
@@ -172,11 +181,13 @@ def test_a_package_json_in_node_modules_tests_or_a_fixture_is_not_judged(judge, 
     assert judge(files) == []
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("path", ["tests/sample/pyproject.toml", "tests/fixtures/sample/pyproject.toml", "fixtures/sample/pyproject.toml"])
 def test_a_pyproject_in_tests_or_a_fixture_is_not_judged_even_beside_no_root_project(judge, path):
     assert judge({path: pyproject("foreign"), **packages("foreign", project=path.removesuffix("/pyproject.toml") + "/src")}) == []
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 file, so no permission is refused")
 @pytest.mark.parametrize("path", ["fixtures/sample/package.json", "tests/sample/pyproject.toml", "web/node_modules/dep/package.json"])
 def test_a_manifest_that_is_not_judged_is_never_read_and_the_repository_name_is_still_judged(build_repo, path):
@@ -185,6 +196,7 @@ def test_a_manifest_that_is_not_judged_is_never_read_and_the_repository_name_is_
     assert (len(rule_findings(repo, Rule.NAMING)), Rule.NAMING in refusals(repo)) == (1, False)
 
 
+@pytest.mark.integration
 def test_a_gitlink_at_a_manifest_path_is_never_entered(build_repo, elsewhere):
     """A submodule's own files carry its own names."""
     inner = build_repo({"pyproject.toml": pyproject("foreign")})
@@ -198,6 +210,7 @@ def test_a_gitlink_at_a_manifest_path_is_never_entered(build_repo, elsewhere):
     assert rule_findings(repo, Rule.NAMING) == []
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "files",
     [
@@ -212,6 +225,7 @@ def test_a_manifest_without_a_name_has_nothing_to_judge(build_repo, files):
     assert (rule_findings(repo, Rule.NAMING), Rule.NAMING in refusals(repo)) == ([], False)
 
 
+@pytest.mark.integration
 def test_each_wrong_kind_is_a_finding_of_its_own_at_its_file(judge):
     files = {
         "pyproject.toml": pyproject("wrong-dist", scripts=("wrong-cli",)),
@@ -223,6 +237,7 @@ def test_each_wrong_kind_is_a_finding_of_its_own_at_its_file(judge):
     ]
 
 
+@pytest.mark.integration
 def test_a_finding_names_the_kind_the_name_found_the_accepted_forms_and_the_stem_it_read(build_repo):
     repo = with_github_remote(build_repo({**GUIDANCE, "pyproject.toml": pyproject("wrong")}), SHOP)
     (finding,) = (found for found in rule_findings(repo, Rule.NAMING) if "distribution" in found.fact)
@@ -232,18 +247,21 @@ def test_a_finding_names_the_kind_the_name_found_the_accepted_forms_and_the_stem
     assert "overnightworks-shop[-<component>]" in str(finding.fix)
 
 
+@pytest.mark.integration
 def test_a_repository_finding_names_where_the_stem_was_read_from_too(build_repo):
     repo = with_github_remote(build_repo(GUIDANCE), "overnightworks/shop-api")
     (finding,) = rule_findings(repo, Rule.NAMING)
     assert "read from remote origin" in finding.fact
 
 
+@pytest.mark.integration
 def test_the_stem_is_the_name_of_origin_and_no_other_remote(build_repo):
     repo = with_github_remote(build_repo({**GUIDANCE, "pyproject.toml": pyproject("overnightworks-shop")}), "overnightworks/other", remote="upstream")
     with_github_remote(repo, SHOP)
     assert rule_findings(repo, Rule.NAMING) == []
 
 
+@pytest.mark.integration
 def test_a_red_name_prints_as_a_misnamed_row_and_makes_the_run_red(build_repo, capsys):
     repo = with_github_remote(build_repo({**GUIDANCE, "pyproject.toml": pyproject("wrong")}), SHOP)
     code, printed = check_output(capsys, repo)
@@ -251,34 +269,41 @@ def test_a_red_name_prints_as_a_misnamed_row_and_makes_the_run_red(build_repo, c
     assert (code, len(rows_of(printed, finding))) == (1, 1)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("suffix", naming.ROLE_SUFFIXES)
 def test_a_repository_name_with_a_role_suffix_is_red_with_no_file_to_judge(judge, suffix):
     assert judge({}, f"overnightworks/shop-{suffix}") == [(".git/config", f"shop-{suffix}")]
 
 
+@pytest.mark.integration
 def test_a_repository_name_with_a_capital_is_red(judge):
     assert judge({}, "overnightworks/Shop") == [(".git/config", "Shop")]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("name", ["shop", "gmail-cleanup", "runtime-shop", "apiary"])
 def test_a_repository_name_without_a_role_suffix_is_clean(judge, name):
     assert judge({}, f"overnightworks/{name}") == []
 
 
+@pytest.mark.integration
 def test_no_github_origin_refuses_a_repository_that_holds_a_name_to_judge(build_repo):
     reasons = refusals(build_repo({**GUIDANCE, "pyproject.toml": pyproject()}))
     assert "origin" in reasons[Rule.NAMING]
 
 
+@pytest.mark.integration
 def test_no_github_origin_refuses_even_a_repository_with_no_name_to_judge(build_repo):
     assert "origin" in refusals(build_repo(GUIDANCE))[Rule.NAMING]
 
 
+@pytest.mark.integration
 def test_a_remote_that_is_not_called_origin_does_not_stand_for_it(build_repo):
     repo = with_github_remote(build_repo({**GUIDANCE, "pyproject.toml": pyproject()}), SHOP, remote="upstream")
     assert "origin" in refusals(repo)[Rule.NAMING]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("path", "content"),
     [
@@ -301,16 +326,19 @@ def test_a_manifest_that_is_not_read_as_utf_8_with_a_string_name_cannot_be_judge
 FIRST_DEVIATION = naming.packaged_deviations()[0]
 
 
+@pytest.mark.integration
 def test_a_packaged_deviation_covers_its_name_in_its_repository_only(build_repo):
     files = {**GUIDANCE, "pyproject.toml": pyproject(FIRST_DEVIATION.name)}
     covered = with_github_remote(build_repo(files), FIRST_DEVIATION.repository)
     assert rule_findings(covered, Rule.NAMING) == []
 
 
+@pytest.mark.integration
 def test_a_packaged_deviation_covers_no_other_repository(judge):
     assert judge({"pyproject.toml": pyproject(FIRST_DEVIATION.name)}) == [("pyproject.toml", FIRST_DEVIATION.name)]
 
 
+@pytest.mark.integration
 def test_a_packaged_deviation_covers_no_other_name_of_its_repository(judge):
     files = {"pyproject.toml": pyproject(f"{FIRST_DEVIATION.name}-other")}
     assert judge(files, FIRST_DEVIATION.repository) == [("pyproject.toml", f"{FIRST_DEVIATION.name}-other")]

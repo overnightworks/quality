@@ -21,6 +21,8 @@ from tests.support.check import check_output, check_result, refusal_row, rule_no
 from tests.support.layout import CONFIG, assert_prints_as_kind, declaring
 from tests.support.merge import ONE_JOB
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def red(build_repo):

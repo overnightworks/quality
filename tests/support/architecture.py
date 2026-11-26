@@ -159,3 +159,6 @@ def adapter_refusal(repo: Path) -> CannotJudge:
     verdict = adapter_verdict(repo)
     assert verdict.refusal is not None
     return verdict.refusal
+
+
+LAYERS = {"type": "layers", "layers": ["shop.web", "shop.db"]}

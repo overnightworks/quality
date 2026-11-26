@@ -87,6 +87,7 @@ def test_a_config_file_that_cannot_be_decoded_is_refused(tmp_path):
         read_gate_settings(tmp_path)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "content",
     [f"a = {'[' * 2000}{']' * 2000}\n", f"a = {'9' * 5000}\n"],
@@ -304,6 +305,7 @@ STAGED = list(STAGED_WORDS)
 TEXT_DATE_DECLARATION = SONGMAKER_DECLARATION.replace("2026-10-20", '"20.10.2026"')
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("command", "config", "code", "line"),
     [
@@ -341,6 +343,7 @@ ADVISORY_DATES = f"{ADVISORY} entry 1 needs until and date as TOML dates without
 ADVISORY_KEYS = f"{ADVISORY} entry 1 needs exactly an id, a lock, an until, a date, an item and a reason"
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("entry", "named"),
     [
@@ -400,6 +403,7 @@ def test_a_malformed_advisory_allowance_shows_the_example(entry):
     assert refused.value.example == config.ADVISORY_ALLOWANCE_EXAMPLE
 
 
+@pytest.mark.integration
 def test_the_verdict_refuses_a_malformed_secret_allowance_as_check_does(capsys, run_env):
     """ALLOW-18: one validator reads the whole config, so the verdict refuses a malformed [secrets] entry too."""
     repo, _ = run_env
@@ -445,6 +449,7 @@ def test_a_layout_declaration_for_agents_md_is_read_as_written():
 BAD_LAYOUT_ENTRY = '[[layout.allow]]\npath = "dir/"\nrule = "agents-md"\nreason = "r"\n'
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("tracked", [{}, {"AGENTS.md": "# guidance\n"}], ids=["no AGENTS.md", "an AGENTS.md"])
 @pytest.mark.parametrize("malformed", ["layout = 1\n", BAD_LAYOUT_ENTRY], ids=["layout not a table", "a bad entry"])
 def test_a_malformed_layout_config_refuses_the_agents_md_row(build_repo, tracked, malformed):
@@ -537,6 +542,7 @@ def test_a_generated_file_needs_mandatory_jobs_that_are_non_empty_names(jobs, jo
         assert "[[size.generated]] entry" in str(refused.value)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("command", "refusal"),
     [([CHECK_WORD], f"{refusal_row('debt')}"), (["check", "debt", "--fix"], f"{refusal_row('debt')}")],
@@ -554,6 +560,7 @@ def test_a_malformed_generated_file_stops_the_size_rule_and_the_fix(build_repo, 
     assert not (repo / "quality" / "baseline.toml").exists()
 
 
+@pytest.mark.integration
 def test_the_verdict_refuses_a_malformed_generated_file_naming_the_side(capsys, run_env):
     """GENERATED-8, VERDICT-40: the verdict refuses a malformed declaration at the head, exit 2, naming its table and
     sending the author to push the fix."""

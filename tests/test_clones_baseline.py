@@ -84,6 +84,7 @@ def baseline_text(repo: Path) -> str:
     return (repo / BASELINE_PATH).read_text(encoding="utf-8")
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("base", "head", "code", "expected"),
     [
@@ -113,6 +114,7 @@ def test_the_clone_baseline_only_falls_against_the_base(pull_request, capsys, ba
         assert "clone baseline removed" not in output
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("moved_symbol", "expected"),
     [("run", "✓ green"), ("walk", UNDECLARED + "clone baseline adds tests/test_b.py check <-> tests/test_e.py walk")],
@@ -140,6 +142,7 @@ ONE_MOVE = [("tests/test_a.py", "tests/test_e.py")]
 BOTH_MOVES = [("tests/test_a.py", "tests/test_z.py"), ("tests/test_b.py", "tests/test_y.py")]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("base", "head", "moves", "expected"),
     [
@@ -158,6 +161,7 @@ def test_a_pair_moves_with_its_files_by_the_rules_of_the_size_entries(pull_reque
     assert expected in verdict_of(pull_request[0], capsys)[1]
 
 
+@pytest.mark.integration
 def test_a_moved_pair_is_not_copied_into_a_later_pull_request(pull_request, capsys, monkeypatch):
     """BASELINE-4: after the move the base holds no pair under the old path, so recreating the old file adds it."""
     repo, _ = pull_request
@@ -174,6 +178,7 @@ GROWN_MOVED_ENTRY = MOVED_ENTRY.replace("70", "90")
 MOVED_RAISE = "size baseline raises function_lines src/new.py f 70 -> 90"
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("base", "head", "expected"),
     [
@@ -190,12 +195,14 @@ def test_adopting_or_dropping_a_table_next_to_a_move_judges_as_without_one(pull_
     assert expected in verdict_of(pull_request[0], capsys)[1]
 
 
+@pytest.mark.integration
 def test_a_raise_in_a_moved_file_is_declared_under_its_head_path(pull_request, capsys):
     """BASELINE-12, VERDICT-53: the declaration matches the line, which names the head path."""
     moved_in_head(pull_request, OLD_ENTRY, GROWN_MOVED_ENTRY, head_config=ONE_JOB + declaration(MOVED_RAISE))
     assert ONLY_DECLARED in verdict_of(pull_request[0], capsys)[1]
 
 
+@pytest.mark.integration
 def test_a_size_raise_and_a_clone_add_are_both_named_size_first(pull_request, capsys):
     """BASELINE-2, BASELINE-4: a raised size entry and an added pair both stand under the loosenings row, the size line
     first."""
@@ -205,6 +212,7 @@ def test_a_size_raise_and_a_clone_add_are_both_named_size_first(pull_request, ca
     assert lines[raised + 1] == UNDECLARED + f"clone baseline adds {SECOND_LABEL}"
 
 
+@pytest.mark.integration
 def test_two_added_pairs_are_named_in_sorted_order_whatever_the_file_order(pull_request, capsys):
     """BASELINE-4: added pairs stand in sorted order, whatever order the file names them."""
     _, output = judged(pull_request, capsys, EMPTY_CLONES, SECOND + FIRST)
@@ -213,6 +221,7 @@ def test_two_added_pairs_are_named_in_sorted_order_whatever_the_file_order(pull_
     assert lines[first + 1] == UNDECLARED + f"clone baseline adds {SECOND_LABEL}"
 
 
+@pytest.mark.integration
 def test_a_declared_clone_add_is_declared_in_the_verdict(pull_request, capsys):
     """BASELINE-4, VERDICT-53, VERDICT-62, VERDICT-63: the text after `! ` on an added pair's line, written as a
     declaration, declares it: the line no longer stands undeclared and the run is red for declared loosenings only."""
@@ -234,6 +243,7 @@ def test_a_declared_clone_add_merges_through_the_door(capsys, tmp_path):
     assert len(gh.merge_calls) == 1
 
 
+@pytest.mark.integration
 def test_a_declaration_for_a_pair_the_head_does_not_add_matches_nothing(pull_request, capsys):
     """VERDICT-31: a declaration for a pair the head does not add matches nothing, and the run is red."""
     what = f"clone baseline adds {SECOND_LABEL}"
@@ -252,6 +262,7 @@ MALFORMED = [
 MALFORMED_IDS = ["not a table", "a path that is not a table", "a symbol that is not a list", "one string", "a number", "a bare string"]
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("text", MALFORMED, ids=MALFORMED_IDS)
 def test_a_malformed_clone_table_cannot_be_judged_by_check(build_repo, capsys, text):
     """CEILING-9: a baseline with a malformed `[clones]` table is exit 2 naming the file, not a traceback."""
@@ -259,6 +270,7 @@ def test_a_malformed_clone_table_cannot_be_judged_by_check(build_repo, capsys, t
     assert (code, BASELINE_PATH in output, "Traceback" in output) == (2, True, False), output
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("text", MALFORMED, ids=MALFORMED_IDS)
 def test_a_malformed_clone_table_cannot_be_judged_by_the_verdict(pull_request, capsys, text):
     """BASELINE-20, BASELINE-25: the verdict names the head's file and gives the restore hint."""
@@ -268,6 +280,7 @@ def test_a_malformed_clone_table_cannot_be_judged_by_the_verdict(pull_request, c
     assert f"restore {BASELINE_PATH} from git, or repair it by hand" in output
 
 
+@pytest.mark.integration
 def test_a_malformed_clone_table_at_the_base_names_the_base_commit_without_a_rewrite_hint(pull_request, capsys):
     """BASELINE-20, BASELINE-25: a malformed table at the base names the base commit and gives no restore hint."""
     repo, commit_base = pull_request
@@ -292,6 +305,7 @@ def assert_the_debt_block_is_the_findings_in_run_order(repo: Path, output: str) 
     assert all(finding.event for finding in findings)
 
 
+@pytest.mark.integration
 def test_check_without_a_clone_table_holds_the_size_and_leaves_the_clone_rule_report_only(build_repo, capsys):
     """CLONE-5: a baseline of size tables alone leaves the clone rule measuring: no finding, and the pairs it found as
     its extent."""
@@ -304,6 +318,7 @@ def test_check_without_a_clone_table_holds_the_size_and_leaves_the_clone_rule_re
     assert_the_debt_block_is_the_findings_in_run_order(repo, output)
 
 
+@pytest.mark.integration
 def test_check_with_a_clone_table_holds_the_size_and_the_pairs_without_a_report_line(build_repo, capsys):
     """CLONE-6: with a `[clones]` table the clone rule judges: a held pair the tree has is no finding, and its extent is
     the ceiling file's pairs."""
@@ -315,6 +330,7 @@ def test_check_with_a_clone_table_holds_the_size_and_the_pairs_without_a_report_
     assert_the_debt_block_is_the_findings_in_run_order(repo, output)
 
 
+@pytest.mark.integration
 def test_a_first_recording_writes_both(build_repo, capsys):
     """FIX-11: with no ceiling yet, the fix records the size entries and the pairs."""
     repo = build_repo({"src/a.py": long_function(70), **TWO_FILES})
@@ -322,6 +338,7 @@ def test_a_first_recording_writes_both(build_repo, capsys):
     assert baseline_text(repo).endswith(LONG_ONE + "\n" + FIRST)
 
 
+@pytest.mark.integration
 def test_a_fix_over_a_file_without_a_clone_table_records_the_pairs_and_keeps_the_entries(build_repo, capsys):
     """FIX-15: a ceiling git never held a `[clones]` table in takes the pairs and no new entry."""
     repo = build_repo({"src/a.py": long_function(70), **TWO_FILES, BASELINE_PATH: LONG_ONE})
@@ -329,6 +346,7 @@ def test_a_fix_over_a_file_without_a_clone_table_records_the_pairs_and_keeps_the
     assert load_baseline(baseline_text(repo)) == ceiling({Key(Metric.FUNCTION_LINES, "src/a.py", "long_one"): 70}, frozenset({FIRST_PAIR}))
 
 
+@pytest.mark.integration
 def test_a_pair_the_tree_lost_leaves_the_ceiling_and_no_new_pair_enters(build_repo, capsys):
     """FIX-9, FIX-10: a held pair the tree lost goes, and a pair the tree gained stays a finding, not in the ceiling."""
     repo = build_repo({**THREE_FILES, BASELINE_PATH: FIRST + SECOND})
@@ -336,6 +354,7 @@ def test_a_pair_the_tree_lost_leaves_the_ceiling_and_no_new_pair_enters(build_re
     assert load_baseline(baseline_text(repo)) == ceiling({}, frozenset({FIRST_PAIR}))
 
 
+@pytest.mark.integration
 def test_the_written_file_loads_back_with_each_pair_once_under_its_first_side_sorted(build_repo, capsys):
     """The file the fix writes lists each pair once under its first side, sorted, and loads back as the same
     baseline; a second write leaves it unchanged."""
@@ -361,6 +380,7 @@ def test_a_reversed_or_repeated_hand_written_pair_loads_as_its_one_identity():
     assert render_baseline(load_baseline(repeated)).endswith("\n" + FIRST)
 
 
+@pytest.mark.integration
 def test_an_empty_clone_table_is_the_empty_set_and_renders_back_as_the_table(build_repo, capsys):
     """An empty `[clones]` table loads as the empty set, not as an absent one, and a first recording of a tree with
     no pair renders it back."""
@@ -372,6 +392,7 @@ def test_an_empty_clone_table_is_the_empty_set_and_renders_back_as_the_table(bui
     assert baseline_text(repo).endswith("\n" + EMPTY_CLONES)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("class_path, functions_path", [('tests/a"q.py', 'tests/b"r.py'), ('tests/b"r.py', 'tests/a"q.py')])
 def test_symbols_and_paths_that_need_quotes_round_trip_through_the_write(build_repo, capsys, class_path, functions_path):
     """A method, a repeated function name, a `"` in a path and a non-ASCII symbol round-trip through the write, on
@@ -394,6 +415,7 @@ def test_symbols_and_paths_that_need_quotes_round_trip_through_the_write(build_r
     assert baseline_text(repo) == first
 
 
+@pytest.mark.integration
 def test_a_pair_across_production_and_tests_round_trips(build_repo, capsys):
     """A pair across production and tests is written and loads back."""
     repo = build_repo({"src/shop.py": clone_function("price", "a", "b"), "tests/test_shop.py": clone_function("cost", "c", "d")})
@@ -430,6 +452,7 @@ def assert_gone_pair(finding: Finding, pair: ClonePair) -> None:
     assert_finding_vocabulary(finding)
 
 
+@pytest.mark.integration
 def test_an_empty_clone_table_makes_a_new_cross_file_pair_red_at_its_second_side(build_repo, capsys):
     """CLONE-6: an empty `[clones]` table makes a new pair across two files a `near copy` finding at its second side."""
     repo, code, output = enforced(capsys, build_repo, TWO_FILES)
@@ -440,6 +463,7 @@ def test_an_empty_clone_table_makes_a_new_cross_file_pair_red_at_its_second_side
     assert_row_prints_finding(row, finding)
 
 
+@pytest.mark.integration
 def test_a_pair_across_production_and_tests_is_judged_like_any_other(build_repo, capsys):
     """CLONE-4, CLONE-6: a pair between production and a test file is a `near copy` finding like any other."""
     files = {"src/a.py": clone_function("run", "a", "b"), "tests/test_b.py": clone_function("check", "c", "d")}
@@ -449,6 +473,7 @@ def test_a_pair_across_production_and_tests_is_judged_like_any_other(build_repo,
     assert_new_pair(finding, "tests/test_b.py:1", Place("src/a.py", "run"), "check")
 
 
+@pytest.mark.integration
 def test_a_held_pair_whose_side_file_was_deleted_is_red_at_the_first_side_and_its_fix_clears_it(build_repo, capsys):
     """CLONE-7: a held pair whose second file was deleted is a `can fall` finding at its first side, and the fix it
     prints is a command of this door that clears it."""
@@ -462,6 +487,7 @@ def test_a_held_pair_whose_side_file_was_deleted_is_red_at_the_first_side_and_it
     assert check_output(capsys, repo)[0] == 0
 
 
+@pytest.mark.integration
 def test_a_renamed_function_makes_the_held_pair_stale_and_the_new_name_a_new_pair(build_repo, capsys):
     """CLONE-6, CLONE-7, CLONE-11: a renamed function leaves the held pair gone at its first side, and the new name is a
     new pair at its second side."""
@@ -474,6 +500,7 @@ def test_a_renamed_function_makes_the_held_pair_stale_and_the_new_name_a_new_pai
     assert_the_debt_block_is_the_findings_in_run_order(repo, output)
 
 
+@pytest.mark.integration
 def test_a_held_same_file_pair_and_a_held_self_pair_are_stale(build_repo, capsys):
     """CLONE-7: a held pair inside one file and a held pair of a function with itself are gone, since the detector never
     produces them."""
@@ -487,6 +514,7 @@ def test_a_held_same_file_pair_and_a_held_self_pair_are_stale(build_repo, capsys
     assert_the_debt_block_is_the_findings_in_run_order(repo, output)
 
 
+@pytest.mark.integration
 def test_a_copy_fixed_in_place_leaves_the_held_pair_stale(build_repo, capsys):
     """CLONE-7: a held pair whose two functions remain but are no longer similar is gone."""
     files = {**TWO_FILES, "tests/test_b.py": "def check(a):\n    return a\n"}
@@ -496,6 +524,7 @@ def test_a_copy_fixed_in_place_leaves_the_held_pair_stale(build_repo, capsys):
     assert_gone_pair(finding, FIRST_PAIR)
 
 
+@pytest.mark.integration
 def test_a_second_side_moved_down_is_named_at_its_new_line(build_repo, capsys):
     """CLONE-6: a new pair is named at the line its second side stands on."""
     files = {**TWO_FILES, "tests/test_b.py": "import os\n\n\n" + TWO_FILES["tests/test_b.py"]}
@@ -505,6 +534,7 @@ def test_a_second_side_moved_down_is_named_at_its_new_line(build_repo, capsys):
     assert_new_pair(finding, "tests/test_b.py:4", FIRST_PAIR.first, "check")
 
 
+@pytest.mark.integration
 def test_new_pairs_print_in_sorted_order_across_locations_and_at_one_location(build_repo, capsys):
     """CLONE-6, O14: three new pairs are three findings, in sorted order across locations and at one location, printed
     in that order."""
@@ -518,6 +548,7 @@ def test_new_pairs_print_in_sorted_order_across_locations_and_at_one_location(bu
     assert_the_debt_block_is_the_findings_in_run_order(repo, output)
 
 
+@pytest.mark.integration
 def test_a_size_can_fall_row_and_a_clone_can_fall_row_share_one_fix(build_repo, capsys):
     """CLONE-7, ROW-3: the fix of a size row and a clone row that can fall is printed once, after the clone row."""
     files = {"src/a.py": long_function(65), "tests/test_a.py": TWO_FILES["tests/test_a.py"]}
@@ -527,6 +558,7 @@ def test_a_size_can_fall_row_and_a_clone_can_fall_row_share_one_fix(build_repo, 
     assert (size_row.fix_follows, clone_row.fix_follows, size_row.fix == clone_row.fix) == (False, True, True), output
 
 
+@pytest.mark.integration
 def test_no_line_before_the_first_area_row_opens_with_a_rule_of_the_debt_area(build_repo, capsys):
     """O15: the size and clone counts are the debt row's extent, never a prelude line."""
     repo = build_repo(TWO_FILES)
@@ -536,6 +568,7 @@ def test_no_line_before_the_first_area_row_opens_with_a_rule_of_the_debt_area(bu
     assert [line for line in prelude if line.startswith(tuple(rule.value for rule in Rule if rule.area is Area.DEBT))] == []
 
 
+@pytest.mark.integration
 def test_a_file_python_cannot_parse_leaves_the_enforced_clone_rule_unable_to_judge(build_repo, capsys):
     """CLONE-8, SIZE-10, SECURITY-18, SECURITY-28: with a `[clones]` table a file Python cannot parse refuses the size
     and clone rules for one reason in the `debt` row, and python-security and python-print with `ruff cannot parse` in
@@ -550,6 +583,7 @@ def test_a_file_python_cannot_parse_leaves_the_enforced_clone_rule_unable_to_jud
     assert f"{refusal_row('code')}ruff cannot parse src/broken.py" in output
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("text", ["[size\n", *MALFORMED], ids=["no clone table, not TOML", *MALFORMED_IDS])
 def test_a_malformed_baseline_leaves_the_debt_rules_unable_to_judge_and_names_one_restore_step(build_repo, capsys, text):
     """CLONE-9, CEILING-9: a baseline that cannot be read, with a `[clones]` table or without one, leaves the size, clone
@@ -562,6 +596,7 @@ def test_a_malformed_baseline_leaves_the_debt_rules_unable_to_judge_and_names_on
     assert f"next: restore {BASELINE_PATH} from git, or repair it by hand" in output.splitlines()
 
 
+@pytest.mark.integration
 def test_the_write_and_the_rule_agree(build_repo, capsys):
     """FIX-11: after a first recording the clone rule finds nothing and the debt row counts the entries and the pairs
     written."""
@@ -573,6 +608,7 @@ def test_the_write_and_the_rule_agree(build_repo, capsys):
     assert extent_counts(area_fact(output, Area.DEBT)) == [len(held.size), len(held.clones)] == [0, 3]
 
 
+@pytest.mark.integration
 def test_a_control_character_and_undecodable_bytes_in_a_new_pair_print_escaped(build_repo, capsys):
     """CLONE-6, MASK-2, MASK-5: a new pair whose paths hold a control character and undecodable bytes prints them
     escaped."""
@@ -584,6 +620,7 @@ def test_a_control_character_and_undecodable_bytes_in_a_new_pair_print_escaped(b
     assert_every_line_starts_with_the_door(output.splitlines())
 
 
+@pytest.mark.integration
 def test_a_control_character_in_a_held_pair_prints_escaped(build_repo, capsys):
     """CLONE-7, MASK-2, MASK-6: a held pair whose path holds a control character is gone, and its location and fact
     print escaped."""

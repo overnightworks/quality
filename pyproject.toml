@@ -56,8 +56,7 @@ testpaths = ["tests"]
 pythonpath = [".", "scripts"]
 addopts = ["--import-mode=importlib", "--strict-markers"]
 markers = [
-    "unit: starts no process and opens no socket in its setup or call (the audit events in STARTING_EVENTS, tests/conftest.py)",
-    "integration: starts a process or opens a socket in its setup or call (the audit events in STARTING_EVENTS, tests/conftest.py)",
+    "integration: starts a process or opens a socket in its setup or call (the audit events in STARTING_EVENTS, tests/conftest.py); a test without it is a unit test",
     "scanner: runs a real scanner that mise installed from quality's manifest (CI installs them)",
 ]
 

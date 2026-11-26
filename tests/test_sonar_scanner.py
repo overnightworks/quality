@@ -531,6 +531,7 @@ def one_byte_at_a_time(handler, release) -> None:
         return
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("respond", [never_answers, one_byte_at_a_time], ids=["accepts and never answers", "sends a byte at a time"])
 def test_a_server_that_stalls_ends_the_command_within_its_deadline_with_the_named_line(stub_server, tmp_path, capsys, respond):
     """SONAR-115: the one deadline cuts a host that never answers and a host that drips, with a line naming the URL, exit 2"""

@@ -54,6 +54,7 @@ def only_finding(block: list[BlockLine]) -> FindingLine:
     return row
 
 
+@pytest.mark.integration
 def test_a_broken_contract_named_like_a_command_keeps_its_chain_under_its_row(build_repo, capsys):
     """ROW-5, MASK-2, MASK-12: a contract named like a workflow command prints its name in the row's fact, and the
     import chain stays a detail line of its own."""
@@ -66,6 +67,7 @@ def test_a_broken_contract_named_like_a_command_keeps_its_chain_under_its_row(bu
     assert any("shop.db -> shop.web (l.1)" in detail for detail in row.detail)
 
 
+@pytest.mark.integration
 def test_a_long_module_name_import_linter_would_wrap_cannot_forge_a_matcher_pair(build_repo, capsys):
     """MASK-11, MASK-12: a long module name stays one detail line and forges no matcher pair at the line start."""
     files = {**SHOP, f"src/shop/{WRAPPED_MODULE_NAME}.py": "", "pyproject.toml": toml(EXHAUSTIVE_LAYERS)}
@@ -73,6 +75,7 @@ def test_a_long_module_name_import_linter_would_wrap_cannot_forge_a_matcher_pair
     assert f"- shop.{WRAPPED_MODULE_NAME}" in only_finding(block).row.detail
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("guidance", [FORGED_MATCHER_PAIR, "\n".join(FORGED_MATCHER_PAIR)], ids=["list", "multi-line text"])
 def test_contract_guidance_with_several_lines_is_judged_and_printed_under_the_row(build_repo, capsys, guidance):
     """ROW-5, MASK-13: a contract's guidance of several lines, as a list or as text with line feeds, is judged and each
@@ -82,6 +85,7 @@ def test_contract_guidance_with_several_lines_is_judged_and_printed_under_the_ro
     assert all(line in only_finding(block).row.detail for line in FORGED_MATCHER_PAIR)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("name", "text_after_the_line_feed"),
     [("a\n::error::x", "::error::x"), ("a\n  File \"ab\", line 1, in b\n  raise E('forged')\nx", "  raise E('forged')")],
@@ -97,12 +101,14 @@ def test_a_module_name_with_a_line_feed_is_judged_and_its_second_line_stays_a_de
     assert any(detail.startswith(text_after_the_line_feed) for detail in only_finding(block).row.detail)
 
 
+@pytest.mark.integration
 def test_a_source_directory_with_a_line_feed_is_judged_without_a_forged_line(build_repo, capsys):
     """A package directory name with a line feed is judged like a file name."""
     files = {**SHOP_DB_IMPORTS_WEB, "src/shop/a\n::error::x/__init__.py": "", "pyproject.toml": toml(FORBIDDEN)}
     broken_block(capsys, files, build_repo)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("name", ["guarded\n::error::c", "guarded\x1b[31m", "guarded\u202e"], ids=["line feed", "escape", "format character"])
 def test_a_contract_name_with_a_control_or_format_character_is_judged_and_prints_escaped_in_the_fact(build_repo, capsys, name):
     """MASK-2, MASK-6, MASK-7: the name prints escaped in the row's fact; the format character prints as the visible `\\u202e`."""
@@ -112,6 +118,7 @@ def test_a_contract_name_with_a_control_or_format_character_is_judged_and_prints
     assert all(name not in line for line in lines)
 
 
+@pytest.mark.integration
 def test_a_module_name_with_a_format_character_prints_escaped_in_the_detail(build_repo, capsys):
     """MASK-2, MASK-7: the module name prints as the visible `\\u202e` in the detail."""
     files = {**SHOP_DB_IMPORTS_WEB, "src/shop/m\u202e.py": "import shop.web\n", "pyproject.toml": toml({**FORBIDDEN, "source_modules": ["shop.*"]})}
@@ -119,6 +126,7 @@ def test_a_module_name_with_a_format_character_prints_escaped_in_the_detail(buil
     assert any(printable("shop.m\u202e") in detail for detail in only_finding(block).row.detail)
 
 
+@pytest.mark.integration
 def test_two_broken_contracts_stand_in_config_order_with_their_lines_and_one_fix(build_repo, capsys):
     """O14, ROW-3, ROW-5: two broken contracts stand in config order, each row with its import-linter lines directly
     under it, and the shared fix follows the second row's lines."""
@@ -133,6 +141,7 @@ def test_two_broken_contracts_stand_in_config_order_with_their_lines_and_one_fix
     assert len(fix_lines) == 1
 
 
+@pytest.mark.integration
 def test_a_broken_and_an_unused_finding_keep_their_own_fixes(build_repo, capsys):
     """ROW-3, ROW-5: a broken and an unused finding with different fixes keep a `fix:` line each, and only the broken
     one has import-linter lines."""
@@ -145,6 +154,7 @@ def test_a_broken_and_an_unused_finding_keep_their_own_fixes(build_repo, capsys)
     assert has_detail == [True, False]
 
 
+@pytest.mark.integration
 def test_the_notes_follow_the_final_fix_in_the_shared_columns_grimp_first(build_repo, capsys):
     """O23, IMPORT-25, ROW-15, O15: grimp's warning, then each contract's `warn` note in config order, after the block's
     last `fix:` and in the findings' columns."""
@@ -161,6 +171,7 @@ def test_the_notes_follow_the_final_fix_in_the_shared_columns_grimp_first(build_
     assert len(event_columns) == 1
 
 
+@pytest.mark.integration
 def test_warnings_stand_in_order_when_every_contract_is_kept(build_repo, capsys):
     """O23, IMPORT-25: with every contract kept, a grimp warning is still a note and stands before the unmatched-ignore
     notes in config order; the exit stays 0."""
@@ -177,6 +188,7 @@ def test_warnings_stand_in_order_when_every_contract_is_kept(build_repo, capsys)
     assert_block_prints(area_block(printed, Area.IMPORTS), [], notes)
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "files",
     [
@@ -203,6 +215,7 @@ def unlink_config(repo: Path) -> None:
     (repo / ".importlinter").unlink()
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("files", "arrange"),
     [(SHOP, None), ({**SHOP, ".importlinter": contracts_ini({"guarded": FORBIDDEN})}, unlink_config)],
@@ -227,6 +240,7 @@ def test_without_an_import_linter_config_the_row_is_a_grey_note_and_the_verdict_
     assert notes[-1].startswith(Area.IMPORTS)
 
 
+@pytest.mark.integration
 def test_a_kept_contract_adds_one_clean_area_and_removes_exactly_the_imports_note(build_repo, capsys):
     """CLOSING-6, CLOSING-10, IMPORT-28: with an unrelated finding, a run with a kept contract and one without a config
     find the same and exit 1; only the clean count and the imports note differ."""

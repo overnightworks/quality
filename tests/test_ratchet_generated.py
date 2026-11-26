@@ -23,6 +23,8 @@ from tests.support.door import FIX_WORDS, door_in
 from tests.support.generated_files import MANDATORY_JOB, TYPES_FILE, generated_config
 from tests.support.source_code import long_function, typescript_branchy_function, typescript_file
 
+pytestmark = pytest.mark.integration
+
 GATE = f'[gate]\nmandatory_jobs = ["{MANDATORY_JOB}"]\n'
 
 

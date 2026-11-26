@@ -9,6 +9,8 @@ from quality.rules import Rule
 from tests.support.check import check_output as run
 from tests.support.check import env_row_stands, is_clean, refusal_row, refusals, rule_findings
 
+pytestmark = pytest.mark.integration
+
 MISSING, SHARED_GROUP, CANCELS_MAIN = FindingEvent.MISSING, FindingEvent.SHARED_GROUP, FindingEvent.CANCELS_MAIN
 WORKFLOW = ".github/workflows/w.yml"
 GROUP = "${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}"

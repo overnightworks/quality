@@ -42,6 +42,7 @@ from tests.support.scanners import OUTPUTS, fake_scanner, lacking
 
 # ---- the real osv-scanner against a fake file:// database (CI runs these; they download the binary) ----
 
+@pytest.mark.integration
 @pytest.mark.scanner
 def test_an_affected_lock_is_red_and_names_the_advisory_and_the_fix(build_repo, publish_database, installed_scanners, run_gate):
     """ADVISORY-8, ADVISORY-24, O41: an affected lock is red, its row at the tracked path names the package and the
@@ -53,6 +54,7 @@ def test_an_affected_lock_is_red_and_names_the_advisory_and_the_fix(build_repo, 
     assert (location, row.event, row.fix, (PACKAGE_NAME in row.fact, ADVISORY_ID in row.fact)) == ("uv.lock", FindingEvent.AFFECTED, upgrade_fix(), (True, True))
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 @pytest.mark.parametrize(
     ("records", "in_fact", "fix_is"),
@@ -76,6 +78,7 @@ def test_the_fix_follows_what_osv_lists(build_repo, publish_database, installed_
     assert (all(word in row.fact for word in in_fact), fix_is(row.fix)) == (True, True), output
 
 
+@pytest.mark.integration
 def test_a_record_naming_a_pypi_package_in_other_spelling_still_supplies_the_fix(
     build_repo, served_scanners, run_gate, publish_database, edited_report
 ):
@@ -92,6 +95,7 @@ def test_a_record_naming_a_pypi_package_in_other_spelling_still_supplies_the_fix
     assert [row.fix for _, row in area_finding_rows(output, Area.DEPENDENCIES)] == [upgrade_fix()]
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 def test_two_advisories_that_alias_each_other_are_one_finding(build_repo, publish_database, installed_scanners, run_gate):
     """ADVISORY-8, ADVISORY-23: one finding per alias group, naming one of its ids."""
@@ -103,6 +107,7 @@ def test_two_advisories_that_alias_each_other_are_one_finding(build_repo, publis
     assert sum(identifier in row.fact for identifier in ("GHSA-aaaa-bbbb-cccc", "PYSEC-1")) == 1
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 def test_every_tracked_lock_is_judged_with_its_relative_name(build_repo, publish_database, installed_scanners, run_gate):
     """ADVISORY-1, ADVISORY-6, ADVISORY-8, ADVISORY-24, O43: nested, odd-named and gitignored locks are judged against
@@ -122,6 +127,7 @@ def test_every_tracked_lock_is_judged_with_its_relative_name(build_repo, publish
     assert (rows["speech/uv.lock"].fix.endswith(upgrade_fix()), "speech" in rows["speech/uv.lock"].fix) == (True, True)
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 @pytest.mark.parametrize(
     "repository_config",
@@ -143,6 +149,7 @@ def test_a_repository_osv_scanner_config_changes_nothing(
     assert [location for location, _ in area_finding_rows(output, Area.DEPENDENCIES)] == [name]
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 @pytest.mark.parametrize(
     "lock", [uv_lock(SAFE), VIRTUAL_ROOT_ONLY], ids=["a clean lock", "only a virtual root"]
@@ -156,6 +163,7 @@ def test_a_lock_no_advisory_affects_is_clean(build_repo, publish_database, insta
     assert "✓ dependencies" in output
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 @pytest.mark.parametrize(
     ("name", "text", "folder"),
@@ -179,6 +187,7 @@ def test_the_live_database_condemns_pyyaml_5_3_1(build_repo, installed_scanners,
 # ---- no network, no real osv-scanner ----
 
 
+@pytest.mark.integration
 def test_without_a_tracked_lock_nothing_is_downloaded_and_no_osv_binary_is_needed(
     build_repo, served_scanners, use_mise, run_gate, monkeypatch
 ):
@@ -189,6 +198,7 @@ def test_without_a_tracked_lock_nothing_is_downloaded_and_no_osv_binary_is_neede
     assert code == 0, output
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("name", ["uv.lock", "tests/requirements.txt"])
 @pytest.mark.parametrize("tracked_only", ["missing", "symlink to a directory", "symlink out"])
 def test_a_lock_the_tree_cannot_hand_over_is_skipped_or_refused(
@@ -214,6 +224,7 @@ def test_a_lock_the_tree_cannot_hand_over_is_skipped_or_refused(
     assert (code, expected_text in output) == (expected_code, True), output
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("archive", "expected"),
     [
@@ -294,6 +305,7 @@ def timed_gate(build_repo, served_scanners, run_gate):
 BODY_BEGUN = b"HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n"
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("opening", "trickles"),
     [(BODY_BEGUN, True), (b"HTTP/1.1 200 OK\r\nX-Slow: ", True)],
@@ -307,6 +319,7 @@ def test_a_server_that_trickles_bytes_hits_the_download_deadline(serve_stalling,
     assert (code, "download exceeded" in output, elapsed < 3) == (2, True, True), output
 
 
+@pytest.mark.integration
 def test_a_download_still_running_when_the_run_ends_is_cut_in_the_runs_words(serve_stalling, timed_gate, monkeypatch):
     """SCANNER-20, ADVISORY-9, REFUSAL-22: a download that outlives the run's deadline ends with it and says so, not
     that it exceeded its own 300 seconds."""
@@ -317,6 +330,7 @@ def test_a_download_still_running_when_the_run_ends_is_cut_in_the_runs_words(ser
     assert (code, cut in output, "exceeded" in output, elapsed < 10) == (2, True, False, True), output
 
 
+@pytest.mark.integration
 def test_a_server_that_goes_silent_is_a_timeout_not_the_total_deadline(serve_stalling, timed_gate, monkeypatch):
     """ADVISORY-9: a server that stops sending is a refusal naming a timeout; the total deadline is named only when
     it is the cause. Every attempt times out, so the refusal comes after the last one."""
@@ -341,6 +355,7 @@ def failing_opener():
     urllib.request.install_opener(None)
 
 
+@pytest.mark.integration
 def test_an_unexpected_download_error_is_cannot_judge_at_once(failing_opener, timed_gate, monkeypatch):
     """An error nobody anticipated while downloading is a refusal naming its cause at once, not a wait for the total
     deadline."""
@@ -353,6 +368,7 @@ def test_an_unexpected_download_error_is_cannot_judge_at_once(failing_opener, ti
         2, True, True, False, True), output
 
 
+@pytest.mark.integration
 def test_a_scratch_directory_that_cannot_be_written_is_cannot_judge(build_repo, served_scanners, run_gate, publish_database, monkeypatch):
     """ADVISORY-10: a full or read-only scratch directory is a refusal naming the database, not a traceback."""
     publish_database()
@@ -370,6 +386,7 @@ def test_a_scratch_directory_that_cannot_be_written_is_cannot_judge(build_repo, 
     assert (code, "cannot place the PyPI advisory database in the scratch directory" in output, "<scratch>" in output, refused(output, "secrets")) == (2, True, True, False), output
 
 
+@pytest.mark.integration
 def test_a_wheel_pin_file_that_cannot_be_written_is_cannot_judge(build_repo, served_scanners, run_gate, publish_database, monkeypatch):
     """A scratch directory that cannot take the wheel pins of a requirements file is a refusal naming that file, not a
     traceback."""
@@ -389,6 +406,7 @@ def test_a_wheel_pin_file_that_cannot_be_written_is_cannot_judge(build_repo, ser
     assert (code, "tests/requirements.txt: cannot write the wheel pins for the scan" in output, "Traceback" in output) == (2, True, False), output
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 @pytest.mark.parametrize(
     ("name", "text"),
@@ -408,6 +426,7 @@ def test_a_lock_osv_cannot_parse_is_cannot_judge_and_names_neither_form_of_its_p
     assert (code, name in output) == (2, True), output
 
 
+@pytest.mark.integration
 def test_two_tracked_names_for_one_lock_are_each_judged(build_repo, served_scanners, run_gate, publish_database):
     """ADVISORY-23, ADVISORY-24: a finding for every tracked name, not only the last one that resolves to the file."""
     publish_database()
@@ -417,6 +436,7 @@ def test_two_tracked_names_for_one_lock_are_each_judged(build_repo, served_scann
     assert sorted(location for location, _ in area_finding_rows(output, Area.DEPENDENCIES)) == ["speech/uv.lock", "uv.lock"]
 
 
+@pytest.mark.integration
 @pytest.mark.scanner
 def test_two_tracked_names_for_one_lock_are_each_judged_by_the_real_osv(build_repo, publish_database, installed_scanners, run_gate):
     """ADVISORY-8, ADVISORY-23, ADVISORY-24: the same, with the real osv-scanner reporting however it reports a repeated
@@ -427,6 +447,7 @@ def test_two_tracked_names_for_one_lock_are_each_judged_by_the_real_osv(build_re
     assert sorted(location for location, _ in area_finding_rows(output, Area.DEPENDENCIES)) == ["speech/uv.lock", "uv.lock"]
 
 
+@pytest.mark.integration
 def test_an_osv_binary_at_the_wrong_version_names_both_versions(build_repo, served_scanners, capsys, publish_database):
     """SCANNER-10: an osv-scanner at another version is exit 2 naming both versions."""
     publish_database()
@@ -438,6 +459,7 @@ def test_an_osv_binary_at_the_wrong_version_names_both_versions(build_repo, serv
     assert (code, f"{OSV} 9.9.9 found, the release pins {scanners.pinned_tool(OSV).version}" in output) == (2, True), output
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("exit_code", [2, 127, 128])
 def test_an_unexpected_osv_exit_is_cannot_judge_with_the_code_and_stderr(
     build_repo, served_scanners, run_gate, publish_database, exit_code
@@ -452,6 +474,7 @@ def test_an_unexpected_osv_exit_is_cannot_judge_with_the_code_and_stderr(
     assert "boom reason" in output
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("fixture", "edit", "exit_code", "expected"),
     [
@@ -508,6 +531,7 @@ def test_a_report_that_disagrees_with_the_exit_is_cannot_judge(
     assert (code, expected in output) == (2, True), output
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize("name", ["uv.lock", "src/frontend/pnpm-lock.yaml", "tests/requirements.txt"])
 def test_a_tracked_file_of_zero_bytes_is_cannot_judge(build_repo, served_scanners, run_gate, publish_database, name):
     """ADVISORY-5: a tracked file of zero bytes is exit 2, since osv-scanner exits 0 on it without judging."""
@@ -518,6 +542,7 @@ def test_a_tracked_file_of_zero_bytes_is_cannot_judge(build_repo, served_scanner
     assert (code, f"{name} is empty" in output) == (2, True), output
 
 
+@pytest.mark.integration
 def test_a_package_osv_cannot_match_to_the_advisory_gets_only_the_advisory_link(
     build_repo, served_scanners, run_gate, publish_database, edited_report
 ):
@@ -535,6 +560,7 @@ def test_a_package_osv_cannot_match_to_the_advisory_gets_only_the_advisory_link(
     assert row.fact.count(SEPARATOR) == 1, row.fact
 
 
+@pytest.mark.integration
 def test_a_fake_osv_clean_report_for_a_tracked_lock_is_clean(build_repo, served_scanners, run_gate, publish_database):
     """A clean osv-scanner report for a tracked lock is clean."""
     publish_database()
@@ -620,6 +646,7 @@ def test_an_allowance_allows_its_advisory_in_its_lock_until_its_date(groups, all
         assert positions == sorted(positions)
 
 
+@pytest.mark.integration
 def test_check_prints_an_allowance_that_ran_out_as_an_affected_row(build_repo, served_scanners, run_gate, publish_database):
     """ALLOW-4, O45: once the date has passed the advisory is red with the date and item, in the upgrade's row."""
     publish_database()
@@ -631,6 +658,7 @@ def test_check_prints_an_allowance_that_ran_out_as_an_affected_row(build_repo, s
     assert all(word in row.fact for word in ("2000-01-01", UV_LOCK_ALLOWANCE["item"]))
 
 
+@pytest.mark.integration
 def test_an_allowance_without_a_tracked_lock_is_red_with_no_osv_scanner_and_no_download(
     build_repo, served_scanners, use_mise, capsys, monkeypatch
 ):

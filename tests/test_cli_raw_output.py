@@ -30,6 +30,8 @@ from tests.support.scanners import (
 from tests.support.secrets import FAKE_KEY, allow_config
 from tests.support.terminal import screen, without_sgr
 
+pytestmark = pytest.mark.integration
+
 
 def streams(repo: Path, capsys, *flags: str, **keywords) -> tuple[int, str, str]:
     """The exit, stdout and stderr of `quality check <flags>` in `repo`."""

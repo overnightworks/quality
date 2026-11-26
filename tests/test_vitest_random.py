@@ -7,6 +7,8 @@ from quality.rules import Rule
 from tests.support.check import check_output as run
 from tests.support.check import check_result, refusals, rule_findings
 
+pytestmark = pytest.mark.integration
+
 RULE = Rule.VITEST_RANDOM
 UNSHUFFLED = FindingEvent.UNSHUFFLED
 CONFIG = "vitest.config.ts"

@@ -9,6 +9,8 @@ from tests.support.check import check_output, refusals, rows_of, rule_findings
 from tests.support.layout import CONFIG, GUIDANCE, assert_row_is_kind, declaring, in_index, red
 from tests.support.merge import ONE_JOB
 
+pytestmark = pytest.mark.integration
+
 RULE = Rule.TEST_LAYOUT
 ROOT_PROJECT = {**GUIDANCE, "pyproject.toml": "", "src/p/cli.py": "x = 1\n"}
 
