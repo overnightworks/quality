@@ -3,5 +3,6 @@ agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
 role = "builder"
 base = "ed2a7a4077071ee21f507d875c384d2e266a24a5"
 branch = "dependabot/uv/import-linter-2.17"
-scope = ["pyproject.toml", "uv.lock"]
+scope = ["docs/rules.md", "pyproject.toml", "src/quality/architecture.py", "uv.lock"]
 opened_commit = "d2545e5e95f3285dcfb3488c33d90da3248bc1b8"
+whole_reason = "A dependency bump and the two sentences that named its old version, which move with it."
