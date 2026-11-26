@@ -8,7 +8,7 @@
 - `mise --cd src/quality/mise install --locked`: install the scanners `src/quality/mise/mise.toml` pins; needs mise; run on a fresh machine and after each change of that file.
 - `uv run quality check`: quality's own gate on this checkout; needs those scanners and network, since every run asks
   the server about the advisory databases.
-- `quality merge <owner/repo>#<pr>`: the operator's door past a red gate; an agent never runs it.
+- `quality merge <owner/repo>#<pr>`: the door past a red gate; an agent runs it, and it merges only on the operator's consent at the head it merges.
 - `gh workflow run release.yml -R overnightworks/quality -f version=X.Y.Z`: dispatch quality's release; an agent runs it once the release pull request's review and CI are green.
 
 ## Rules
@@ -34,4 +34,4 @@
 - `docs/naming.md`: read when you name a package or rename a repository, or change a Sonar key.
 - `docs/proof.md`: read when you add tests or a CI job, or change a proof or CI-time rule or number.
 - `docs/sonar.md`: read when you change `sonar findings`, coverage on new code or the Sonar gate.
-- `docs/runbooks/`: read when the operator's door is the question, a pull request red that no change can turn green; the files are named by their task.
+- `docs/runbooks/`: read when the door past a red gate is the question, a pull request red that no change can turn green; the files are named by their task.

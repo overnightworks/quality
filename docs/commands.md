@@ -659,24 +659,23 @@ door (SCANNER-5).
 
 ## `quality merge`
 
-- MERGE-53: `quality merge <owner/repo>#<pr> [<owner/repo>#<pr> ...] [--dry-run] [-v]` is the operator's door past a red
-  gate: it merges the pull requests that the gate keeps red only for legacy Sonar findings or for
-  [declared loosenings](gate.md#declared-loosenings), each on the operator's own `yes`. The steps to take are in
-  [the runbook](runbooks/merge.md); this is what the command does, and [the lines on several names](#several-names)
-  say what a run over more than one pull request adds.
+- MERGE-53: `quality merge <owner/repo>#<pr> [--dry-run] [-v]` is the door past a red gate: it merges the pull request
+  that the gate keeps red only for legacy Sonar findings or for [declared loosenings](gate.md#declared-loosenings), on the
+  operator's consent. The steps to take are in [the runbook](runbooks/merge.md); this is what the command does.
 
 Ruled by the operator:
 
 - A body the door refuses for its line (MERGE-67) stops at `! landing  refused` under the pull request's row instead,
-  the same row as the last one before the question (MERGE-5).
+  the same row as the last one before the consent check (MERGE-5).
 - `merge` names no aco step; that step belongs in the head's instructions.
 
-- MERGE-54: **Operator only.** It runs under the operator's own `gh` login, which needs admin permission on the repository
+- MERGE-54: **Consent.** It runs under the `gh` login of whoever runs it, which needs admin permission on the repository
   (checked first: exit `2`, nothing changed,
-- MERGE-55: the missing right named). Agents never run it; it
-  refuses when stdin is not a terminal. This is the agent contract, not a lock: agents on the operator's machine share
-  his `gh` login, so to an agent the terminal is a hurdle, and that login could switch `quality_gate` directly. A real
-  lock (agents with a token without admin rights) belongs to the machine's setup, owned by
+- MERGE-55: the missing right named). An agent runs it, and it merges only on the operator's consent (MERGE-120). That is
+  the agent contract, a tripwire as [gate](gate.md#declared-loosenings) says, not a lock: agents on the operator's machine
+  share his `gh` login, so the door cannot tell his review from one written under his login, and that login could switch
+  `quality_gate` directly. A real lock (agents acting under an identity of their own, with the operator's credentials
+  out of their reach) belongs to the machine's setup, owned by
   [overnightworks/platform](https://github.com/overnightworks/platform), not to quality; it is a known residual risk.
 - MERGE-56: **It refuses unless the door is the only way** (exit `1`, nothing changed): the pull request is open
 - MERGE-57: and
@@ -736,7 +735,7 @@ Ruled by the operator:
 - MERGE-106: The
   verdict's base side and the fetch of the base commit use the compared tip, never the `base.sha` the pull request
   names.
-- MERGE-107: After `yes` and before the gate is touched the comparison is read again, outside the gate's
+- MERGE-107: After the consent and before the gate is touched the comparison is read again, outside the gate's
   restore: another tip than the one shown is `! base  moved` with `error: not merged · <base> moved since the rows
   were shown · nothing changed` (exit `1`, no log comment), `next:` being the update step where the head is now behind,
   else the door again; Ctrl-C during that read ends the run interrupted (exit `130`) with nothing changed.
@@ -776,28 +775,39 @@ Ruled by the operator:
 - MERGE-80: and an anonymous read that
   SonarCloud refuses (a private project answers 404) is exit `2`, naming `SONAR_TOKEN`;
 - MERGE-81: with a token, a 401 or 403 says the token was rejected.
-- MERGE-1: **It shows, then asks:** on stdout the [release](#which-release-judges) that judges first, then a row as each step
+- MERGE-1: **It shows, then checks the consent:** on stdout the [release](#which-release-judges) that judges first, then a row as each step
   passes:
 - MERGE-2: the pull request (`open`, head, base), the `base` row, the checks, the declared loosenings, each
   [whole](output.md#length) with its `item` and `date` and its `reason` on the line below,
 - MERGE-3: the legacy count
   where Sonar failed,
 - MERGE-4: the merge method (`allowed on <base>`),
-- MERGE-5: and last the `landing` row naming the
-  line the merge commit ends with
-- MERGE-6: (`work item` and `#<n>`, or `no item` and its kind); then, on stderr,
-  `Switch quality_gate off, merge #<pr>, switch it on? Type yes: `.
-- MERGE-7: Only `yes` in lower case, ended with
-  Enter, merges
-- MERGE-8: (whitespace around it counts for nothing;
-- MERGE-9: `Yes` or `y` change nothing);
-- MERGE-10: any other line, or the end of input (Ctrl-D) before Enter, prints `error: not confirmed · nothing changed` and
-  `next:` naming the command again (exit `1`);
-- MERGE-11: Ctrl-C at the question ends the run interrupted
-  (exit `130`);
-- MERGE-12: nothing has changed in either case.
-- MERGE-13: With stderr closed the question and the
-  pairs print nowhere; nothing moves to stdout.
+- MERGE-5: and last before the consent check the `landing` row naming the
+  line the merge commit ends with (`work item` and `#<n>`, or `no item` and its kind).
+- MERGE-6 (retired).
+- MERGE-7 (retired).
+- MERGE-8 (retired).
+- MERGE-9 (retired).
+- MERGE-10 (retired).
+- MERGE-11 (retired).
+- MERGE-12 (retired).
+- MERGE-13 (retired).
+- MERGE-119: **The consent text** is one fenced block the door prints for the head it merges: a line of three backticks,
+  `quality merge consent for <owner/repo>#<pr> at <head sha>`, `legacy findings on <default branch>` where Sonar failed
+  (no count, which moves with each analysis), each declared loosening as its row shows it, `<what> · <item> of <date>` and
+  `reason: <reason>` on the next line, and a line of three backticks. Every line is escaped on its own line and starts
+  with the door's own words, so no value closes the fence early or reaches another line.
+- MERGE-120: **The consent** is an organisation owner's latest review on the pull request: its author an active member of
+  the organisation that holds the repository with the role `admin`, its state a comment or an approval and not dismissed,
+  made at the head the door merges (its `commit_id`), its body the consent text of that head, line endings aside (CRLF read
+  as LF, trailing line ends dropped). The door reads `pulls/<pr>/reviews` and `orgs/<org>/memberships/<login>`.
+- MERGE-121: **Without it** the door stops at `! consent  missing` (exit `1`, nothing changed, a dry run too) with the
+  consent text below the row, whole and with no row prefix, so a reader pastes it as a review, and the pair
+  `error: not merged · no consent review at <head, 7 characters> · nothing changed` with `next:` the operator leaves
+  the text above as his review at that head, then the door runs again. Reviews or a membership that GitHub does not
+  answer are the `✗ consent` row (exit `2`). With it the row is `✓ consent  given  review <id> at <commit, 7 characters>`.
+- MERGE-122: The door never reads the comment that shows the operator the text: it recomputes the text at the head and
+  refuses any difference, so a review of an earlier head or of another text is no consent.
 - MERGE-14: A refusal is its `!` row and the `error:`/`next:` pair on
   stderr (exit `1`),
 - MERGE-15: each blocking line of the verdict [whole](output.md#length) below the `loosenings`
@@ -810,18 +820,18 @@ Ruled by the operator:
   for that commit: `fix it on <base branch> first` for the base,
 - MERGE-19: which is read first,
 - MERGE-20: or
-  `push the fix to the pull request's branch, then run quality merge <owner/repo>#<pr> again` for the merge commit;
-- MERGE-21: no terminal on stdin is the pair alone (exit `1`); a name not of the form
-  `<owner>/<repo>#<pr>` is [a wrong invocation](#help-and-wrong-invocations) (exit `2`).
-- MERGE-22: Every line it prints is
-  escaped as [the other doors' lines are](output.md#masking), so a `reason` cannot hide anything before `yes` or forge
+  `push the fix to the pull request's branch, then run quality merge <owner/repo>#<pr> again` for the merge commit.
+- MERGE-21 (retired).
+- MERGE-22: Every line it prints, the consent text included, is
+  escaped as [the other doors' lines are](output.md#masking), so a `reason` cannot hide anything before the consent or forge
   a line.
-- MERGE-23: **Dry run:** `--dry-run` reads and shows every row the door shows,
-- MERGE-24: refuses where it refuses before the question (the read after `yes` it cannot make),
-- MERGE-25: and in place of the question ends with
+- MERGE-23: **Dry run:** `--dry-run` reads and shows every row the door shows, the consent row and, where consent is
+  missing, its text,
+- MERGE-24: refuses where it refuses before the merge (the read after the consent it cannot make),
+- MERGE-25: and in place of the merge ends with
   `~ dry run · would switch quality_gate off, merge #<pr>, switch it on · nothing changed` on stdout (exit `0`);
-- MERGE-26: it reads no answer
-- MERGE-27: and sends no request that changes anything (no `gh api -X`), and it needs a terminal on stdin like the door.
+- MERGE-26 (retired).
+- MERGE-27: it sends no request that changes anything (no `gh api -X`).
 - MERGE-28: `-v` is taken and adds nothing:
   the door runs no scanner.
 - MERGE-29: **Off, merge, on:** it sets the repository's `quality_gate` property to `false` (this takes the fleet's ruleset off
@@ -840,10 +850,10 @@ Ruled by the operator:
 - MERGE-33: the shown text and the log comment name the method),
 - MERGE-34: and sets the property back to `true`
   in every case: merged, merge failed, Ctrl-C.
-- MERGE-35: After `yes` each step is a row on stdout as GitHub answers it
+- MERGE-35: After the consent each step is a row on stdout as GitHub answers it
   (`quality_gate  off`, `#<pr>  merged` with the method, `quality_gate  on`, `log comment  posted`),
 - MERGE-36: ending
-  `✓ merged #<pr> · quality_gate on again · <duration>` (counted from `yes`) (exit `0`).
+  `✓ merged #<pr> · quality_gate on again · <duration>` (counted from the consent) (exit `0`).
 - MERGE-37: A step
   not done is a `✗` row (`off failed`, `not merged`, `state unknown`, `not restored`, `not posted`) and one pair on
   stderr, exit `2`,
@@ -857,13 +867,15 @@ Ruled by the operator:
 - MERGE-43: if that does
   not settle it, the row is `state unknown` and the pair says `#<pr> may be merged` with `gh pr view`.
 - MERGE-44: Before
-  the question a stdout that refuses a row stops the door (exit `2`, nothing changed);
-- MERGE-45: after `yes` such a
+  the gate is touched a stdout that refuses a row stops the door (exit `2`, nothing changed);
+- MERGE-45: after that such a
   stdout takes no further row and no closing line, and the run does every step and keeps its exit.
 - MERGE-46: **Logged:** one comment on the pull request, opening `quality merge run by @<login>`
 - MERGE-47: (who, when,
-- MERGE-48: the legacy count
-- MERGE-49: and each declaration,
+- MERGE-48: the legacy count,
+- MERGE-49 (retired).
+- MERGE-123: the consent review and the commit it was made at (`consent review <id> at <commit_id>`), with no declaration,
+  which the review holds,
 - MERGE-50: `quality_gate off → <outcome> → on`
   (`<outcome>` is `merge`, `merge failed` or `merge state unknown`),
 - MERGE-51: or
@@ -872,58 +884,16 @@ Ruled by the operator:
   the comment then ending `NOT restored, it may still be off` in place of `on`. A comment not posted is its
   `✗` row, its command under `next:`.
 
-### Several names
+A terminal that hangs up between the switch-off and the restore leaves the property off without a word.
 
-Ruled by the operator:
-
-- MERGE-108: `quality merge` takes several pull requests in one run; each is judged, shown with its rows and refused exactly as a
-  run for it alone is, every MERGE line holds per pull request and the `quality_gate` property is switched off and
-  restored per repository, and each merges only on the operator's own `yes` to it.
-
-`quality merge A#1 B#2 ...` judges and shows each named pull request one after the other and merges each on the
-operator's own `yes` to it (MERGE-108). It takes the names given and finds none: the door reads only the repositories
-it is named. Every line of this section above holds per pull request, because each pull request is a run for it alone.
-
-- MERGE-109: **A process per pull request.** For each name the run starts `<python> -P -m quality.cli merge <name>` with
-  `--dry-run` and `-v` as given, the interpreter being the one that runs the door, and waits until it has
-  exited before it starts the next, in the order named, two of one repository included (MERGE-108). The child judges
-  at its own pinned release, switches the repository's `quality_gate` off and on again itself and shares nothing with
-  the next. `-P` keeps the working directory off the child's module path, so a `quality` package in a pull
-  request's checkout never loads under the operator's login. A second pull request of a repository is
-  judged from scratch, and after a merge moved its base it is refused as behind (MERGE-108).
-- MERGE-110: **Rows.** Before each child one `· <n> of <total>  judging  <name>` row names the pull request and its
-  place. The run flushes its output and discards what the terminal holds typed ahead before each child, so a
-  line typed during one pull request never answers the next one's question; the run itself reads no line.
-- MERGE-111: Each child's own rows and closing line or pair stand as a run for it alone prints them. At the end one
-  row per name says what that child came to, from its exit alone: `✓ merged` (exit `0`), `~ would merge` (exit `0` of
-  a dry run), `! not merged` (exit `1`), `! interrupted` (it ended by the interrupt), `✗ stopped` (exit `2`),
-  `✗ killed` with `signal <n>` (any other signal) and `· not run`.
-- **Refused: the run goes on.** A child that exits `1` (a refusal, a `no`, a moved base) leaves nothing changed, and
-  the next name runs (MERGE-111).
-- MERGE-112: **Stopped: the run ends.** A child that exits `2` ends the run, because the run cannot tell an unjudged read from a
-  gate that may still be off; the later names show as not run. The pair says `stopped at <name>` and the
-  count, and under `next:` names first the step that child's own pair printed above, to be done at once, then
-  `quality merge` with the names not run.
-- MERGE-114: **Killed by a signal.** A child killed by a signal other than SIGINT printed no pair: the run says
-  `quality_gate MAY STILL BE OFF on <owner/repo>`, names the restore command first and then `quality merge` with the
-  names not run, ends `2` and starts no child.
-- MERGE-113: **Interrupted.** Ctrl-C reaches the child and the run together. The child ends as a run for it alone does; the run
-  waits for it, never kills it, starts no further child and ends interrupted. A Ctrl-C that arrives
-  outside the wait (as a child starts, or while the run prints its rows, summary or pair) is noted, not raised: the run
-  still waits for a started child and prints the summary and the pair, a restore step included. SIGTERM to the run alone
-  ends the run and leaves the child to finish and restore the property by itself.
-- MERGE-118: **The exit.** The run exits `2` if a child exited `2` or was killed, else `130` if it was interrupted, else `1` if
-  a child exited `1`, else `0`: an interrupted run never exits `0` or `1`, whatever the interrupted
-  child's own exit was, so a gate that may be off is never hidden behind an interruption.
-- MERGE-117: **The last line.** All merged ends `✓ merged <n> of <n> · <duration>` on stdout (MERGE-111); a dry run ends
-  `~ dry run · would merge <n> of <n> · nothing changed`. Exit `1` ends with the pair
-  `merged <m> of <n> · <k> not merged · nothing changed` and `next:` the command for the names not merged (MERGE-111);
-  exit `2` with the pair of the stopped child and the names not run (MERGE-112), `--dry-run` carried in the command
-  where the run had it. An interrupted run ends with its rows and no pair (MERGE-113).
-- MERGE-115: **No terminal.** Without a terminal on stdin the run is the pair of MERGE-21, exit `1`, and no child starts.
-- MERGE-116: **A word that names no pull request,** among several, is refused naming that word, before any child starts (exit
-  `2`). With one name the door runs in the same process and prints as it does without this section
-  (MERGE-117).
-
-A terminal that hangs up between the switch-off and the restore leaves the property off without a word, as a run for
-one pull request does; a name given twice is judged twice.
+- MERGE-108 (retired).
+- MERGE-109 (retired).
+- MERGE-110 (retired).
+- MERGE-111 (retired).
+- MERGE-112 (retired).
+- MERGE-113 (retired).
+- MERGE-114 (retired).
+- MERGE-115 (retired).
+- MERGE-116 (retired).
+- MERGE-117 (retired).
+- MERGE-118 (retired).

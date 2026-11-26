@@ -10,7 +10,7 @@ repository and for the operator who merges past it.
     quality sonar findings [-v]
     quality verdict [-v]
     quality report
-    quality merge OWNER/REPO#N [OWNER/REPO#N ...] [--dry-run]
+    quality merge OWNER/REPO#N [--dry-run]
 
 [Exit codes](docs/output.md#exit-codes): `0` clean, `1` findings, `2` cannot judge (never clean), `130` interrupted
 (Ctrl-C).
@@ -48,5 +48,5 @@ Locally, `quality check` runs every rule the gate runs, the secret, workflow and
 - [docs/codeql.md](docs/codeql.md): the `codeql.yml` caller contract.
 - [docs/release.md](docs/release.md): the release path (`release-gate.yml`, `release-tag.yml`, `image.yml`), its caller contract, how quality releases itself and the standard.
 - [docs/sonar.md](docs/sonar.md): `sonar findings`, coverage on new code, new and legacy findings, the quality gate, the Dependabot exception.
-- [docs/runbooks/merge.md](docs/runbooks/merge.md): the operator's door past a red gate.
+- [docs/runbooks/merge.md](docs/runbooks/merge.md): the door past a red gate, which merges on the operator's consent.
 - [AGENTS.md](AGENTS.md): the contract for agents working in this repository.

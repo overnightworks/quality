@@ -309,23 +309,13 @@ The line of `quality check debt --fix --dry-run` when nothing is left to lower (
 - CLOSING-25: A folder outside the home folder, or any folder where no home folder is known, stands as its absolute path.
 - CLOSING-26: No run that cannot start ends in a traceback.
 
-## A merge run over several names
+## The consent in a merge run
 
-A `quality merge` run over several names prints each child's own rows, closing line and pair as a run for that name
-alone prints them (MERGE-111), and its own lines around them, in the grammar of [Rows](#rows):
-
-- Before each child one note row `· <n> of <total>  judging  <name>`, `<name>` the fact (MERGE-110).
-- At the end one row per name in the order named, the name its subject and the event what the child's exit says
-  (MERGE-111): `✓ merged`, `~ would merge` (a dry run), `! not merged` (exit `1`), `! interrupted`, `✗ stopped`
-  (exit `2`), `✗ killed  signal <n>` and `· not run`.
-- Then one closing line or one pair (MERGE-111, MERGE-112, MERGE-117): `✓ merged <n> of <n> · <duration>`, or
-  `~ dry run · would merge <n> of <n> · nothing changed`, or the pair `error: merged <m> of <n> · <k> not merged ·
-  nothing changed` with `next: quality merge <names not merged>`, or the pair of a run that stopped, which begins
-  `stopped at <name>` (a child's exit `2`) or `quality_gate MAY STILL BE OFF on <owner/repo>` (a child killed by a
-  signal) and names under `next:` first the step to take at once, then `quality merge <names not run>` (MERGE-112,
-  MERGE-114). An interrupted run ends with its rows and no pair (MERGE-113).
-- The exit is the worst of the children's: `2` beats `130` beats `1` beats `0` (MERGE-118), so an interrupted run never
-  exits `0` or `1`.
+`quality merge` names one pull request and prints its rows in the grammar of [Rows](#rows). Its `consent` row is
+`✓ consent  given  review <id> at <commit>` where an organisation owner's review carries the text, and `! consent  missing`
+where none does; below the missing row the consent text stands as a block (MERGE-119, MERGE-121): each line escaped as
+[Masking](#masking) says, printed whole with no row prefix and no padding, so a reader pastes the fenced text as a review.
+Every line of the block starts with the door's own text (MASK-11).
 
 ## Refusals
 
@@ -431,13 +421,13 @@ next: write it in quality/config.toml like this:
 
 Ruled by the operator:
 
-- stdout carries rows and the verdict (STREAM-1). stderr carries the live line, the input prompt and `error:`/`next:`
+- stdout carries rows and the verdict (STREAM-1). stderr carries the live line and `error:`/`next:`
   (STREAM-2). So `quality check | less` shows every finding and an error stays visible.
 - `report`: rows (FLEET-33) and verdict (FLEET-45) on stderr; the tables are an artifact on stdout, so
   `quality report > fleet.md` writes only the five tables (FLEET-40).
 
 - STREAM-1: Rows and the verdict go to stdout;
-- STREAM-2: the live line, the input prompt and `error:`/`next:` go to stderr.
+- STREAM-2: the live line and `error:`/`next:` go to stderr.
 
 `quality report` has [its own split](commands.md#quality-report).
 
