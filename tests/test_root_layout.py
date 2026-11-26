@@ -306,11 +306,19 @@ def test_a_directory_whose_case_condition_fails_is_unlisted_and_its_fact_names_t
     assert set(found) == set(facts)
 
 
-def test_a_case_directory_in_another_case_names_its_case_spelling_and_condition(build_repo):
+@pytest.mark.parametrize(
+    "files",
+    [{"Frontend/package.json": "{}"}, {"Frontend/index.html": "x", "frontend/package.json": "{}"}],
+    ids=["its condition fails too", "its condition is met by the exactly spelled entry"],
+)
+def test_a_case_directory_in_another_case_names_its_case_spelling_and_condition(build_repo, files):
     """ROOT-3, ROOT-11, ROOT-18."""
-    fact = unlisted_facts(build_repo({**GUIDANCE, "Frontend/package.json": "{}"}))["Frontend/"]
+    found = unlisted_facts(build_repo({**GUIDANCE, **files}))
+    fact = found["Frontend/"]
     hint = "its case spells it frontend/"
-    assert (hint in fact, "the list spells" in fact, fact.index(hint) < fact.index("frontend/package.json")) == (True, False, True)
+    assert (list(found), hint in fact, "the list spells" in fact, fact.index(hint) < fact.index("frontend/package.json")) == (
+        ["Frontend/"], True, False, True,
+    )
 
 
 def test_a_root_symlink_named_like_a_case_directory_is_a_file_entry_and_unlisted(build_repo):
