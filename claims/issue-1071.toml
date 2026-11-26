@@ -1,0 +1,8 @@
+claim_id = "a3c5715924be48f9b25790b60725e222"
+agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
+role = "builder"
+base = "26ef093f524db617211c25358690a2c2f426fc10"
+branch = "claude/issue-1071-cookie-refusal-states-own-reason"
+scope = ["docs/rules.md", "src/quality/architecture.py", "tests"]
+opened_commit = "e4fa59dd28a448f8c7abde1b03876c710d61bd8a"
+whole_reason = "One printed refusal of the import walk, its comment, its spec sentence and its expected text in the architecture tests."
