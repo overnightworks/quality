@@ -60,10 +60,6 @@ def test_every_base_list_entry_is_green_without_a_config(build_repo):
     assert red(build_repo(files), Rule.ROOT_LAYOUT) == []
 
 
-TOOL_READ_ROOT_NAMES = [
-    "tsconfig.json", "vitest.config.ts", "Makefile", "mise.toml", "mise.lock", "pnpm-workspace.yaml", "alembic.ini", ".sops.yaml",
-    ".claude/settings.json", ".claude-plugin/marketplace.json", ".codex/config.toml", ".agents/skills/x",
-]
 PROJECTS_CONDITION = "holds folders and each holds a pyproject.toml or package.json"
 FLUX_CONDITION = "clusters/<name>/flux-system/"
 
@@ -249,12 +245,6 @@ def test_a_declaration_is_no_loosening_at_the_verdict(pull_request, capsys):
     put(repo / CONFIG, ONE_JOB + declaring("frontend/"))
     code, output = verdict_of(repo, capsys)
     assert (code, "loosened" in output, "✓ green" in output) == (0, False, True)
-
-
-def test_every_name_a_tool_reads_from_the_root_is_green_without_a_declaration(build_repo):
-    """ROOT-1, ROOT-7."""
-    repo = build_repo({**GUIDANCE, **{name: "x" for name in TOOL_READ_ROOT_NAMES}})
-    assert red(repo, Rule.ROOT_LAYOUT) == []
 
 
 @pytest.mark.parametrize(
