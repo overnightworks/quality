@@ -397,8 +397,6 @@ class DoorStream:
 
 def _put(channel: Channel, text: str) -> None:
     stream = channel.stream
-    if stream is None:
-        return
     try:
         print(text, end="", file=stream, flush=True)
     except OSError:
