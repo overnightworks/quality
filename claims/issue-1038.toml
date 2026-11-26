@@ -1,8 +1,0 @@
-claim_id = "c6e06ab85d004986a64dcf8260313853"
-agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
-role = "builder"
-base = "a8dcb95386a297356eefcef8c2799ca49689b7b3"
-branch = "claude/issue-1038-own-tests-carry-integration-mark"
-scope = ["docs/ARCHITECTURE.md", "pyproject.toml", "tests"]
-opened_commit = "079d25d9dbfc8909845a35afa3c43da246eb3378"
-whole_reason = "One mark moves from run time into the sources of the tests that start a process, with the hook that proves it."
