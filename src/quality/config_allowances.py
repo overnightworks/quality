@@ -188,7 +188,7 @@ def _read_root_entry(entry: object, position: int) -> RootEntry:
 
 def layout_allowances(layout: dict, side: ConfigSide) -> tuple[LayoutEntry, ...]:
     if side is ConfigSide.BASE:
-        return config_entries.distinct_entries(layout, "allow", LAYOUT_ALLOWANCE_HEADING, LAYOUT_ALLOWANCE_EXAMPLE, _read_layout_entry)
+        return config_entries.declared_entries(layout, "allow", LAYOUT_ALLOWANCE_HEADING, LAYOUT_ALLOWANCE_EXAMPLE, _read_layout_entry)
     return config_entries.unique_entries(
         layout, "allow", LAYOUT_ALLOWANCE_HEADING, LAYOUT_ALLOWANCE_EXAMPLE, _read_layout_allowance,
         lambda allowance: allowance.identity,
@@ -276,7 +276,7 @@ def _one_per_field[Allowance](
 
 def root_allowances(root: dict, side: ConfigSide) -> tuple[RootEntry, ...]:
     if side is ConfigSide.BASE:
-        return config_entries.distinct_entries(root, "allow", ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE, _read_root_entry)
+        return config_entries.declared_entries(root, "allow", ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE, _read_root_entry)
     return _one_per_field(ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE, _read_root_allowance, "entry", "root entry")(root)
 
 

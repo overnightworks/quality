@@ -88,7 +88,7 @@ def unique_entries[Entry](
         entries[identity(entry)] = entry
     return tuple(entries.values())
 
-def distinct_entries[Entry](
+def declared_entries[Entry](
     table: dict, key: str, heading: str, example: ExampleLines, read: Callable[[object, int], Entry]
 ) -> tuple[Entry, ...]:
     """The entries of a list in `table`, each read by `read`, a repeated one kept as declared: a reading by identity
