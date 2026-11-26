@@ -421,6 +421,8 @@ It applies these rules:
   - IMPORT-21: a name or content that is not valid UTF-8,
   - IMPORT-22: a
     coding cookie in any spelling but utf-8, utf8, ascii, us-ascii or ansi_x3.4-1968 (accepted in any letter case),
+    because quality reads every source as UTF-8 and judges only one that it and grimp read alike
+    (`<path> cannot be examined: declares <spelling>; quality reads only <the accepted spellings>`),
   - IMPORT-23: or one the system will not let it read or that is gone: `<path> cannot be examined: <the system's reason>`,
     which does not say whether a rerun helps).
   - IMPORT-33: A name that does not end in `.py` is neither stat'ed nor read, so a dangling link, a link loop or a file
