@@ -1,0 +1,8 @@
+claim_id = "90c57ab47c5b40edaedfa44d0dcae823"
+agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
+role = "builder"
+base = "bde65d7f6ed50d7ad6031c8d636a33fe1891a452"
+branch = "claude/issue-1065-rules-md-security-through-loosenings"
+scope = ["docs/rules.md", "tests"]
+opened_commit = "313fada3fac506cfd09af838ac529a667c3764ca"
+whole_reason = "One range of one document converted to one form, plus at most the test docstrings that already prove their uncited IDs."
