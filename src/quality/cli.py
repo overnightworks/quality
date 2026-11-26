@@ -554,11 +554,19 @@ def _dependencies_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | N
     return SEPARATOR.join((counted(judged.lockfiles, "lockfile"), counted(judged.packages, "package")))
 
 
-_DEBT_EXTENT: dict[Measurement, Callable[[str, str, list[str], list[str]], str]] = {
-    Measurement.MEASURED_ONLY: lambda entries, pairs, limits, held_ids: f"{entries} over the thresholds",
-    Measurement.PARTLY_MEASURED_ONLY: lambda entries, pairs, limits, held_ids: ", ".join([pairs, *held_ids]),
-    Measurement.ENFORCED: lambda entries, pairs, limits, held_ids: (
-        f"{CEILING_HELD}{SEPARATOR}{', '.join([entries, pairs, *limits, *held_ids])}"
+@dataclass(frozen=True)
+class _DebtCounts:
+    entries: str
+    pairs: str
+    limits: list[str]
+    held_ids: list[str]
+
+
+_DEBT_EXTENT: dict[Measurement, Callable[[_DebtCounts], str]] = {
+    Measurement.MEASURED_ONLY: lambda counts: f"{counts.entries} over the thresholds",
+    Measurement.PARTLY_MEASURED_ONLY: lambda counts: ", ".join([counts.pairs, *counts.held_ids]),
+    Measurement.ENFORCED: lambda counts: (
+        f"{CEILING_HELD}{SEPARATOR}{', '.join([counts.entries, counts.pairs, *counts.limits, *counts.held_ids])}"
     ),
 }
 
@@ -567,7 +575,7 @@ def _debt_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) ->
     entries, pairs = counted(extents[Rule.SIZE], "entry", "entries"), counted(extents[Rule.CLONE], CLONE_PAIR)
     limits = [counted(extents[Rule.JOB_TIMEOUT], baseline_file.JOB_LIMIT)] if extents[Rule.JOB_TIMEOUT] else []
     held_ids = [counted(extents[Rule.SPEC_CITATION], baseline_file.UNCITED_SPEC_ID)] if extents[Rule.SPEC_CITATION] else []
-    return _DEBT_EXTENT[verdict.measurement](entries, pairs, limits, held_ids)
+    return _DEBT_EXTENT[verdict.measurement](_DebtCounts(entries, pairs, limits, held_ids))
 
 
 def _workflows_extent(verdict: AreaVerdict, extents: Mapping[Rule, Extent | None]) -> str:
