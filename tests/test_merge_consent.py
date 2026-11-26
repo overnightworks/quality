@@ -146,3 +146,19 @@ def test_a_consent_that_cannot_be_read_is_not_judged_and_changes_nothing(moment,
     code, out, _ = run(gh, capsys)
     assert (code, f"  ✗ consent       not judged     {moment} broke\n" in out) == (2, True)
     changed_nothing(gh)
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        pytest.param({**review(BLOCK), "user": "felix"}, id="a user that is no object"),
+        pytest.param({**review(BLOCK), "body": 7}, id="a body that is no text"),
+        pytest.param(["review"], id="a review that is no object"),
+    ],
+)
+def test_a_reviews_answer_of_the_wrong_shape_is_not_judged_and_changes_nothing(malformed, capsys):
+    """MERGE-121: reviews GitHub answers in a shape the door does not read are no consent and no refusal: the `✗ consent` row, exit 2."""
+    gh = FakeGh(reviews=[malformed])
+    code, out, _ = run(gh, capsys)
+    assert (code, "  ✗ consent       not judged     " in out) == (2, True)
+    changed_nothing(gh)

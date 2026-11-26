@@ -103,9 +103,9 @@ def test_the_merge_help_stands_in_its_frame(capsys):
     assert help_of(capsys, ["merge"]) == (
         "usage: quality merge OWNER/REPO#N [--dry-run] [-v]\n"
         "\n"
-        "Merge a pull request whose gate is red only for legacy findings or loosenings\n"
-        "he ruled, once an organisation owner's review at its head holds the consent\n"
-        "text the door prints; without it the door prints the text and refuses.\n"
+        "Merge a pull request whose gate is red only for legacy findings or loosenings,\n"
+        "once an organisation owner's review at its head holds the consent text the\n"
+        "door prints; without it the door prints the text and refuses.\n"
         "\n"
         "Options:\n"
         "  --dry-run   show the rows and the consent, then stop: nothing changes,\n"

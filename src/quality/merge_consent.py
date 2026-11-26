@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from quality.config import Declaration
 from quality.gh import GhFailed, GhRunner
-from quality.report import printable
+from quality.report import CannotJudge, printable
 from quality.verdict import declaration_texts
 
 FENCE = "```"
@@ -34,10 +34,16 @@ def consent_lines(repository: str, pull_request: int, head_sha: str, declared: S
     return (FENCE, f"quality merge consent for {repository}#{pull_request} at {head_sha}", *legacy, *loosenings, FENCE)
 
 
+def parse_review(each: object) -> Review:
+    """The review as GitHub lists it; any other shape is not judged."""
+    if not isinstance(each, dict) or not isinstance(each.get("user") or {}, dict) or not isinstance(each.get("body") or "", str):
+        raise CannotJudge("GitHub's answer for the pull request's reviews is not a list of reviews")
+    return Review(each["id"], (each["user"] or {}).get("login", ""), each["state"], each["commit_id"], each["body"] or "")
+
+
 def read_reviews(gh: GhRunner, repository: str, pull_request: int) -> list[Review]:
     listed = gh(["api", "--paginate", f"repos/{repository}/pulls/{pull_request}/reviews?per_page=100", "--jq", ".[]"], None)
-    reviews = map(json.loads, listed.splitlines())
-    return [Review(each["id"], (each["user"] or {}).get("login", ""), each["state"], each["commit_id"], each["body"] or "") for each in reviews]
+    return [parse_review(json.loads(line)) for line in listed.splitlines()]
 
 
 def is_organisation_owner(gh: GhRunner, repository: str, login: str) -> bool:

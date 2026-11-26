@@ -72,9 +72,9 @@ Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.
 MERGE_HELP = """\
 usage: quality merge OWNER/REPO#N [--dry-run] [-v]
 
-Merge a pull request whose gate is red only for legacy findings or loosenings
-he ruled, once an organisation owner's review at its head holds the consent
-text the door prints; without it the door prints the text and refuses.
+Merge a pull request whose gate is red only for legacy findings or loosenings,
+once an organisation owner's review at its head holds the consent text the
+door prints; without it the door prints the text and refuses.
 
 Options:
   --dry-run   show the rows and the consent, then stop: nothing changes,
