@@ -188,7 +188,7 @@ Ruled by the operator:
 - Rule names only in an allowance fix (ROW-7): a `fix:` line that asks for an `[[….allow]]` entry names the rule
   (SUFFIX-17), because the entry needs it.
 - REFUSAL-23: A config refusal's fact may name the values a config key takes, rule ids included, and the example to copy may hold
-  the entry's rule line; this is the one exception to the rule that no rule name stands outside an
+  the entry's rule line (REFUSAL-15); this is the one exception to the rule that no rule name stands outside an
   allowance's `fix:`.
 
 - ROW-7: No rule name stands in a row (`compose-port`, `env-file`); the event says it in words. The areas replace the

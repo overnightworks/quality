@@ -143,4 +143,5 @@ def test_quality_holds_its_own_clone_table_and_its_clean_debt_row_counts_the_cei
     what its ceiling file holds."""
     code, output = run(capsys, QUALITY_ITSELF)
     held = read_baseline(QUALITY_ITSELF)
-    assert (code, extent_counts(area_fact(output, "debt"))) == (0, [len(held.size), len(held.clones), len(held.spec_citations)]), output
+    expected = [len(held.size), len(held.clones), *([len(held.spec_citations)] if held.spec_citations else [])]
+    assert (code, extent_counts(area_fact(output, "debt"))) == (0, expected), output
