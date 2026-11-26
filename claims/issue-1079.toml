@@ -1,8 +1,0 @@
-claim_id = "b0fd129f4c2b46459dfe3008691f3f07"
-agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
-role = "builder"
-base = "26ef093f524db617211c25358690a2c2f426fc10"
-branch = "claude/issue-1079-root-shapes-become-cases"
-scope = ["docs/rules.md", "pyproject.toml", "quality/config.toml", "src/quality/root_layout.py", "tests"]
-opened_commit = "a88a908354f15e02eeef27af8bad9e3b38afaa47"
-whole_reason = "One widening of the root-layout rule by its cases, with its spec sentences; the tests directory because the cases sit in the root-layout test module and its helpers."
