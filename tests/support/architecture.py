@@ -81,14 +81,16 @@ def skat_files(core: str = "", *, web: str = "", helper: str = "") -> dict[str, 
     }
 
 
-def judged_in(root: Path, files: dict[str, str], contracts: dict[str, dict], untracked: tuple[str, ...] = (), **session) -> RuleResult:
-    """`read_contracts` and `check_contracts` over `files` written under `root` and tracked but for `untracked`, with `skat` the one root
-    package and agents external."""
+def judged_in(
+    root: Path, files: dict[str, str], contracts: dict[str, dict], untracked: tuple[str, ...] = (), tracked_absent: tuple[str, ...] = (), **session
+) -> RuleResult:
+    """`read_contracts` and `check_contracts` over `files` written under `root`, tracked but for `untracked`, and over the
+    names of `tracked_absent`, which git tracks and the tree does not hold, with `skat` the one root package and agents external."""
     for name, content in files.items():
         (root / name).parent.mkdir(parents=True, exist_ok=True)
         (root / name).write_text(content, encoding="utf-8")
     configs = {"pyproject.toml": contracts_toml(contracts, ("skat",), include_external_packages=True, **session)}
-    read = architecture.read_contracts(root, [name for name in files if name not in untracked], configs)
+    read = architecture.read_contracts(root, [*(name for name in files if name not in untracked), *tracked_absent], configs)
     assert read is not None
     return architecture.check_contracts(read)
 
