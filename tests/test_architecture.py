@@ -495,7 +495,7 @@ def _unknown_coding_cookie(package):
 
 def _latin1_coding_cookie(package):
     (package / "cookie.py").write_text("# coding: latin-1\nx = 1\n")
-    return "src/shop/cookie.py", "declares latin-1; grimp reads only"
+    return "src/shop/cookie.py", "declares latin-1; quality reads only"
 
 
 def _unknown_coding_cookie_in_a_source_with_a_nul(package):
@@ -505,12 +505,12 @@ def _unknown_coding_cookie_in_a_source_with_a_nul(package):
 
 def _coding_cookie_after_code(package):
     (package / "cookie.py").write_text("x = 1\n# coding: latin-1\nimport a\n")
-    return "src/shop/cookie.py", "declares latin-1; grimp reads only"
+    return "src/shop/cookie.py", "declares latin-1; quality reads only"
 
 
 def _unknown_coding_cookie_after_a_nul(package):
     (package / "cookie.py").write_bytes(b"\x00\n# coding: bogus\n")
-    return "src/shop/cookie.py", "declares bogus; grimp reads only"
+    return "src/shop/cookie.py", "declares bogus; quality reads only"
 
 
 def _bom_conflicting_with_a_coding_cookie(package):
@@ -521,7 +521,7 @@ def _bom_conflicting_with_a_coding_cookie(package):
 def _python_alias_of_utf8(spelling):
     def arrange(package):
         (package / "cookie.py").write_text(f"# coding: {spelling}\nx = 1\n")
-        return "src/shop/cookie.py", f"declares {spelling}; grimp reads only"
+        return "src/shop/cookie.py", f"declares {spelling}; quality reads only"
     return arrange
 
 
