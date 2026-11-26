@@ -3,7 +3,7 @@ import pytest
 from quality.baseline_file import BASELINE_PATH
 from quality.config_entries import CONFIG_PATH
 from tests.support.architecture import FORBIDDEN, GUARDED_CHANGES, contracts_toml
-from tests.support.git_repositories import put
+from tests.support.git_repositories import make_repo, put
 from tests.support.merge import (
     B_REMOVED,
     ONE_JOB,
@@ -30,7 +30,7 @@ CHANGES = f"    ! {GUARDED_CHANGES}{STRUCK_FIELD}"
 GREEN = ["✓ green"]
 
 
-def committed(pull_request, base_contract, head_contract, head_files, baselines=(None, None), base_files=None, also=None):
+def committed(pull_request, base_contract, head_contract, head_files, baselines=(None, None), base_files=None, also=None, submodules=()):
     """The base commit holds the shop, `base_files`, the base contract and the first of `baselines`; the head commit
     changes the files and the contract and holds the second; `also` maps the name of a second contract to its base and
     head options, a missing option removing the contract at the head."""
@@ -43,6 +43,9 @@ def committed(pull_request, base_contract, head_contract, head_files, baselines=
     for name, text in {**head_files, "pyproject.toml": contracts_toml({"guarded": head_contract, **{name: after for name, (_, after) in also.items() if after}}),
                        BASELINE_PATH: head_baseline}.items():
         put(repo / name, text)
+    for path in submodules:
+        (repo / path).mkdir(parents=True)
+        make_repo(repo / path, {"README.md": "a repository of its own\n"})
     commit_all(repo, "head")
     return repo
 
@@ -77,6 +80,14 @@ def test_the_verdict_reads_the_merge_commits_files_before_a_strike_loosens(capsy
     folder still holds a file stay `changes <list>`."""
     repo = committed(pull_request, DEAD, head_contract, head_files)
     assert viewed(repo, capsys) == (code, expected)
+
+
+@pytest.mark.integration
+def test_the_verdict_reads_a_submodule_at_a_struck_modules_folder_as_no_file_of_the_module(capsys, pull_request):
+    """LOOSE-19: a struck module with no tracked file of its own at the head is no loosening, and a submodule the head
+    tracks where the module stood is a commit, not a file."""
+    repo = committed(pull_request, DEAD, STRUCK, DELETED, submodules=["src/shop/dead"])
+    assert viewed(repo, capsys) == (0, GREEN)
 
 
 @pytest.mark.integration
