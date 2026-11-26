@@ -179,13 +179,21 @@ import graph, and a read that cannot be judged refuses the fix while the table i
 `[literal_text]` table is read and ignored, and the rewrite leaves it out ([rules](rules.md)). A
 ceiling or `[clones]` table git holds and the tree lacks, or a `[job_minutes]` table where a job above 15 would be
 recorded or a `[spec_citations]` table where it would be recorded, refuses with the restore step, and a
-shallow clone that cannot prove a first recording names `git fetch --unshallow` ([rules](rules.md)). It takes no
-`--staged` (HELP-25) and needs `debt` among the named areas (HELP-26), or no area named; either refusal keeps a
-`--dry-run` in its `next:` (HELP-27). `quality check --fix --dry-run` makes, judges and renders the same ceiling,
-refuses where the fix refuses before its write (FIXCMD-1), writes nothing, and exits `1` while the fix would change the
-file, `0` when not ([rules](rules.md)); a refusal only the write meets shows at the fix alone (FIXCMD-2). Exit `0`
-clean, `1` findings, `2` could not fix ([exit codes](output.md#exit-codes)). No workflow runs `--fix` or
-its dry run (HELP-28).
+shallow clone that cannot prove a first recording names `git fetch --unshallow` ([rules](rules.md)).
+
+- HELP-25: It takes no
+  `--staged`
+- HELP-26: and needs `debt` among the named areas,
+- HELP-27: or no area named; either refusal keeps a
+  `--dry-run` in its `next:`.
+- FIXCMD-1: `quality check --fix --dry-run` makes, judges and renders the same ceiling,
+  refuses where the fix refuses before its write,
+- FIXCMD-2: writes nothing, and exits `1` while the fix would change the
+  file, `0` when not ([rules](rules.md)); a refusal only the write meets shows at the fix alone. Exit `0`
+  clean, `1` findings, `2` could not fix ([exit codes](output.md#exit-codes)).
+- HELP-28: No workflow runs `--fix` or
+  its dry run.
+
 The rows and rules are in [rules](rules.md), the rows' form in [output](output.md).
 
 Ruled by the operator:
@@ -197,58 +205,89 @@ Ruled by the operator:
 
 ## `quality check secrets --staged`
 
-`quality check secrets --staged` scans exactly what the next commit records: the effective index of the repository it
-runs in, compared with `HEAD` (STAGED-1), or taken whole before the first commit (STAGED-2), with no path argument. It
-is meant for a pre-commit hook, which runs it in the work-tree top or below it (STAGED-3). A relative `GIT_INDEX_FILE`
-is resolved against the working directory, as git does (STAGED-4), so `git commit -a`, `git commit <path>` and a linked
-worktree scan the index git is committing (STAGED-5). `--staged` takes exactly the area `secrets`; any other set of
+- STAGED-1: `quality check secrets --staged` scans exactly what the next commit records: the effective index of the repository it
+  runs in, compared with `HEAD`,
+- STAGED-2: or taken whole before the first commit, with no path argument.
+- STAGED-3: It
+  is meant for a pre-commit hook, which runs it in the work-tree top or below it.
+- STAGED-4: A relative `GIT_INDEX_FILE`
+  is resolved against the working directory, as git does,
+- STAGED-5: so `git commit -a`, `git commit <path>` and a linked
+  worktree scan the index git is committing.
+
+`--staged` takes exactly the area `secrets`; any other set of
 areas, or none, is a [wrong invocation](#help-and-wrong-invocations).
 
 Ruled by the operator: `--staged` only with `secrets`: any other area with `--staged` is exit 2 with
 `next: quality check secrets --staged` (HELP-23).
 
 The index is written as a tree (`git write-tree`, only tree objects a commit writes anyway) and read into a scratch
-repository inside a 0700 scratch directory. The scratch repository borrows the objects
-(`objects/info/alternates`), has an empty work tree and none of the live repository's config or `info/attributes`, so a
-staged `.gitleaksignore`, `.gitleaks.toml`, `.gitattributes` with `-diff`, or a `gitleaks:allow` comment changes
-nothing (STAGED-6). gitleaks runs in the same attribute-free environment as `check`, with quality's config. The allow
-list is the staged tree's own `quality/config.toml` (none staged: no allowances) (STAGED-7). The staged run validates
-only the `[secrets]` table of that config and ignores other tables and keys ([gate](gate.md#declared-loosenings)),
-while `check` (when a selected area needs the config, validating the whole of it) and `verdict` stay strict, so schema
-growth never blocks a commit (STAGED-8).
+repository inside a 0700 scratch directory.
 
-The output is [`check`'s frame](output.md#rows): the `secrets` row with `staged change · N files` (the paths the staged
-diff lists, each added, changed, deleted or renamed path one file) (STAGED-9), the finding rows and the allowed notes
-under it, and the verdict. It prints no unused allowance: one change cannot tell a stale entry from one the history
-still needs (STAGED-10), so `quality check secrets` reports them. [`-v`](output.md#verbose-runs) is `check`'s: it shows
-the raw scanner output under the row, never a secret. At a terminal stderr shows `check`'s live line while gitleaks runs
-([output](output.md#colour-and-the-live-line)). A refused staged config names the fact on the row and the example under
-`next:` ([refusals](output.md#refusals)), followed by `stage the fix, then run quality check secrets --staged again`
-(STAGED-11): the refused file is the staged one, so an edit alone changes nothing.
+- STAGED-6: The scratch repository borrows the objects
+  (`objects/info/alternates`), has an empty work tree and none of the live repository's config or `info/attributes`, so a
+  staged `.gitleaksignore`, `.gitleaks.toml`, `.gitattributes` with `-diff`, or a `gitleaks:allow` comment changes
+  nothing. gitleaks runs in the same attribute-free environment as `check`, with quality's config.
+- STAGED-7: The allow
+  list is the staged tree's own `quality/config.toml` (none staged: no allowances).
+- STAGED-8: The staged run validates
+  only the `[secrets]` table of that config and ignores other tables and keys ([gate](gate.md#declared-loosenings)),
+  while `check` (when a selected area needs the config, validating the whole of it) and `verdict` stay strict, so schema
+  growth never blocks a commit.
+
+- STAGED-9: The output is [`check`'s frame](output.md#rows): the `secrets` row with `staged change · N files` (the paths the staged
+  diff lists, each added, changed, deleted or renamed path one file), the finding rows and the allowed notes
+  under it, and the verdict.
+- STAGED-10: It prints no unused allowance: one change cannot tell a stale entry from one the history
+  still needs, so `quality check secrets` reports them. [`-v`](output.md#verbose-runs) is `check`'s: it shows
+  the raw scanner output under the row, never a secret. At a terminal stderr shows `check`'s live line while gitleaks runs
+  ([output](output.md#colour-and-the-live-line)).
+- STAGED-11: A refused staged config names the fact on the row and the example under
+  `next:` ([refusals](output.md#refusals)), followed by `stage the fix, then run quality check secrets --staged again`: the refused file is the staged one, so an edit alone changes nothing.
 
 gitleaks' staged mode sees only added and changed lines, so a known false positive blocks only the commits that touch
-its line, and then needs its allowance, as in CI (STAGED-12). A key only in the work tree or only in `HEAD` is clean.
-Exit `2` (never clean): a scanner missing or at another version, with the command that installs it
-([scanners](#scanners)), git older than 2.41 ([rules](rules.md)), an unreadable allow list (STAGED-13), an index with
-unmerged entries (STAGED-14), a [folder that is not a repository](output.md#the-closing-line), or a gitleaks run without
-a report (STAGED-15).
+its line, and then needs its allowance, as in CI.
+
+- STAGED-12: A key only in the work tree or only in `HEAD` is clean.
+- STAGED-13: Exit `2` (never clean): a scanner missing or at another version, with the command that installs it
+  ([scanners](#scanners)), git older than 2.41 ([rules](rules.md)), an unreadable allow list,
+- STAGED-14: an index with
+  unmerged entries,
+- STAGED-15: a [folder that is not a repository](output.md#the-closing-line), or a gitleaks run without
+  a report.
 
 ## `quality report`
 
-`quality report` reads `quality/fleet.toml` in the folder it runs in (FLEET-28) and takes no path (FLEET-29). The file
-has three optional keys, `organizations = [...]` (GitHub organization names), `repositories = [...]` (single
-`owner/name`s, a fork too (FLEET-30)) and `exclude = [...]` (single `owner/name`s left out of what the organizations
-list (FLEET-31)); the fleet is every public, non-archived, non-fork repository GitHub lists for each organization
-(FLEET-32), less the excluded ones, plus the named ones. On stderr it prints
-`· fleet  N found  <organizations> · quality/fleet.toml` (without `<organizations> · ` when the file names none)
-(FLEET-33), then a row per repository as it is measured, sorted by name, case-insensitively (FLEET-34):
-`✓ <owner/name>  measured  <commit> · <time>` (FLEET-35), `✗ …  not measured <reason>` (FLEET-36), whose reason for a repository without a commit is `holds no commit` (FLEET-103), or
-`✗ …  partly read  cannot read <files>` (FLEET-37), or, for a repository whose runs could not be read, `✗ …  partly read  cannot read CI time` (FLEET-105); a failed read of the release tags adds
-`✗ release tags  not read <reason>` under the fleet line (FLEET-38). The subjects share one column (FLEET-39). On stdout
-it prints the five markdown tables and nothing else, so `quality report > fleet.md` writes only them (FLEET-40): the size
-of every repository under a heading with the date and the quality version (FLEET-41), then the same rows as a repo × rule matrix (FLEET-42), then under the heading
-`CI time, last 7 days · N API calls` one row per repository: `Repo`, `Commits`, `Median`, `p90`, `Red`, `Red on main`,
-`Re-runs`, `Green on re-run`, `Jobs sampled`, `Queue p90` and `Over 12 min` (FLEET-104), then the pairs between repositories (FLEET-113), then the tests per layer (FLEET-119). A commit is the unit, except in `Re-runs` and `Green on re-run`, which count runs. One commit fans out into several
+- FLEET-28: `quality report` reads `quality/fleet.toml` in the folder it runs in
+- FLEET-29: and takes no path.
+- FLEET-30: The file
+  has three optional keys, `organizations = [...]` (GitHub organization names), `repositories = [...]` (single
+  `owner/name`s, a fork too)
+- FLEET-31: and `exclude = [...]` (single `owner/name`s left out of what the organizations
+  list);
+- FLEET-32: the fleet is every public, non-archived, non-fork repository GitHub lists for each organization, less the excluded ones, plus the named ones.
+- FLEET-33: On stderr it prints
+  `· fleet  N found  <organizations> · quality/fleet.toml` (without `<organizations> · ` when the file names none),
+- FLEET-34: then a row per repository as it is measured, sorted by name, case-insensitively:
+- FLEET-35: `✓ <owner/name>  measured  <commit> · <time>`,
+- FLEET-36: `✗ …  not measured <reason>`,
+- FLEET-103: whose reason for a repository without a commit is `holds no commit`,
+- FLEET-37: or
+  `✗ …  partly read  cannot read <files>`,
+- FLEET-105: or, for a repository whose runs could not be read, `✗ …  partly read  cannot read CI time`;
+- FLEET-38: a failed read of the release tags adds
+  `✗ release tags  not read <reason>` under the fleet line.
+- FLEET-39: The subjects share one column.
+- FLEET-40: On stdout
+  it prints the five markdown tables and nothing else, so `quality report > fleet.md` writes only them:
+- FLEET-41: the size
+  of every repository under a heading with the date and the quality version,
+- FLEET-42: then the same rows as a repo × rule matrix,
+- FLEET-104: then under the heading
+  `CI time, last 7 days · N API calls` one row per repository: `Repo`, `Commits`, `Median`, `p90`, `Red`, `Red on main`,
+  `Re-runs`, `Green on re-run`, `Jobs sampled`, `Queue p90` and `Over 12 min`, then the pairs between repositories (FLEET-113), then the tests per layer (FLEET-119).
+
+A commit is the unit, except in `Re-runs` and `Green on re-run`, which count runs. One commit fans out into several
 runs: the runs created in the 7 days before the report's day over the events `pull_request` and `push`, grouped by head
 commit; its wall is its latest `updated_at` minus its earliest `created_at`, so a re-run counts from its first attempt. A
 commit with a run still in progress and a commit whose runs are all `cancelled` are left out. `Commits`, `Median` and `p90`
@@ -269,132 +308,195 @@ listing's order. Private repositories are not read, and a commit whose runs begi
 `Re-runs` and `Green on re-run` count runs, not commits, per repository over the same window and events, from the
 `run_attempt` and `conclusion` of each finished run's latest attempt: `Re-runs` the runs with a `run_attempt` above 1,
 `Green on re-run` those among them concluded `success`. A `run_attempt` that is not an integer makes the repository
-`cannot read CI time`. A `partly read` row, or one with no counted commit, shows dashes. They add no API call, no finding
-and no exit, and the JSON document (FLEET-106) does not carry them (FLEET-112). Named gaps: G1, a run re-run after a green
+`cannot read CI time`. A `partly read` row, or one with no counted commit, shows dashes.
+
+- FLEET-112: They add no API call, no finding
+  and no exit, and the JSON document (FLEET-106) does not carry them.
+
+Named gaps: G1, a run re-run after a green
 first attempt counts as green on re-run; G2, no job names or failing steps are read; G3, a run created before the window
 but re-run inside it is not counted.
 
 The CI-time read starts before the first clone and runs beside the clones, the size measurement and the pairs between
 repositories, one request at a time; its rows print after the last repository's row, and the tables and the document are
-those a read after the clones gives (FLEET-125). The report has one deadline of 720 seconds from its start: no request
-and no clone starts after it, and a clone in flight ends at it. A repository whose runs it stops is `partly read · N pages
-read` and makes `complete` false; one whose jobs it stops before the first call shows `not sampled · time limit` in its
-three cells, and one it stops mid-sample shows the sample it read; one whose clone it does not start is `not measured ·
-the report's 720 seconds are spent` (exit `2`, FLEET-46). Like the call cap, it falls on the repositories read last, in
-the listing's order (FLEET-126). The `fleet report` job's limit covers its setup, the deadline, one request in flight
-and the tail (tables, summary, document, upload): 60 + 720 + 30 + 90 = 900 seconds (FLEET-127). Named gaps: the pairs
+those a read after the clones gives. The report has one deadline of 720 seconds from its start: no request
+and no clone starts after it, and a clone in flight ends at it.
+
+- FLEET-125: A repository whose runs it stops is `partly read · N pages
+  read` and makes `complete` false; one whose jobs it stops before the first call shows `not sampled · time limit` in its
+  three cells, and one it stops mid-sample shows the sample it read; one whose clone it does not start is `not measured ·
+  the report's 720 seconds are spent` (exit `2`, FLEET-46).
+- FLEET-126: Like the call cap, it falls on the repositories read last, in
+  the listing's order.
+- FLEET-127: The `fleet report` job's limit covers its setup, the deadline, one request in flight
+  and the tail (tables, summary, document, upload): 60 + 720 + 30 + 90 = 900 seconds.
+
+Named gaps: the pairs
 between repositories are not bounded (24 s at 18 repositories, inside the tail); a size measurement in flight finishes
 after the deadline; a cut is not spread evenly.
 
-The runs are read from the repository's runs listing without a date filter, newest first, 100 to a page, because a
-filtered listing returns at most 1,000 runs; the read stops after the first page whose oldest run, of any event, was
-created before the window, or at the listing's end, and a run created before the window is not counted, so a window of
-more than 1,000 runs is counted whole (FLEET-128). A run listed on two pages, because runs created during the read shift
-the pages, counts once by its id, as its later sighting shows it (FLEET-129). A listing that ends before the run total it
-reports is `partly read · N pages read` and makes `complete` false (FLEET-130). Named gaps: a run deleted during the read
+- FLEET-128: The runs are read from the repository's runs listing without a date filter, newest first, 100 to a page, because a
+  filtered listing returns at most 1,000 runs; the read stops after the first page whose oldest run, of any event, was
+  created before the window, or at the listing's end, and a run created before the window is not counted, so a window of
+  more than 1,000 runs is counted whole.
+- FLEET-129: A run listed on two pages, because runs created during the read shift
+  the pages, counts once by its id, as its later sighting shows it.
+- FLEET-130: A listing that ends before the run total it
+  reports is `partly read · N pages read` and makes `complete` false.
+
+Named gaps: a run deleted during the read
 can let one run slip past a page boundary unread; the stop assumes the listing's id order agrees with `created_at` at the
 window's edge.
 
-With `GITHUB_STEP_SUMMARY` set, the
-tables are appended there (FLEET-43). Every cell puts a backslash before `` \ ` * _ ~ [ ] < > & | ``, so repository text
-opens no HTML comment, link or new cell (FLEET-44); a bare URL still renders as a link to its own address. The run ends
-on stderr with `✓ N of N repositories measured · <time>` (`repository` for one, exit `0`) (FLEET-45) or with `error: `
-and what applies of `K of N repositories not measured`, `J partly read` and `the release tags not read`, then `the
-tables say so`, and `next: quality report` (exit `2`) (FLEET-46); an unwritable summary is
-`error: GITHUB_STEP_SUMMARY is not writable · <reason>` (exit `2`, with
-`fix what the error names, then run quality report again` under `next:`) (FLEET-47). `-v` adds nothing: the report runs
-no scanner (FLEET-48). The fleet's selection lives once, in `quality/fleet.toml` (FLEET-49);
-`.github/workflows/report.yml` runs it every Monday at 05:17 UTC and on dispatch; the tables stand in that run's
-summary. The report writes to no repository and lists with its own read-only job token (`GITHUB_TOKEN`,
-sent to `api.github.com` only, never to git); a local run lists anonymously (FLEET-50).
+- FLEET-43: With `GITHUB_STEP_SUMMARY` set, the
+  tables are appended there.
+- FLEET-44: Every cell puts a backslash before `` \ ` * _ ~ [ ] < > & | ``, so repository text
+  opens no HTML comment, link or new cell; a bare URL still renders as a link to its own address.
+- FLEET-45: The run ends
+  on stderr with `✓ N of N repositories measured · <time>` (`repository` for one, exit `0`)
+- FLEET-46: or with `error: `
+  and what applies of `K of N repositories not measured`, `J partly read` and `the release tags not read`, then `the
+  tables say so`, and `next: quality report` (exit `2`);
+- FLEET-47: an unwritable summary is
+  `error: GITHUB_STEP_SUMMARY is not writable · <reason>` (exit `2`, with
+  `fix what the error names, then run quality report again` under `next:`).
+- FLEET-48: `-v` adds nothing: the report runs
+  no scanner.
+- FLEET-49: The fleet's selection lives once, in `quality/fleet.toml`; `.github/workflows/report.yml` runs it every Monday at 05:17 UTC and on dispatch; the tables stand in that run's
+  summary.
+- FLEET-50: The report writes to no repository and lists with its own read-only job token (`GITHUB_TOKEN`,
+  sent to `api.github.com` only, never to git); a local run lists anonymously.
 
 `quality report --ci-time-json` also writes the CI time as one JSON document to the fixed relative path
 `site/fleet-ci-time.json`, creating `site/` when it is missing, after the step summary, in UTF-8 with a trailing newline,
 and prints nothing of its own; without the switch no file is written. The switch takes no path, so no caller chooses
-where the file lands. The top level holds, in this
-order, `schema` (`1`; a change of any key goes through it), `generated_at` and `window_start` and `window_end` (RFC 3339 UTC
-instants: `window_start` is midnight UTC seven days before the report's day, the bound of the runs read, and `window_end`
-equals `generated_at`), `limit_seconds` (`600`, the one limit the CI-time module owns), `complete` and `repositories`, a flat
-array with one row per repository of the report's selection in the table's order, each with `name`, `median_seconds`,
-`commits_sampled`, `measured` and `breach`: only the name, whole numbers and booleans, no commit author and no reason
-text (FLEET-106). A repository with a median over at least one counted commit is `measured` with that median in whole
-seconds and its count of commits, and `breach` is true when the median is strictly above `limit_seconds`; a repository whose
-runs the cap left `partly read`, whose runs `cannot read CI time`, or with no counted commit is not measured and carries
-`0`, `0` and `breach` false, so a thin week is judged by `commits_sampled` and never by a minimum the file applies
-(FLEET-107). `complete` is false when any repository's CI time is `partly read` or `cannot read CI time`, and true
-otherwise, zero counted commits included; the size rows do not touch it (FLEET-108). An unwritable path (`site` a file, no
-write permission) is `error: site/fleet-ci-time.json is not writable · <reason>` with `fix what the error names, then run quality report
-again` under `next:`, exit `2`, after the tables (FLEET-109). An unwritable step summary ends the report before the
-document is written, and a report that ends with a repository not measured still writes it. Private repositories are not
-read, so the public document names none; that is a named gap, not a list (FLEET-110).
-`report.yml` passes the bare switch, uploads `site/` as the Pages artifact whenever the file
-exists, and its `publish` job deploys it to the repository's GitHub Pages at `https://overnightworks.github.io/quality/fleet-ci-time.json`
-(`application/json`, no token): the workflow keeps `contents: read`, and the `publish` job alone adds `pages: write` and
-`id-token: write` and runs only on the repository's default branch, so a dispatch from another branch uploads the
-artifact and never deploys. A run that wrote no file deploys nothing and leaves the last file in place (FLEET-111). The
+where the file lands.
+
+- FLEET-106: The top level holds, in this
+  order, `schema` (`1`; a change of any key goes through it), `generated_at` and `window_start` and `window_end` (RFC 3339 UTC
+  instants: `window_start` is midnight UTC seven days before the report's day, the bound of the runs read, and `window_end`
+  equals `generated_at`), `limit_seconds` (`600`, the one limit the CI-time module owns), `complete` and `repositories`, a flat
+  array with one row per repository of the report's selection in the table's order, each with `name`, `median_seconds`,
+  `commits_sampled`, `measured` and `breach`: only the name, whole numbers and booleans, no commit author and no reason
+  text.
+- FLEET-107: A repository with a median over at least one counted commit is `measured` with that median in whole
+  seconds and its count of commits, and `breach` is true when the median is strictly above `limit_seconds`; a repository whose
+  runs the cap left `partly read`, whose runs `cannot read CI time`, or with no counted commit is not measured and carries
+  `0`, `0` and `breach` false, so a thin week is judged by `commits_sampled` and never by a minimum the file applies.
+- FLEET-108: `complete` is false when any repository's CI time is `partly read` or `cannot read CI time`, and true
+  otherwise, zero counted commits included; the size rows do not touch it.
+- FLEET-109: An unwritable path (`site` a file, no
+  write permission) is `error: site/fleet-ci-time.json is not writable · <reason>` with `fix what the error names, then run quality report
+  again` under `next:`, exit `2`, after the tables. An unwritable step summary ends the report before the
+  document is written, and a report that ends with a repository not measured still writes it.
+- FLEET-110: Private repositories are not
+  read, so the public document names none; that is a named gap, not a list.
+- FLEET-111: `report.yml` passes the bare switch, uploads `site/` as the Pages artifact whenever the file
+  exists, and its `publish` job deploys it to the repository's GitHub Pages at `https://overnightworks.github.io/quality/fleet-ci-time.json`
+  (`application/json`, no token): the workflow keeps `contents: read`, and the `publish` job alone adds `pages: write` and
+  `id-token: write` and runs only on the repository's default branch, so a dispatch from another branch uploads the
+  artifact and never deploys. A run that wrote no file deploys nothing and leaves the last file in place.
+
+The
 Pages source (GitHub Actions) is a repository setting that no code owns.
 
-A missing (FLEET-51), unreadable (a directory, a dangling link, not UTF-8) (FLEET-52), malformed (FLEET-53), duplicating
-(also across case, and across `repositories` and `exclude`: `exclude[0] repeats repositories[1]`) (FLEET-54), empty
-(`selects no repository`) (FLEET-55) or badly named (FLEET-56) `quality/fleet.toml` is the pair, exit `2`, before any
-request or clone (FLEET-57): `error: ` and what is wrong with `quality/fleet.toml`, named repository-relative, and
-`next: write it in quality/fleet.toml like this:` with the file's shape below (FLEET-58); each bad entry is named by its
-place (`repositories[3]`, `exclude[1]`, `organizations[0]`), never by its text (FLEET-59). The listing is read once per
-organization, before any clone (FLEET-60), and a problem of any organization is one pair that ends `· nothing measured`
-(FLEET-61): an organization GitHub does not know (`organizations[0] is no GitHub organization`) (FLEET-62), a listing
-GitHub did not give (`GitHub did not list <organization> · HTTP <status>`, a timeout, an unreachable host) (FLEET-63),
-more than 100 public repositories (quality reads one page) (FLEET-64), an answer that is not a list of repositories
-(FLEET-65), a fleet the listing and `exclude` leave empty (`selects no repository`) (FLEET-66), or a `repositories`
-entry the organization already lists (`repositories[0] is already in <organization>`) (FLEET-67), or an `exclude` entry
-that matches no repository found (`exclude[0] matches no repository found`: the same for a name GitHub does not list and
-for one that is private, archived or a fork (FLEET-68); an entry of an organization whose listing failed is judged on
-the rerun (FLEET-69)). A failure of GitHub adds `fix what the error names, then run quality report again` under `next:`,
-after the shape when the file is also at fault (FLEET-70). No listed text is printed (FLEET-71), and a private
-repository a token can list is dropped without a trace (FLEET-72).
+- FLEET-51: A missing,
+- FLEET-52: unreadable (a directory, a dangling link, not UTF-8),
+- FLEET-53: malformed,
+- FLEET-54: duplicating
+  (also across case, and across `repositories` and `exclude`: `exclude[0] repeats repositories[1]`),
+- FLEET-55: empty
+  (`selects no repository`)
+- FLEET-56: or badly named
+- FLEET-57: `quality/fleet.toml` is the pair, exit `2`, before any
+  request or clone:
+- FLEET-58: `error: ` and what is wrong with `quality/fleet.toml`, named repository-relative, and
+  `next: write it in quality/fleet.toml like this:` with the file's shape below;
+- FLEET-59: each bad entry is named by its
+  place (`repositories[3]`, `exclude[1]`, `organizations[0]`), never by its text.
+- FLEET-60: The listing is read once per
+  organization, before any clone,
+- FLEET-61: and a problem of any organization is one pair that ends `· nothing measured`:
+- FLEET-62: an organization GitHub does not know (`organizations[0] is no GitHub organization`),
+- FLEET-63: a listing
+  GitHub did not give (`GitHub did not list <organization> · HTTP <status>`, a timeout, an unreachable host),
+- FLEET-64: more than 100 public repositories (quality reads one page),
+- FLEET-65: an answer that is not a list of repositories,
+- FLEET-66: a fleet the listing and `exclude` leave empty (`selects no repository`),
+- FLEET-67: or a `repositories`
+  entry the organization already lists (`repositories[0] is already in <organization>`),
+- FLEET-68: or an `exclude` entry
+  that matches no repository found (`exclude[0] matches no repository found`: the same for a name GitHub does not list and
+  for one that is private, archived or a fork;
+- FLEET-69: an entry of an organization whose listing failed is judged on
+  the rerun).
+- FLEET-70: A failure of GitHub adds `fix what the error names, then run quality report again` under `next:`,
+  after the shape when the file is also at fault.
+- FLEET-71: No listed text is printed,
+- FLEET-72: and a private
+  repository a token can list is dropped without a trace.
 
-- Each repository is cloned from `https://github.com/<owner>/<name>` (FLEET-73) with `git -c credential.helper= clone
+- FLEET-73: Each repository is cloned from `https://github.com/<owner>/<name>`
+- FLEET-74: with `git -c credential.helper= clone
   --depth 1 --no-tags`, `GIT_TERMINAL_PROMPT=0` and no askpass, into a temporary directory that is removed on every
-  exit (FLEET-74), and its default branch tip is measured (FLEET-75).
-- git runs anonymously: without system, global or `GIT_CONFIG_*` config and with an empty `HOME`, so no configured
-  header, helper or `~/.netrc` reaches the host (FLEET-76).
-- Lines are the physical lines of the tracked files of the `size` rule's languages (FLEET-77), the count its 800-line
-  limit uses (blank and comment lines included) (FLEET-78), and a tracked file whose name is not UTF-8 counts like any
-  other (FLEET-79); `Languages` lists each with its lines, production and tests together (FLEET-80), largest first,
-  ties by name (FLEET-81), and `—` for a row with no measured file (FLEET-82). Production versus test is the `size`
-  rule's file-name rule, so `scripts/test_inventory.py` counts as test (FLEET-83). `test:prod` is test lines divided by
-  production lines with two decimals (FLEET-84), `—` without production lines (FLEET-85). The debt columns count files
-  from 800 lines, and the functions from 60 lines and with a CCN above 15 of Python, TypeScript, JavaScript, Svelte and Vue, [`size`](rules.md)'s debt (FLEET-86).
-- `Clone pairs prod / test` counts the `clone` rule's pairs (two near-identical functions in two files, at 40 tokens and
-  90 %) (FLEET-87); a pair counts as test only when both sides are tests, so a test that copies production code counts
-  as prod (FLEET-88).
-- Under `Clone pairs between repositories · N pairs`, after the CI-time table, stands one row per pair of near-identical
+  exit,
+- FLEET-75: and its default branch tip is measured.
+- FLEET-76: git runs anonymously: without system, global or `GIT_CONFIG_*` config and with an empty `HOME`, so no configured
+  header, helper or `~/.netrc` reaches the host.
+- FLEET-77: Lines are the physical lines of the tracked files of the `size` rule's languages,
+- FLEET-78: the count its 800-line
+  limit uses (blank and comment lines included),
+- FLEET-79: and a tracked file whose name is not UTF-8 counts like any
+  other;
+- FLEET-80: `Languages` lists each with its lines, production and tests together,
+- FLEET-81: largest first,
+  ties by name,
+- FLEET-82: and `—` for a row with no measured file.
+- FLEET-83: Production versus test is the `size`
+  rule's file-name rule, so `scripts/test_inventory.py` counts as test.
+- FLEET-84: `test:prod` is test lines divided by
+  production lines with two decimals,
+- FLEET-85: `—` without production lines.
+- FLEET-86: The debt columns count files
+  from 800 lines, and the functions from 60 lines and with a CCN above 15 of Python, TypeScript, JavaScript, Svelte and Vue, [`size`](rules.md)'s debt.
+- FLEET-87: `Clone pairs prod / test` counts the `clone` rule's pairs (two near-identical functions in two files, at 40 tokens and
+  90 %);
+- FLEET-88: a pair counts as test only when both sides are tests, so a test that copies production code counts
+  as prod.
+- FLEET-113: Under `Clone pairs between repositories · N pairs`, after the CI-time table, stands one row per pair of near-identical
   functions in two different measured repositories, found by the `clone` rule's detector and thresholds: `Repo`,
   `Function`, `Repo`, `Function` and `Kind`, where `Function` reads `<path> <symbol>` as `clone` names a function; each
-  pair stands once, its sides in sorted order (FLEET-113). A pair inside one repository stands only in that
-  repository's `Clone pairs prod / test` cell, never in this table (FLEET-114). `Kind` is `test` when both sides are
-  test files under the `size` rule's file-name rule, else `prod`; `prod` rows come first, then rows by their sides
-  (FLEET-115). The table is computed each run from the measured default-branch tips, so a pair whose copy is gone or
-  drifted below the threshold leaves it, and a repository not measured adds no pair (FLEET-116). It raises no finding
-  and changes no exit (FLEET-117). Named limit: the detector reads Python, not workflow files, so the copied jobs of
+  pair stands once, its sides in sorted order.
+- FLEET-114: A pair inside one repository stands only in that
+  repository's `Clone pairs prod / test` cell, never in this table.
+- FLEET-115: `Kind` is `test` when both sides are
+  test files under the `size` rule's file-name rule, else `prod`; `prod` rows come first, then rows by their sides.
+- FLEET-116: The table is computed each run from the measured default-branch tips, so a pair whose copy is gone or
+  drifted below the threshold leaves it, and a repository not measured adds no pair.
+- FLEET-117: It raises no finding
+  and changes no exit. Named limit: the detector reads Python, not workflow files, so the copied jobs of
   `ci.yml` are outside it; the CI standard's shared building blocks own them.
-- Under `Tests per layer`, last, stands one row per repository: `Repo`, `Unit`, `Integration`, `Flow`, `Live`,
+- FLEET-119: Under `Tests per layer`, last, stands one row per repository: `Repo`, `Unit`, `Integration`, `Flow`, `Live`,
   `Skipped`, `Fixme` and `Note`, numbers with thousands separators as the size table. It is counted in the clone the
   size table measures, with no further GitHub call or clone, runs no repository code, raises no finding, changes no exit
-  and is not in `site/fleet-ci-time.json` (FLEET-119). A Python test is a function named `test*` in a Python test file,
+  and is not in `site/fleet-ci-time.json`.
+- FLEET-120: A Python test is a function named `test*` in a Python test file,
   a parametrized one once; a script test is a call of `it` or `test` in a TypeScript or JavaScript test file, bare or
   with a modifier (`skip`, `skipIf(…)`, `runIf(…)`, `only`, `fixme`, `concurrent`, `each(…)`), whose first argument
   is a string or a template; `test.step(`, `test.describe(`, `test.use(`, hooks, a member `x.test(` and a runtime
-  `test.skip(<condition>, …)` are no test (FLEET-120). The layer comes from the path first: `Live` is a test under
+  `test.skip(<condition>, …)` are no test. The layer comes from the path first: `Live` is a test under
   `tests/e2e/live/` of the root or of a judged project, or under a frontend project's `e2e/live/`; `Flow` is one under
-  `tests/e2e/` or a frontend project's `e2e/` otherwise. Every other Python test is `Integration` when an `integration`
+  `tests/e2e/` or a frontend project's `e2e/` otherwise.
+- FLEET-121: Every other Python test is `Integration` when an `integration`
   mark reaches it, in the forms `Skipped` reads (on the test, on an enclosing class, in a class's or the module's
   `pytestmark`, or through a module-level name bound to the mark), and `Unit` otherwise; every other script test is
-  `Unit` (FLEET-121). `Skipped` counts each test a skip mark reaches: Python `pytest.mark.skip` or `skipif`, bare or
+  `Unit`.
+- FLEET-122: `Skipped` counts each test a skip mark reaches: Python `pytest.mark.skip` or `skipif`, bare or
   called, on the test, an enclosing class, a module's `pytestmark` (one mark, a list or a tuple) or through a
   module-level name bound to such a mark; script `skip` or `skipIf(…)` on the call, every test inside `describe.skip(`,
   `describe.skipIf(…)(` or `test.describe.skip(`, and a runtime `test.skip(<condition>, …)`, which marks the innermost
   enclosing test or, in a describe outside any test, every test of that describe, and outside any test or describe every
-  test of the file; a conditional mark counts even where CI runs the test (FLEET-122). The forms of a Python test's
+  test of the file; a conditional mark counts even where CI runs the test. The forms of a Python test's
   marks are read by `pytest_marks`, the one owner `adapter-import` and `integration-marker` share, and `suites` maps
   its mark names to these columns. A module's or class's `pytestmark` is read only where the name is bound once in that
   body, by a plain or annotated assignment standing directly in it, to a mark or a list or tuple of marks, and a
@@ -402,58 +504,84 @@ repository a token can list is dropped without a trace (FLEET-72).
   any form, a binding inside an `if`, `try`, `with`, `for`, `while` or `match`, a value that is no mark) gives no marks,
   so the test counts as unmarked, `adapter-import` exempts nothing and `integration-marker` leaves the module red. A write no
   statement shows (a star import, `globals()`, a conftest hook) is not seen.
-  `Fixme` counts the same way for Playwright `test.fixme`, `describe.fixme` and pytest `pytest.mark.xfail`; a
-  test with both marks counts in both columns (FLEET-123). A Python test file that does not parse and a script test file
+- FLEET-123: `Fixme` counts the same way for Playwright `test.fixme`, `describe.fixme` and pytest `pytest.mark.xfail`; a
+  test with both marks counts in both columns.
+- FLEET-124: A Python test file that does not parse and a script test file
   that is not UTF-8 or that the lexer refuses count no test; `Note` reads `N files not read`, and an unmeasured
-  repository reads `cannot judge: <reason>` there with `—` in every number (FLEET-124). Named limits: probe and
+  repository reads `cannot judge: <reason>` there with `—` in every number. Named limits: probe and
   `browser`-marked pytest tests outside `tests/e2e/` count by their `integration` mark; an `integration` mark that only
   a conftest hook adds counts as `Unit`, as does an integration layer by folder (`tests/integration/`), and a script
   test has no integration mark; not read are imperative `pytest.skip()` and `pytest.xfail()`, `pytest.param(marks=…)`,
   `from pytest import mark`, marks added by conftest hooks, `-m` or `--deselect` in workflows, `unittest.skip`,
   Playwright `test.fail`, vitest `todo` and `fails` and `.only`; a test written in a loop counts once; the counts are
   static, not what a run skipped.
-- A `.py` file Python cannot parse, or a TypeScript, JavaScript, Svelte or Vue file that is not UTF-8 or nested too
-  deeply to read, still has its lines counted (FLEET-89); the row's note says how many such files there are, as `N files not valid Python`,
-  `N files not UTF-8` and `N files nested too deeply to read` (FLEET-90), never which (FLEET-91).
-- The matrix stands under a heading naming the newest release tag of `overnightworks/quality` by version, read by an
+- FLEET-89: A `.py` file Python cannot parse, or a TypeScript, JavaScript, Svelte or Vue file that is not UTF-8 or
+  nested too deeply to read, still has its lines counted;
+- FLEET-90: the row's note says how many such files there are, as `N files not valid Python`, `N files not UTF-8`
+  and `N files nested too deeply to read`,
+- FLEET-91: never which.
+- FLEET-1: The matrix stands under a heading naming the newest release tag of `overnightworks/quality` by version, read by an
   anonymous `git ls-remote --tags` and never from the running code's version; an annotated tag counts at the commit it
-  points to, a name that is no release tag is ignored, and a listing without a release tag is unreadable (FLEET-1). It
-  has one `Gate` and one `CodeQL` cell per repository (FLEET-2). They come from the job-level `uses:` of each tracked
-  `.github/workflows/*.yml|yaml`, parsed as data and never run (FLEET-3). A pin to a commit (40 hexadecimal digits, in
-  either case) shows the release tag at that commit, with `(behind)` when it is not the newest (FLEET-4);
-  `<7 characters> (no release)` when no tag points there (FLEET-5), `<ref> (not a commit)` for a branch or tag name
-  (FLEET-6), `no gate` or `none` without a caller (FLEET-7), and `self` for the repository's own `./` or `$/` file in
-  `overnightworks/quality` (FLEET-8). Two callers show both, joined by ` · ` (FLEET-9). The `# v` comment is never read
-  (FLEET-10). The owner and repository of a `uses:` match in any case, the workflow path exactly (FLEET-11).
-- After `Gate` and `CodeQL` the matrix has `Mandatory jobs` (the number in `[gate] mandatory_jobs` of
+  points to, a name that is no release tag is ignored, and a listing without a release tag is unreadable.
+- FLEET-2: It
+  has one `Gate` and one `CodeQL` cell per repository.
+- FLEET-3: They come from the job-level `uses:` of each tracked
+  `.github/workflows/*.yml|yaml`, parsed as data and never run.
+- FLEET-4: A pin to a commit (40 hexadecimal digits, in
+  either case) shows the release tag at that commit, with `(behind)` when it is not the newest;
+- FLEET-5: `<7 characters> (no release)` when no tag points there,
+- FLEET-6: `<ref> (not a commit)` for a branch or tag name,
+- FLEET-7: `no gate` or `none` without a caller,
+- FLEET-8: and `self` for the repository's own `./` or `$/` file in
+  `overnightworks/quality`.
+- FLEET-9: Two callers show both, joined by ` · `.
+- FLEET-10: The `# v` comment is never read.
+- FLEET-11: The owner and repository of a `uses:` match in any case, the workflow path exactly.
+- FLEET-12: After `Gate` and `CodeQL` the matrix has `Mandatory jobs` (the number in `[gate] mandatory_jobs` of
   `quality/config.toml`, `no config` without the file, `—` without a gate), `Sonar legacy` (`report` or `fail` from
-  `[gate] legacy`, `no config` without the file, `—` without a gate) (FLEET-12) and one column per rule whose
-  enforcement depends on the release or the repository (FLEET-13). The rules every release enforces stand once in the
-  sentence under the heading (FLEET-14). A rule cell says what the pinned gate does with the rule, never whether the
-  repository passes it: `enforced`, `report-only` (`size` without `quality/baseline.toml` (FLEET-15), `import-contract`
-  without an import-linter config (FLEET-16), `clone` on v0.4.0 and, from v0.5.0 on, without a `[clones]` table in
-  `quality/baseline.toml` (FLEET-17), `catalog-check` under a tag, which only reports it (FLEET-98), `logging` and `test-twin` on every release that has them, which report notes only (LOGGING-6, TWIN-6), `spec-citation` without a `[spec_citations]` table in `quality/baseline.toml` (CITE-6, FLEET-118), `literal-text` under a tag below v0.16.0, which only measures, and from v0.16.0 until the release that names the catalogs declaration without a `[literal_text]` table (FLEET-101, FLEET-102; `SwitchChange` in `src/quality/rules.py`)),
+  `[gate] legacy`, `no config` without the file, `—` without a gate)
+- FLEET-13: and one column per rule whose
+  enforcement depends on the release or the repository.
+- FLEET-14: The rules every release enforces stand once in the
+  sentence under the heading.
+- FLEET-15: A rule cell says what the pinned gate does with the rule, never whether the
+  repository passes it: `enforced`, `report-only` (`size` without `quality/baseline.toml`,
+- FLEET-16: `import-contract`
+  without an import-linter config,
+- FLEET-17: `clone` on v0.4.0 and, from v0.5.0 on, without a `[clones]` table in
+  `quality/baseline.toml`,
+- FLEET-18: `catalog-check` under a tag, which only reports it (FLEET-98), `logging` and `test-twin` on every release that has them, which report notes only (LOGGING-6, TWIN-6), `spec-citation` without a `[spec_citations]` table in `quality/baseline.toml` (CITE-6, FLEET-118), `literal-text` under a tag below v0.16.0, which only measures, and from v0.16.0 until the release that names the catalogs declaration without a `[literal_text]` table (FLEET-101, FLEET-102; `SwitchChange` in `src/quality/rules.py`)),
   `no adapter contract` (`adapter-import` and `integration-marker`, when the clone's import-linter config holds no `forbidden` contract with the id `core-imports-no-adapter`) (ADAPTERIMPORT-21, INTEGRATION-11),
-  `not in <tag>` when the pinned release predates the rule (FLEET-18),
-  `not released` when only main has the rule (FLEET-19), `no catalogs declaration` (`catalog-check` on main, `literal-text` on main and from the release that names the catalogs declaration as its switch, `locator-text` on main and from v0.21.0 on, `render-pass` on main and from v0.17.0 on, in the gate's own
+  `not in <tag>` when the pinned release predates the rule,
+- FLEET-19: `not released` when only main has the rule,
+- FLEET-20: `no catalogs declaration` (`catalog-check` on main, `literal-text` on main and from the release that names the catalogs declaration as its switch, `locator-text` on main and from v0.21.0 on, `render-pass` on main and from v0.17.0 on, in the gate's own
   repository, when the clone's `pyproject.toml` does not declare `overnightworks-design[catalogs]`; `enforced` when it does)
   (FLEET-99), `no judged project` (`test-layout`, from v0.7.0 on, when the
   clone has no Python project with a package under `src/` and no frontend project (a `package.json` outside every
-  project's `tests/`)) (FLEET-20), and `—` without a gate (FLEET-21). Two pins give the oldest release; a pin that is
-  no release (a commit without a tag, a branch or tag name, or unreadable release tags) gives `release unknown`
-  (FLEET-22). The table of first releases lives in `rules.py`.
-- A workflow file that cannot be read shows `cannot read <file>` in every cell that needs the pin (FLEET-23), a
+  project's `tests/`)),
+- FLEET-21: and `—` without a gate.
+- FLEET-22: Two pins give the oldest release; a pin that is
+  no release (a commit without a tag, a branch or tag name, or unreadable release tags) gives `release unknown`. The table of first releases lives in `rules.py`.
+- FLEET-23: A workflow file that cannot be read shows `cannot read <file>` in every cell that needs the pin,
+- FLEET-100: a
   malformed `quality/config.toml`, `quality/baseline.toml` or `pyproject.toml` and an import-linter config that cannot be read
-  or that two files hold show `cannot read <file>` (`import-linter config`) in each cell that reads the file (FLEET-100), while a cell that does
-  not keeps its value (every cell under no gate, a rule cell under a pin before the rule or `release unknown`)
-  (FLEET-24), unreadable release tags say so in the heading and show pins as commits (FLEET-25), and each makes the exit
-  `2` (FLEET-26). No value, `behind`, `no gate` or `report-only` included, makes the run red (FLEET-27).
-- Found rows are named by GitHub's own `owner/name` (FLEET-92), named rows by the entry as written (FLEET-93); all are
-  [sorted by it, case-insensitively](#quality-report). A private repository is not measured, because the tables are
+  or that two files hold show `cannot read <file>` (`import-linter config`) in each cell that reads the file,
+- FLEET-24: while a cell that does
+  not keeps its value (every cell under no gate, a rule cell under a pin before the rule or `release unknown`),
+- FLEET-25: unreadable release tags say so in the heading and show pins as commits,
+- FLEET-26: and each makes the exit
+  `2`.
+- FLEET-27: No value, `behind`, `no gate` or `report-only` included, makes the run red.
+- FLEET-92: Found rows are named by GitHub's own `owner/name`,
+- FLEET-93: named rows by the entry as written; all are
+  [sorted by it, case-insensitively](#quality-report).
+- FLEET-94: A private repository is not measured, because the tables are
   published and it is not anonymously readable: one named in `repositories` shows as a `cannot judge` row like any
-  repository that cannot be cloned (FLEET-94).
-- A repository that cannot be cloned or measured shows `cannot judge: <reason>` (for example `cannot clone (git exited
-  128)`) (FLEET-95), with no local path (FLEET-96); every other row still shows (FLEET-97), and
+  repository that cannot be cloned.
+- FLEET-95: A repository that cannot be cloned or measured shows `cannot judge: <reason>` (for example `cannot clone (git exited
+  128)`),
+- FLEET-96: with no local path;
+- FLEET-97: every other row still shows, and
   [the exit](#quality-report) is `2`.
 
 ## Scanners

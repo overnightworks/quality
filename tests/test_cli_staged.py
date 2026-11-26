@@ -148,7 +148,7 @@ STAGED_EXAMPLE_REFUSALS = [refusal for refusal in all_refusals() if "staged" in 
 @pytest.mark.integration
 @pytest.mark.parametrize("refusal", STAGED_EXAMPLE_REFUSALS, ids=[refusal.id for refusal in STAGED_EXAMPLE_REFUSALS])
 def test_a_staged_config_refusal_keeps_its_fact_and_its_example_apart(build_repo, capsys, refusal):
-    """O10, STAGED-11: a staged config refusal names its fact on the row, its example apart, then the stage step."""
+    """STAGED-11, O10: a staged config refusal names its fact on the row, its example apart, then the stage step."""
     repo = build_repo({"README.md": "x\n"})
     stage(repo, {CONFIG: refusal.text})
     code, out, err = fixed(capsys, repo, *STAGED_WORDS)
