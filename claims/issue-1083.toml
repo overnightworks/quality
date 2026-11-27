@@ -1,5 +1,5 @@
 claim_id = "c3703017ee804a80be5f1b8ffe5cb37b"
-agent = "Claude 228608ca-8f50-4cbf-a804-f12421af4ef8"
+agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
 role = "builder"
 base = "53d96df2f29eaeb18f326e3b4259c203f3c25791"
 branch = "claude/issue-1083-door-merges-on-consent"
