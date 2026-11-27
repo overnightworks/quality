@@ -914,12 +914,14 @@ It applies these rules:
     symlink counts by its name, a folder never);
   - LAYOUT-43: its key is its base without a leading `+`, so `page.test.ts` maps to `+page.svelte`.
   - LAYOUT-44: An empty base never matches, and `.test.ts` is red.
-  - LAYOUT-45: Spec: a judged file with the word `spec` lies under its project's top-level `e2e/` folder at any depth;
+  - LAYOUT-45: Spec: a judged file with the word `spec` lies under its project's spec folder at any depth;
+  - LAYOUT-51: the spec folder is `tests/e2e/` for the project at the repository root, the folder LAYOUT-5 names for
+    end-to-end tests, since `root-layout` accepts no root `e2e/`, and its top-level `e2e/` for every other project.
   - LAYOUT-46: other files there are not judged as specs, and a `.test.*` there needs its sibling.
   - LAYOUT-47: A declaration exempts its path from every case.
   - LAYOUT-48: Each case has its own fact and fix: a test with no sibling (move it beside the file it tests and name it
-    `<subject>[<Aspect>]` plus its own tail) and a spec outside `e2e/` (move it into the project's `e2e/`, or name a
-    Vitest test `<subject>.test.<suffix>`); every fix ends with declaring the path; both say `misplaced`,
+    `<subject>[<Aspect>]` plus its own tail) and a spec outside its project's spec folder (move it into that folder, or
+    name a Vitest test `<subject>.test.<suffix>`); every fix ends with declaring the path; both say `misplaced`,
   - LAYOUT-49: and a test in the repository root names it as the repository root, and one in a nested project's root
     folder names that folder.
 

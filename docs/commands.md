@@ -486,8 +486,8 @@ Pages source (GitHub Actions) is a repository setting that no code owns.
   with a modifier (`skip`, `skipIf(…)`, `runIf(…)`, `only`, `fixme`, `concurrent`, `each(…)`), whose first argument
   is a string or a template; `test.step(`, `test.describe(`, `test.use(`, hooks, a member `x.test(` and a runtime
   `test.skip(<condition>, …)` are no test. The layer comes from the path first: `Live` is a test under
-  `tests/e2e/live/` of the root or of a judged project, or under a frontend project's `e2e/live/`; `Flow` is one under
-  `tests/e2e/` or a frontend project's `e2e/` otherwise.
+  `tests/e2e/live/` of the root or of a judged project, or under a frontend project's spec folder (LAYOUT-51) in `live/`;
+  `Flow` is one under `tests/e2e/` or a frontend project's spec folder otherwise.
 - FLEET-121: Every other Python test is `Integration` when an `integration`
   mark reaches it, in the forms `Skipped` reads (on the test, on an enclosing class, in a class's or the module's
   `pytestmark`, or through a module-level name bound to the mark), and `Unit` otherwise; every other script test is

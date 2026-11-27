@@ -183,10 +183,12 @@ def _script_test_marks(tokens: list[Token]) -> Iterator[Marks]:
 
 
 def _live_and_flow_folders(tracked: list[str]) -> tuple[list[PurePosixPath], list[PurePosixPath]]:
-    """The folders of each judged project's `tests/` and of each frontend project, that name the live and the flow layer."""
-    roots = [PurePosixPath(layout.TESTS_DIRECTORY), *(project.tests_directory for project in layout.python_projects(tracked))]
-    roots += [PurePosixPath(directory) for directory in layout.frontend_projects(tracked)]
-    return [root / layout.LIVE_FOLDER for root in roots], [root / layout.END_TO_END_DIRECTORY for root in roots]
+    """The folders that name the live and the flow layer: each judged project's `tests/e2e/` and each frontend project's
+    spec folder."""
+    flow = [PurePosixPath(layout.TESTS_DIRECTORY) / layout.END_TO_END_DIRECTORY]
+    flow += [project.tests_directory / layout.END_TO_END_DIRECTORY for project in layout.python_projects(tracked)]
+    flow += [layout.spec_folder(PurePosixPath(directory)) for directory in layout.frontend_projects(tracked)]
+    return [folder / layout.LIVE_DIRECTORY for folder in flow], flow
 
 
 def count_suites(tracked: list[str], sources: dict[str, bytes]) -> Suites:
