@@ -183,8 +183,8 @@ def _script_test_marks(tokens: list[Token]) -> Iterator[Marks]:
 
 
 def _live_and_flow_folders(tracked: list[str]) -> tuple[list[PurePosixPath], list[PurePosixPath]]:
-    """The folders that name the live and the flow layer: each judged project's `tests/e2e/` and each frontend project's
-    spec folder."""
+    """The folders that name the live and the flow layer: the root's and each judged project's `tests/e2e/` and
+    each frontend project's spec folder."""
     flow = [PurePosixPath(layout.TESTS_DIRECTORY) / layout.END_TO_END_DIRECTORY]
     flow += [project.tests_directory / layout.END_TO_END_DIRECTORY for project in layout.python_projects(tracked)]
     flow += [layout.spec_folder(PurePosixPath(directory)) for directory in layout.frontend_projects(tracked)]

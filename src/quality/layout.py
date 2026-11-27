@@ -203,7 +203,7 @@ def frontend_projects(paths: Iterable[str]) -> list[str]:
 
 def spec_folder(project: PurePosixPath) -> PurePosixPath:
     """The folder of a frontend project's Playwright specs (LAYOUT-51): `tests/e2e/` for the project at the repository
-    root, whose `root-layout` accepts no root `e2e/`, and the project's top-level `e2e/` for every other."""
+    root, since `root-layout` accepts no root `e2e/`, and the project's top-level `e2e/` for every other."""
     root = PurePosixPath(ROOT_DIRECTORY)
     return PurePosixPath(TESTS_DIRECTORY, END_TO_END_DIRECTORY) if project == root else project / END_TO_END_DIRECTORY
 

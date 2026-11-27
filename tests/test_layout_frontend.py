@@ -183,6 +183,13 @@ def test_the_fact_and_the_fix_of_a_misplaced_spec_name_its_projects_spec_folder(
     assert (finding.path, folder in finding.fix) == (spec, True)
 
 
+def findings_by_rule(repo, *rules: Rule) -> tuple[tuple, ...]:
+    """The findings of each of `rules` from one run, each having judged and not refused."""
+    judged = {verdict.rule: verdict for verdict in check_result(repo).verdicts}
+    assert all(judged[rule].refusal is None for rule in rules)
+    return tuple(judged[rule].findings for rule in rules)
+
+
 @pytest.mark.parametrize(
     "files",
     [
@@ -195,16 +202,15 @@ def test_the_fact_and_the_fix_of_a_misplaced_spec_name_its_projects_spec_folder(
 )
 def test_a_spec_in_its_projects_spec_folder_passes_test_layout_and_root_layout_in_one_run(build_repo, files):
     """LAYOUT-5, LAYOUT-33, LAYOUT-38, LAYOUT-45, LAYOUT-51, ROOT-18: no spec folder makes either rule red."""
-    verdicts = {verdict.rule: verdict.findings for verdict in check_result(build_repo(files)).verdicts}
-    assert (verdicts[RULE], verdicts[Rule.ROOT_LAYOUT]) == ((), ())
+    assert findings_by_rule(build_repo(files), RULE, Rule.ROOT_LAYOUT) == ((), ())
 
 
 def test_a_root_project_has_no_root_e2e_for_a_spec_and_root_layout_refuses_the_folder_in_the_same_run(build_repo):
     """LAYOUT-45, LAYOUT-51, ROOT-1: a spec in the root `e2e/`, `src/` or `tests/` is red, and `e2e/` is unlisted."""
     repo = build_repo(frontend("e2e/flow.spec.ts", "src/x.spec.ts", "tests/x.spec.ts"))
-    verdicts = {verdict.rule: verdict.findings for verdict in check_result(repo).verdicts}
-    assert [finding.location for finding in verdicts[RULE]] == ["e2e/flow.spec.ts", "src/x.spec.ts", "tests/x.spec.ts"]
-    assert [(finding.location, finding.event) for finding in verdicts[Rule.ROOT_LAYOUT]] == [("e2e/", FindingEvent.UNLISTED)]
+    spec_findings, root_findings = findings_by_rule(repo, RULE, Rule.ROOT_LAYOUT)
+    assert [finding.location for finding in spec_findings] == ["e2e/flow.spec.ts", "src/x.spec.ts", "tests/x.spec.ts"]
+    assert [(finding.location, finding.event) for finding in root_findings] == [("e2e/", FindingEvent.UNLISTED)]
 
 
 def test_a_test_with_no_subject_in_the_root_folder_does_not_name_the_folder_as_a_dot(build_repo, capsys):
