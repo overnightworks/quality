@@ -3,21 +3,27 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path, PurePosixPath
-from typing import NamedTuple
+from typing import Literal, NamedTuple, overload
 
 from quality import config_entries, repository
 from quality.config_allowances import (
     COMPOSE_ALLOWANCE_EXAMPLE,
     LAYOUT_ALLOWANCE_EXAMPLE,
+    LAYOUT_ENTRY_EXAMPLE,
     PYTHON_ALLOWANCE_EXAMPLE,
     ROOT_ALLOWANCE_EXAMPLE,
+    ROOT_ENTRY_EXAMPLE,
     WORKFLOW_ALLOWANCE_EXAMPLE,
     ComposeAllowance,
     ConfigSide,
+    LayoutAllowance,
     LayoutEntry,
     PythonAllowance,
+    RootAllowance,
     RootEntry,
     WorkflowAllowance,
+    base_layout_entries,
+    base_root_entries,
     compose_allowances,
     layout_allowances,
     python_allowances,
@@ -104,6 +110,10 @@ class TableShape(NamedTuple):
     arrays: tuple[str, ...]
     example: config_entries.ExampleLines
     own_reader: bool = False
+    base_example: config_entries.ExampleLines | None = None
+
+    def example_on(self, side: ConfigSide) -> config_entries.ExampleLines:
+        return self.base_example if side is ConfigSide.BASE and self.base_example else self.example
 
     @property
     def keys(self) -> set[str]:
@@ -118,8 +128,8 @@ TABLE_SHAPES: dict[str, TableShape] = {
     "gate": TableShape(("mandatory_jobs", "legacy", "sonar"), ("loosened",), EXAMPLE),
     "secrets": TableShape(("allow",), (), ALLOWANCE_EXAMPLE, own_reader=True),
     "advisories": TableShape((), ("allow",), ADVISORY_ALLOWANCE_EXAMPLE),
-    "root": TableShape((), ("allow",), ROOT_ALLOWANCE_EXAMPLE),
-    "layout": TableShape((), ("allow",), LAYOUT_ALLOWANCE_EXAMPLE),
+    "root": TableShape((), ("allow",), ROOT_ALLOWANCE_EXAMPLE, base_example=ROOT_ENTRY_EXAMPLE),
+    "layout": TableShape((), ("allow",), LAYOUT_ALLOWANCE_EXAMPLE, base_example=LAYOUT_ENTRY_EXAMPLE),
     "python": TableShape((), ("allow",), PYTHON_ALLOWANCE_EXAMPLE),
     "compose": TableShape((), ("allow",), COMPOSE_ALLOWANCE_EXAMPLE),
     "workflow": TableShape((), ("allow",), WORKFLOW_ALLOWANCE_EXAMPLE),
@@ -204,9 +214,12 @@ class ImplementedDocument:
 
 
 @dataclass(frozen=True)
-class GateSettings:
+class GateSettings[RootRecord: RootEntry = RootAllowance, LayoutRecord: LayoutEntry = LayoutAllowance]:
     """What the gate reads from quality/config.toml: the settings a pull request must not loosen, the loosenings
-    it declares, and the advisories and secret values it allows; `sonar` is whether the gate's `sonar` job scans."""
+    it declares, and the advisories and secret values it allows; `sonar` is whether the gate's `sonar` job scans.
+
+    A head's root and layout entries are the full allowances; the settings of a base, read by identity only, are
+    `GateSettings[RootEntry, LayoutEntry]`."""
 
     mandatory_jobs: tuple[str, ...]
     legacy: LegacyMode
@@ -216,8 +229,11 @@ class GateSettings:
     implemented_documents: tuple[ImplementedDocument, ...] = ()
     sonar: bool = True
     secret_allowances: tuple[Allowance, ...] = ()
-    root_allowances: tuple[RootEntry, ...] = ()
-    layout_allowances: tuple[LayoutEntry, ...] = ()
+    root_allowances: tuple[RootRecord, ...] = ()
+    layout_allowances: tuple[LayoutRecord, ...] = ()
+
+
+type BaseSettings = GateSettings[RootEntry, LayoutEntry]
 
 
 class Allowance(NamedTuple):
@@ -229,13 +245,13 @@ class Allowance(NamedTuple):
 
 
 @dataclass(frozen=True)
-class AllowLists:
+class AllowLists[RootRecord: RootEntry = RootAllowance, LayoutRecord: LayoutEntry = LayoutAllowance]:
     """What the repository allows or declares, one list per table; the default allows nothing, as a missing config does."""
 
     secrets: dict[Allowance, str] = field(default_factory=dict)
     advisories: tuple[AdvisoryAllowance, ...] = ()
-    root: tuple[RootEntry, ...] = ()
-    layout: tuple[LayoutEntry, ...] = ()
+    root: tuple[RootRecord, ...] = ()
+    layout: tuple[LayoutRecord, ...] = ()
     python: tuple[PythonAllowance, ...] = ()
     compose: tuple[ComposeAllowance, ...] = ()
     workflow: tuple[WorkflowAllowance, ...] = ()
@@ -255,19 +271,19 @@ class RenderPass:
 
 @dataclass(frozen=True)
 class Declarations:
-    """What the check reads from one validated config: the allow lists and the render-pass declaration."""
+    """What the check reads from one validated config of the head: the allow lists and the render-pass declaration."""
 
     allow_lists: AllowLists = field(default_factory=AllowLists)
     render_pass: RenderPass = field(default_factory=RenderPass)
 
 
 @dataclass(frozen=True)
-class _Document:
+class _Document[RootRecord: RootEntry = RootAllowance, LayoutRecord: LayoutEntry = LayoutAllowance]:
     """The whole config, validated once: the [gate] table, its declarations, and every allow list."""
 
     gate: dict
     declarations: tuple[Declaration, ...]
-    allow_lists: AllowLists
+    allow_lists: AllowLists[RootRecord, LayoutRecord]
     render_pass: RenderPass
 
 
@@ -287,7 +303,7 @@ def _refuse_unknown_secrets_keys(secrets: dict) -> None:
         raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} has {config_entries.unknown_keys(unknown)} in [secrets] - only allow exists")
 
 
-def _refuse_unknown_keys(document: dict, tables: dict[str, dict]) -> None:
+def _refuse_unknown_keys(document: dict, tables: dict[str, dict], examples: dict[str, config_entries.ExampleLines]) -> None:
     unknown = set(document) - TABLE_SHAPES.keys()
     example = None
     for name, shape in TABLE_SHAPES.items():
@@ -296,17 +312,23 @@ def _refuse_unknown_keys(document: dict, tables: dict[str, dict]) -> None:
         extra = set(tables[name]) - shape.keys
         unknown |= extra
         if extra and name not in UNKNOWN_KEY_WITHOUT_EXAMPLE:
-            example = shape.example
+            example = examples[name]
     if unknown:
         raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} has {config_entries.unknown_keys(unknown)} - {KNOWN_KEYS}", example)
 
 
-def _validated_document(text: str, side: ConfigSide) -> _Document:
+@overload
+def _validated_document(text: str, side: Literal[ConfigSide.HEAD]) -> _Document: ...
+@overload
+def _validated_document(text: str, side: ConfigSide) -> _Document[RootEntry, LayoutEntry]: ...
+def _validated_document(text: str, side: ConfigSide) -> _Document[RootEntry, LayoutEntry]:
     """The one validation of the whole config: one parse, one unknown-key check, and every entry of every table; the base
     side reads a root and a layout entry by its identity only."""
+    base = side is ConfigSide.BASE
+    examples = {name: shape.example_on(side) for name, shape in TABLE_SHAPES.items()}
     document = config_entries.parse(text, EXAMPLE)
-    tables = {name: config_entries.table_named(document, name, shape.example) for name, shape in TABLE_SHAPES.items()}
-    _refuse_unknown_keys(document, tables)
+    tables = {name: config_entries.table_named(document, name, examples[name]) for name in TABLE_SHAPES}
+    _refuse_unknown_keys(document, tables, examples)
     gate = tables["gate"]
     return _Document(
         gate,
@@ -314,8 +336,8 @@ def _validated_document(text: str, side: ConfigSide) -> _Document:
         AllowLists(
             _parse_allowances(tables["secrets"]),
             _advisory_allowances(tables["advisories"]),
-            root_allowances(tables["root"], side),
-            layout_allowances(tables["layout"], side),
+            (base_root_entries if base else root_allowances)(tables["root"]),
+            (base_layout_entries if base else layout_allowances)(tables["layout"]),
             python_allowances(tables["python"]),
             compose_allowances(tables["compose"]),
             workflow_allowances(tables["workflow"]),
@@ -477,7 +499,11 @@ def _sonar(gate: dict, legacy: LegacyMode) -> bool:
     return value
 
 
-def load_gate_settings(text: str | None, *, side: ConfigSide) -> GateSettings:
+@overload
+def load_gate_settings(text: str | None, *, side: Literal[ConfigSide.HEAD]) -> GateSettings: ...
+@overload
+def load_gate_settings(text: str | None, *, side: ConfigSide) -> GateSettings[RootEntry, LayoutEntry]: ...
+def load_gate_settings(text: str | None, *, side: ConfigSide) -> GateSettings[RootEntry, LayoutEntry]:
     """mandatory_jobs is judged before legacy, so a config wrong in both is refused for mandatory_jobs. `side` says whose text it is: the base is read by
     identity only, so a caller names it and none reads a base strictly by leaving it out."""
     if text is None:

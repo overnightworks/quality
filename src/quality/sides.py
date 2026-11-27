@@ -8,11 +8,12 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
+from typing import Literal, overload
 
 from quality import adapter_imports, architecture, checkout, layout, process, repository
 from quality.baseline_file import BASELINE_PATH, Baseline, SizeError, load_baseline, read_baseline
 from quality.config import GateSettings, LegacyMode, load_gate_settings, read_gate_settings
-from quality.config_allowances import ConfigSide
+from quality.config_allowances import ConfigSide, LayoutAllowance, LayoutEntry, RootAllowance, RootEntry
 from quality.config_entries import CONFIG_PATH, ConfigError
 from quality.ratchet import NO_RENAMES, Renames, head_step, renames_of
 from quality.report import CannotJudge, Step
@@ -25,12 +26,16 @@ IMPORT_CONFIG = "import-linter config"
 
 
 @dataclass(frozen=True)
-class Side:
-    """What the gate holds at one side of a pull request: its settings, its baseline (None without one) and its import contracts."""
+class Side[RootRecord: RootEntry = RootAllowance, LayoutRecord: LayoutEntry = LayoutAllowance]:
+    """What the gate holds at one side of a pull request: its settings, its baseline (None without one) and its import
+    contracts; a base is a `Side[RootEntry, LayoutEntry]`, its entries read by identity only."""
 
-    settings: GateSettings
+    settings: GateSettings[RootRecord, LayoutRecord]
     baseline: Baseline | None
     contracts: architecture.SideContracts = field(default_factory=architecture.SideContracts)
+
+
+type BaseSide = Side[RootEntry, LayoutEntry]
 
 
 FORBIDDEN_REF_CHARACTERS = re.compile(r"[\x00-\x20\x7f~^:?*\[\\]")
@@ -79,7 +84,7 @@ def read_head(repo: Path) -> Side:
     return Side(settings, baseline, _contracts_at(import_configs, HEAD))
 
 
-def read_base(repo: Path, base_sha: str) -> Side:
+def read_base(repo: Path, base_sha: str) -> BaseSide:
     """The gate's settings, baseline and import-linter configs at the base commit; a file the base lacks reads as absent."""
     where = f"the base commit {base_sha}"
     try:
@@ -94,13 +99,13 @@ def read_base(repo: Path, base_sha: str) -> Side:
     )
 
 
-def _reads_tree(base: Side | None, head: Side) -> bool:
+def _reads_tree(base: BaseSide | None, head: Side) -> bool:
     """Whether the files of the two commits can change the judgement: only a module a contract list lost needs them."""
     return base is not None and bool(architecture.struck_modules(base.contracts, head.contracts))
 
 
 def pull_files(
-    base: Side | None, head: Side, read_tree: Callable[[bool], architecture.PullTree],
+    base: BaseSide | None, head: Side, read_tree: Callable[[bool], architecture.PullTree],
     read_renames_listing: Callable[[bool], Renames], renames_can_change_entries: bool,
 ) -> tuple[architecture.PullTree | None, Renames]:
     """What the pull request's two commits add to the judgement, read by the caller's readers: the tree when a module is
@@ -115,7 +120,7 @@ def pull_files(
     return None, NO_RENAMES
 
 
-def compares_baselines(base: Side | None, head: Side) -> bool:
+def compares_baselines(base: BaseSide | None, head: Side) -> bool:
     """Whether the renames can change the judgement: only a comparison of two baselines reads them. Any other pair is
     judged without them, so a pull request that renames nothing the baselines name is never held up by the diff."""
     return base is not None and base.baseline is not None and head.baseline is not None
@@ -294,9 +299,17 @@ def read_pull_tree_of_pull(
         return read_pull_tree(repository, base_sha, merge_sha, isolated, FETCH_TIMEOUT_SECONDS, DOOR_WORDS, marks)
 
 
+@overload
+def side_of(
+    config: str | None, baseline: str | None, where: str, import_configs: Mapping[str, str | None] = ..., *, side: Literal[ConfigSide.HEAD]
+) -> Side: ...
+@overload
+def side_of(
+    config: str | None, baseline: str | None, where: str, import_configs: Mapping[str, str | None] = ..., *, side: ConfigSide
+) -> BaseSide: ...
 def side_of(
     config: str | None, baseline: str | None, where: str, import_configs: Mapping[str, str | None] = MappingProxyType({}), *, side: ConfigSide
-) -> Side:
+) -> BaseSide:
     """One side from its file texts, None where the side lacks the file; an unreadable file names `where`. The config is
     read as `side` says, the head strictly and the base by its entries' identity.
 

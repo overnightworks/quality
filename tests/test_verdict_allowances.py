@@ -171,3 +171,28 @@ def test_a_base_entry_without_its_identity_is_refused_naming_the_base(entry):
     with pytest.raises(UnusableConfig) as refused:
         side_of(CHECKS + entry, None, "the base", side=ConfigSide.BASE)
     assert refused.value.where == "the base"
+
+
+TABLE_REFUSED_BASES = {
+    "a root allow that is no list": "[root]\nallow = 3\n",
+    "a layout allow that is no list": "[layout]\nallow = 3\n",
+    "a root table with an unknown key": "[root]\nunknown = 1\n",
+    "a layout table with an unknown key": "[layout]\nunknown = 1\n",
+    "a root table that is no table": "root = 3\n",
+}
+
+
+@pytest.mark.parametrize("entry", [*REFUSED_BASES.values(), *TABLE_REFUSED_BASES.values()], ids=[*REFUSED_BASES, *TABLE_REFUSED_BASES])
+def test_a_refused_base_shows_no_example_with_an_ends_key(entry):
+    """VERDICT-79: the base is read by identity only, so no example of its refusal asks for `ends`."""
+    with pytest.raises(UnusableConfig) as refused:
+        side_of(CHECKS + entry, None, "the base", side=ConfigSide.BASE)
+    assert not any(line.startswith("ends") for line in refused.value.error.example or ())
+
+
+@pytest.mark.parametrize("entry", TABLE_REFUSED_BASES.values(), ids=TABLE_REFUSED_BASES.keys())
+def test_a_base_whose_allow_table_cannot_be_read_is_refused_naming_the_base(entry):
+    """VERDICT-79: a malformed `[root]` or `[layout]` table is refused on the base too."""
+    with pytest.raises(UnusableConfig) as refused:
+        side_of(CHECKS + entry, None, "the base", side=ConfigSide.BASE)
+    assert refused.value.where == "the base"

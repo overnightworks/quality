@@ -64,3 +64,19 @@ def test_the_door_refuses_a_base_entry_without_its_identity_naming_the_base(entr
     gh = FakeGh(base_config=ONE_JOB + entry, merge_config=ONE_JOB)
     code, _, err = run(gh, capsys)
     assert (code, "fix it on main first" in err, gh.merge_calls) == (2, True, [])
+
+
+BASE_REFUSALS = {
+    "a root entry without its name": "[[root.allow]]\nreason = 'r'\n",
+    "a layout entry without its rule": "[[layout.allow]]\npath = 'tests/a.py'\n",
+    "a root allow that is no list": "[root]\nallow = 3\n",
+    "a layout allow that is no list": "[layout]\nallow = 3\n",
+}
+
+
+@pytest.mark.parametrize("entry", BASE_REFUSALS.values(), ids=BASE_REFUSALS.keys())
+def test_the_door_shows_a_refused_base_without_an_ends_example_and_names_the_base(entry, capsys):
+    """VERDICT-79: the base is read by identity, so the refusal shows no `ends` key to write and its step names the base."""
+    gh = FakeGh(base_config=ONE_JOB + entry, merge_config=ONE_JOB)
+    code, _, err = run(gh, capsys)
+    assert (code, "ends" in err, "fix it on main first" in err) == (2, False, True)

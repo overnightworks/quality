@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, StrEnum
 from functools import partial
+from typing import Literal, overload
 
 from quality import architecture, checkout
 from quality.base_branch import MergeMethod, choose_merge_method, compare_with_tip
@@ -34,6 +35,7 @@ from quality.pin import JudgingRelease
 from quality.ratchet import Renames
 from quality.report import CannotJudge, Command, Instruction, Reason, Step, config_refusal, printable
 from quality.sides import (
+    BaseSide,
     Side,
     UnusableConfig,
     pull_files,
@@ -225,7 +227,7 @@ def github_remote(repository: str) -> str:
 
 
 def rederived_verdict(
-    head: Side, base: Side, check_runs: Sequence[Check], renames: Renames, pull_tree: architecture.PullTree | None = None
+    head: Side, base: BaseSide, check_runs: Sequence[Check], renames: Renames, pull_tree: architecture.PullTree | None = None
 ) -> Verdict:
     """The verdict's own decider at the merge commit, with the Sonar job taken as green: the door judges Sonar itself."""
     jobs = [Job(run.name, 1, run.status, SUCCESS if run.name == SONAR_CHECK else run.conclusion) for run in check_runs]
@@ -251,7 +253,11 @@ def read_statuses(gh: GhRunner, repository: str, head_sha: str) -> list[Check]:
     return [Check(status["context"], "queued" if status["state"] == PENDING_STATUS else COMPLETED, status["state"]) for status in statuses]
 
 
-def read_side_at(gh: GhRunner, repository: str, sha: str, fix: Step, side: ConfigSide) -> Side:
+@overload
+def read_side_at(gh: GhRunner, repository: str, sha: str, fix: Step, side: Literal[ConfigSide.HEAD]) -> Side: ...
+@overload
+def read_side_at(gh: GhRunner, repository: str, sha: str, fix: Step, side: ConfigSide) -> BaseSide: ...
+def read_side_at(gh: GhRunner, repository: str, sha: str, fix: Step, side: ConfigSide) -> BaseSide:
     """The gate's settings, baseline and import-linter configs at one commit, as the verdict reads the `side` that commit
     stands for; a 404 reads as absent, a config quality cannot read is its refusal with `fix`, the step that repairs it at
     this commit."""
@@ -531,7 +537,7 @@ def loosenings_row(verdict: Verdict, sonar_red: bool, refused: Pair) -> Row:
 
 
 def read_pull_files(
-    remote_for: RemoteFor, repository: str, base: Side, head: Side, commits: tuple[str, str], environment: Mapping[str, str],
+    remote_for: RemoteFor, repository: str, base: BaseSide, head: Side, commits: tuple[str, str], environment: Mapping[str, str],
 ) -> tuple[architecture.PullTree | None, Renames]:
     """`sides.pull_files` with the readers that fetch the pull request's two commits from its repository's remote."""
     return pull_files(
