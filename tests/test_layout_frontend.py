@@ -102,7 +102,7 @@ def frontend(*paths: str, manifest: str = "package.json") -> dict[str, str]:
              {**GUIDANCE, **empty_files("Cargo.toml", "tools/package.json", "tools/a.test.mjs")}, ["tools/a.test.mjs"]),
     ],
 )
-def test_the_sibling_and_the_e2e_folder_are_judged_per_frontend_project(build_repo, files, expected):
+def test_the_sibling_and_the_spec_folder_are_judged_per_frontend_project(build_repo, files, expected):
     """LAYOUT-2, LAYOUT-5, LAYOUT-32, LAYOUT-33, LAYOUT-34, LAYOUT-35, LAYOUT-36, LAYOUT-38, LAYOUT-39, LAYOUT-40,
     LAYOUT-41, LAYOUT-42, LAYOUT-43, LAYOUT-44, LAYOUT-45, LAYOUT-46, LAYOUT-51: only a judged test file in a frontend
     project is red, once, by its name; a spec lies in its project's spec folder."""
