@@ -1,0 +1,8 @@
+claim_id = "c2a9400452324091868b6171cb560c10"
+agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
+role = "builder"
+base = "5fa4d173d20f61cabff1f337b1068fa7e6114ace"
+branch = "claude/issue-1099-one-owner-of-the-delete-entry-fix"
+scope = ["src/quality/compose.py", "src/quality/config_entries.py", "src/quality/pr_workflows.py", "src/quality/python_floor.py", "src/quality/ratchet.py", "src/quality/root_layout.py", "src/quality/spec_citations.py"]
+opened_commit = "bc6e2e9fa5c88e0d9b632bd3d8d1792a6a73b7e4"
+whole_reason = "One wording owner: the helper and its six callers, which change together or leave a second copy."
