@@ -156,7 +156,7 @@ It applies these rules:
 
   Only the `size`
   rule leaves the file out: `clone` and the report still read it. quality cannot see what the declared job runs; the
-  operator checks it once, at the door.
+  operator checks it once, in the consent text he reads before he consents.
 
   - SIZE-4: Functions are measured as follows.
 
@@ -605,7 +605,8 @@ It applies these rules:
   - INTEGRATION-10: The `integration` mark exempts nothing from `adapter-import`, and `imports_adapter` exempts nothing
     here.
   - INTEGRATION-11: The [fleet matrix](commands.md#quality-report) cell reads `enforced` when the repository's config
-    holds the contract with the id, `no adapter contract` otherwise.
+    holds the contract with the id, `no adapter contract` otherwise, and `not in <tag>` under a pin below v0.28.0.
+    It first ships in v0.28.0.
 
   Named gaps, waiting for usage evidence: fixtures a `conftest.py` injects, string imports, `allow_indirect_imports`
   (each red or outside what a static read sees); a `conftest.py` hook or plugin that adds or removes marks or builds
@@ -1242,7 +1243,7 @@ It applies these rules:
   - BASELINE-28: so the base is never read and only `check` holds the tree.
 
   A lizard update that measures a function higher therefore turns the pull request that takes it red; a ruled raise is
-  declared (see [Declared loosenings](gate.md#declared-loosenings)) and stays red until the operator's door merges it.
+  declared (see [Declared loosenings](gate.md#declared-loosenings)) and stays red until the door merges it, on the operator's consent.
 - The import contracts only tighten:
   - LOOSE-4: on a pull request `quality verdict` and the door compare the contracts of the three config places at the
     head with the base's, as import-linter parses them (never the raw options, so moving a config between
@@ -1274,7 +1275,7 @@ It applies these rules:
   Ruled by the operator:
 
   - LOOSE-1: Each of these loosenings is red, can be declared with a `[[gate.loosened]]` entry whose `what` is its line
-    exactly, and lands only through the operator's door.
+    exactly, and lands only through the door, on the operator's consent.
   - LOOSE-2: The door reads the import contracts at the merge state and at the base itself and refuses an undeclared
     loosening, even when it was opened for Sonar's legacy findings.
   - LOOSE-3: Removing the whole config file can be declared as well and goes through the door.
@@ -2237,7 +2238,7 @@ no spec defines or one that is retired, and a duplicate definition are red, and 
   finding, and a raise is a hand edit with a declared loosening. While any `.md` or script test file is unread it neither drops nor
   records: with the table the rule reads `cannot judge`, naming the unread files, exit `2`, writing nothing, in the dry run too;
   without it nothing is recorded, the report-only note stays and the exit is unchanged. An ID defined in an unread file would
-  otherwise look undefined and be dropped, then return as a new uncited ID only the operator's door could merge. Named limit: a
+  otherwise look undefined and be dropped, then return as a new uncited ID only the door could merge. Named limit: a
   tracked `.md` file that is not UTF-8 keeps its repository from recording until it is fixed.
 - CITE-11: **Recording under `--fix`.** `quality check --fix` records the table, the uncited IDs of the tree, only where the
   baseline has none, git never held one, the tree defines a live ID, no citation is undefined or retired (a declared foreign
@@ -2303,7 +2304,7 @@ no spec defines or one that is retired, and a duplicate definition are red, and 
   `delete its <heading> entry from quality/config.toml`. Without the table neither is judged (CITE-6).
 - CITE-18: **The owner's loosening.** On a pull request a head `[[spec_citations.implemented]]` path the base does not
   declare prints `spec citation leaves <path> to its implementers · <item> of <date>`, declared by the entry's own `item` and
-  `date` and red until the operator's door merges it ([gate](gate.md#declared-loosenings)). A base without
+  `date` and red until the door merges it, on the operator's consent ([gate](gate.md#declared-loosenings)). A base without
   `quality/config.toml` makes every entry new; an inherited or deleted entry and a changed `reason`, `item` or `date` loosen
   nothing; a changed `path` is new; a `[[gate.loosened]]` entry with this text matches nothing and is red; without a base
   nothing is judged. An implementer's foreign prefix is no loosening.
@@ -2403,10 +2404,10 @@ reason = "gradio caps pillow<13; no image input"
   position](output.md#refusals) (`[[advisories.allow]] entry 2`), except the last two, which name the `id` and `lock` and the
   key; [`check secrets --staged` reads only `[secrets]`](gate.md#declared-loosenings).
 - A new allowance, and one whose `until` moves later, is a [declared loosening](gate.md#declared-loosenings) the allowance
-  makes itself, so only the operator's door merges it. The pull request writes the allowance, so its item, date and
+  makes itself, so only the door merges it, on the operator's consent. The pull request writes the allowance, so its item, date and
   reason prove nothing alone: the verdict's red and the door are the gate. An `id` that is an alias covers every
   group carrying it in that lock, while the door names the `id` and the lock, not the packages.
-  Why only the operator's door merges it stands in [gate.md](gate.md#declared-loosenings). The entry's keys, the alias,
+  Why only the door merges it stands in [gate.md](gate.md#declared-loosenings). The entry's keys, the alias,
   the date format, the expiry line, the unmatched allowance, [the adoption](gate.md#declared-loosenings), no latest
   `until`, the printed lines, an advisory without a fixed version and the reach of an allowance are defaults the
   operator never answered.
@@ -2414,7 +2415,7 @@ reason = "gradio caps pillow<13; no image input"
 Ruled by the operator:
 
 - An exception stands per advisory in `quality/config.toml`, with a reason, an item and a date (ALLOW-1).
-- A new exception is a loosening: the pull request stays red until the operator's door merges it (VERDICT-64).
+- A new exception is a loosening: the pull request stays red until the door merges it on the operator's consent (VERDICT-64).
 - ALLOW-8: From the merge on, the advisory is green until the date and red again after it.
 - No agent can silence an advisory alone.
 - A pull request cannot move the re-check date later without the operator: a later `until` for an existing exception is
@@ -2524,7 +2525,7 @@ write) (ADVISORY-42).
 Ruled by the operator:
 
 - NPM-1: An `[[advisories.allow]]` entry for an npm finding is the same entry with `lock` set to the file's tracked path (`id
-  = "..."`, `lock = "frontend/pnpm-lock.yaml"`); it is a declared loosening and merges only through the operator's door like
+  = "..."`, `lock = "frontend/pnpm-lock.yaml"`); it is a declared loosening and merges only through the door like
   any other.
 - NPM-2: Nothing in the repository's own files silences an advisory; only a real fix in the lock, an upgrade or an override,
   counts.

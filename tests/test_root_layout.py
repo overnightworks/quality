@@ -247,7 +247,7 @@ def test_a_hundred_strays_print_a_hundred_sorted_findings(build_repo, capsys):
 @pytest.mark.parametrize("ruled", [True, False], ids=["with its ruling", "without a ruling"])
 def test_an_added_declaration_is_a_loosening_at_the_verdict(pull_request, capsys, ruled):
     """ROOT-22, VERDICT-76: a pull request that adds a declaration is red; with the ruling written on it only the
-    operator's door lands it, without it nothing does."""
+    door, on the operator's consent, lands it, without it nothing does."""
     repo, commit_base = pull_request
     commit_base(None, ONE_JOB)
     put(repo / CONFIG, ONE_JOB + root_declaring("frontend/", ruling=RULING if ruled else None))

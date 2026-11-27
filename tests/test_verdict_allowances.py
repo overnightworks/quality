@@ -33,7 +33,7 @@ def green():
 
 
 def declared(table: Table, name: str, ends: str = "#2"):
-    """The only line is the entry's, declared by its own ruling: red, and only the operator's door lands it."""
+    """The only line is the entry's, declared by its own ruling: red, and only the door, on the operator's consent, lands it."""
     return (((f"{table.what(name, ends)} · {RULED}", ("reason: stands apart",)),), (), False, False)
 
 

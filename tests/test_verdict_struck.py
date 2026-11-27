@@ -11,6 +11,7 @@ from tests.support.merge import (
     TWO_JOBS,
     changed_nothing,
     closing_line,
+    consenting_to,
     declaring,
     drive,
     not_judged_pair,
@@ -201,7 +202,7 @@ def test_the_door_cannot_judge_a_strike_whose_listing_outlasts_the_limit_and_lea
     child = tmp_path / "child-pid"
     gh = struck_pull(tmp_path, STRUCK, DELETED, **DECLARED_JOB_REMOVAL)
     fake_git(f'case "$*" in *" {stalls} "*) sleep 300 & echo $! > "{child}"; wait;; esac')
-    code, _ = drive(gh)
+    code = drive(gh)
     streams = capsys.readouterr()
     assert (code, fact in streams.out, streams.err) == (2, True, not_judged_pair())
     assert process_is_gone(int(child.read_text()))
@@ -266,7 +267,9 @@ def struck_pull(tmp_path, head_contract, merge_files, moves=(), baselines=(None,
     return gh
 
 
-DECLARED_JOB_REMOVAL = {"checks": SONAR_GREEN, "base_config": TWO_JOBS, "merge_config": ONE_JOB + declaring(B_REMOVED)}
+DECLARED_JOB_REMOVAL = {
+    "checks": SONAR_GREEN, "base_config": TWO_JOBS, "merge_config": ONE_JOB + declaring(B_REMOVED), "reviews": consenting_to(B_REMOVED),
+}
 
 
 @pytest.mark.integration
@@ -281,7 +284,7 @@ def test_the_door_merges_a_dead_strike_or_removal_beside_a_declared_loosening_wi
     """LOOSE-19, LOOSE-23, LOOSE-24: the door reads the pull request's merge commit; a deleted module's strike, or the
     removal of a contract whose only module it deleted, needs no declaration."""
     gh = struck_pull(tmp_path, head_contract, DELETED, removed=removed, **DECLARED_JOB_REMOVAL)
-    code, _ = drive(gh)
+    code = drive(gh)
     out = capsys.readouterr().out
     assert (code, closing_line() in out, line in out, len(gh.merge_calls)) == (0, True, False, 1)
 
@@ -290,7 +293,7 @@ def test_the_door_merges_a_dead_strike_or_removal_beside_a_declared_loosening_wi
 def test_the_door_carries_a_baseline_entry_under_the_renames_of_the_tree_a_strike_reads(capsys, tmp_path):
     """LOOSE-24: beside a dead strike, a baseline entry whose file the merge commit renames is carried and the door merges."""
     gh = struck_pull(tmp_path, STRUCK, DELETED, [MOVED_PATHS], MOVED_BASELINES, **DECLARED_JOB_REMOVAL)
-    code, _ = drive(gh)
+    code = drive(gh)
     out = capsys.readouterr().out
     assert (code, closing_line() in out, len(gh.merge_calls)) == (0, True, 1)
 
@@ -304,7 +307,7 @@ def test_the_door_carries_a_baseline_entry_under_the_renames_of_the_tree_a_strik
 def test_the_door_refuses_an_undeclared_strike_of_a_module_the_merge_commit_keeps_or_git_reads_as_renamed(capsys, tmp_path, merge_files, moves):
     """LOOSE-20, LOOSE-21: the door says `changes <list>` and merges nothing."""
     gh = struck_pull(tmp_path, STRUCK, merge_files, moves)
-    code, _ = drive(gh)
+    code = drive(gh)
     out = capsys.readouterr().out
     assert (code, f"{GUARDED_CHANGES}{STRUCK_FIELD}" in out, gh.merge_calls) == (1, True, [])
 
@@ -317,7 +320,7 @@ PLAIN_JOBS = {"checks": SONAR_GREEN, "base_config": ONE_JOB, "merge_config": ONE
 def test_the_door_refuses_an_undeclared_removal_of_a_contract_whose_modules_stay(capsys, tmp_path):
     """LOOSE-2, LOOSE-23: the door says `removed` and merges nothing."""
     gh = struck_pull(tmp_path, DEAD, DELETED, removed=LIVE_CONTRACT, **PLAIN_JOBS)
-    assert drive(gh)[0] == 1
+    assert drive(gh) == 1
     assert f"    ! {REMOVED_LINE}\n" in capsys.readouterr().out
     changed_nothing(gh)
 
@@ -325,8 +328,10 @@ def test_the_door_refuses_an_undeclared_removal_of_a_contract_whose_modules_stay
 @pytest.mark.integration
 def test_a_declared_removal_of_a_contract_whose_modules_stay_merges_through_the_door(capsys, tmp_path):
     """LOOSE-1, LOOSE-23: the declared removal is shown and the door merges."""
-    gh = struck_pull(tmp_path, DEAD, DELETED, removed=LIVE_CONTRACT, **{**PLAIN_JOBS, "merge_config": ONE_JOB + declaring(REMOVED_LINE)})
-    assert drive(gh)[0] == 0
+    gh = struck_pull(
+        tmp_path, DEAD, DELETED, removed=LIVE_CONTRACT, **{**PLAIN_JOBS, "merge_config": ONE_JOB + declaring(REMOVED_LINE), "reviews": consenting_to(REMOVED_LINE)}
+    )
+    assert drive(gh) == 0
     assert f"    ! {REMOVED_LINE} · overnightworks/songmaker#1345 of 2026-10-20\n        reason: ruled\n" in capsys.readouterr().out
     assert gh.sequence == ["gate false", "merge", "gate true", "comment"]
 
@@ -335,7 +340,7 @@ def test_a_declared_removal_of_a_contract_whose_modules_stay_merges_through_the_
 def test_the_door_merges_a_renamed_strike_whose_new_name_the_merge_commit_lists_with_no_line_for_the_strike(capsys, tmp_path):
     """LOOSE-22, LOOSE-24: beside a declared loosening, the renamed module in the same list leaves no line for the strike."""
     gh = struck_pull(tmp_path, STRUCK_WITH_NEW, {}, RENAME_MOVE, **DECLARED_JOB_REMOVAL)
-    code, _ = drive(gh)
+    code = drive(gh)
     out = capsys.readouterr().out
     assert (code, closing_line() in out, "source_modules" in out, len(gh.merge_calls)) == (0, True, False, 1)
 
@@ -364,7 +369,7 @@ def test_the_verdict_and_the_door_print_the_same_loosening_lines_for_the_same_tw
     gh.files[("pyproject.toml", gh.merge_sha)] = contracts_toml({"guarded": head_contract})
     monkeypatch.setenv("GATE_BASE_SHA", gh.base_sha)
     verdict_code, verdict_out = verdict_of(tmp_path / "work", capsys)
-    door_code, _ = drive(gh)
+    door_code = drive(gh)
     door_out = capsys.readouterr().out
     named = [line.strip() for line in verdict_out.splitlines() if 'import contract "' in line]
     assert named == [line.strip() for line in door_out.splitlines() if 'import contract "' in line]
@@ -376,11 +381,11 @@ def test_the_verdict_and_the_door_print_the_same_loosening_lines_for_the_same_tw
 def test_the_door_asks_for_no_remote_without_a_strike_and_without_baselines(tmp_path):
     """LOOSE-24: nothing is fetched when no module is struck."""
     gh = pulled(tmp_path, None, None, base_files=SHOP_BASE, checks=SONAR_GREEN, base_config=TWO_JOBS,
-                merge_config=ONE_JOB + declaring(B_REMOVED))
+                merge_config=ONE_JOB + declaring(B_REMOVED), reviews=consenting_to(B_REMOVED))
     gh.files[("pyproject.toml", gh.base_sha)] = contracts_toml({"guarded": DEAD})
     gh.files[("pyproject.toml", gh.merge_sha)] = contracts_toml({"guarded": DEAD})
     gh.remote = None
-    assert (drive(gh)[0], len(gh.merge_calls)) == (0, 1)
+    assert (drive(gh), len(gh.merge_calls)) == (0, 1)
 
 
 @pytest.mark.integration
@@ -407,7 +412,7 @@ def test_the_door_cannot_judge_a_strike_or_a_removal_whose_files_it_cannot_read(
     """LOOSE-23, LOOSE-24: a failed fetch, listing or rename list, or one with a warning, is exit 2 in the door's words."""
     gh = struck_pull(tmp_path, head_contract, DELETED, removed=removed, **DECLARED_JOB_REMOVAL)
     break_it(gh, tmp_path, fake_git)
-    code, _ = drive(gh)
+    code = drive(gh)
     streams = capsys.readouterr()
     assert (code, fact in streams.out, streams.err) == (2, True, not_judged_pair())
     changed_nothing(gh)

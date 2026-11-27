@@ -1,6 +1,8 @@
 import json
+import os
+import signal
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -29,15 +31,17 @@ from tests.support.merge import (
     base_row,
     changed_nothing,
     closing_line,
+    consent_row,
+    consenting,
     declaring,
-    door_ports,
     drive,
     landing_row,
+    loosened,
     merge_request,
     not_judged_pair,
-    prompt,
     pull_row,
-    rows_before_the_prompt,
+    rows_before_the_attempt,
+    run,
     sonar,
 )
 
@@ -87,6 +91,9 @@ def qwen_lines():
     return f"    ! {ADDS_QWEN} · {presentator_ruling()}\n        reason: {qwen_reason()}\n"
 
 
+PRESENTATOR = "overnightworks/agent-presentator#371"
+
+
 def songmaker_ruling():
     return "overnightworks/songmaker#1345 of 2026-10-20"
 
@@ -97,10 +104,6 @@ def presentator_ruling():
 
 def removed_b_lines():
     return f"    ! {B_REMOVED} · {songmaker_ruling()}\n        reason: ruled\n"
-
-
-def removed_b():
-    return (B_REMOVED, songmaker_ruling(), "ruled")
 
 
 def malformed_rules():
@@ -135,7 +138,7 @@ def test_an_empty_token_reads_sonar_anonymously(unset, monkeypatch):
     else:
         monkeypatch.setenv("SONAR_TOKEN", "")
     transport = recording(sonar())
-    assert drive(FakeGh(), transport)[0] == 0
+    assert drive(FakeGh(), transport) == 0
     assert transport.sent
     assert set(transport.sent) == {None}
 
@@ -144,7 +147,7 @@ def test_a_set_token_still_sends_basic_authorization(monkeypatch, capsys):
     """MERGE-77, MERGE-78: a set token is sent as Basic authorization and never shown in a row."""
     monkeypatch.setenv("SONAR_TOKEN", "s3cret-token")
     transport = recording(sonar())
-    assert drive(FakeGh(), transport)[0] == 0
+    assert drive(FakeGh(), transport) == 0
     assert set(transport.sent) == {basic_authorization("s3cret-token")}
     output = capsys.readouterr().out
     assert "s3cret-token" not in output
@@ -156,7 +159,7 @@ def test_a_refused_anonymous_read_is_cannot_judge_naming_the_token(status, monke
     """MERGE-80: an anonymous refusal names the missing SONAR_TOKEN and changes nothing."""
     monkeypatch.setenv("SONAR_TOKEN", "")
     gh = FakeGh()
-    assert drive(gh, refusing_anonymous_read(status))[0] == 2
+    assert drive(gh, refusing_anonymous_read(status)) == 2
     out = capsys.readouterr().out
     assert f"did not resolve acme_widgets in pullRequest=7 anonymously (HTTP {status}); a private project needs SONAR_TOKEN" in out
     changed_nothing(gh)
@@ -171,7 +174,7 @@ def test_the_token_never_appears_when_sonar_refuses_it(monkeypatch, capsys):
         raise SonarHttpError(401, url)
 
     gh = FakeGh()
-    assert drive(gh, rejecting)[0] == 2
+    assert drive(gh, rejecting) == 2
     output = capsys.readouterr().out
     assert "rejected the token" in output
     assert "s3cret-token" not in output
@@ -179,8 +182,8 @@ def test_the_token_never_appears_when_sonar_refuses_it(monkeypatch, capsys):
     changed_nothing(gh)
 
 
-def test_logs_who_and_the_legacy_count_on_the_pull_request():
-    """MERGE-46, MERGE-48, MERGE-50: the comment names who, the legacy count and the sequence."""
+def test_logs_who_the_legacy_count_and_the_consent_on_the_pull_request():
+    """MERGE-46, MERGE-47, MERGE-48, MERGE-50: the comment names who, the legacy count and the sequence."""
     gh = FakeGh()
     drive(gh)
     assert "@felix" in gh.comments[0]
@@ -188,14 +191,10 @@ def test_logs_who_and_the_legacy_count_on_the_pull_request():
     assert "off → merge → on" in gh.comments[0]
 
 
-def test_shows_repository_head_and_legacy_count_before_asking(capsys):
-    """MERGE-1, MERGE-3, MERGE-5, MERGE-6: the rows come in order with the landing last, then the question."""
-    shown = []
-    drive(FakeGh(), when_asked=lambda: shown.append(capsys.readouterr()))
-    assert (shown[0].out, shown[0].err) == (
-        rows_before_the_prompt(),
-        prompt(),
-    )
+def test_shows_repository_head_and_legacy_count_before_the_consent(capsys):
+    """MERGE-1, MERGE-3, MERGE-5: the rows come in order with the landing last, then the consent row."""
+    code, out, err = run(FakeGh(), capsys, words=["--dry-run"])
+    assert (code, out.startswith(rows_before_the_attempt()), err) == (0, True, "")
 
 
 @pytest.mark.parametrize(
@@ -257,13 +256,12 @@ def test_shows_repository_head_and_legacy_count_before_asking(capsys):
 def test_refuses_unless_the_door_is_the_only_way(gh_kwargs, sonar_kwargs, message, capsys):
     """MERGE-14, MERGE-15, MERGE-56, MERGE-59, MERGE-60, MERGE-61, MERGE-62, MERGE-72, MERGE-73, MERGE-74, MERGE-75,
     MERGE-76, MERGE-82, MERGE-84, MERGE-85, MERGE-87: each refusal of the door names its reason, changes nothing and
-    asks no question."""
+    changes nothing."""
     gh = FakeGh(**gh_kwargs)
-    code, answers = drive(gh, sonar(**sonar_kwargs))
+    code = drive(gh, sonar(**sonar_kwargs))
     assert code == 1
     assert message in capsys.readouterr().out
     changed_nothing(gh)
-    assert answers == []
 
 
 @pytest.mark.parametrize(
@@ -272,7 +270,7 @@ def test_refuses_unless_the_door_is_the_only_way(gh_kwargs, sonar_kwargs, messag
 def test_cannot_judge_when_sonar_cannot_be_read_under_legacy_fail(sonar_kwargs, capsys):
     """MERGE-16: a SonarCloud that cannot be reached or read under legacy fail is not judged: exit 2, nothing changed."""
     gh = FakeGh()
-    code, _ = drive(gh, sonar(**sonar_kwargs))
+    code = drive(gh, sonar(**sonar_kwargs))
     assert code == 2
     assert "not judged" in capsys.readouterr().out
     changed_nothing(gh)
@@ -281,11 +279,10 @@ def test_cannot_judge_when_sonar_cannot_be_read_under_legacy_fail(sonar_kwargs, 
 def test_cannot_judge_without_the_merge_commit_the_jobs_ran_on(capsys):
     """The release and the config the jobs ran on are unknown, so exit 2 and nothing changed."""
     gh = FakeGh(merge_sha=None)
-    code, answers = drive(gh, sonar())
+    code = drive(gh, sonar())
     assert code == 2
     assert capsys.readouterr().out == ""
     changed_nothing(gh)
-    assert answers == []
 
 
 def test_names_the_finding_a_pull_request_adds(capsys):
@@ -295,18 +292,15 @@ def test_names_the_finding_a_pull_request_adds(capsys):
 
 
 @pytest.mark.parametrize(
-    ("gh_kwargs", "terminal", "repo", "code"),
-    [
-        ({}, False, REPO, 1), ({}, True, "not-a-repo", 2), ({}, True, "acme/widg\u0435ts", 2), ({"admin": False}, True, REPO, 2),
-        ({"fail_on": ["pull"]}, True, REPO, 2),
-    ],
-    ids=["no terminal", "bad name", "a lookalike name", "missing admin permission", "gh down"],
+    ("gh_kwargs", "repo", "code"),
+    [({}, "not-a-repo", 2), ({}, "acme/widg\u0435ts", 2), ({"admin": False}, REPO, 2), ({"fail_on": ["pull"]}, REPO, 2)],
+    ids=["bad name", "a lookalike name", "missing admin permission", "gh down"],
 )
-def test_changes_nothing_when_it_cannot_start(gh_kwargs, terminal, repo, code):
-    """MERGE-16, MERGE-21, MERGE-54: the door changes nothing when it has no terminal, no admin right or no working gh,
-    or is given a name of another form."""
+def test_changes_nothing_when_it_cannot_start(gh_kwargs, repo, code):
+    """MERGE-16, MERGE-54: the door changes nothing when it has no admin right or no working gh, or is given a name of
+    another form."""
     gh = FakeGh(**gh_kwargs)
-    assert drive(gh, terminal=terminal, repo=repo)[0] == code
+    assert drive(gh, repo=repo) == code
     changed_nothing(gh)
 
 
@@ -336,7 +330,7 @@ def test_the_door_refuses_a_baseline_loosening_next_to_legacy_red(base_baseline,
     merges."""
     remote, base_sha, merge_sha = git_pull(tmp_path, base_baseline, merge_baseline)
     gh = FakeGh(base_baseline=base_baseline, merge_baseline=merge_baseline, base_sha=base_sha, merge_sha=merge_sha, remote=remote)
-    assert drive(gh)[0] == code
+    assert drive(gh) == code
     assert message in capsys.readouterr().out
     assert (gh.merge_calls == []) == (code == 1)
 
@@ -345,8 +339,11 @@ def test_the_verdict_reads_the_base_side_at_the_compared_tip_not_at_the_pull_req
     """MERGE-106: the config, the baseline and the import-linter configs of the base side are read at the tip the
     comparison named, never at the older sha the pull request still names."""
     older = "c" * 40
-    gh = FakeGh(pull_base_sha=older, checks=SONAR_GREEN, base_config=TWO_JOBS, head_config=ONE_JOB + declaring(B_REMOVED))
-    assert drive(gh)[0] == 0
+    gh = FakeGh(
+        pull_base_sha=older, checks=SONAR_GREEN, base_config=TWO_JOBS, head_config=ONE_JOB + declaring(B_REMOVED),
+        reviews=consenting(declared=(loosened(B_REMOVED),), legacy_branch=None),
+    )
+    assert drive(gh) == 0
     reads = {call[-1].partition("/contents/")[2].partition("?ref=")[0] for call in gh.calls if call[-1].endswith(f"?ref={BASE_SHA}")}
     assert reads == {CONFIG_PATH, BASELINE_PATH, *architecture.CONFIG_FILES}
     assert not any(older in argument for call in gh.calls for argument in call)
@@ -356,7 +353,7 @@ def test_a_malformed_baseline_at_the_merge_commit_cannot_be_judged(capsys):
     """MERGE-16, MERGE-82: a baseline the door cannot read at the merge commit is not judged: exit 2, the file and the
     commit named, nothing changed."""
     gh = FakeGh(base_baseline=BASELINE_82, merge_baseline="[ccn")
-    assert drive(gh)[0] == 2
+    assert drive(gh) == 2
     assert f"{BASELINE_PATH} at {MERGE_SHA}" in capsys.readouterr().out
     changed_nothing(gh)
 
@@ -364,20 +361,20 @@ def test_a_malformed_baseline_at_the_merge_commit_cannot_be_judged(capsys):
 @pytest.mark.parametrize(
     ("base_config", "merge_config", "declared", "rows"),
     [
-        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED), (removed_b(),), declared_row(1) + removed_b_lines()),
+        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED), (loosened(B_REMOVED),), declared_row(1) + removed_b_lines()),
         (
             GATE_CONFIG, REPORT_CONFIG + declaring("legacy fail → report"),
-            (("legacy fail → report", songmaker_ruling(), "ruled"),),
+            (loosened("legacy fail → report"),),
             declared_row(1) + f"    ! legacy fail → report · {songmaker_ruling()}\n        reason: ruled\n",
         ),
         (
             ONE_JOB, ONE_JOB + allowance_config(reason=qwen_reason()),
-            ((ADDS_QWEN, presentator_ruling(), qwen_reason()),),
+            (loosened(ADDS_QWEN, qwen_reason(), PRESENTATOR, date(2026, 10, 21)),),
             declared_row(1) + qwen_lines(),
         ),
         (
             TWO_JOBS, ONE_JOB + declaring(B_REMOVED) + allowance_config(reason=qwen_reason()),
-            (removed_b(), (ADDS_QWEN, presentator_ruling(), qwen_reason())),
+            (loosened(B_REMOVED), loosened(ADDS_QWEN, qwen_reason(), PRESENTATOR, date(2026, 10, 21))),
             declared_row(2) + removed_b_lines()
             + qwen_lines(),
         ),
@@ -390,69 +387,66 @@ def test_a_malformed_baseline_at_the_merge_commit_cannot_be_judged(capsys):
 def test_a_declared_loosening_merges_through_the_door_without_sonar(
     capsys, monkeypatch, base_config, merge_config, declared, rows
 ):
-    """MERGE-2, MERGE-33, MERGE-49, MERGE-50, MERGE-88: with Sonar green and only declared loosenings at the merge
-    commit, an allowance's own among them, the door shows each declaration whole with its reason below,
-    then asks, merges with the head pinned, and logs it, with no SonarCloud request."""
+    """MERGE-2, MERGE-33, MERGE-50, MERGE-88, MERGE-123: with Sonar green and only declared loosenings at the merge
+    commit, an allowance's own among them, the door shows each declaration whole with its reason below, merges on the
+    review that carries them with the head pinned, and logs it, with no SonarCloud request."""
     monkeypatch.delenv("SONAR_TOKEN", raising=False)
-    gh, transport, shown = FakeGh(checks=SONAR_GREEN, base_config=base_config, merge_config=merge_config, body="Work-Item: #9"), recording(sonar()), []
-
-    def read_line():
-        shown.append(capsys.readouterr())
-        return "yes\n"
-
-    code = cli.main(["merge", f"{REPO}#7"], gh=gh, transport=transport, terminal=cli.Terminal(read_line, lambda: True), ports=door_ports())
-    assert (code, transport.sent, gh.sequence) == (0, [], ["gate false", "merge", "gate true", "comment"])
-    assert (shown[0].out, shown[0].err) == (
-        RELEASE_ROW + pull_row() + base_row() + checks_row("quality / verdict is") + rows + merge_row() + landing_row("#9"),
-        prompt(),
+    gh = FakeGh(
+        checks=SONAR_GREEN, base_config=base_config, merge_config=merge_config, body="Work-Item: #9",
+        reviews=consenting(declared=declared, legacy_branch=None),
     )
+    transport = recording(sonar())
+    code, out, err = run(gh, capsys, transport=transport)
+    assert (code, err, transport.sent, gh.sequence) == (0, "", [], ["gate false", "merge", "gate true", "comment"])
+    assert out.startswith(RELEASE_ROW + pull_row() + base_row() + checks_row("quality / verdict is") + rows + merge_row() + landing_row("#9") + consent_row())
     assert gh.merge_calls == [merge_request()[0]]
     assert "merges with a merge commit; quality_gate off → merge → on." in gh.comments[0]
-    assert all(f"declared loosening ({ruling}): {what} - reason: {reason}" in gh.comments[0] for what, ruling, reason in declared)
 
 
-def test_the_door_names_each_of_79_allowances_within_one_comment(capsys):
-    """The 79 allowances of one pull request are 79 lines of the door, and the log comment stays within GitHub's
-    65,536 characters."""
+def test_the_door_names_each_of_79_allowances_within_one_consent_text(capsys):
+    """The 79 allowances of one pull request are 79 lines of the door, and the consent text stays within the 65,536
+    characters of a review."""
     allowances = "".join(
         allowance_config(f"GHSA-{number:04d}-pgg6-55fp", f"speech/providers/provider-{number}/uv.lock", reason="x" * 60)
         for number in range(79)
     )
-    gh = FakeGh(checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + allowances)
-    assert drive(gh)[0] == 0
-    shown = [line for line in capsys.readouterr().out.splitlines() if line.startswith("    ! advisory allowance adds ")]
-    assert (len(shown), len(gh.comments[0]) < 65_536) == (79, True)
+    gh = FakeGh(checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + allowances, reviews=[])
+    out = run(gh, capsys)[1]
+    shown = [line for line in out.splitlines() if line.startswith("    ! advisory allowance adds ")]
+    assert (len(shown), len(out[out.index("```\n") :]) < 65_536) == (79, True)
 
 
 def test_legacy_findings_and_a_declared_loosening_merge_in_one_run(capsys):
-    """MERGE-48, MERGE-49, MERGE-71: a red Sonar on legacy findings next to a declared loosening merges under every
-    legacy condition, showing both, and the log comment names the legacy count and the declaration."""
-    gh = FakeGh(base_config=GATE_CONFIG.replace('["checks"]', '["checks", "B"]'), head_config=GATE_CONFIG + declaring(B_REMOVED))
-    shown = []
-    assert drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))[0] == 0
-    assert (shown[0].out, shown[0].err) == (
-        RELEASE_ROW + pull_row() + base_row() + checks_row() + declared_row(1) + removed_b_lines() + legacy_row() + merge_row()
-        + landing_row(),
-        prompt(),
+    """MERGE-3, MERGE-48, MERGE-71: a red Sonar on legacy findings next to a declared loosening merges under every
+    legacy condition, showing both, and the log comment names the legacy count."""
+    gh = FakeGh(
+        base_config=GATE_CONFIG.replace('["checks"]', '["checks", "B"]'), head_config=GATE_CONFIG + declaring(B_REMOVED),
+        reviews=consenting(declared=(loosened(B_REMOVED),)),
     )
-    assert f'4 legacy finding(s); declared loosening ({songmaker_ruling()}): {B_REMOVED}' in gh.comments[0]
+    code, out, _ = run(gh, capsys)
+    assert code == 0
+    assert out.startswith(
+        RELEASE_ROW + pull_row() + base_row() + checks_row() + declared_row(1) + removed_b_lines() + legacy_row() + merge_row()
+        + landing_row() + consent_row()
+    )
+    assert "4 legacy finding(s); consent review" in gh.comments[0]
 
 
 def test_a_red_sonar_run_next_to_a_green_one_takes_the_legacy_path(capsys):
     """MERGE-62: Sonar is green only when every run is green, so one red run is judged for legacy findings."""
-    assert drive(FakeGh(extra_runs=[("quality / sonar", "success")]))[0] == 0
+    assert drive(FakeGh(extra_runs=[("quality / sonar", "success")])) == 0
     assert legacy_row() in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
     ("base_config", "merge_config", "code", "expected"),
     [
-        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\x1b[8m versteckt"), 0, "        reason: ok\\x1b[8m versteckt"),
-        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\u202edetsurt"), 0, "        reason: ok\\u202edetsurt"),
+        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\x1b[8m versteckt"), 1, "        reason: ok\\x1b[8m versteckt"),
+        (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\u202edetsurt"), 1, "        reason: ok\\u202edetsurt"),
         (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\rforged"), 2, "needs a non-empty one-line reason"),
         (TWO_JOBS, ONE_JOB + declaring(B_REMOVED, reason="ok\nforged"), 2, "needs a non-empty one-line reason"),
         (ONE_JOB, '[gate]\nmandatory_jobs = ["checks", "a\\n::error::b"]\n', 1, "    ! a\\x0a::error::b missing · not in the run"),
-        (ONE_JOB, ONE_JOB + allowance_config("GHSA-\x1b[8m", "a\tb/uv.lock", reason="ok\x1b[8m versteckt"), 0,
+        (ONE_JOB, ONE_JOB + allowance_config("GHSA-\x1b[8m", "a\tb/uv.lock", reason="ok\x1b[8m versteckt"), 1,
          f"    ! advisory allowance adds GHSA-\\x1b[8m in a\\x09b/uv.lock until 2027-01-31 · {presentator_ruling()}"),
     ],
     ids=[
@@ -461,14 +455,13 @@ def test_a_red_sonar_run_next_to_a_green_one_takes_the_legacy_path(capsys):
     ],
 )
 def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config, code, expected):
-    """MERGE-22, MERGE-86: no repository text in a declaration or a refusal can hide, split or forge a line, and a
-    refused job's name prints escaped."""
-    gh = FakeGh(checks=SONAR_GREEN, base_config=base_config, merge_config=merge_config)
-    assert drive(gh)[0] == code
+    """MERGE-22, MERGE-86: no repository text in a declaration, in the consent text below it or in a refusal can hide,
+    split or forge a line, and a refused job's name prints escaped."""
+    gh = FakeGh(checks=SONAR_GREEN, base_config=base_config, merge_config=merge_config, reviews=[])
+    assert drive(gh) == code
     streams = capsys.readouterr()
     assert [line for line in streams.out.splitlines() if expected in line] != []
     assert_every_line_starts_with_the_door([*streams.out.splitlines(), *streams.err.splitlines()])
-    assert "\u202e" not in "".join(gh.comments)
 
 
 @pytest.mark.parametrize(
@@ -476,15 +469,12 @@ def test_every_line_the_door_prints_is_escaped(capsys, base_config, merge_config
     [({}, "merge commit", "merges with a merge commit"), ({"rules": [[pull_request_rule("squash")]]}, "squash      ", "merges with a squash")],
     ids=["a merge commit", "a squash"],
 )
-def test_the_operator_reads_the_method_before_the_question_and_the_log_comment_names_it(gh_kwargs, event, sentence, capsys):
+def test_the_operator_reads_the_method_before_the_consent_and_the_log_comment_names_it(gh_kwargs, event, sentence, capsys):
     """MERGE-4, MERGE-33: the method row says what the door lands with on the base branch, and the log comment
     carries the method."""
-    gh, shown = FakeGh(**gh_kwargs), []
-    drive(gh, when_asked=lambda: shown.append(capsys.readouterr()))
-    assert (shown[0].out, shown[0].err) == (
-        RELEASE_ROW + pull_row() + base_row() + checks_row() + loosenings_none() + legacy_row() + merge_row(event) + landing_row(),
-        prompt(),
-    )
+    gh = FakeGh(**gh_kwargs)
+    out = run(gh, capsys)[1]
+    assert out.startswith(RELEASE_ROW + pull_row() + base_row() + checks_row() + loosenings_none() + legacy_row() + merge_row(event) + landing_row() + consent_row())
     assert f"; {sentence}; " in gh.comments[0]
 
 
@@ -517,7 +507,7 @@ def test_the_door_merges_with_a_method_the_settings_and_every_rule_allow(gh_kwar
     """MERGE-30, MERGE-31: the door merges with the first of a merge commit and a squash that the settings and every
     rule allow, and pins the head."""
     gh = FakeGh(**gh_kwargs)
-    assert drive(gh)[0] == 0
+    assert drive(gh) == 0
     assert (gh.merge_calls, [body["merge_method"] for body in gh.merge_bodies]) == ([merge_request()[0]], [method])
 
 
@@ -534,7 +524,7 @@ def test_the_door_reads_the_comparison_and_the_rules_of_the_base_branch_the_pull
     """MERGE-103: the door asks GitHub to compare the live tip of the pull request's base branch, its ref
     percent-encoded but for slashes, with the head, one commit per page, and reads that branch's rules."""
     gh = FakeGh(base_ref=base_ref)
-    assert drive(gh)[0] == 0
+    assert drive(gh) == 0
     compare_read = next(call for call in gh.calls if "/compare/" in " ".join(call))
     rules_read = next(call for call in gh.calls if "/rules/branches/" in " ".join(call))
     assert (compare_read, rules_read) == (
@@ -588,13 +578,10 @@ def test_the_door_refuses_before_the_gate_when_no_method_is_usable(gh_kwargs, li
     """MERGE-16, MERGE-32: a repository that allows no merge commit or squash, or whose rules cannot be read, is exit 2
     with a named line, and neither the gate nor the merge is touched."""
     gh = FakeGh(**gh_kwargs)
-    code, answers = drive(gh)
-    streams = capsys.readouterr()
-    assert (code, streams.out, streams.err, answers) == (
+    assert run(gh, capsys) == (
         2,
         RELEASE_ROW + pull_row() + base_row() + checks_row() + loosenings_none() + legacy_row() + f"  ✗ merge         not judged     {line}\n",
         not_judged_pair(),
-        [],
     )
     changed_nothing(gh)
 
@@ -603,7 +590,7 @@ def test_a_method_github_refuses_at_merge_time_leaves_the_gate_on_and_the_pull_r
     """MERGE-29, MERGE-31, MERGE-34: a squash that GitHub refuses at merge time leaves the gate switched on again and
     the pull request unmerged."""
     gh = FakeGh(rules=[[pull_request_rule("squash")]], fail_on=["merge"])
-    assert drive(gh)[0] == 2
+    assert drive(gh) == 2
     assert (gh.merge_calls, gh.gate_values) == ([merge_request(method="squash")[0]], ["false", "true"])
     assert "not merged" in capsys.readouterr().out
 
@@ -618,3 +605,52 @@ def test_the_github_remote_is_the_https_clone_address_of_the_repository(tmp_path
         capture_output=True, text=True, check=True,
     ).stdout.strip()
     assert resolved == f"{local}/{REPO}.git"
+
+
+MOVED_TIP = "e" * 40
+
+
+@pytest.mark.parametrize(
+    ("later_compare", "next_lines"),
+    [
+        ((MOVED_TIP, 0), "next: quality merge acme/widgets#7\n"),
+        (
+            (MOVED_TIP, 2),
+            "next:\n    gh pr update-branch 7 --repo acme/widgets\n    wait for the checks, then run quality merge acme/widgets#7 again\n",
+        ),
+    ],
+    ids=["the head still contains the new tip", "the head lacks the new tip"],
+)
+def test_a_base_that_moved_after_the_consent_is_refused_before_the_gate_is_touched(later_compare, next_lines, capsys):
+    """MERGE-107: the comparison read again after the consent refuses another tip than the one shown (exit 1, nothing
+    changed, no log comment) and names the update step where the head is now behind, else the door again."""
+    gh = FakeGh(later_compare=later_compare)
+    code, out, err = run(gh, capsys)
+    assert code == 1
+    assert out == rows_before_the_attempt() + "  ! base          moved\n"
+    assert err == "error: not merged · main moved since the rows were shown · nothing changed\n" + next_lines
+    changed_nothing(gh)
+    assert (gh.comments, [call for call in gh.calls if "-X" in call]) == ([], [])
+
+
+def test_a_comparison_that_cannot_be_read_after_the_consent_is_not_judged_and_changes_nothing(capsys):
+    """MERGE-105, MERGE-107: a comparison that fails after the consent is the `✗ base` row (exit 2), nothing changed."""
+    gh = FakeGh(fail_on=["recheck"])
+    code, out, _ = run(gh, capsys)
+    assert (code, out.endswith("  ✗ base          not judged     cannot compare aaaaaaa with main: recheck broke\n")) == (2, True)
+    changed_nothing(gh)
+    assert gh.comments == []
+
+
+def test_ctrl_c_during_the_comparison_after_the_consent_ends_the_run_interrupted_and_changes_nothing():
+    """MERGE-107: Ctrl-C while the comparison is read again ends the run interrupted (exit 130), nothing changed."""
+    gh, sent = FakeGh(interrupt_on=["recheck"]), []
+    saved = signal.getsignal(signal.SIGINT)
+    try:
+        with pytest.raises(SystemExit) as exited:
+            cli.run(door=lambda: drive(gh), environment={}, send_signal=lambda pid, number: sent.append((pid, number)))
+    finally:
+        signal.signal(signal.SIGINT, saved)
+    assert (exited.value.code, sent) == (130, [(os.getpid(), signal.SIGINT)])
+    changed_nothing(gh)
+    assert gh.comments == []

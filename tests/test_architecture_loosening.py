@@ -22,7 +22,7 @@ from tests.support.check import (
     leading_count,
 )
 from tests.support.check import check_output as run
-from tests.support.merge import BASE_SHA, ONE_JOB, SONAR_GREEN, FakeGh, changed_nothing, declaring, drive
+from tests.support.merge import BASE_SHA, ONE_JOB, SONAR_GREEN, FakeGh, changed_nothing, consenting_to, declaring, drive
 
 QUALITY_ROOT = Path(__file__).resolve().parents[1]
 
@@ -180,7 +180,7 @@ def test_the_door_refuses_an_undeclared_import_contract_loosening_next_to_legacy
     """LOOSE-2: the door reads the import-linter configs at the base and the merge commit and refuses an undeclared
     loosening of them, even when it was opened for Sonar's legacy findings."""
     gh = GhWithImportConfigs(**gh_kwargs)
-    assert drive(gh)[0] == 1
+    assert drive(gh) == 1
     assert f"    ! {line}\n" in capsys.readouterr().out
     changed_nothing(gh)
 
@@ -188,8 +188,11 @@ def test_the_door_refuses_an_undeclared_import_contract_loosening_next_to_legacy
 def test_a_declared_import_contract_config_removal_merges_through_the_door(capsys):
     """LOOSE-1, LOOSE-3: with Sonar green, only the declared loosening of an import contract is left, and the door
     shows the declaration and merges."""
-    gh = GhWithImportConfigs(checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + declaring(FILE_REMOVED), **CONFIG_AT_BASE)
-    assert drive(gh)[0] == 0
+    gh = GhWithImportConfigs(
+        checks=SONAR_GREEN, base_config=ONE_JOB, merge_config=ONE_JOB + declaring(FILE_REMOVED), reviews=consenting_to(FILE_REMOVED),
+        **CONFIG_AT_BASE,
+    )
+    assert drive(gh) == 0
     assert f"    ! {FILE_REMOVED} · overnightworks/songmaker#1345 of 2026-10-20\n        reason: ruled\n" in capsys.readouterr().out
     assert gh.sequence == ["gate false", "merge", "gate true", "comment"]
 
@@ -198,6 +201,6 @@ def test_import_contracts_at_the_base_that_cannot_be_told_apart_cannot_be_judged
     """LOOSE-16: the door names the commit whose import contracts it cannot read, and changes nothing."""
     twice = contracts_ini({"a": FORBIDDEN}) + ini_section("importlinter:contract:again", {"name": "a", **FORBIDDEN})
     gh = GhWithImportConfigs(base_files={".importlinter": twice})
-    assert drive(gh)[0] == 2
+    assert drive(gh) == 2
     assert f"import-linter config at {BASE_SHA}: " in capsys.readouterr().out
     changed_nothing(gh)

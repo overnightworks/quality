@@ -15,6 +15,7 @@ from tests.support.merge import (
     FakeGh,
     changed_nothing,
     drive,
+    run,
 )
 from tests.support.merge import sonar as merge_sonar
 from tests.support.sonar import (
@@ -133,33 +134,27 @@ def test_the_merge_door_names_every_added_finding_where_the_bot_config_exists(se
     gh = FakeGh()
     if served:
         serve_config_at_merge_commit(gh)
-    code, answers = drive(gh, merge_sonar(added=[bot_issue(), bot_issue("python:S1")]))
+    code = drive(gh, merge_sonar(added=[bot_issue(), bot_issue("python:S1")]))
     refusal = capsys.readouterr().out
     assert code == 1
     assert (sonar_properties.DEPENDABOT_EXCEPTION_RULE in refusal, "python:S1" in refusal) == (True, True)
     changed_nothing(gh)
-    assert answers == []
 
 
 def test_the_merge_door_cannot_judge_when_a_config_read_fails_other_than_not_found(capsys):
     gh = FakeGh()
     gh.files[(CONFIG_PATH, MERGE_SHA)] = GhFailed("gh api failed: HTTP 500")
-    code, answers = drive(gh)
+    code = drive(gh)
     assert code == 2
     assert "not judged" in capsys.readouterr().out
     changed_nothing(gh)
-    assert answers == []
 
 
 def test_the_merge_door_shows_main_whole_and_reads_no_bot_config(capsys):
     """SONAR-24, SONAR-26."""
     gh = FakeGh(merge_lands=True)
     serve_config_at_merge_commit(gh)
-    shown_before_asking = []
-    code, _ = drive(
-        gh, merge_sonar(legacy=12), when_asked=lambda: shown_before_asking.append(capsys.readouterr().out)
-    )
-    (shown,) = shown_before_asking
+    code, shown, _ = run(gh, capsys, transport=merge_sonar(legacy=12))
     assert code == 0
     assert "  ! sonar         12 legacy findings on main\n" in shown
     assert [call for call in gh.calls if sonar_properties.DEPENDABOT_CONFIG in " ".join(call)] == []

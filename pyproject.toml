@@ -15,7 +15,7 @@ dependencies = [
     # logline v1.13.0: the full commit of its release tag, because quality is installed without a lock
     "overnightworks-logline @ git+https://github.com/overnightworks/logline@4121b57c138942ba02d1ea3959a4260ac428d777",
     "packaging>=24",
-    "ruff==0.17.5",
+    "ruff==0.17.6",
     "zizmor==1.32.0",
 ]
 
@@ -82,9 +82,8 @@ exhaustive = true
 layers = [
     "cli",
     "cli_help",
-    "merge_run",
     "merge",
-    "landing | base_branch",
+    "merge_consent | landing | base_branch",
     "verdict",
     "loosenings",
     "sides | gh",

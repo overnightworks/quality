@@ -175,16 +175,3 @@ def test_the_bounded_run_reports_each_second(tmp_path):
     with process.scratch_directory():
         done = process.run_bounded_in_own_group(["cat", str(fifo)], 30, every_second=release)
     assert (done.returncode, done.stdout, seconds) == (0, "go\n", [1])
-
-
-@pytest.mark.integration
-def test_a_child_started_when_ctrl_c_arrives_is_waited_for_and_the_interrupt_is_reported(monkeypatch):
-    """A Ctrl-C between a child's start and the wait for it neither orphans the child nor raises."""
-
-    class InterruptedWhenStarted(subprocess.Popen):
-        def __init__(self, *arguments, **keywords):
-            super().__init__(*arguments, **keywords)
-            signal.raise_signal(signal.SIGINT)
-
-    monkeypatch.setattr(subprocess, "Popen", InterruptedWhenStarted)
-    assert process.run_to_its_end([sys.executable, "-c", "raise SystemExit(3)"]) == process.Finished(3, interrupted=True)

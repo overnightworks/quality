@@ -22,6 +22,7 @@ from tests.support.merge import (
     drive,
     gate_workflow,
     pull_row,
+    run,
     running_at,
 )
 
@@ -39,10 +40,9 @@ def at_merge(**files):
 
 
 def door(capsys, gh, **arguments):
-    """The door's exit, stdout and stderr, answered `no` at its question."""
-    code, _ = drive(gh, typed="no\n", **arguments)
-    printed = capsys.readouterr()
-    return code, printed.out, printed.err
+    """The door's exit, stdout and stderr, refused at its consent check for want of a review."""
+    gh.reviews = []
+    return run(gh, capsys, **arguments)
 
 
 def listing_refused(what):

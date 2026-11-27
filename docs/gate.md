@@ -211,8 +211,9 @@ no loosening event exists for it. Any other key, or a value that is not a non-em
 
 ### Declared loosenings
 
-- VERDICT-52: A pull request that loosens the gate as the operator ruled declares each loosening in its `quality/config.toml`, one
-  entry per loosening:
+- VERDICT-52: A pull request that loosens the gate declares each loosening in its `quality/config.toml`, one
+  entry per loosening; its `item` names the item whose card asks the operator's consent and its `date` is the day the entry
+  is written:
 
 ```toml
 [[gate.loosened]]
@@ -252,7 +253,7 @@ reason = "the operator ruled the requirement shelf machinery out"
 - VERDICT-63: When nothing else is red, the closing line is `! red · only declared loosenings · only the operator merges it · 4s`,
   and stderr names the one command: `next: quality merge <owner>/<repo>#<n>`. No entry approves itself:
   an agent may write one, but the ruleset and `aco land` still need a green `quality / verdict`, and only
-  [the operator's door](commands.md#quality-merge) merges.
+  [the door](commands.md#quality-merge) merges, on the operator's consent.
 - VERDICT-64: An advisory allowance (`[[advisories.allow]]`, see the `advisory` rule under `quality check`) declares its own
   loosening with its own `item` and `date`, so it needs no `[[gate.loosened]]` entry. An allowance whose `id` and
   `lock` the base lacks prints `advisory allowance adds <id> in <lock> until <until> · <item> of <date>`; one whose
@@ -269,7 +270,7 @@ reason = "the operator ruled the requirement shelf machinery out"
   is a loosening with no `item` and `date` of its own, since its entry carries none and no `until` brings it back to red.
   A head `(rule, file, secret_sha256)` the base lacks prints
   `secret allowance adds <rule> in <file> · sha256 <first 12 hex of secret_sha256>`; it is declared by a
-  `[[gate.loosened]]` entry with that text as `what`, like a removed mandatory job, and stays red for the operator's door.
+  `[[gate.loosened]]` entry with that text as `what`, like a removed mandatory job, and stays red until the door merges it.
 - VERDICT-72: A deleted entry and a changed `reason` loosen nothing; a changed `rule`, `file` or `secret_sha256` is a
   new entry.
 - VERDICT-73: A base without `quality/config.toml` holds no allowance, so every secret allowance of the
@@ -297,9 +298,9 @@ reason = "the operator ruled the requirement shelf machinery out"
 - VERDICT-77: With `item` and `date` written on the entry, the operator's ruling that lets it in, the line is declared by
   them, as `· <item> of <date>` with `reason: …` beneath. Without them the line is undeclared and has
   `fix: write the operator's ruling that lets it in on the entry in quality/config.toml, its item and its date` beneath,
-  where `reason:` stands for a declared line. The verdict is red either way, and only [the operator's
-  door](commands.md#quality-merge) lands a declared one: an undeclared one stops the door, whose blocking row shows the
-  same line with the same `fix:`.
+  where `reason:` stands for a declared line. The verdict is red either way, and only
+  [the door](commands.md#quality-merge), on the operator's consent, lands a declared one: an undeclared one stops the
+  door, whose blocking row shows the same line with the same `fix:`.
 - VERDICT-78: An inherited entry, a changed `reason`, `ends` or ruling and a deleted entry loosen nothing; a layout entry
   whose `rule` changes is a new entry.
 - VERDICT-79: The base side of the two tables is read by identity only, `entry` for root and `rule` and `path` for
@@ -328,11 +329,13 @@ reason = "the operator ruled the requirement shelf machinery out"
 
 Ruled by the operator:
 
-- A loosening is declared and stays red, and only the operator's door merges it.
+- A loosening is declared and stays red, and only the door merges it, on the operator's consent.
 - A declared removal of a mandatory job is no longer judged.
 - The door may merge legacy Sonar findings and a declared loosening in one run.
 - Only the door moves an allowance's `until` later, because that date is what brings the advisory back to red.
 - An allowance is its own declaration, with no second `[[gate.loosened]]` entry.
+- The door merges a pull request only on the operator's consent: an organisation owner's latest review on it at the head the door merges, submitted as a comment or an approval and not dismissed, carrying exactly the consent text the door prints for that head, one fenced block, line endings aside. It never reads the comment that shows the operator the text: it recomputes the text at that head and refuses any difference.
+- The consent check is a tripwire for cooperative agents: it holds the cases it lists (an organisation owner's latest review, submitted and not dismissed, at the merged head, carrying exactly that text). It cannot tell the operator's review from one written under his login, by an agent too; the boundary that stops a non-cooperative agent is agents acting on GitHub under their own identity, with the operator's credentials and the board's click out of their reach (platform#885).
 
 The reason and the residual risk stand in [ARCHITECTURE](ARCHITECTURE.md), sections 6 and 8.
 

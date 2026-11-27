@@ -6,8 +6,8 @@ constraints stand. The references ([gate](gate.md), [codeql](codeql.md), [sonar]
 
 ## 1. Context and Scope
 
-The engineer and the agent run `quality check` locally and in the commit hook. The operator uses his door
-(`quality merge`) to merge past a red gate. Every gated repository's CI calls the reusable `gate.yml`, which
+The engineer and the agent run `quality check` locally and in the commit hook. The operator consents, in a review, to the door
+(`quality merge`) merging past a red gate. Every gated repository's CI calls the reusable `gate.yml`, which
 runs the check, the SonarCloud job and the verdict. Outside quality lie GitHub (its API and Actions), SonarCloud, the
 OSV advisory archives, mise with the three scanners it installs, PyPI, which uv installs quality's own dependencies
 from, and design's and logline's git sources on GitHub, the second source of a dependency: `design.catalogs` reads the
@@ -16,7 +16,7 @@ catalogs declaration and the catalog files for the languages rules, and `logline
 ```mermaid
 flowchart LR
     engineer["Engineer / agent<br/>quality check, commit hook"]
-    operator["Operator<br/>quality merge"]
+    operator["Operator<br/>consent review"]
     ci["Gated repository's CI<br/>gate.yml"]
     quality(["quality"])
     github["GitHub API and Actions"]
@@ -26,7 +26,7 @@ flowchart LR
     pypi["PyPI via uv"]
     design["design's and logline's git sources<br/>pinned by commit"]
     engineer --> quality
-    operator --> quality
+    operator --> github
     ci --> quality
     quality --> github
     quality --> sonarcloud
@@ -44,8 +44,8 @@ the blocks, and `quality check` enforces it: a module imports only from the laye
 ```mermaid
 flowchart TB
     cli["cli.py: the one door; arguments, exit code"]
-    several["merge_run.py: the run over several names, each in a process of its own"]
-    door["merge.py, base_branch.py: the operator's door and what GitHub says about its base branch"]
+    door["merge.py, base_branch.py: the door past a red gate and what GitHub says about its base branch"]
+    consent["merge_consent.py: the text the door prints for a head and the owner's review that carries it"]
     verdict["verdict.py, loosenings.py, sides.py: the pull request's verdict, what counts as a loosening, and the two sides it compares"]
     reports["sonar_properties.py, sonar.py, fleet.py: SonarCloud scan wiring and findings, fleet report"]
     check["check.py, staged.py: areas in order, the commit hook"]
@@ -53,9 +53,8 @@ flowchart TB
     pin["pin.py: the release the gate pins"]
     rules["rule modules: one decision each"]
     shared["shared layers below the rules"]
-    cli --> several
     cli --> door
-    several --> door
+    door --> consent
     cli --> verdict
     cli --> reports
     cli --> check
@@ -67,14 +66,6 @@ flowchart TB
     pin --> rules
     rules --> shared
 ```
-
-A run over several names runs each pull request's door as a process of its own, `python -P -m quality.cli merge
-<name>`, one after the other: a pull request whose gate pins another release replaces its process with that release,
-so a loop in one process would end at the first such pull request, and each pull request is judged and restored by
-exactly the code a run for it alone runs. The run waits for each child through an interrupt and never kills it, since
-a killed child could leave `quality_gate` off. `-P` keeps the working directory off the child's module path: a pull
-request's checkout is untrusted and may hold a `quality` package that would otherwise run under the operator's admin
-login.
 
 Rules return findings and never print; `output.py` owns every printed line. `checkout.py` and `repository.py` are the
 only readers of the checked-out files (`architecture.py` opens the sources itself, for grimp), `web.py` the only HTTP transport that sends a credential, and `gh.py` runs every `gh` command the door sends. `python_imports.py` is the one reader of a module's import statements: from them `external_imports.py` keeps the submodules of an external package that a forbidden contract names (`agents.calling`), which grimp would squash, so nothing of the package is read or installed.
@@ -151,8 +142,8 @@ pin through `gh` at the pull request's merge commit and checks every listed name
 quality itself it runs the installed quality, never the pull request's own code. The Sonar token's boundary stands in
 [sonar](sonar.md#quality-sonar-findings). The advisory archive is an unsigned zip over TLS; a local copy is used only
 when the server's ETag and the copy's own md5 agree ([rules](rules.md)). Agents are cooperative and share the operator's
-`gh` login, so the door is the agreed path, not a lock; a real lock (a token without admin rights) belongs to the
-machine's setup, not to quality.
+`gh` login, so the door and its consent check are the agreed path, not a lock; a real lock (agents acting under identities
+of their own) belongs to the machine's setup, not to quality.
 
 **Proof strategy.** A test's layer is the `integration` mark in its own source, in the module's `pytestmark` or on the
 test or its class; a test without it is a unit test. `tests/conftest.py` fails a test without the mark that starts a
@@ -166,12 +157,15 @@ cannot judge.
 
 ## 6. Constraints and reasons
 
-- A loosening is declared and stays red; only the operator's door merges it. A pull request writes its own declaration,
-  so the declaration alone proves nothing: an agent could write the declaration and the loosening in one pull request.
+- A loosening is declared and stays red; only the door merges it, on the operator's consent: an organisation owner's latest
+  review at the merged head that carries exactly the text the door prints. A pull request writes its own declaration, so the
+  declaration alone proves nothing: an agent could write the declaration and the loosening in one pull request. The consent
+  check is a tripwire for cooperative agents: agents share the operator's `gh` login, so it cannot tell his review from one
+  written under his login; the boundary is agents acting under identities of their own (platform#885).
 - Callers pin quality's workflows by commit with the tag in a comment, and Dependabot bumps them; quality's own action
   pins move the same way. One release then reaches every caller through a pull request it judges itself, with no token
   that writes to every repository.
-- A repository turns SonarCloud off only in `quality/config.toml`: the verdict holds the config against the base, so switching it off is a loosening only the operator's door merges, which a workflow input would not be.
+- A repository turns SonarCloud off only in `quality/config.toml`: the verdict holds the config against the base, so switching it off is a loosening only the door merges, on the operator's consent, which a workflow input would not be.
 - Every line quality prints follows one grammar of rows, `glyph · subject · event · fact`, the principle hal's output follows too, so a reader or a script learns it once for the fleet.
 - One reusable CodeQL workflow serves the fleet and uploads under the Default Setup's category, so alerts carry over when
   a repository switches.
@@ -200,13 +194,13 @@ cannot judge.
   judges tests.
 - A validated hand list of fleet repositories: it still forgets a new repository. Reopens when the fleet spans owners no
   organization holds.
-- Selecting the fleet by a custom property or topic: `quality_gate` means the ruleset applies and the emergency door switches it off, and a
+- Selecting the fleet by a custom property or topic: `quality_gate` means the ruleset applies and the door switches it off, and a
   topic is one more hand step per repository. Reopens when the report should measure exactly the gated repositories.
 - Parallel REST requests in the fleet report: GitHub counts response time against 90 seconds of CPU time per 60 seconds and recommends serial requests, so a pool gains at most 1.5×. Reopens when the read needs more than the deadline holds at serial speed.
 - A check that exits 2 with the `uvx --from git+…` command for the pinned release instead of fetching it. Reopens when the operator rules it.
 
 ## 8. Risks and Technical Debt
 
-- Agents share the operator's `gh` login; the door is a contract, not a lock.
+- Agents share the operator's `gh` login; the door's consent check is a tripwire, not a lock.
 - Each repository is judged by the release it pins, so a fix reaches it only with its next pin move, and a defect stays until then.
 - SonarCloud's engine is downloaded unpinned, an accepted trust boundary ([sonar](sonar.md#quality-sonar-findings)).
