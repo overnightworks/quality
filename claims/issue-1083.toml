@@ -1,8 +1,0 @@
-claim_id = "c3703017ee804a80be5f1b8ffe5cb37b"
-agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
-role = "builder"
-base = "53d96df2f29eaeb18f326e3b4259c203f3c25791"
-branch = "claude/issue-1083-door-merges-on-consent"
-scope = [".github/workflows/release-gate.yml", "AGENTS.md", "README.md", "docs", "pyproject.toml", "src/quality", "tests"]
-opened_commit = "195f2e78977f50ba4b94cbe2afabdf9b34cfe2f6"
-whole_reason = "One trust decision of the merge door: the consent module, the door's deletion of its typed yes, terminal check and batch run, their tests, and every document that names the door, which cannot land apart without a door that asks for a consent nobody documents."
