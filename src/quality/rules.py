@@ -62,7 +62,7 @@ class Area(StrEnum):
     help_line: str
 
     FILES = "files", "what the repository tracks: layout, tests, env files, compose ports, the Python floor, literal page text, catalog texts in test locators"
-    DEBT = "debt", "size, near copies and job time limits against the debt ceiling (quality/baseline.toml), and spec IDs no test cites"
+    DEBT = "debt", "size, near copies and job time limits against the debt ceiling (quality/baseline.toml), spec IDs no test cites, and spec rules a change makes too long"
     IMPORTS = "imports", "the import contracts"
     SECRETS = "secrets", "secrets in the committed history"
     WORKFLOWS = "workflows", "GitHub workflows: lint, security, concurrency, the workflows a pull request triggers, pytest -n, pytest calls that can run the live layer, run-time installs, the languages standard's catalog-check and render-pass"
