@@ -9,7 +9,7 @@ from quality.config_allowances import ROOT_ALLOWANCE_EXAMPLE
 from quality.config_entries import CONFIG_PATH
 from quality.output import FIX_LABEL, Glyph
 from quality.report import FindingEvent
-from quality.root_layout import ROOT_BASE_DIRECTORIES, ROOT_BASE_ENTRIES, ROOT_BASE_FILES
+from quality.root_layout import ROOT_BASE_DIRECTORIES, ROOT_BASE_ENTRIES, ROOT_BASE_FILES, ROOT_CASES
 from quality.rules import Rule
 from tests.support.allowances import RULED, RULING
 from tests.support.check import check_output, copy_block, env_row_stands, finding_rows, rows_of, rule_findings
@@ -62,6 +62,7 @@ def test_every_base_list_entry_is_green_without_a_config(build_repo):
 PROJECTS_CONDITION = "holds folders and each holds a package.json or pyproject.toml"
 PLUGINS_CONDITION = "holds folders and each holds a .claude-plugin/plugin.json or .codex-plugin/plugin.json"
 FLUX_CONDITION = "clusters/<name>/flux-system/"
+DOCKER_CONDITION = next(case.condition.sentence for case in ROOT_CASES if case.entry == "docker/")
 
 
 def unlisted_facts(repo) -> dict[str, str]:
@@ -268,6 +269,13 @@ def test_an_added_declaration_is_a_loosening_at_the_verdict(pull_request, capsys
         {"plugins/atelier/.claude-plugin/plugin.json": "{}", "plugins/atelier/.codex-plugin/plugin.json": "{}"},
         {"plugins/a/.claude-plugin/plugin.json": "{}", "plugins/b/.codex-plugin/plugin.json": "{}"},
         {"src/frontend/package.json": "{}"},
+        {f"docker/{name}.Dockerfile": "x" for name in ("build", "lint", "test")},
+        {
+            "Dockerfile": "x",
+            "docker/music-worker.Dockerfile": "x",
+            "docker/docker-compose.test.yml": "x",
+            "docker/scripts/start.sh": "x",
+        },
     ],
     ids=[
         "frontend with its package.json",
@@ -278,10 +286,12 @@ def test_an_added_declaration_is_a_loosening_at_the_verdict(pull_request, capsys
         "a plugin with both hosts' manifests",
         "plugins each with the manifest of one host",
         "frontend below the root",
+        "docker with three named Dockerfiles and no root Dockerfile",
+        "docker with a named Dockerfile, a compose file and a script beside a root Dockerfile",
     ],
 )
 def test_a_directory_whose_case_condition_is_met_is_green_without_a_declaration(build_repo, files):
-    """ROOT-1, ROOT-18, ROOT-19, ROOT-20, ROOT-21, ROOT-23."""
+    """ROOT-1, ROOT-18, ROOT-19, ROOT-20, ROOT-21, ROOT-23, ROOT-24."""
     assert red(build_repo({**GUIDANCE, **files}), Rule.ROOT_LAYOUT) == []
 
 
@@ -309,6 +319,11 @@ def test_a_directory_whose_case_condition_is_met_is_green_without_a_declaration(
         ({"clusters/pc/apps.yaml": "x"}, {"clusters/": FLUX_CONDITION}),
         ({"apps/x/flux-system/y.yaml": "x"}, {"apps/": FLUX_CONDITION}),
         ({"clusters/pc/flux-system": "x"}, {"clusters/": FLUX_CONDITION}),
+        ({"Dockerfile": "x", "docker/app.toml": "x"}, {"docker/": DOCKER_CONDITION}),
+        ({"docker/images/app.Dockerfile": "x"}, {"docker/": DOCKER_CONDITION}),
+        ({"docker/app.Dockerfile.bak": "x"}, {"docker/": DOCKER_CONDITION}),
+        ({"docker/.Dockerfile": "x"}, {"docker/": DOCKER_CONDITION}),
+        ({"docker/app.dockerfile": "x"}, {"docker/": DOCKER_CONDITION}),
     ],
     ids=[
         "frontend without a package.json",
@@ -326,10 +341,15 @@ def test_a_directory_whose_case_condition_is_met_is_green_without_a_declaration(
         "clusters without flux-system",
         "flux-system below another root directory than clusters",
         "a file named flux-system directly in a cluster",
+        "docker with a root Dockerfile and no Dockerfile in it",
+        "docker whose only Dockerfile lies in a subfolder",
+        "docker whose only file merely begins with a Dockerfile name",
+        "docker whose only Dockerfile has no name",
+        "docker whose only Dockerfile is spelled in lower case",
     ],
 )
 def test_a_directory_whose_case_condition_fails_is_unlisted_and_its_fact_names_the_condition(build_repo, files, facts):
-    """ROOT-3, ROOT-11, ROOT-18, ROOT-19, ROOT-20, ROOT-21, ROOT-23."""
+    """ROOT-3, ROOT-11, ROOT-18, ROOT-19, ROOT-20, ROOT-21, ROOT-23, ROOT-24."""
     found = unlisted_facts(build_repo({**GUIDANCE, **files}))
     assert {entry: condition in found[entry] for entry, condition in facts.items()} == dict.fromkeys(facts, True)
     assert set(found) == set(facts)

@@ -718,6 +718,8 @@ It applies these rules:
   - ROOT-23: `plugins/`, where each of its child directories that holds a tracked file holds a tracked
     `.claude-plugin/plugin.json` or `.codex-plugin/plugin.json` at that path directly under it, and at least one does, the
     folder of plugins that Claude Code's and Codex's documentation lay out;
+  - ROOT-24: `docker/`, where a tracked `<name>.Dockerfile` lies directly in it, the folder Docker's documentation lays
+    out for an app's further images and what they are built and tested with;
   - ROOT-20: `legal/`, where `legal/datenschutz.html` is tracked, the page the platform's app standard requires of every
     app;
   - ROOT-21: `clusters/`, `infrastructure/` and `apps/`, where a tracked file lies under `clusters/<name>/flux-system/`,
@@ -765,7 +767,9 @@ It applies these rules:
   symlink in the tree stays that repository's own check; a directory of projects or of plugins is judged by its direct
   children only; a plugin folder with no manifest, or with only a `plugin.json` at its own root, makes `plugins/`
   unlisted; a Flux bootstrap deeper than `clusters/<name>/flux-system/` is unlisted, and a condition is met by the name
-  alone, so an empty or symlinked `frontend/package.json` meets it (ROOT-16).
+  alone, so an empty or symlinked `frontend/package.json` meets it (ROOT-16); what `docker/` holds beside its
+  Dockerfiles is not judged, and a `docker/` whose Dockerfiles lie only in subfolders, or are named plain `Dockerfile`,
+  is unlisted.
 - `file-suffix`:
   - SUFFIX-1: a tracked file whose basename has no suffix is a finding,
   - SUFFIX-2: unless it is executable (index mode 100755), a symlink (120000) or a gitlink (160000),

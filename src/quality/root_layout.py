@@ -32,6 +32,8 @@ PLUGIN_MANIFESTS = frozenset({".claude-plugin/plugin.json", ".codex-plugin/plugi
 FLUX_CLUSTERS = "clusters"
 FLUX_DIRECTORY = "flux-system"
 
+DOCKERFILE_SUFFIX = ".Dockerfile"
+
 
 @dataclass(frozen=True)
 class CaseCondition:
@@ -64,6 +66,14 @@ def _directory_of_manifested_folders(directory: str, manifests: frozenset[str]) 
     return CaseCondition(f"it holds folders and each holds a {' or '.join(sorted(manifests))}", met)
 
 
+def _named_dockerfile_directly_in(directory: str) -> CaseCondition:
+    def met(tracked: frozenset[str]) -> bool:
+        names = (path.removeprefix(directory) for path in tracked if path.startswith(directory))
+        return any("/" not in name and name.endswith(DOCKERFILE_SUFFIX) and name != DOCKERFILE_SUFFIX for name in names)
+
+    return CaseCondition(f"a <name>{DOCKERFILE_SUFFIX} directly in {directory} is tracked", met)
+
+
 def _flux_bootstrap() -> CaseCondition:
     def met(tracked: frozenset[str]) -> bool:
         return any(len(parts) > 3 and parts[0] == FLUX_CLUSTERS and parts[2] == FLUX_DIRECTORY for parts in (path.split("/") for path in tracked))
@@ -77,6 +87,7 @@ ROOT_CASES = (
     RootCase("packages/", _directory_of_manifested_folders("packages/", PROJECT_FILES)),
     RootCase("providers/", _directory_of_manifested_folders("providers/", PROJECT_FILES)),
     RootCase("plugins/", _directory_of_manifested_folders("plugins/", PLUGIN_MANIFESTS)),
+    RootCase("docker/", _named_dockerfile_directly_in("docker/")),
     *(RootCase(entry, _flux_bootstrap()) for entry in (f"{FLUX_CLUSTERS}/", "infrastructure/", "apps/")),
 )
 
