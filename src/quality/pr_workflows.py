@@ -5,7 +5,7 @@ from pathlib import Path
 
 from quality import checkout, workflow_rules
 from quality.config_allowances import WORKFLOW_ALLOWANCE_HEADING, WorkflowAllowance, workflow_allowance_entry
-from quality.config_entries import CONFIG_PATH
+from quality.config_entries import delete_entry_fix
 from quality.report import Example, Finding, FindingEvent, RuleResult
 from quality.rules import Rule
 
@@ -38,6 +38,6 @@ def _unused(file: str) -> Finding:
     return Finding(
         Rule.PR_WORKFLOWS, file, None,
         f"{WORKFLOW_ALLOWANCE_HEADING} names no workflow a pull request triggers beyond the gate's caller and CodeQL's",
-        f"delete its {WORKFLOW_ALLOWANCE_HEADING} entry from {CONFIG_PATH}",
+        delete_entry_fix(WORKFLOW_ALLOWANCE_HEADING),
         event=FindingEvent.UNUSED,
     )

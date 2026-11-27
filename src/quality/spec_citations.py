@@ -26,7 +26,7 @@ from quality.config import (
     MARKDOWN_SUFFIX,
     AllowLists,
 )
-from quality.config_entries import CONFIG_PATH
+from quality.config_entries import CONFIG_PATH, delete_entry_fix
 from quality.markdown_fences import live_line_indexes
 from quality.output import SEPARATOR, counted
 from quality.report import CannotJudge, Finding, FindingEvent, Note, NoteEvent, RuleResult
@@ -270,27 +270,23 @@ def _citation_finding(identifier: str, site: Site, defined: Collection[str]) -> 
     return _finding(site, FindingEvent.UNDEFINED, f"{identifier} is cited and defined nowhere", "define it in a spec, or cite another ID")
 
 
-def _delete_entry(heading: str) -> str:
-    return f"delete its {heading} entry from {CONFIG_PATH}"
-
-
 def _declaration_findings(tree: Tree) -> list[Finding]:
     """The declared prefixes the tree defines itself or no citation carries, and the declared documents that define no live ID."""
     conflicts = [
         _finding(
             (CONFIG_PATH, None), FindingEvent.CONFLICT, f"{FOREIGN_PREFIX_HEADING} prefix {prefix} is defined here, first at {site}",
-            f"{_delete_entry(FOREIGN_PREFIX_HEADING)}, or give the local IDs a prefix of their own",
+            f"{delete_entry_fix(FOREIGN_PREFIX_HEADING)}, or give the local IDs a prefix of their own",
         )
         for prefix, site in tree.conflicting_prefixes.items()
     ]
     unused_prefixes = [
-        _finding((CONFIG_PATH, None), FindingEvent.UNUSED, f"{FOREIGN_PREFIX_HEADING} prefix {prefix} matches no citation", _delete_entry(FOREIGN_PREFIX_HEADING))
+        _finding((CONFIG_PATH, None), FindingEvent.UNUSED, f"{FOREIGN_PREFIX_HEADING} prefix {prefix} matches no citation", delete_entry_fix(FOREIGN_PREFIX_HEADING))
         for prefix in tree.unused_prefixes
     ]
     unused_documents = [
         _finding(
             (path, None), FindingEvent.UNUSED, f"{IMPLEMENTED_DOCUMENT_HEADING} matches no tracked file that defines a live spec ID",
-            _delete_entry(IMPLEMENTED_DOCUMENT_HEADING),
+            delete_entry_fix(IMPLEMENTED_DOCUMENT_HEADING),
         )
         for path in tree.unused_documents
     ]

@@ -8,8 +8,8 @@ from pathlib import Path, PurePosixPath
 import yaml
 
 from quality import checkout, repository
-from quality.config_allowances import ComposeAllowance
-from quality.config_entries import CONFIG_PATH
+from quality.config_allowances import COMPOSE_ALLOWANCE_HEADING, ComposeAllowance
+from quality.config_entries import CONFIG_PATH, delete_entry_fix
 from quality.report import CannotJudge, Finding, FindingEvent
 from quality.rules import Rule
 
@@ -120,7 +120,7 @@ def _compose_file_findings(name: str, text: str, declared_services: set[str]) ->
 
 def _network_mode_finding(name: str, service_name: object, network_mode: object) -> Finding | None:
     """A finding for `host`, and for a value an interpolation may resolve to `host`; None for any other mode."""
-    fix = f"give it a network of its own, or declare it in {CONFIG_PATH} with [[compose.allow]], a file, a service and a reason"
+    fix = f"give it a network of its own, or declare it in {CONFIG_PATH} with {COMPOSE_ALLOWANCE_HEADING}, a file, a service and a reason"
     if network_mode == HOST_NETWORK_MODE:
         return Finding(Rule.COMPOSE_PORT, name, None,
                        f"service {service_name}: network_mode: {HOST_NETWORK_MODE} publishes all it binds", fix, event=FindingEvent.HOST_NETWORK)
@@ -133,8 +133,8 @@ def _network_mode_finding(name: str, service_name: object, network_mode: object)
 def _stale_compose_declaration(file: str, service: str) -> Finding:
     return Finding(
         Rule.COMPOSE_PORT, file, None,
-        f"[[compose.allow]] service {service} is not host-networked there",
-        f"delete its [[compose.allow]] entry from {CONFIG_PATH}",
+        f"{COMPOSE_ALLOWANCE_HEADING} service {service} is not host-networked there",
+        delete_entry_fix(COMPOSE_ALLOWANCE_HEADING),
         event=FindingEvent.UNUSED,
     )
 
