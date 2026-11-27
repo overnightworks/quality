@@ -187,7 +187,7 @@ def a_shallow_clone_on_main_itself(build_repo, elsewhere) -> Path:
     ],
 )
 def test_a_long_rule_and_no_merge_base_with_origin_main_cannot_be_judged_and_names_the_next_step(build_repo, elsewhere, capsys, start, step):
-    """SPECLENGTH-7: exit 2 with the refusal and the step that fetches the base, never a pass that judged nothing."""
+    """SPECLENGTH-7, SPECLENGTH-8: exit 2 with the refusal and the step that fetches the base, never a pass that judged nothing."""
     repo = start(build_repo, elsewhere)
     refusal = next(verdict.refusal for verdict in check_result(repo, named=DEBT).verdicts if verdict.rule is Rule.SPEC_LENGTH)
     assert (door_in(repo, CHECK_WORD, Area.DEBT.value), refusal.reason.fact, refusal.reason.next_steps) == (2, spec_length.NO_BASE_FACT, (step,))
@@ -202,7 +202,7 @@ def test_a_long_rule_and_no_merge_base_with_origin_main_cannot_be_judged_and_nam
     ],
 )
 def test_a_tree_with_no_long_rule_or_on_main_itself_needs_no_fetch_and_is_clean(build_repo, elsewhere, start):
-    """SPECLENGTH-7: the base is asked only where a live rule is over the limit, and on main's own commit it is HEAD."""
+    """SPECLENGTH-9: the base is asked only where a live rule is over the limit, and on main's own commit it is HEAD."""
     repo = start(build_repo, elsewhere)
     assert (door_in(repo, CHECK_WORD, Area.DEBT.value), rule_findings(repo, Rule.SPEC_LENGTH, DEBT)) == (0, [])
 
@@ -210,7 +210,7 @@ def test_a_tree_with_no_long_rule_or_on_main_itself_needs_no_fetch_and_is_clean(
 @pytest.mark.integration
 @pytest.mark.parametrize("state", ["a baseline held", "no baseline"])
 def test_the_rule_is_red_without_a_spec_citation_table_and_without_a_baseline_file(branched, capsys, state):
-    """SPECLENGTH-8: it needs no table and no config, so it judges every repository the same."""
+    """SPECLENGTH-10: it needs no table and no config, so it judges every repository the same."""
     baseline = DEBT_BASELINE_STATES[state]
     files = {} if baseline is None else {BASELINE_PATH: baseline}
     repo = branched({**spec_with(SHORT), **files}, spec_with(SHORT, rule("X-1", OVER)))
