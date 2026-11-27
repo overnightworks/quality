@@ -1,0 +1,8 @@
+claim_id = "b9f35ee7eeea4ceda71575c922855f5d"
+agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
+role = "builder"
+base = "f157bdfccdf7b237f3db2cff73a0ff0e3ef128a0"
+branch = "claude/issue-1094-the-base-reading-of-allow-entries-prints"
+scope = ["docs/gate.md", "src/quality/config.py", "src/quality/config_allowances.py", "src/quality/config_entries.py", "src/quality/merge.py", "src/quality/report.py", "src/quality/root_layout.py", "src/quality/sides.py", "tests"]
+opened_commit = "eabd488d65874374db74ec817c009bef79e864f0"
+whole_reason = "One gap between the two sides' readings of the allow tables: their types, the base refusal's printed example and the sentence that states the base reading; tests because the refusal is proven at the verdict and door test modules."
