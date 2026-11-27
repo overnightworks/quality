@@ -715,6 +715,9 @@ It applies these rules:
     exact case. `frontend/` is accepted where `frontend/package.json` is tracked;
   - ROOT-19: `packages/` and `providers/`, where each of their child directories that holds a tracked file holds a tracked
     `pyproject.toml` or `package.json` directly, and at least one does;
+  - ROOT-23: `plugins/`, where each of its child directories that holds a tracked file holds a tracked
+    `.claude-plugin/plugin.json` or `.codex-plugin/plugin.json` at that path directly under it, and at least one does, the
+    folder of plugins that Claude Code's and Codex's documentation lay out;
   - ROOT-20: `legal/`, where `legal/datenschutz.html` is tracked, the page the platform's app standard requires of every
     app;
   - ROOT-21: `clusters/`, `infrastructure/` and `apps/`, where a tracked file lies under `clusters/<name>/flux-system/`,
@@ -759,9 +762,10 @@ It applies these rules:
   - ROOT-17: No configuration switches it off.
 
   Named gaps: a submodule in the root counts as a file entry and no case of it is tested; marketplace's refusal of every
-  symlink in the tree stays that repository's own check; a directory of projects is judged by its direct children only,
-  a Flux bootstrap deeper than `clusters/<name>/flux-system/` is unlisted, and a condition is met by the name alone, so
-  an empty or symlinked `frontend/package.json` meets it (ROOT-16).
+  symlink in the tree stays that repository's own check; a directory of projects or of plugins is judged by its direct
+  children only; a plugin folder with no manifest, or with only a `plugin.json` at its own root, makes `plugins/`
+  unlisted; a Flux bootstrap deeper than `clusters/<name>/flux-system/` is unlisted, and a condition is met by the name
+  alone, so an empty or symlinked `frontend/package.json` meets it (ROOT-16).
 - `file-suffix`:
   - SUFFIX-1: a tracked file whose basename has no suffix is a finding,
   - SUFFIX-2: unless it is executable (index mode 100755), a symlink (120000) or a gitlink (160000),
