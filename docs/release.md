@@ -262,7 +262,7 @@ The secret's name is illustrative.
 | GATE-21 | `Refused: CI's push run <id> concluded <conclusion>.` | Fix main; release the next green commit. |
 | GATE-22 | `Refused: the quality / verdict of CI's push run <id> is <conclusion>.` | The gate's verdict job did not succeed; fix it on main. |
 | GATE-23 | `Refused: no single pull request merged <sha> into main.` | Every main commit comes from exactly one merged pull request; release a commit that does. |
-| GATE-24 | `Refused: pull request #<n> merged with quality / verdict <conclusion>; release the next commit merged with a green verdict.` | The commit was merged past a red or missing verdict (an emergency merge). Only that commit is refused; its content ships with the next commit merged green. |
+| GATE-24 | `Refused: pull request #<n> merged with quality / verdict <conclusion>; release the next commit merged with a green verdict.` | The commit was merged past a red or missing verdict (a merge through the door). Only that commit is refused; its content ships with the next commit merged green. |
 
 - GATE-25: A later re-run does not lift this: only check runs finished by the merge count.
 

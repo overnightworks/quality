@@ -70,7 +70,7 @@ def test_the_door_reads_the_mark_from_the_merge_commit_as_the_verdict_does(capsy
         tmp_path, base, head, [(OLD, NEW)], base_config=GATE_CONFIG, merge_config=GATE_CONFIG,
         base_files={OLD: MODULE}, merge_files={NEW: MODULE + MARK, "pyproject.toml": pyproject},
     )
-    assert drive(gh)[0] == code
+    assert drive(gh) == code
     assert (line is None or line in capsys.readouterr().out) is True
 
 

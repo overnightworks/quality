@@ -2,8 +2,9 @@
 
 import pytest
 
+from quality.config import Declaration
 from tests.support.allowances import EACH_TABLE, FIX, RULED, RULING
-from tests.support.merge import GATE_CONFIG, ONE_JOB, SONAR_GREEN, FakeGh, run
+from tests.support.merge import GATE_CONFIG, ONE_JOB, SONAR_GREEN, FakeGh, consenting, run
 from tests.support.verdict_renames import pulled
 
 pytestmark = pytest.mark.integration
@@ -19,10 +20,11 @@ def undeclared_lines(table) -> str:
 
 @EACH_TABLE
 def test_the_door_lands_an_added_entry_with_its_ruling_as_the_verdict_prints_it(table, tmp_path, capsys):
-    """VERDICT-76, VERDICT-77: a declared entry is landable, shown with its ruling and reason."""
+    """VERDICT-76, VERDICT-77: a declared entry is landable on the owner's consent, shown with its ruling and reason."""
     entry = table.entry(table.first, reason="stands apart", ruling=RULING)
-    gh = pulled(tmp_path, None, None, base_config=ONE_JOB, merge_config=ONE_JOB + entry, checks=SONAR_GREEN)
-    code, out, _, _ = run(gh, capsys)
+    consent = consenting(declared=(Declaration(table.what(table.first), *RULING, "stands apart"),), legacy_branch=None)
+    gh = pulled(tmp_path, None, None, base_config=ONE_JOB, merge_config=ONE_JOB + entry, checks=SONAR_GREEN, reviews=consent)
+    code, out, _ = run(gh, capsys)
     assert (code, declared_lines(table) in out) == (0, True)
 
 
@@ -32,7 +34,7 @@ def test_the_door_stops_at_an_added_entry_without_a_ruling_and_shows_its_fix(tab
     a declared entry stands beside it."""
     entries = table.entry(table.first, reason="stands apart", ruling=RULING) + table.entry(table.second)
     gh = pulled(tmp_path, None, None, base_config=ONE_JOB, merge_config=ONE_JOB + entries, checks=SONAR_GREEN)
-    code, out, _, _ = run(gh, capsys)
+    code, out, _ = run(gh, capsys)
     assert (code, undeclared_lines(table) in out, gh.merge_calls) == (1, True, [])
 
 
@@ -41,7 +43,7 @@ def test_the_door_reads_a_base_written_before_the_keys_and_finds_no_loosening(ta
     """VERDICT-79: the pin move that writes `ends` is no loosening at the door, and no pull request file is fetched; the base's
     extra key and multi-line reason are not read."""
     gh = FakeGh(base_config=GATE_CONFIG + table.written_before_the_keys(), merge_config=GATE_CONFIG + table.entry(table.first))
-    code, out, _, _ = run(gh, capsys)
+    code, out, _ = run(gh, capsys)
     assert (code, "  ✓ loosenings    none\n" in out) == (0, True)
 
 
@@ -52,7 +54,7 @@ def test_the_door_reads_a_file_git_moved_as_the_move_of_its_allow_entry(table, t
         tmp_path, None, None, [(table.first, table.second)],
         base_config=GATE_CONFIG + table.entry(table.first), merge_config=GATE_CONFIG + table.entry(table.second),
     )
-    code, out, _, _ = run(gh, capsys)
+    code, out, _ = run(gh, capsys)
     assert (code, "  ✓ loosenings    none\n" in out) == (0, True)
 
 
@@ -60,5 +62,5 @@ def test_the_door_reads_a_file_git_moved_as_the_move_of_its_allow_entry(table, t
 def test_the_door_refuses_a_base_entry_without_its_identity_naming_the_base(entry, capsys):
     """VERDICT-79: the refusal sends the fix to the base branch."""
     gh = FakeGh(base_config=ONE_JOB + entry, merge_config=ONE_JOB)
-    code, _, err, _ = run(gh, capsys)
+    code, _, err = run(gh, capsys)
     assert (code, "fix it on main first" in err, gh.merge_calls) == (2, True, [])

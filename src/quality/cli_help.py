@@ -12,9 +12,9 @@ Commands:
   check [AREA ...] [--staged] [--fix] [--dry-run]
       Check this repository against the fleet's rules, with the quality
       release its gate pins.
-  merge OWNER/REPO#N [OWNER/REPO#N ...] [--dry-run]
-      Operator only: merge pull requests whose gate is red only for legacy
-      findings or loosenings he ruled, each after he types yes.
+  merge OWNER/REPO#N [--dry-run]
+      Merge a pull request whose gate is red only for legacy findings or
+      loosenings, on the operator's consent review.
   report
       Measure every fleet repository: size, debt, the gate release it pins.
 
@@ -70,14 +70,14 @@ Exit codes: 0 clean, 1 findings, 2 could not check, 130 interrupted.
 """
 
 MERGE_HELP = """\
-usage: quality merge OWNER/REPO#N [OWNER/REPO#N ...] [--dry-run] [-v]
+usage: quality merge OWNER/REPO#N [--dry-run] [-v]
 
-Operator only: merge pull requests whose gate is red only for legacy findings
-or loosenings he ruled, each after he types yes. Several names run one after
-the other, each as a run of its own.
+Merge a pull request whose gate is red only for legacy findings or loosenings,
+once an organisation owner's review at its head holds the consent text the
+door prints; without it the door prints the text and refuses.
 
 Options:
-  --dry-run   show the rows, then stop before the question: nothing changes,
+  --dry-run   show the rows and the consent, then stop: nothing changes,
               exit 0 where the door would merge
   -v          show the raw scanner output; the door runs no scanner
   -h, --help  show this help

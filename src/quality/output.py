@@ -119,7 +119,8 @@ class SubLine:
 @dataclass(frozen=True)
 class Row:
     """`glyph subject event fact`, the event a member of an enum the caller owns or a release; with a `count` it reads
-    `3 findings`."""
+    `3 findings`; a `block` stands below it line by line, escaped and with no row prefix or padding, so a reader copies
+    it whole."""
 
     glyph: Glyph
     subject: str
@@ -130,6 +131,7 @@ class Row:
     descriptive: bool = False
     fix: str = ""
     counts_plural: bool = True
+    block: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -303,6 +305,7 @@ def _row_lines(row: Row, channel: Channel, subject_width: int = SUBJECT_WIDTH) -
         text = _fitted(sub.text, f"    {sub.glyph} ", None if sub.whole else channel.width)
         lines.append(f"    {_paint(sub.glyph, GLYPH_STYLE[sub.glyph], styled)} {text}")
         lines += [_paint(f"        {printable(line)}", DIM, styled) for line in sub.below]
+    lines += map(printable, row.block)
     if row.fix:
         lines += _fix_lines(row.fix)
     return lines
@@ -366,7 +369,7 @@ def subject_width(rows: Sequence[Row]) -> int:
 
 @dataclass(frozen=True)
 class DoorStream:
-    """The operator's door's stdout, its one writer. A line it refuses (a full disk) leads it to the null device, so
+    """The door's stdout, its one writer. A line it refuses (a full disk) leads it to the null device, so
     it takes nothing more and no later write of the door can stop a request; a closed stream and a reader that left
     take the lines as every stream does. Its channel is private, so no caller reaches the raw stream past it."""
 
@@ -394,13 +397,10 @@ class DoorStream:
 
 def _put(channel: Channel, text: str) -> None:
     stream = channel.stream
-    if stream is None:
-        return
     try:
         print(text, end="", file=stream, flush=True)
     except OSError:
-        # A terminal that hung up must not replace the run's exception or exit: the live line only decorates the run,
-        # and a prompt nobody can read is still read: where it shows is the operator's setting.
+        # A terminal that hung up must not replace the run's exception or exit: the live line only decorates the run.
         _discard_further_writes(stream)
 
 
@@ -569,15 +569,3 @@ def write_pair(error: str, next_steps: tuple[Step, ...], channel: Channel) -> No
     styled = channel.styled
     _print_lines([f"{_paint('error:', f'{BOLD};{RED}', styled)} {printable(error)}"], channel)
     _print_lines(_next_lines(next_steps, _paint("next:", CYAN, styled)), channel)
-
-
-def ask(prompt: str, channel: Channel, read_line: Callable[[], str]) -> str | None:
-    """The prompt on `channel`, then the line a person ended with Enter, without its line end; None where the input
-    ends before Enter, after a line end on `channel`, so the next line starts on its own. The typed line is never
-    printed: the terminal's echo is its only copy. Ctrl-C passes through untouched: the shell ends that line."""
-    _put(channel, printable(prompt))
-    line = read_line()
-    if line.endswith("\n"):
-        return line.removesuffix("\n")
-    _put(channel, "\n")
-    return None

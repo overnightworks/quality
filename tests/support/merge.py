@@ -1,13 +1,15 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from urllib.parse import unquote
 
 from quality import checkout, cli, pin
 from quality.baseline_file import BASELINE_PATH
+from quality.config import Declaration
 from quality.config_entries import CONFIG_PATH
 from quality.gh import GhFailed
 from quality.installation import VcsOrigin
+from quality.merge_consent import consent_lines
 from quality.pin import RunningQuality
 from quality.report import CannotJudge
 from tests.support.door import RELEASE_ROW
@@ -25,6 +27,12 @@ BASE_SHA = "b" * 40
 
 
 MERGE_SHA = "d" * 40
+
+
+OWNER = "felix"
+
+
+REVIEW_ID = 4101
 
 
 PINNED_COMMIT = "5e" * 20
@@ -91,17 +99,55 @@ def declaring(what, reason="ruled"):
     )
 
 
+def consent_block(declared: tuple[Declaration, ...] = (), legacy_branch="main", head=SHA, pull_request=7, repository=REPO):
+    """The text the door prints for a head, as the production contract builds it."""
+    return "\n".join(consent_lines(repository, pull_request, head, declared, legacy_branch))
+
+
+def review(body, login=OWNER, state="COMMENTED", commit_id=SHA, review_id=REVIEW_ID):
+    """A review as GitHub lists it."""
+    return {"id": review_id, "user": {"login": login}, "state": state, "commit_id": commit_id, "body": body}
+
+
+def consenting(**arguments):
+    """The reviews of a pull request that only the operator, an owner, has reviewed, with the text of `consent_block`."""
+    return [review(consent_block(**arguments))]
+
+
+def consenting_to(*whats, legacy_branch=None):
+    """The reviews of a pull request whose owner consented to the declarations `declaring` writes for `whats`; Sonar
+    green unless `legacy_branch` names the branch it failed on."""
+    return consenting(declared=tuple(loosened(what) for what in whats), legacy_branch=legacy_branch)
+
+
+def loosened(what, reason="ruled", item="overnightworks/songmaker#1345", day=date(2026, 10, 20)):
+    """The declaration a `[[gate.loosened]]` entry of `declaring` and the door's consent text carry."""
+    return Declaration(what, item, day, reason)
+
+
+def declared_loosening(reviews=None, reason="ruled", **consent):
+    """The `FakeGh` arguments of a pull request that removes a mandatory job with one declaration, Sonar green; the owner
+    consents to its text (as `consent` shapes it) unless `reviews` names the reviews."""
+    declared = loosened(B_REMOVED, reason=reason)
+    return {
+        "checks": SONAR_GREEN, "base_config": TWO_JOBS, "head_config": ONE_JOB + declaring(B_REMOVED, reason),
+        "reviews": consenting(declared=(declared,), legacy_branch=None, **consent) if reviews is None else reviews,
+    }
+
+
 class FakeGh:
     """Answers the gh calls the command makes and records every one; `fail_on` names a call to break. `base_sha` is the
     live tip of the base branch, `pull_base_sha` the base sha the pull request still names (the tip when None), and
-    `later_compare` the (tip, behind_by) the comparison answers from its second read on."""
+    `later_compare` the (tip, behind_by) the comparison answers from its second read on. `reviews` are the pull request's
+    reviews in the order GitHub lists them (an owner's consenting comment when None) and `memberships` the (role, state) of each
+    login in the organisation (the operator an active owner when None); a login it does not hold is no member."""
 
     def __init__(
         self, admin=True, checks=None, statuses=None, state="open", fail_on=(), interrupt_on=(), merge_lands=False,
         head_config=GATE_CONFIG, base_config=GATE_CONFIG, merge_config=None, merge_sha=MERGE_SHA,
         base_baseline=None, merge_baseline=None, base_sha=BASE_SHA, remote=None, extra_runs=(), settings=None, rules=((),), base_ref="main", rules_error=None, rules_raw=None,
         body="Work-Item: #3\n\nCloses #3", later_body=None, draft=False, raw_answers=None, workflows=None, listing=None,
-        behind_by=0, pull_base_sha=None, later_compare=None,
+        behind_by=0, pull_base_sha=None, later_compare=None, reviews=None, memberships=None,
     ):
         self.admin, self.state, self.fail_on, self.merge_lands = admin, state, set(fail_on), merge_lands
         self.interrupt_on = list(interrupt_on)
@@ -121,6 +167,8 @@ class FakeGh:
         self.statuses = statuses or {}
         self.body, self.later_body, self.draft, self.pulls_read = body, later_body, draft, 0
         self.merged = False
+        self.reviews = consenting() if reviews is None else reviews
+        self.memberships = {OWNER: ("admin", "active")} if memberships is None else memberships
         self.raw_answers = raw_answers or {}
         # the workflow files by commit and name; `listing` stands for the merge commit's listing as GitHub answers it
         self.workflows = {merge_sha: {"ci.yml": gate_workflow()}} if workflows is None else workflows
@@ -161,7 +209,7 @@ class FakeGh:
         if "/contents/.github/workflows" in text:
             return "listing" if "/contents/.github/workflows?" in text else "workflow"
         for marker, step in (
-            ("/compare/", "compare"), ("-X PUT", "merge"), ("check-runs", "checks"), ("/status", "statuses"), ("contents/", "config"), ("/pulls/", "pull"),
+            ("/compare/", "compare"), ("-X PUT", "merge"), ("/reviews", "reviews"), ("/memberships/", "membership"), ("check-runs", "checks"), ("/status", "statuses"), ("contents/", "config"), ("/pulls/", "pull"),
             ("/rules/branches/", "rules"), ("properties/values", "gate"), ("/comments", "comment"),
         ):
             if marker in text:
@@ -198,8 +246,13 @@ class FakeGh:
         if step == "merge":
             self.record(step, arguments, stdin)
             return json.dumps({"merged": True, "sha": self.merge_sha, "message": "Pull Request successfully merged"})
-        if step == "login":
-            return "felix\n"
+        reads = {
+            "login": lambda: f"{OWNER}\n",
+            "reviews": lambda: "\n".join(map(json.dumps, self.reviews)),
+            "membership": lambda: self.membership_answer(arguments[-1].rpartition("/")[2]),
+        }
+        if step in reads:
+            return reads[step]()
         self.record(step, arguments, stdin)
         return ""
 
@@ -240,6 +293,12 @@ class FakeGh:
             if value is not ABSENT:
                 pull[name] = value
         return json.dumps(pull)
+
+    def membership_answer(self, login):
+        if login not in self.memberships:
+            raise GhFailed("gh api failed: HTTP 404", not_found=True)
+        role, state = self.memberships[login]
+        return json.dumps({"role": role, "state": state})
 
     def compare_answer(self):
         tip, behind_by = self.later_compare if self.compares_read and self.later_compare else (self.base_sha, self.behind_by)
@@ -322,8 +381,8 @@ def landing_row(item="#3"):
     return f"  · landing       work item      {item}\n"
 
 
-def rows_before_the_prompt():
-    """What the default `FakeGh` shows the operator, the landing row last."""
+def rows_before_the_consent():
+    """What the default `FakeGh` shows before the consent check, the landing row last."""
     return (
         RELEASE_ROW
         + pull_row()
@@ -336,12 +395,26 @@ def rows_before_the_prompt():
     )
 
 
-def prompt(pull_request=7):
-    return f"Switch quality_gate off, merge #{pull_request}, switch it on? Type yes: "
+def consent_row(review_id=REVIEW_ID, head=SHA):
+    return f"  ✓ consent       given          review {review_id} at {head[:7]}\n"
 
 
-def not_confirmed_pair(pull_request=7, repository=REPO):
-    return f"error: not confirmed · nothing changed\nnext: quality merge {repository}#{pull_request}\n"
+def rows_before_the_attempt():
+    """What the default `FakeGh` shows before the gate is touched."""
+    return rows_before_the_consent() + consent_row()
+
+
+def consent_missing_rows(block=None, head=SHA):
+    """The refused consent row and the block below it, whole and with no row prefix."""
+    fact = f"no organisation owner's latest review at {head[:7]} carries the text below"
+    return f"  ! consent       missing        {fact}\n" + (consent_block(head=head) if block is None else block) + "\n"
+
+
+def consent_missing_pair(pull_request=7, repository=REPO, head=SHA):
+    return (
+        f"error: not merged · no consent review at {head[:7]} · nothing changed\n"
+        f"next: the operator leaves the text above as his review at {head[:7]}, then quality merge {repository}#{pull_request} runs again\n"
+    )
 
 
 def landing_pair(pull_request=7, repository=REPO):
@@ -355,13 +428,6 @@ def not_judged_pair():
     return (
         "error: could not judge · nothing changed\n"
         "next: fix what the ✗ row names, then run quality merge acme/widgets#7 again\n"
-    )
-
-
-def terminal_pair():
-    return (
-        "error: not merged · the operator's merge needs a terminal on stdin · nothing changed\n"
-        "next: the operator runs it in his own terminal\n"
     )
 
 
@@ -387,9 +453,9 @@ def restore_line():
     return '    echo \'{"properties":[{"property_name":"quality_gate","value":"true"}]}\' | gh api -X PATCH repos/acme/widgets/properties/values --input -\n'
 
 
-def log_body(switched="off", outcome="merge", restored="on", method="merge commit", findings="4 legacy finding(s)"):
+def log_body(switched="off", outcome="merge", restored="on", method="merge commit", findings="4 legacy finding(s); ", review_id=REVIEW_ID):
     return (
-        f"body=quality merge run by @felix at 2026-11-06T12:00:00+00:00: {findings}; merges with a {method}; "
+        f"body=quality merge run by @felix at 2026-11-06T12:00:00+00:00: {findings}consent review {review_id} at {SHA}; merges with a {method}; "
         f"quality_gate {switched} → {outcome} → {restored}."
     )
 
@@ -398,33 +464,20 @@ def comment_line(**arguments):
     return f"    gh api -X POST repos/acme/widgets/issues/7/comments -f '{log_body(**arguments)}'\n"
 
 
-def drive(
-    gh, transport=None, typed="yes\n", terminal=True, repo=REPO, when_asked=lambda: None, pull_request="7", clock=lambda: 0.0, words=(), ports=None,
-    environment=None,
-):
-    """The `typed` argument is the line the terminal answers, its line end included (`""` the end of input); an exception is raised."""
-    answers = []
-
-    def read_line():
-        when_asked()
-        answers.append(typed)
-        if isinstance(typed, BaseException):
-            raise typed
-        return typed
-
+def drive(gh, transport=None, repo=REPO, pull_request="7", clock=lambda: 0.0, words=(), ports=None, environment=None):
+    """The door's exit on `repo#pull_request` through `cli.main`; an exception is raised."""
     remote = getattr(gh, "remote", None)
-    code = cli.main(
-        ["merge", f"{repo}#{pull_request}", *words], gh=gh, transport=transport or sonar(), terminal=cli.Terminal(read_line, lambda: terminal), remote_for=no_network if remote is None else lambda repository: remote,
+    return cli.main(
+        ["merge", f"{repo}#{pull_request}", *words], gh=gh, transport=transport or sonar(), remote_for=no_network if remote is None else lambda repository: remote,
         clock=clock, now=frozen_now, ports=ports or door_ports(), **({} if environment is None else {"environment": environment}),
     )
-    return code, answers
 
 
 def run(gh, capsys, **arguments):
-    """The door's exit, stdout, stderr and the answers it read, on a run through `drive`."""
-    code, answers = drive(gh, **arguments)
+    """The door's exit, stdout and stderr on a run through `drive`."""
+    code = drive(gh, **arguments)
     streams = capsys.readouterr()
-    return code, streams.out, streams.err, answers
+    return code, streams.out, streams.err
 
 
 def changed_nothing(gh):

@@ -131,7 +131,7 @@ jobs:
             exit 1
           fi
           read -r number head merged_at <<<"$pull"
-          # Only check runs finished by the merge count, so a re-run after an emergency merge never lifts this refusal.
+          # Only check runs finished by the merge count, so a re-run after a merge through the door never lifts this refusal.
           verdict=$(MERGED_AT="$merged_at" gh api "repos/$GITHUB_REPOSITORY/commits/$head/check-runs?check_name=quality%20%2F%20verdict&filter=all&per_page=100" \
             --jq '[.check_runs[] | select(.completed_at != null and .completed_at <= env.MERGED_AT)] | max_by(.id) | .conclusion // "missing"')
           if [ "$verdict" != "success" ]; then
