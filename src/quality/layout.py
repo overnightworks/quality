@@ -201,6 +201,13 @@ def frontend_projects(paths: Iterable[str]) -> list[str]:
     return [str(directory) for directory in _project_directories([PurePosixPath(path) for path in paths], PACKAGE_FILE)]
 
 
+def spec_folder(project: PurePosixPath) -> PurePosixPath:
+    """The folder of a frontend project's Playwright specs (LAYOUT-51): `tests/e2e/` for the project at the repository
+    root, since `root-layout` accepts no root `e2e/`, and the project's top-level `e2e/` for every other."""
+    root = PurePosixPath(ROOT_DIRECTORY)
+    return PurePosixPath(TESTS_DIRECTORY, END_TO_END_DIRECTORY) if project == root else project / END_TO_END_DIRECTORY
+
+
 def package_document(path: str, content: bytes) -> dict:
     """The JSON object a `package.json` holds, empty where it holds another value; a file that is no UTF-8 JSON is `Unparsable`."""
     try:
@@ -234,7 +241,7 @@ def check_test_layout(modes: Mapping[str, str], allowances: Sequence[LayoutAllow
     `test_<module>[_<aspect>].py`, or lies directly beside the `support/` folder that holds a tracked helper it is named
     after (LAYOUT-50); a declaration of an untracked path is a finding too. A project is judged when it
     has a package. A Vitest test of a frontend project lies beside the file it tests and a Playwright spec in the
-    project's top-level `e2e/`."""
+    project's spec folder (LAYOUT-51)."""
     declared = declared_paths(allowances, Rule.TEST_LAYOUT)
     tracked = [PurePosixPath(path) for path in modes]
     mirrors = {
@@ -283,7 +290,7 @@ class _Destination:
 class _ProjectMirror:
     """What a project's tests may mirror: the keys of each `src/` package folder and `scripts/` folder, and the
     root's workflows, each key with the name it stands for. `helpers` holds the keys of the tracked helpers directly in
-    a `support/` folder under `tests/`, by the folder that holds `support/` (LAYOUT-50)."""
+    a `support/` folder, by the folder that holds `support/` (LAYOUT-50)."""
 
     directory: PurePosixPath
     packages: tuple[str, ...]
@@ -435,7 +442,7 @@ def _mirror_finding(path: PurePosixPath, problems: Sequence[_Problem]) -> Findin
 
 
 def _frontend_findings(modes: Mapping[str, str], declared: set[str], python_tests: Iterable[PurePosixPath]) -> list[Finding]:
-    """A frontend test sits beside a file it tests and a spec lies in its project's `e2e/`; a path under a judged Python
+    """A frontend test sits beside a file it tests and a spec lies in its project's spec folder; a path under a judged Python
     `tests/` is left to the Python cases."""
     projects = {PurePosixPath(project) for project in frontend_projects(modes)}
     subjects = _subject_keys(modes)
@@ -471,18 +478,18 @@ def _subject_keys(modes: Mapping[str, str]) -> dict[PurePosixPath, frozenset[str
 
 def _frontend_finding(path: PurePosixPath, project: PurePosixPath, keys: frozenset[str]) -> list[Finding]:
     if SPEC_WORD in ratchet.runner_test_words(path.name):
-        inside = path.relative_to(project).parts[:1] == (END_TO_END_DIRECTORY,)
-        return [] if inside else [_spec_outside_end_to_end(str(path), f"{project / END_TO_END_DIRECTORY}/")]
+        folder = spec_folder(project)
+        return [] if folder in path.parents else [_spec_outside_spec_folder(str(path), f"{folder}/")]
     base = _base(path.name)
     named = any(prefix in keys for prefix in _word_prefixes(base, FRONTEND_WORD_BOUNDARY))
     return [] if named else [_test_without_sibling(path, base)]
 
 
-def _spec_outside_end_to_end(path: str, end_to_end: str) -> Finding:
+def _spec_outside_spec_folder(path: str, folder: str) -> Finding:
     return _test_layout_finding(
         path, FindingEvent.MISPLACED,
-        f"a Playwright spec outside {end_to_end}",
-        f"move it into {end_to_end}, or, if it is a Vitest test, name it `<subject>.test.<suffix>` beside its subject",
+        f"a Playwright spec outside {folder}",
+        f"move it into {folder}, or, if it is a Vitest test, name it `<subject>.test.<suffix>` beside its subject",
     )
 
 

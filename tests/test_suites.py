@@ -35,14 +35,22 @@ def script_counts(source: str) -> tuple[int, int, int]:
         ("web/src/a.test.ts", "web/package.json", SCRIPT_TEST, UNIT),
         ("web/e2e/a.spec.ts", "web/package.json", SCRIPT_TEST, FLOW),
         ("web/e2e/live/a.spec.ts", "web/package.json", SCRIPT_TEST, LIVE),
+        ("tests/e2e/a.spec.ts", "package.json", SCRIPT_TEST, FLOW),
+        ("tests/e2e/live/a.spec.ts", "package.json", SCRIPT_TEST, LIVE),
+        ("e2e/a.spec.ts", "package.json", SCRIPT_TEST, UNIT),
+        ("e2e/live/a.spec.ts", "package.json", SCRIPT_TEST, UNIT),
+        ("web/tests/e2e/a.spec.ts", "web/package.json", SCRIPT_TEST, UNIT),
     ],
     ids=[
         "unit under the root tests", "flow under the root e2e", "live under the root live", "flow under a project's e2e",
         "live under a project's live", "unit beside its source", "flow in a frontend project's e2e", "live in a frontend project's live",
+        "flow in a root frontend project's tests/e2e", "live in a root frontend project's tests/e2e/live",
+        "unit in a root frontend project's e2e", "unit in a root frontend project's e2e/live", "unit in a member's tests/e2e",
     ],
 )
 def test_a_test_is_counted_in_the_layer_its_path_names(path, manifest, source, layer):
-    """FLEET-121: the path names Live and Flow before any mark is read."""
+    """FLEET-120, FLEET-121, LAYOUT-51: the path names Live and Flow before any mark is read, a frontend project's spec folder
+    included."""
     found = counted({path: source, **({manifest: ""} if manifest else {})})
     assert {each: found.layers[each] for each in Layer} == {each: int(each is layer) for each in Layer}
 
