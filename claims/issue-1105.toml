@@ -1,8 +1,0 @@
-claim_id = "d1904779e0884bdab98a6efb8864e261"
-agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
-role = "builder"
-base = "5fa4d173d20f61cabff1f337b1068fa7e6114ace"
-branch = "claude/issue-1105-layout-50-support-helper-case"
-scope = ["docs/rules.md", "src/quality/layout.py", "tests/test_adapter_imports.py", "tests/test_layout_mapping.py"]
-opened_commit = "23ce4204fb9fa3ace7983cea3e300701c31f60a6"
-whole_reason = "One rule case and its one consumer: LAYOUT-50 in layout.py and rules.md, its mapping proof, and the subject rule ADAPTERIMPORT-6 that must not move with it."
