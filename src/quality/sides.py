@@ -25,7 +25,6 @@ HEAD = "the head"
 IMPORT_CONFIG = "import-linter config"
 
 
-
 @dataclass(frozen=True)
 class Side[RootRecord: RootEntry = RootAllowance, LayoutRecord: LayoutEntry = LayoutAllowance]:
     """What the gate holds at one side of a pull request: its settings, its baseline (None without one) and its import

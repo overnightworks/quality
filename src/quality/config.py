@@ -110,6 +110,10 @@ class TableShape(NamedTuple):
     arrays: tuple[str, ...]
     example: config_entries.ExampleLines
     own_reader: bool = False
+    base_example: config_entries.ExampleLines | None = None
+
+    def example_on(self, side: ConfigSide) -> config_entries.ExampleLines:
+        return self.base_example if side is ConfigSide.BASE and self.base_example else self.example
 
     @property
     def keys(self) -> set[str]:
@@ -124,8 +128,8 @@ TABLE_SHAPES: dict[str, TableShape] = {
     "gate": TableShape(("mandatory_jobs", "legacy", "sonar"), ("loosened",), EXAMPLE),
     "secrets": TableShape(("allow",), (), ALLOWANCE_EXAMPLE, own_reader=True),
     "advisories": TableShape((), ("allow",), ADVISORY_ALLOWANCE_EXAMPLE),
-    "root": TableShape((), ("allow",), ROOT_ALLOWANCE_EXAMPLE),
-    "layout": TableShape((), ("allow",), LAYOUT_ALLOWANCE_EXAMPLE),
+    "root": TableShape((), ("allow",), ROOT_ALLOWANCE_EXAMPLE, base_example=ROOT_ENTRY_EXAMPLE),
+    "layout": TableShape((), ("allow",), LAYOUT_ALLOWANCE_EXAMPLE, base_example=LAYOUT_ENTRY_EXAMPLE),
     "python": TableShape((), ("allow",), PYTHON_ALLOWANCE_EXAMPLE),
     "compose": TableShape((), ("allow",), COMPOSE_ALLOWANCE_EXAMPLE),
     "workflow": TableShape((), ("allow",), WORKFLOW_ALLOWANCE_EXAMPLE),
@@ -313,10 +317,6 @@ def _refuse_unknown_keys(document: dict, tables: dict[str, dict], examples: dict
         raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} has {config_entries.unknown_keys(unknown)} - {KNOWN_KEYS}", example)
 
 
-# The base is read for its root and layout entries' identity only, so a refusal on it asks for nothing more.
-BASE_EXAMPLES: dict[str, config_entries.ExampleLines] = {"root": ROOT_ENTRY_EXAMPLE, "layout": LAYOUT_ENTRY_EXAMPLE}
-
-
 @overload
 def _validated_document(text: str, side: Literal[ConfigSide.HEAD]) -> _Document: ...
 @overload
@@ -325,7 +325,7 @@ def _validated_document(text: str, side: ConfigSide) -> _Document[RootEntry, Lay
     """The one validation of the whole config: one parse, one unknown-key check, and every entry of every table; the base
     side reads a root and a layout entry by its identity only."""
     base = side is ConfigSide.BASE
-    examples = {name: BASE_EXAMPLES.get(name, shape.example) if base else shape.example for name, shape in TABLE_SHAPES.items()}
+    examples = {name: shape.example_on(side) for name, shape in TABLE_SHAPES.items()}
     document = config_entries.parse(text, EXAMPLE)
     tables = {name: config_entries.table_named(document, name, examples[name]) for name in TABLE_SHAPES}
     _refuse_unknown_keys(document, tables, examples)
