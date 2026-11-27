@@ -1,0 +1,8 @@
+claim_id = "20c33d2b8a6f49fe913838463066c86c"
+agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
+role = "builder"
+base = "1e87cc38a623878410273b9a257c2cf59c6c86a0"
+branch = "claude/issue-1112-layout-51-spec-folder"
+scope = ["docs/commands.md", "docs/rules.md", "src/quality/layout.py", "src/quality/suites.py", "tests/test_layout_frontend.py", "tests/test_suites.py"]
+opened_commit = "b1408cc7eff4b6c747ca229e184eb8026e11f9b4"
+whole_reason = "One owner of a frontend project's spec folder: LAYOUT-51 in layout.py and rules.md, and its second reader, FLEET-120 in suites.py and commands.md, with each one's tests; split, the two readers disagree at the root."
