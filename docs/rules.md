@@ -605,7 +605,8 @@ It applies these rules:
   - INTEGRATION-10: The `integration` mark exempts nothing from `adapter-import`, and `imports_adapter` exempts nothing
     here.
   - INTEGRATION-11: The [fleet matrix](commands.md#quality-report) cell reads `enforced` when the repository's config
-    holds the contract with the id, `no adapter contract` otherwise.
+    holds the contract with the id, `no adapter contract` otherwise, and `not in <tag>` under a pin below v0.28.0.
+    It first ships in v0.28.0.
 
   Named gaps, waiting for usage evidence: fixtures a `conftest.py` injects, string imports, `allow_indirect_imports`
   (each red or outside what a static read sees); a `conftest.py` hook or plugin that adds or removes marks or builds
