@@ -210,7 +210,7 @@ class ImplementedDocument:
 
 
 @dataclass(frozen=True)
-class GateSettings[Root: RootEntry = RootAllowance, Layout: LayoutEntry = LayoutAllowance]:
+class GateSettings[RootRecord: RootEntry = RootAllowance, LayoutRecord: LayoutEntry = LayoutAllowance]:
     """What the gate reads from quality/config.toml: the settings a pull request must not loosen, the loosenings
     it declares, and the advisories and secret values it allows; `sonar` is whether the gate's `sonar` job scans.
 
@@ -225,8 +225,8 @@ class GateSettings[Root: RootEntry = RootAllowance, Layout: LayoutEntry = Layout
     implemented_documents: tuple[ImplementedDocument, ...] = ()
     sonar: bool = True
     secret_allowances: tuple[Allowance, ...] = ()
-    root_allowances: tuple[Root, ...] = ()
-    layout_allowances: tuple[Layout, ...] = ()
+    root_allowances: tuple[RootRecord, ...] = ()
+    layout_allowances: tuple[LayoutRecord, ...] = ()
 
 
 type BaseSettings = GateSettings[RootEntry, LayoutEntry]
@@ -241,13 +241,13 @@ class Allowance(NamedTuple):
 
 
 @dataclass(frozen=True)
-class AllowLists[Root: RootEntry = RootAllowance, Layout: LayoutEntry = LayoutAllowance]:
+class AllowLists[RootRecord: RootEntry = RootAllowance, LayoutRecord: LayoutEntry = LayoutAllowance]:
     """What the repository allows or declares, one list per table; the default allows nothing, as a missing config does."""
 
     secrets: dict[Allowance, str] = field(default_factory=dict)
     advisories: tuple[AdvisoryAllowance, ...] = ()
-    root: tuple[Root, ...] = ()
-    layout: tuple[Layout, ...] = ()
+    root: tuple[RootRecord, ...] = ()
+    layout: tuple[LayoutRecord, ...] = ()
     python: tuple[PythonAllowance, ...] = ()
     compose: tuple[ComposeAllowance, ...] = ()
     workflow: tuple[WorkflowAllowance, ...] = ()
@@ -274,12 +274,12 @@ class Declarations:
 
 
 @dataclass(frozen=True)
-class _Document[Root: RootEntry = RootAllowance, Layout: LayoutEntry = LayoutAllowance]:
+class _Document[RootRecord: RootEntry = RootAllowance, LayoutRecord: LayoutEntry = LayoutAllowance]:
     """The whole config, validated once: the [gate] table, its declarations, and every allow list."""
 
     gate: dict
     declarations: tuple[Declaration, ...]
-    allow_lists: AllowLists[Root, Layout]
+    allow_lists: AllowLists[RootRecord, LayoutRecord]
     render_pass: RenderPass
 
 

@@ -27,11 +27,11 @@ IMPORT_CONFIG = "import-linter config"
 
 
 @dataclass(frozen=True)
-class Side[Root: RootEntry = RootAllowance, Layout: LayoutEntry = LayoutAllowance]:
+class Side[RootRecord: RootEntry = RootAllowance, LayoutRecord: LayoutEntry = LayoutAllowance]:
     """What the gate holds at one side of a pull request: its settings, its baseline (None without one) and its import
     contracts; a base is a `Side[RootEntry, LayoutEntry]`, its entries read by identity only."""
 
-    settings: GateSettings[Root, Layout]
+    settings: GateSettings[RootRecord, LayoutRecord]
     baseline: Baseline | None
     contracts: architecture.SideContracts = field(default_factory=architecture.SideContracts)
 
