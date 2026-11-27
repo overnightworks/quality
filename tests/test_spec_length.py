@@ -100,6 +100,8 @@ def test_an_edited_rule_over_the_limit_is_a_finding_and_its_untouched_neighbour_
         pytest.param([rule("X-1", 20), "", f"  {words(OVER - 20)}"], [("X-1", OVER)], id="a paragraph after a blank line belongs to its rule"),
         pytest.param([rule("X-1", AT), f"  - X-2: {words(OVER)}"], [("X-2", OVER)], id="a nested item with an ID is a rule of its own"),
         pytest.param([rule("X-1", AT), "  ```", f"  {words(5)}", "  ```"], [], id="a fenced block counts for no rule"),
+        pytest.param(["- X-1 (retired).", f"  {words(OVER)}"], [], id="a retired rule's text counts for no rule"),
+        pytest.param(["# Heading", f"  {words(OVER)}"], [], id="text outside every rule counts for no rule"),
     ],
 )
 def test_a_rule_counts_the_words_of_its_text_and_each_table_row_is_one_rule(branched, capsys, lines, expected):
