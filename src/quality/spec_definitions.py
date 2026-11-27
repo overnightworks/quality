@@ -20,7 +20,9 @@ BYTE_ORDER_MARK = "\ufeff"
 ID = rf"{ID_PREFIX}-(?a:\d+)"
 ID_PATTERN = re.compile(ID)
 ID_HEADER = "ID"
-DEFINING_ITEM = re.compile(rf"\s*(?:[-*+]|(?a:\d+)[.)])\s+(?P<id>{ID})(?::|(?P<retired> \(retired\)\.))")
+LIST_MARKER = r"(?:[-*+]|(?a:\d+)[.)])"
+LEADING_MARKER = re.compile(rf"{LIST_MARKER}\s+")
+DEFINING_ITEM = re.compile(rf"\s*{LIST_MARKER}\s+(?P<id>{ID})(?::|(?P<retired> \(retired\)\.))")
 
 
 class Site(NamedTuple):
@@ -106,7 +108,7 @@ def _rules_of(text: str) -> list[_OpenRule]:
                 rules.append(_OpenRule(cell, index + 1, True, indent, _words(_cells_after_the_first(line))))
         elif standing:
             if standing[-1].live:
-                standing[-1].words.extend(_words(stripped))
+                standing[-1].words.extend(_words(LEADING_MARKER.sub("", stripped, count=1)))
         elif not line[0].isspace():
             under_rule = False
     return rules
