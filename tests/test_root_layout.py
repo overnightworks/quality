@@ -60,6 +60,7 @@ def test_every_base_list_entry_is_green_without_a_config(build_repo):
 
 
 PROJECTS_CONDITION = "holds folders and each holds a package.json or pyproject.toml"
+PLUGINS_CONDITION = "holds folders and each holds a .claude-plugin/plugin.json or .codex-plugin/plugin.json"
 FLUX_CONDITION = "clusters/<name>/flux-system/"
 
 
@@ -264,6 +265,8 @@ def test_an_added_declaration_is_a_loosening_at_the_verdict(pull_request, capsys
         {"legal/datenschutz.html": "x", "legal/nutzungsbedingungen.html": "x"},
         {"clusters/pc/flux-system/gotk-sync.yaml": "x", "apps/x.yaml": "x", "infrastructure/y.yaml": "x"},
         {"packages/a/pyproject.toml": "x", "packages/README.md": "x"},
+        {"plugins/atelier/.claude-plugin/plugin.json": "{}", "plugins/atelier/.codex-plugin/plugin.json": "{}"},
+        {"plugins/a/.claude-plugin/plugin.json": "{}", "plugins/b/.codex-plugin/plugin.json": "{}"},
         {"src/frontend/package.json": "{}"},
     ],
     ids=[
@@ -272,11 +275,13 @@ def test_an_added_declaration_is_a_loosening_at_the_verdict(pull_request, capsys
         "legal with its privacy page",
         "the three Flux directories",
         "packages with a project and a file beside it",
+        "a plugin with both hosts' manifests",
+        "plugins each with the manifest of one host",
         "frontend below the root",
     ],
 )
 def test_a_directory_whose_case_condition_is_met_is_green_without_a_declaration(build_repo, files):
-    """ROOT-1, ROOT-18, ROOT-19, ROOT-20, ROOT-21."""
+    """ROOT-1, ROOT-18, ROOT-19, ROOT-20, ROOT-21, ROOT-23."""
     assert red(build_repo({**GUIDANCE, **files}), Rule.ROOT_LAYOUT) == []
 
 
@@ -289,6 +294,14 @@ def test_a_directory_whose_case_condition_is_met_is_green_without_a_declaration(
         ({"legal/impressum.html": "x"}, {"legal/": "legal/datenschutz.html"}),
         ({"providers/a/pyproject.toml": "x", "providers/b/readme.md": "x"}, {"providers/": PROJECTS_CONDITION}),
         ({"packages/readme.md": "x"}, {"packages/": PROJECTS_CONDITION}),
+        (
+            {"plugins/a/.claude-plugin/plugin.json": "{}", "plugins/b/skills/x/SKILL.md": "x"},
+            {"plugins/": PLUGINS_CONDITION},
+        ),
+        ({"plugins/a/skills/x/SKILL.md": "x"}, {"plugins/": PLUGINS_CONDITION}),
+        ({"plugins/a/plugin.json": "{}"}, {"plugins/": PLUGINS_CONDITION}),
+        ({"plugins/a/pyproject.toml": "x"}, {"plugins/": PLUGINS_CONDITION}),
+        ({"packages/a/.claude-plugin/plugin.json": "{}"}, {"packages/": PROJECTS_CONDITION}),
         (
             {"apps/x.yaml": "x", "infrastructure/y.yaml": "x"},
             {"apps/": FLUX_CONDITION, "infrastructure/": FLUX_CONDITION},
@@ -304,6 +317,11 @@ def test_a_directory_whose_case_condition_is_met_is_green_without_a_declaration(
         "legal without the privacy page",
         "providers with a folder that is no project",
         "packages with files only directly inside",
+        "plugins with a folder that holds no manifest beside one that does",
+        "plugins with no manifest at all",
+        "plugins whose plugin.json lies at the plugin's own root",
+        "plugins holding a project manifest",
+        "packages holding a plugin manifest",
         "apps and infrastructure without clusters",
         "clusters without flux-system",
         "flux-system below another root directory than clusters",
@@ -311,7 +329,7 @@ def test_a_directory_whose_case_condition_is_met_is_green_without_a_declaration(
     ],
 )
 def test_a_directory_whose_case_condition_fails_is_unlisted_and_its_fact_names_the_condition(build_repo, files, facts):
-    """ROOT-3, ROOT-11, ROOT-18, ROOT-19, ROOT-20, ROOT-21."""
+    """ROOT-3, ROOT-11, ROOT-18, ROOT-19, ROOT-20, ROOT-21, ROOT-23."""
     found = unlisted_facts(build_repo({**GUIDANCE, **files}))
     assert {entry: condition in found[entry] for entry, condition in facts.items()} == dict.fromkeys(facts, True)
     assert set(found) == set(facts)

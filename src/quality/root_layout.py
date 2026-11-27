@@ -27,6 +27,8 @@ ROOT_BASE_DIRECTORIES = frozenset({
 })
 ROOT_BASE_ENTRIES = ROOT_BASE_FILES | ROOT_BASE_DIRECTORIES
 
+PLUGIN_MANIFESTS = frozenset({".claude-plugin/plugin.json", ".codex-plugin/plugin.json"})
+
 FLUX_CLUSTERS = "clusters"
 FLUX_DIRECTORY = "flux-system"
 
@@ -51,14 +53,15 @@ def _tracks(path: str) -> CaseCondition:
     return CaseCondition(f"{path} is tracked", lambda tracked: path in tracked)
 
 
-def _directory_of_projects(directory: str) -> CaseCondition:
-    """Each child folder of `directory` that holds a tracked file holds a project manifest directly, and at least one does."""
+def _directory_of_manifested_folders(directory: str, manifests: frozenset[str]) -> CaseCondition:
+    """Each child folder of `directory` that holds a tracked file holds one of `manifests` at that path directly under it,
+    and at least one does."""
 
     def met(tracked: frozenset[str]) -> bool:
         children = {parts[1] for parts in (path.split("/") for path in tracked) if len(parts) > 2 and parts[0] + "/" == directory}
-        return bool(children) and all(any(f"{directory}{child}/{name}" in tracked for name in PROJECT_FILES) for child in children)
+        return bool(children) and all(any(f"{directory}{child}/{name}" in tracked for name in manifests) for child in children)
 
-    return CaseCondition(f"it holds folders and each holds a {' or '.join(sorted(PROJECT_FILES))}", met)
+    return CaseCondition(f"it holds folders and each holds a {' or '.join(sorted(manifests))}", met)
 
 
 def _flux_bootstrap() -> CaseCondition:
@@ -71,8 +74,9 @@ def _flux_bootstrap() -> CaseCondition:
 ROOT_CASES = (
     RootCase("frontend/", _tracks(f"frontend/{PACKAGE_FILE}")),
     RootCase("legal/", _tracks("legal/datenschutz.html")),
-    RootCase("packages/", _directory_of_projects("packages/")),
-    RootCase("providers/", _directory_of_projects("providers/")),
+    RootCase("packages/", _directory_of_manifested_folders("packages/", PROJECT_FILES)),
+    RootCase("providers/", _directory_of_manifested_folders("providers/", PROJECT_FILES)),
+    RootCase("plugins/", _directory_of_manifested_folders("plugins/", PLUGIN_MANIFESTS)),
     *(RootCase(entry, _flux_bootstrap()) for entry in (f"{FLUX_CLUSTERS}/", "infrastructure/", "apps/")),
 )
 
