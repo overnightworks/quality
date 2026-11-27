@@ -10,6 +10,7 @@ from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, S
 from dataclasses import dataclass
 from enum import Enum, StrEnum, auto
 from pathlib import Path, PurePosixPath
+from typing import NamedTuple
 
 import yaml
 
@@ -42,6 +43,9 @@ QUALITY_REMOTE = re.compile(
     re.IGNORECASE,
 )
 ORIGIN_REMOTE = "origin"
+REMOTE_DEFAULT_BRANCH = f"{ORIGIN_REMOTE}/{DEFAULT_BRANCH}"
+DEFAULT_BRANCH_REF = f"refs/remotes/{REMOTE_DEFAULT_BRANCH}"
+FETCH_DEFAULT_BRANCH_STEP = Command(f"git fetch {ORIGIN_REMOTE} {DEFAULT_BRANCH}")
 BLOCK_STYLES = frozenset({"|", ">"})
 LINE_BREAKS = re.compile("[\r\n\x85\u2028\u2029]")
 NOT_PINNED_STEP = Instruction("pin the gate as docs/gate.md shows: @<commit sha> # v<tag>")
@@ -160,6 +164,30 @@ def renamed_since(root: Path, commit: str) -> bytes:
 
 def is_shallow(root: Path) -> bool:
     return _git_listing(root, ["rev-parse", "--is-shallow-repository"]).stdout.strip() == b"true"
+
+
+def merge_base_with_default_branch(root: Path, refusal: str) -> str:
+    """The newest commit `HEAD` and `origin/main` share. A clone that holds none, because it lacks the ref or its shallow
+    history does not reach one, cannot judge: `CannotJudge` with `refusal` and the step that fetches it."""
+    ref_here = _git_listing(root, ["rev-parse", "--verify", "--quiet", f"{DEFAULT_BRANCH_REF}^{{commit}}"], frozenset({0, 1})).returncode == 0
+    base = _git_listing(root, ["merge-base", "HEAD", DEFAULT_BRANCH_REF], frozenset({0, 1})).stdout.strip() if ref_here else b""
+    if not base:
+        raise CannotJudge(refusal, (UNSHALLOW_STEP if ref_here and is_shallow(root) else FETCH_DEFAULT_BRANCH_STEP,))
+    return os.fsdecode(base)
+
+
+class Difference(NamedTuple):
+    """A tracked path whose content or mode differs from a commit's, and whether the commit holds it."""
+
+    path: str
+    in_commit: bool
+
+
+def differences_from(root: Path, commit: str) -> list[Difference]:
+    """The tracked paths the work tree changes against `commit`, uncommitted edits and deletions included, a rename as the
+    deletion of its old path and the addition of its new one."""
+    fields = _git_listing(root, ["diff", "--name-status", "--no-renames", "-z", commit, "--"]).stdout.split(b"\0")[:-1]
+    return [Difference(os.fsdecode(name), status != b"A") for status, name in zip(fields[0::2], fields[1::2], strict=True)]
 
 
 def judged[T](ask: Callable[[Path, str], T], root: Path, name: str) -> T:

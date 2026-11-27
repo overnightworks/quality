@@ -89,6 +89,7 @@ class Rule(StrEnum):
     JOB_TIMEOUT = "job-timeout", Area.DEBT, RELEASE_0_12, Switch.ALWAYS
     TEST_TWIN = "test-twin", Area.DEBT, RELEASE_0_23, Switch.REPORT_ONLY
     SPEC_CITATION = "spec-citation", Area.DEBT, RELEASE_0_25, Switch.REPORT_ONLY, SwitchChange(RELEASE_0_26, Switch.SPEC_TABLE)
+    SPEC_LENGTH = "spec-length", Area.DEBT, None, Switch.ALWAYS
     IMPORT_CONTRACT = "import-contract", Area.IMPORTS, RELEASE_0_3, Switch.IMPORT_LINTER_CONFIG
     ADAPTER_IMPORT = "adapter-import", Area.IMPORTS, RELEASE_0_27, Switch.ADAPTER_CONTRACT
     INTEGRATION_MARKER = "integration-marker", Area.IMPORTS, RELEASE_0_28, Switch.ADAPTER_CONTRACT
