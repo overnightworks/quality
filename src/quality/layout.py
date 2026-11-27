@@ -302,7 +302,7 @@ class _ProjectMirror:
             _folder_keys([path for path in tracked if path.suffix == ".py" and source in path.parents], source),
             _folder_keys([path for path in tracked if scripts in path.parents], scripts),
             {_key(name): name for name in (path.stem.replace("-", "_") for path in tracked if checkout.is_workflow(path))},
-            _helper_keys(tracked, project.tests_directory),
+            _helper_keys(tracked),
         )
 
     def names_helper(self, folder: PurePosixPath, test_name: str) -> bool:
@@ -370,12 +370,12 @@ def _folder_keys(files: Sequence[PurePosixPath], root: PurePosixPath) -> dict[Pu
     return dict(keys)
 
 
-def _helper_keys(tracked: Sequence[PurePosixPath], tests: PurePosixPath) -> dict[PurePosixPath, dict[str, str]]:
-    """The key of each tracked `.py` directly in a `support/` folder under `tests`, other than `__init__.py` and
-    `conftest.py`, by the folder that holds `support/`."""
+def _helper_keys(tracked: Sequence[PurePosixPath]) -> dict[PurePosixPath, dict[str, str]]:
+    """The key of each tracked `.py` directly in a `support/` folder, other than `__init__.py` and `conftest.py`, by the
+    folder that holds `support/`."""
     keys: defaultdict[PurePosixPath, dict[str, str]] = defaultdict(dict)
     for path in tracked:
-        if path.suffix == ".py" and path.name not in (INIT_FILE, CONFTEST_FILE) and path.parent.name == SUPPORT_DIRECTORY and tests in path.parent.parents:
+        if path.suffix == ".py" and path.name not in (INIT_FILE, CONFTEST_FILE) and path.parent.name == SUPPORT_DIRECTORY:
             keys[path.parent.parent].setdefault(_key(path.stem), path.stem)
     return dict(keys)
 

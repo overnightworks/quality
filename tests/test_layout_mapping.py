@@ -124,7 +124,7 @@ HELPER_TEST = "tests/test_restart_wait.py"
         case("a test beside a helper in a folder that mirrors nothing is clean", ["src/p/x.py", "tests/sub/support/x.py", "tests/sub/test_x.py"], []),
         case("a test with no helper stays red", ["src/p/x.py", HELPER_TEST], [HELPER_TEST]),
         case("a test whose name shares no word prefix with the helper stays red", ["src/p/x.py", HELPER, "tests/test_restarts.py"], ["tests/test_restarts.py"]),
-        case("a test in a folder below the helper stays red", ["src/p/x.py", HELPER, "tests/sub/test_restart_wait.py"],
+        case("a test one folder away from support/ stays red", ["src/p/x.py", HELPER, "tests/sub/test_restart_wait.py"],
              ["tests/sub/test_restart_wait.py"]),
         case("a helper in a nested package names no test", ["src/p/x.py", "tests/support/pkg/restart.py", HELPER_TEST], [HELPER_TEST]),
         case("an init names no test", ["src/p/x.py", "tests/support/__init__.py", "tests/test_init.py"],
