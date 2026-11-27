@@ -121,18 +121,31 @@ def define(texts: dict[str, str]) -> dict[str, list[Definition]]:
     return definitions
 
 
+def is_spec_file(name: str) -> bool:
+    return PurePosixPath(name).suffix == MARKDOWN_SUFFIX
+
+
+def spec_text(content: bytes) -> str | None:
+    """The text of a spec file's bytes; one that is not UTF-8 defines nothing, so None."""
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
 def read_markdown(root: Path, tracked: list[str]) -> Markdown:
     """The definitions of the tracked Markdown files the tree holds as text; those that are absent from it, cannot be read or are
     not UTF-8 are named, never guessed."""
     texts: dict[str, str] = {}
     unread: list[str] = []
-    for name in (name for name in tracked if PurePosixPath(name).suffix == MARKDOWN_SUFFIX):
+    for name in filter(is_spec_file, tracked):
         try:
             content = repository.read_bytes(root, name) if repository.is_on_disk(root, name) else None
-            if content is None:
-                unread.append(name)
-            else:
-                texts[name] = content.decode("utf-8")
-        except (repository.RepositoryFileError, UnicodeDecodeError):
+        except repository.RepositoryFileError:
+            content = None
+        text = None if content is None else spec_text(content)
+        if text is None:
             unread.append(name)
+        else:
+            texts[name] = text
     return Markdown(define(texts), unread)

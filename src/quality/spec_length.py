@@ -7,12 +7,10 @@ where the tree holds a live rule over the limit, and a clone without that merge 
 
 from collections import defaultdict
 from collections.abc import Iterator
-from contextlib import suppress
 from itertools import chain
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from quality import checkout, spec_definitions
-from quality.config import MARKDOWN_SUFFIX
 from quality.output import SEPARATOR
 from quality.report import Finding, FindingEvent, RuleResult
 from quality.rules import Rule
@@ -35,9 +33,10 @@ def _base_texts(root: Path, base: str, differences: list[checkout.Difference]) -
     """The text at `base` of each changed Markdown file it holds; one that is not UTF-8 defines nothing."""
     texts: dict[str, str] = {}
     for difference in differences:
-        if difference.in_commit and PurePosixPath(difference.path).suffix == MARKDOWN_SUFFIX:
-            with suppress(UnicodeDecodeError):
-                texts[difference.path] = checkout.blob(root, f"{base}:{difference.path}").decode("utf-8")
+        if difference.in_commit and spec_definitions.is_spec_file(difference.path):
+            text = spec_definitions.spec_text(checkout.blob(root, f"{base}:{difference.path}"))
+            if text is not None:
+                texts[difference.path] = text
     return texts
 
 
