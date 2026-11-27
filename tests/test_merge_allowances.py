@@ -78,5 +78,5 @@ BASE_REFUSALS = {
 def test_the_door_shows_a_refused_base_without_an_ends_example_and_names_the_base(entry, capsys):
     """VERDICT-79: the base is read by identity, so the refusal shows no `ends` key to write and its step names the base."""
     gh = FakeGh(base_config=ONE_JOB + entry, merge_config=ONE_JOB)
-    code, _, err, _ = run(gh, capsys)
+    code, _, err = run(gh, capsys)
     assert (code, "ends" in err, "fix it on main first" in err) == (2, False, True)
