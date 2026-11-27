@@ -324,6 +324,7 @@ def test_a_directory_whose_case_condition_is_met_is_green_without_a_declaration(
         ({"docker/app.Dockerfile.bak": "x"}, {"docker/": DOCKER_CONDITION}),
         ({"docker/.Dockerfile": "x"}, {"docker/": DOCKER_CONDITION}),
         ({"docker/app.dockerfile": "x"}, {"docker/": DOCKER_CONDITION}),
+        ({"app.Dockerfile": "x", "docker/app.toml": "x"}, {"docker/": DOCKER_CONDITION, "app.Dockerfile": ""}),
     ],
     ids=[
         "frontend without a package.json",
@@ -346,6 +347,7 @@ def test_a_directory_whose_case_condition_is_met_is_green_without_a_declaration(
         "docker whose only file merely begins with a Dockerfile name",
         "docker whose only Dockerfile has no name",
         "docker whose only Dockerfile is spelled in lower case",
+        "docker beside a named Dockerfile at the root",
     ],
 )
 def test_a_directory_whose_case_condition_fails_is_unlisted_and_its_fact_names_the_condition(build_repo, files, facts):
