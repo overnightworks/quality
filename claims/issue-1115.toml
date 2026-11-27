@@ -1,0 +1,7 @@
+claim_id = "8058735f4d754139ad0affca17f5c97b"
+agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
+role = "builder"
+base = "8a43fd77c628ed3b3ddf8423c5ec91b493b68325"
+branch = "claude/issue-1115-root-24-docker"
+scope = ["docs/rules.md", "src/quality/root_layout.py", "tests/test_root_layout.py"]
+opened_commit = "e8ce87b16c911f7e9859b1e8ee7b734371c645bd"
