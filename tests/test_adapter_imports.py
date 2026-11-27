@@ -213,6 +213,20 @@ def test_a_test_a_layout_declaration_exempts_has_no_subject_and_is_judged(red):
     assert red({path: ADAPTER_IMPORT}, contract, extra=declared) == [f"{path}:1"]
 
 
+@pytest.mark.parametrize(
+    ("path", "code", "helper", "contract", "expected"),
+    [
+        pytest.param("tests/core/test_config_process.py", "import shop.core.config\n", "tests/core/support/config_process.py",
+                     adapter_contract(forbidden=("shop.core.config",)), False, id="a helper key never replaces the module key as subject"),
+        pytest.param("tests/test_restart_wait.py", ADAPTER_IMPORT, "tests/support/restart.py", adapter_contract(), True,
+                     id="a test only the helper case accepts has no subject"),
+    ],
+)
+def test_a_helper_key_names_no_subject(red, path, code, helper, contract, expected):
+    """ADAPTERIMPORT-6, LAYOUT-50: a helper in `support/` that accepts a test is no module the test is named after."""
+    assert red({path: code, helper: ""}, contract) == ([f"{path}:1"] if expected else [])
+
+
 def test_a_test_of_a_project_the_layout_rules_do_not_judge_is_judged(red):
     """ADAPTERIMPORT-6: a project without a package has no mirror, so its tests have no subject."""
     member = {"tool/pyproject.toml": "", "tool/tests/test_db.py": ADAPTER_IMPORT}
