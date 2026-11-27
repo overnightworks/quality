@@ -1,7 +1,0 @@
-claim_id = "50165ac5b626457cac6db0bf781187d0"
-agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
-role = "builder"
-base = "31c87ecf56641c082e51bccdad0bfab005f0cdfb"
-branch = "claude/issue-1109-root-23-plugins-case"
-scope = ["docs/rules.md", "src/quality/root_layout.py", "tests/test_root_layout.py"]
-opened_commit = "0e3272518e9599490cb793d45c1414b536c2a0b9"
