@@ -107,8 +107,7 @@ def tracked_files(root: Path) -> list[str]:
 def require_unchanged_tracked_files(root: Path, step: Step) -> None:
     """Refuses a work tree whose tracked files differ from `HEAD` in content or mode, deletions included; untracked and
     ignored files are not asked, and a file rewritten with its own bytes is unchanged."""
-    listing = _git_listing(root, ["diff", "--name-only", "--no-renames", "-z", "HEAD", "--"])
-    changed = [os.fsdecode(name) for name in listing.stdout.split(b"\0") if name]
+    changed = [difference.path for difference in differences_from(root, "HEAD")]
     if changed:
         more = f" and {len(changed) - 1} more differ" if len(changed) > 1 else " differs"
         raise CannotJudge(f"{changed[0]}{more} from the checked-out commit", (step,))
