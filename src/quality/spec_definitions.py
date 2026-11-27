@@ -38,7 +38,7 @@ class Definition(NamedTuple):
 
     site: Site
     live: bool
-    words: tuple[str, ...] = ()
+    words: tuple[str, ...]
 
 
 @dataclass
