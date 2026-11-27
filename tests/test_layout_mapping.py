@@ -110,6 +110,45 @@ def test_support_is_judged_while_e2e_and_fixtures_are_not(build_repo, paths, exp
     assert red(build_repo(project("src/p/x.py", *paths)), RULE) == expected
 
 
+HELPER = "tests/support/restart.py"
+HELPER_TEST = "tests/test_restart_wait.py"
+
+
+@pytest.mark.parametrize(
+    ("paths", "expected"),
+    [
+        case("a one-package project", ["src/p/x.py", HELPER, HELPER_TEST], []),
+        case("a project with several packages", ["src/a/x.py", "src/b/y.py", HELPER, HELPER_TEST], []),
+        case("the helper's exact name", ["src/p/x.py", HELPER, "tests/test_restart.py"], []),
+        case("a helper's underscore is dropped", ["src/p/x.py", "tests/support/_restart.py", HELPER_TEST], []),
+        case("a folder that mirrors nothing", ["src/p/x.py", "tests/sub/support/x.py", "tests/sub/test_x.py"], []),
+        case("no helper", ["src/p/x.py", HELPER_TEST], [HELPER_TEST]),
+        case("a helper that shares no word prefix", ["src/p/x.py", HELPER, "tests/test_restarts.py"], ["tests/test_restarts.py"]),
+        case("a helper in the folder above", ["src/p/x.py", HELPER, "tests/sub/test_restart_wait.py"],
+             ["tests/sub/test_restart_wait.py"]),
+        case("a helper in a nested package", ["src/p/x.py", "tests/support/pkg/restart.py", HELPER_TEST], [HELPER_TEST]),
+        case("an init is no helper", ["src/p/x.py", "tests/support/__init__.py", "tests/test_init.py"],
+             ["tests/support/__init__.py", "tests/test_init.py"]),
+        case("a conftest is no helper", ["src/p/x.py", "tests/support/conftest.py", "tests/test_conftest.py"],
+             ["tests/test_conftest.py"]),
+        case("a test in the support folder stays red", ["src/p/x.py", "tests/support/support/x.py", "tests/support/test_x.py"],
+             ["tests/support/test_x.py"]),
+    ],
+)
+def test_a_test_beside_the_tracked_helper_it_is_named_after_is_clean(build_repo, paths, expected):
+    """LAYOUT-26, LAYOUT-50: a test directly beside a `support/` folder is clean when a word prefix of its name equals the
+    key of a tracked helper directly in it, whatever the mirrored folders say."""
+    assert red(build_repo(project(*paths)), RULE) == expected
+
+
+def test_an_untracked_helper_accepts_no_test(build_repo):
+    """LAYOUT-50: only a tracked helper names a test."""
+    repo = build_repo(project("src/p/x.py", HELPER_TEST))
+    (repo / HELPER).parent.mkdir(parents=True)
+    (repo / HELPER).write_text("")
+    assert red(repo, RULE) == [HELPER_TEST]
+
+
 @pytest.mark.parametrize(
     ("files", "expected"),
     [

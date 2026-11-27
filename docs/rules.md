@@ -482,8 +482,8 @@ It applies these rules:
   - ADAPTERIMPORT-5: It is a core test when its subject lies inside
     `source_modules` (by prefix with `as_packages`, the default, else exactly).
   - ADAPTERIMPORT-6: A test with no subject,
-    because a `[[layout.allow]]` entry exempts it from `test-layout` or its project is not judged, is a core test too, so
-    no declaration becomes a path allowlist.
+    because a `[[layout.allow]]` entry exempts it from `test-layout`, its project is not judged or only LAYOUT-50
+    accepts it, is a core test too, so no declaration becomes a path allowlist.
   - ADAPTERIMPORT-7: A subject equal to or inside a forbidden module, or any
     other subject outside `source_modules`, makes no core test; these are name checks and no graph is
     asked.
@@ -859,7 +859,7 @@ It applies these rules:
   a project whose `src/` holds only modules, and a package named `support` or `fixtures`.
 
   - LAYOUT-11: Every `test_*.py` outside `fixtures/` and the top-level `e2e/` mirrors the module it tests, one
-    direction.
+    direction, or stands beside the helper it tests (LAYOUT-50).
   - LAYOUT-12: Its folder mirrors a folder of `src/<package>/` (`tests/api/` is `src/<package>/api/`;
   - LAYOUT-13: with several packages `tests/<package>/api/` is `src/<package>/api/`),
   - LAYOUT-14: and that folder holds a tracked `.py` at any depth.
@@ -876,6 +876,9 @@ It applies these rules:
   - LAYOUT-24: The test's name, `test_<name>.py`, splits at `_` into words and a word prefix of it, ending at a word
     boundary, must equal a key exactly;
   - LAYOUT-25: the rest is the aspect, and a name whose first word is empty (`test_.py`, `test__x.py`) has no prefix.
+  - LAYOUT-50: A `test_*.py` directly in a folder that directly holds a `support/` folder is also clean when a word prefix
+    of its name, read as LAYOUT-24 and LAYOUT-25 read it, equals the key of a tracked `.py` directly in that `support/`
+    folder other than `__init__.py` and `conftest.py`, its key read as LAYOUT-19 reads it; it needs no mirrored folder.
   - LAYOUT-26: A `test_*.py` in a `support/` folder is red.
   - LAYOUT-27: A member's tests map only into the member's own `src/` and `scripts/`.
   - LAYOUT-28: Each case has its own fact and fix,

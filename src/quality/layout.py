@@ -231,7 +231,8 @@ def check_test_layout(modes: Mapping[str, str], allowances: Sequence[LayoutAllow
     """Every tracked path under a judged project's `tests/` is a `test_*.py`, a `conftest.py`, a file in a `support/` or
     `fixtures/` folder or a file in the top-level `e2e/`, and no `__init__.py` lies there outside `fixtures/`; a
     `test_*.py` outside `fixtures/` and the top-level `e2e/` lies in the folder that mirrors its module and is named
-    `test_<module>[_<aspect>].py`; a declaration of an untracked path is a finding too. A project is judged when it
+    `test_<module>[_<aspect>].py`, or lies directly beside the `support/` folder that holds a tracked helper it is named
+    after (LAYOUT-50); a declaration of an untracked path is a finding too. A project is judged when it
     has a package. A Vitest test of a frontend project lies beside the file it tests and a Playwright spec in the
     project's top-level `e2e/`."""
     declared = declared_paths(allowances, Rule.TEST_LAYOUT)
@@ -281,13 +282,15 @@ class _Destination:
 @dataclass(frozen=True)
 class _ProjectMirror:
     """What a project's tests may mirror: the keys of each `src/` package folder and `scripts/` folder, and the
-    root's workflows, each key with the name it stands for."""
+    root's workflows, each key with the name it stands for. `helpers` holds the keys of the tracked helpers directly in
+    a `support/` folder under `tests/`, by the folder that holds `support/` (LAYOUT-50)."""
 
     directory: PurePosixPath
     packages: tuple[str, ...]
     sources: Mapping[PurePosixPath, Mapping[str, str]]
     scripts: Mapping[PurePosixPath, Mapping[str, str]]
     workflows: Mapping[str, str]
+    helpers: Mapping[PurePosixPath, Mapping[str, str]]
 
     @classmethod
     def of(cls, project: PythonProject, tracked: Sequence[PurePosixPath]) -> _ProjectMirror:
@@ -299,7 +302,12 @@ class _ProjectMirror:
             _folder_keys([path for path in tracked if path.suffix == ".py" and source in path.parents], source),
             _folder_keys([path for path in tracked if scripts in path.parents], scripts),
             {_key(name): name for name in (path.stem.replace("-", "_") for path in tracked if checkout.is_workflow(path))},
+            _helper_keys(tracked, project.tests_directory),
         )
+
+    def names_helper(self, folder: PurePosixPath, test_name: str) -> bool:
+        """Whether a word prefix of `test_name` is the key of a tracked helper in the `support/` folder inside `folder`."""
+        return _longest_key(test_name, self.helpers.get(folder, {})) is not None
 
     def subject(self, folders: tuple[str, ...], test_name: str) -> str | None:
         """The module or package the test named `test_<test_name>.py` in `folders` is named after, by its longest key."""
@@ -362,6 +370,16 @@ def _folder_keys(files: Sequence[PurePosixPath], root: PurePosixPath) -> dict[Pu
     return dict(keys)
 
 
+def _helper_keys(tracked: Sequence[PurePosixPath], tests: PurePosixPath) -> dict[PurePosixPath, dict[str, str]]:
+    """The key of each tracked `.py` directly in a `support/` folder under `tests`, other than `__init__.py` and
+    `conftest.py`, by the folder that holds `support/`."""
+    keys: defaultdict[PurePosixPath, dict[str, str]] = defaultdict(dict)
+    for path in tracked:
+        if path.suffix == ".py" and path.name not in (INIT_FILE, CONFTEST_FILE) and path.parent.name == SUPPORT_DIRECTORY and tests in path.parent.parents:
+            keys[path.parent.parent].setdefault(_key(path.stem), path.stem)
+    return dict(keys)
+
+
 def _key(name: str) -> str:
     """`__x__` reads as `x`, otherwise one leading `_` is dropped."""
     wrapped = WRAPPED_NAME.fullmatch(name)
@@ -393,8 +411,10 @@ def _mirror_findings(path: PurePosixPath, folders: tuple[str, ...], mirror: _Pro
             f"a test module in a {SUPPORT_DIRECTORY}/ folder, which holds helpers",
             "rename it if it is a helper, or move it to the folder that mirrors its module",
         )])]
-    problems, destination = mirror.destination(folders)
     name = path.stem.removeprefix(TEST_PREFIX)
+    if mirror.names_helper(path.parent, name):
+        return []
+    problems, destination = mirror.destination(folders)
     if destination is not None and _longest_key(name, destination.keys) is None:
         named = f"is named by a word prefix of {name}" if name else "is named by an empty name"
         problems.append((
@@ -490,8 +510,8 @@ def _stray_under_tests(path: str) -> Finding:
 def test_subjects(modes: Mapping[str, str], allowances: Sequence[LayoutAllowance]) -> dict[str, str | None]:
     """The module or package each tracked `test_*.py` under a Python project's `tests/` is named after, None where the
     layout rules name none: a `test-layout` declaration exempts the path, the project has no package, or no key of the
-    mirrored folder is a word prefix of its name. A test under the `scripts/`, `workflows/` or `e2e/` of its `tests/` has
-    no entry."""
+    mirrored folder is a word prefix of its name; a helper key (LAYOUT-50) names no subject. A test under the
+    `scripts/`, `workflows/` or `e2e/` of its `tests/` has no entry."""
     declared = declared_paths(allowances, Rule.TEST_LAYOUT)
     tracked = [PurePosixPath(path) for path in modes]
     mirrors = {project.tests_directory: _ProjectMirror.of(project, tracked) for project in python_projects(modes) if project.packages}
