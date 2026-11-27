@@ -39,7 +39,7 @@ from quality.baseline_file import (
     moved_adapter_counts,
 )
 from quality.config import GENERATED_FILE_HEADING, GeneratedFile
-from quality.config_entries import CONFIG_PATH
+from quality.config_entries import delete_entry_fix
 from quality.output import SEPARATOR, counted
 from quality.report import CannotJudge, Finding, FindingEvent, Instruction, Note, NoteEvent, RuleResult, Unparsable
 from quality.rules import Rule
@@ -765,7 +765,7 @@ def _stale_declarations(tree: TreeMeasurement, generated: Collection[GeneratedFi
             file.path,
             None,
             f"{GENERATED_FILE_HEADING} matches no tracked file in a measured language",
-            f"delete its {GENERATED_FILE_HEADING} entry from {CONFIG_PATH}",
+            delete_entry_fix(GENERATED_FILE_HEADING),
             event=FindingEvent.UNUSED,
         )
         for file in generated

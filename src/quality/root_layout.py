@@ -5,7 +5,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from quality.config_allowances import DECLARATION_NEEDS, ROOT_ALLOWANCE_HEADING, RootEntry
-from quality.config_entries import CONFIG_PATH
+from quality.config_entries import CONFIG_PATH, delete_entry_fix
 from quality.layout import PACKAGE_FILE, PROJECT_FILES
 from quality.report import Finding, FindingEvent
 from quality.rules import Rule
@@ -126,6 +126,6 @@ def _stale_root_declaration(entry: str, tracked_entries: set[str]) -> Finding:
     return Finding(
         Rule.ROOT_LAYOUT, entry, None,
         f"{ROOT_ALLOWANCE_HEADING} matches no tracked root entry{hint}",
-        f"delete its {ROOT_ALLOWANCE_HEADING} entry from {CONFIG_PATH}",
+        delete_entry_fix(ROOT_ALLOWANCE_HEADING),
         event=FindingEvent.UNUSED,
     )

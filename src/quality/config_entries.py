@@ -99,6 +99,10 @@ def entry_name(heading: str, position: int) -> str:
     """How a message names one entry of a list: its heading and 1-based position."""
     return f"{heading} entry {position}"
 
+def delete_entry_fix(heading: str) -> str:
+    """The fix a finding gives for an entry that no longer has anything to allow."""
+    return f"delete its {heading} entry from {CONFIG_PATH}"
+
 def entry_refusal(heading: str, position: int, example: ExampleLines) -> Callable[[str], ConfigError]:
     def refuse(need: str) -> ConfigError:
         return ConfigError(f"{CONFIG_PATH} {entry_name(heading, position)} needs {need}", example)

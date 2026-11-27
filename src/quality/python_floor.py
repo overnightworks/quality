@@ -9,7 +9,7 @@ from packaging.version import Version
 
 from quality import repository
 from quality.config_allowances import PYTHON_ALLOWANCE_HEADING, PythonAllowance
-from quality.config_entries import CONFIG_PATH
+from quality.config_entries import CONFIG_PATH, delete_entry_fix
 from quality.report import Finding, FindingEvent, Note, NoteEvent, Unparsable
 from quality.rules import Rule
 
@@ -73,7 +73,7 @@ def _floor_finding(path: str, requires_python: str, floor: Version | None) -> Fi
 def _stale_python_allowance(allowance: PythonAllowance, fact: str) -> Finding:
     return Finding(
         Rule.PYTHON_FLOOR, allowance.path, None, f"{PYTHON_ALLOWANCE_HEADING} {fact}",
-        f"delete its {PYTHON_ALLOWANCE_HEADING} entry from {CONFIG_PATH}",
+        delete_entry_fix(PYTHON_ALLOWANCE_HEADING),
         event=FindingEvent.UNUSED,
     )
 

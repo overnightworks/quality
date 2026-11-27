@@ -8,8 +8,8 @@ from pathlib import Path, PurePosixPath
 import yaml
 
 from quality import checkout, repository
-from quality.config_allowances import ComposeAllowance
-from quality.config_entries import CONFIG_PATH
+from quality.config_allowances import COMPOSE_ALLOWANCE_HEADING, ComposeAllowance
+from quality.config_entries import CONFIG_PATH, delete_entry_fix
 from quality.report import CannotJudge, Finding, FindingEvent
 from quality.rules import Rule
 
@@ -134,7 +134,7 @@ def _stale_compose_declaration(file: str, service: str) -> Finding:
     return Finding(
         Rule.COMPOSE_PORT, file, None,
         f"[[compose.allow]] service {service} is not host-networked there",
-        f"delete its [[compose.allow]] entry from {CONFIG_PATH}",
+        delete_entry_fix(COMPOSE_ALLOWANCE_HEADING),
         event=FindingEvent.UNUSED,
     )
 
