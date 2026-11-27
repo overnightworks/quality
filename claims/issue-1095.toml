@@ -3,6 +3,6 @@ agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
 role = "builder"
 base = "f157bdfccdf7b237f3db2cff73a0ff0e3ef128a0"
 branch = "claude/issue-1095-release-v0-28-0-integration-marker-s-fir"
-scope = [".github/workflows/gate.yml", "docs/commands.md", "docs/rules.md", "src/quality/rules.py", "tests/test_fleet_matrix.py"]
+scope = [".github/workflows/gate.yml", "docs/commands.md", "docs/rules.md", "src/quality/rules.py", "tests/test_fleet_matrix.py", "tests/test_fleet_matrix_pins.py"]
 opened_commit = "2a9b6fd33d7b33466715da370b8816d1bab86105"
 whole_reason = "One release: the rule's first release, the gate pins, the doc lines and the matrix test that name it."
