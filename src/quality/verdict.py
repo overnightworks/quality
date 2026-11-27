@@ -29,6 +29,7 @@ from quality.report import (
     config_refusal,
 )
 from quality.sides import (
+    BaseSide,
     Side,
     UnusableConfig,
     is_git_ref_name,
@@ -226,7 +227,7 @@ def _undeclared_line(text: str, fix: str = "") -> SubLine:
 
 def judge(
     head: Side,
-    base: Side | None,
+    base: BaseSide | None,
     jobs: list[Job],
     gate_results: Mapping[str, str],
     current_attempt: int,
@@ -486,7 +487,7 @@ def _gate_results(needs_text: str) -> Mapping[str, str]:
     return MappingProxyType({name: need["result"] for name, need in needs.items()})
 
 
-def read_sides(run: GateRun) -> tuple[Side | None, Side]:
+def read_sides(run: GateRun) -> tuple[BaseSide | None, Side]:
     """The base, read first so that a refusal the pull request inherits is named at the base, then the head; a config
     either cannot read is its fact and example with that side's step."""
     base = None
@@ -497,7 +498,7 @@ def read_sides(run: GateRun) -> tuple[Side | None, Side]:
     return base, _side(partial(read_head, Path(".")), PUSH_THE_FIX)
 
 
-def _side(read: Callable[[], Side], fix: Step) -> Side:
+def _side[Held: BaseSide](read: Callable[[], Held], fix: Step) -> Held:
     try:
         return read()
     except UnusableConfig as unusable:

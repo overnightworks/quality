@@ -305,15 +305,18 @@ reason = "the operator ruled the requirement shelf machinery out"
 - VERDICT-79: The base side of the two tables is read by identity only, `entry` for root and `rule` and `path` for
   layout, and every other key and value is ignored, a repeated identity included, so a base written before `ends`
   existed, or with a reason or a key this release refuses, is read, and the pull request that writes `ends` is no
-  loosening. A base entry without its identity keys, or with one that is not text, is exit `2` naming the base. The head
-  side is read strictly: an entry without `ends`, with an `ends` that is no item reference, or with only one of `item`
-  and `date` is a config it cannot read (VERDICT-39 to VERDICT-41), and `next:` shows the table's example.
+  loosening. A base entry without its identity keys, or with one that is not text, is exit `2` naming the base, and its
+  example shows the identity keys alone. The head side is read strictly: an entry without `ends`, with an `ends` that is
+  no item reference, or with only one of `item` and `date` is a config it cannot read (VERDICT-39 to VERDICT-41), and
+  `next:` shows the table's example.
 - VERDICT-80: A `[[gate.loosened]]` entry whose `what` is the text of such a line matches nothing and is red.
 - VERDICT-81: A layout `path`, and a root entry that names a file, moves when git's rename listing (BASELINE-11) maps the
   base path to the head path: the head entry at the new path is inherited, not added. While the head still declares the
   old name, the new one is added. A root directory has no rename git reports, so a directory declared under a new name
   is added. The listing is read only when the head holds an entry whose identity the base lacks, so a run with no added
   entry reads and fetches nothing more than before.
+- VERDICT-82: A base whose `[root]` or `[layout]` table cannot be read, an `allow` that is no list or a key the table does
+  not have, is refused as well, exit `2` naming the base, with the identity-only example.
 - A baseline loosening (`size baseline raises …`, `clone baseline adds …`, `job limit baseline raises …`, `spec citation
   baseline adds …`, and `adapter import baseline raises <directory> <from> -> <to>`, `adapter import baseline adds
   <directory> <count>` or `adapter import baseline removed`, see "The baseline only falls" in [rules](rules.md)) is declared

@@ -7,6 +7,7 @@ from quality import architecture
 from quality.architecture import PullTree
 from quality.baseline_file import BASELINE_PATH, Baseline
 from quality.config import (
+    BaseSettings,
     Declaration,
     GateSettings,
     GeneratedFile,
@@ -27,7 +28,7 @@ from quality.ratchet import (
     raised_entries,
     raised_job_limits,
 )
-from quality.sides import Side
+from quality.sides import BaseSide, Side
 
 SHA_PREFIX_LENGTH = 12
 UNRULED_FIX = "write the operator's ruling that lets it in on the entry in quality/config.toml, its item and its date"
@@ -44,7 +45,7 @@ class Loosening:
 
 
 def collect_loosenings(
-    head: Side, base: Side, renames: Renames, pull_tree: PullTree | None
+    head: Side, base: BaseSide, renames: Renames, pull_tree: PullTree | None
 ) -> tuple[tuple[Loosening, ...], tuple[Declaration, ...]]:
     """Each loosening, bound to the head's new declaration of it; a declaration the base holds already binds nothing.
     An advisory allowance, a generated file and an implemented document declare their own loosening, so no [[gate.loosened]] entry binds one; a
@@ -70,7 +71,7 @@ def collect_loosenings(
     return (*own, *_allowance_loosenings(base.settings, head.settings), *_self_declared_loosenings(base.settings, head.settings, renames)), stale
 
 
-def _secret_allowance_loosenings(base: GateSettings, head: GateSettings) -> list[str]:
+def _secret_allowance_loosenings(base: BaseSettings, head: GateSettings) -> list[str]:
     """Each head secret allowance whose rule, file and value the base lacks, named by the first 12 hex digits of the hash."""
     inherited = set(base.secret_allowances)
     return [
@@ -80,7 +81,7 @@ def _secret_allowance_loosenings(base: GateSettings, head: GateSettings) -> list
     ]
 
 
-def _allowance_loosenings(base: GateSettings, head: GateSettings) -> list[Loosening]:
+def _allowance_loosenings(base: BaseSettings, head: GateSettings) -> list[Loosening]:
     """Each head allowance the base lacks, or whose `until` the head moves later, declared by its own item and date."""
     base_until = {allowance.key: allowance.until for allowance in base.advisory_allowances}
     loosenings = []
@@ -102,11 +103,12 @@ type DeclaringEntry = GeneratedFile | ImplementedDocument | RootAllowance | Layo
 @dataclass(frozen=True)
 class _SelfDeclaring:
     """One kind of entry that is a loosening by itself: the line the verdict prints for an added one, filled from the
-    entry's fields; where the settings hold a side's entries; the path and qualifier that tell an entry from another; the
+    entry's fields; where the settings hold the head's entries and which identities the base holds; the path and qualifier that tell an entry from another; the
     ruling that lets it in (None where a person has not written it); and whether git's renames move its path."""
 
     line: str
     entries: Callable[[GateSettings], Iterable[DeclaringEntry]]
+    held: Callable[[BaseSettings], Iterable[tuple[str, str]]]
     identity: Callable[[DeclaringEntry], tuple[str, str]]
     ruling: Callable[[DeclaringEntry], Ruling | None]
     carries_renames: bool = False
@@ -121,33 +123,39 @@ def _own_ruling(entry: GeneratedFile | ImplementedDocument) -> Ruling:
 
 
 _SELF_DECLARING = (
-    _SelfDeclaring("size leaves out generated file {path}", lambda settings: settings.generated_files, _path_alone, _own_ruling),
     _SelfDeclaring(
-        "spec citation leaves {path} to its implementers", lambda settings: settings.implemented_documents, _path_alone, _own_ruling
+        "size leaves out generated file {path}", lambda settings: settings.generated_files,
+        lambda settings: map(_path_alone, settings.generated_files), _path_alone, _own_ruling,
+    ),
+    _SelfDeclaring(
+        "spec citation leaves {path} to its implementers", lambda settings: settings.implemented_documents,
+        lambda settings: map(_path_alone, settings.implemented_documents), _path_alone, _own_ruling,
     ),
     _SelfDeclaring(
         "root allowance adds {entry} until {ends}", lambda settings: settings.root_allowances,
-        attrgetter("identity"), attrgetter("ruling"), carries_renames=True,
+        lambda settings: map(attrgetter("identity"), settings.root_allowances), attrgetter("identity"), attrgetter("ruling"),
+        carries_renames=True,
     ),
     _SelfDeclaring(
         "layout allowance adds {path} for {rule} until {ends}", lambda settings: settings.layout_allowances,
-        attrgetter("identity"), attrgetter("ruling"), carries_renames=True,
+        lambda settings: map(attrgetter("identity"), settings.layout_allowances), attrgetter("identity"), attrgetter("ruling"),
+        carries_renames=True,
     ),
 )
 
 
-def _added(kind: _SelfDeclaring, base: GateSettings, head: GateSettings, renames: Renames) -> list[DeclaringEntry]:
+def _added(kind: _SelfDeclaring, base: BaseSettings, head: GateSettings, renames: Renames) -> list[DeclaringEntry]:
     """The head's entries of one kind whose identity the base lacks; where the kind carries renames, a base entry whose
     path git renamed also holds the new path unless the head still declares the old one."""
     entries = list(kind.entries(head))
-    held = {kind.identity(entry) for entry in kind.entries(base)}
+    held = set(kind.held(base))
     if kind.carries_renames:
         kept = {kind.identity(entry)[0] for entry in entries}
         held |= {(moved, qualifier) for path, qualifier in held if (moved := moved_path(path, renames, kept)) is not None}
     return [entry for entry in entries if kind.identity(entry) not in held]
 
 
-def renames_can_change(base: Side | None, head: Side) -> bool:
+def renames_can_change(base: BaseSide | None, head: Side) -> bool:
     """Whether the head holds an entry of a rename-carrying table whose identity the base lacks, the one case where the
     renames can change the judgement of those tables: a rename only moves a base entry, so an entry the base holds
     stays held."""
@@ -156,7 +164,7 @@ def renames_can_change(base: Side | None, head: Side) -> bool:
     )
 
 
-def _self_declared_loosenings(base: GateSettings, head: GateSettings, renames: Renames) -> list[Loosening]:
+def _self_declared_loosenings(base: BaseSettings, head: GateSettings, renames: Renames) -> list[Loosening]:
     """Each head entry the base does not hold, of each self-declaring kind: declared by the ruling it carries, else
     undeclared with the fix that asks for one."""
     loosenings = []

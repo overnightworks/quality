@@ -36,6 +36,9 @@ LAYOUT_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
     'reason = "the deploy script reads it by this name"',
     'ends = "#123"',
 )
+# What the base is read for, so the only entry a refusal on the base can ask for.
+ROOT_ENTRY_EXAMPLE: config_entries.ExampleLines = (ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE[1])
+LAYOUT_ENTRY_EXAMPLE: config_entries.ExampleLines = (LAYOUT_ALLOWANCE_HEADING, LAYOUT_ALLOWANCE_EXAMPLE[1], LAYOUT_ALLOWANCE_EXAMPLE[2])
 PYTHON_ALLOWANCE_EXAMPLE: config_entries.ExampleLines = (
     PYTHON_ALLOWANCE_HEADING,
     'path = "speech/providers/qwen/pyproject.toml"',
@@ -182,19 +185,21 @@ def _read_root_allowance(entry: object, position: int) -> RootAllowance:
 def _read_root_entry(entry: object, position: int) -> RootEntry:
     """The identity of a root entry, which is all a base is read for."""
     if not isinstance(entry, dict) or not isinstance(entry.get("entry"), str):
-        raise config_entries.entry_refusal(ROOT_ALLOWANCE_HEADING, position, ROOT_ALLOWANCE_EXAMPLE)("an entry as text")
+        raise config_entries.entry_refusal(ROOT_ALLOWANCE_HEADING, position, ROOT_ENTRY_EXAMPLE)("an entry as text")
     return RootEntry(entry["entry"])
 
 
-def layout_allowances(layout: dict, side: ConfigSide) -> tuple[LayoutEntry, ...]:
-    if side is ConfigSide.BASE:
-        return config_entries.declared_entries(layout, "allow", LAYOUT_ALLOWANCE_HEADING, LAYOUT_ALLOWANCE_EXAMPLE, _read_layout_entry)
+def layout_allowances(layout: dict) -> tuple[LayoutAllowance, ...]:
     return config_entries.unique_entries(
         layout, "allow", LAYOUT_ALLOWANCE_HEADING, LAYOUT_ALLOWANCE_EXAMPLE, _read_layout_allowance,
         lambda allowance: allowance.identity,
         lambda allowance: f"declares path = {config_entries.toml_string(allowance.path)} for rule = "
         f"{config_entries.toml_string(str(allowance.rule))} twice; one declaration per rule and path",
     )
+
+
+def base_layout_entries(layout: dict) -> tuple[LayoutEntry, ...]:
+    return config_entries.declared_entries(layout, "allow", LAYOUT_ALLOWANCE_HEADING, LAYOUT_ENTRY_EXAMPLE, _read_layout_entry)
 
 
 def _read_python_allowance(entry: object, position: int) -> PythonAllowance:
@@ -225,7 +230,7 @@ def _read_layout_allowance(entry: object, position: int) -> LayoutAllowance:
 def _read_layout_entry(entry: object, position: int) -> LayoutEntry:
     """The identity of a layout entry, which is all a base is read for."""
     if not isinstance(entry, dict) or not all(isinstance(entry.get(key), str) for key in ("path", "rule")):
-        raise config_entries.entry_refusal(LAYOUT_ALLOWANCE_HEADING, position, LAYOUT_ALLOWANCE_EXAMPLE)("a path and a rule as text")
+        raise config_entries.entry_refusal(LAYOUT_ALLOWANCE_HEADING, position, LAYOUT_ENTRY_EXAMPLE)("a path and a rule as text")
     return LayoutEntry(entry["path"], entry["rule"])
 
 
@@ -274,10 +279,12 @@ def _one_per_field[Allowance](
     )
 
 
-def root_allowances(root: dict, side: ConfigSide) -> tuple[RootEntry, ...]:
-    if side is ConfigSide.BASE:
-        return config_entries.declared_entries(root, "allow", ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE, _read_root_entry)
+def root_allowances(root: dict) -> tuple[RootAllowance, ...]:
     return _one_per_field(ROOT_ALLOWANCE_HEADING, ROOT_ALLOWANCE_EXAMPLE, _read_root_allowance, "entry", "root entry")(root)
+
+
+def base_root_entries(root: dict) -> tuple[RootEntry, ...]:
+    return config_entries.declared_entries(root, "allow", ROOT_ALLOWANCE_HEADING, ROOT_ENTRY_EXAMPLE, _read_root_entry)
 
 
 python_allowances = _one_per_field(PYTHON_ALLOWANCE_HEADING, PYTHON_ALLOWANCE_EXAMPLE, _read_python_allowance, "path", "path")
