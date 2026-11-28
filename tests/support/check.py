@@ -21,6 +21,7 @@ from tests.support.baselines import DEBT_BASELINE_STATES
 from tests.support.door import FIX_WORDS, PinnedJudging, check_door, door_in
 from tests.support.git_repositories import make_repo
 from tests.support.merge import ONE_JOB
+from tests.support.workflow_scripts import WORKFLOW
 
 installed_ruff = cli.INSTALLED_RUFF
 
@@ -368,6 +369,19 @@ def rows_of(printed: str, finding: Finding) -> list[FindingRow]:
 def rule_findings(repo: Path, rule: Rule, named: Iterable[Area] = ()) -> list[Finding]:
     """The findings `rule` returns over `repo` (over the areas `named`, every one without) before the door prints them."""
     return [finding for verdict in check_result(repo, named=named).verdicts if verdict.rule is rule for finding in verdict.findings]
+
+
+def judge_workflow(rule: Rule, path: str = WORKFLOW) -> Callable[..., list[Finding]]:
+    """A function `(build_repo, text)` that gives the findings of `rule` over a repository tracking `text` as the workflow `path`."""
+
+    def judged(build_repo, text: str, name: str = path) -> list[Finding]:
+        return rule_findings(build_repo({name: text}), rule)
+
+    return judged
+
+
+def event_line_fact(findings: Iterable[Finding]) -> list[tuple[FindingEvent, int | None, str]]:
+    return [(finding.event, finding.line, finding.fact) for finding in findings]
 
 
 def fix_label_and_lines(finding: Finding) -> tuple[str, tuple[str, ...]]:
