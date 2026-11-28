@@ -328,6 +328,22 @@ def test_a_download_cut_at_the_deadline_names_the_failure_before_it(scene, drive
     assert (zip_url in err, "no answer in time" in err, "connection refused" in err) == (True, True, True)
 
 
+def test_a_failure_that_arrives_as_the_deadline_passes_is_named_as_it_is(scene, drive):
+    """SONAR-115: an attempt that fails for its own reason, not by the cut, keeps that reason in the line"""
+    zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
+
+    def refused_as_the_deadline_passes(url, headers, deadline, timeout=15):
+        scene.clock.advance(sonar_scanner.COMMAND_DEADLINE_SECONDS)
+        raise OSError("connection refused")
+
+    scene.fetch = refused_as_the_deadline_passes
+    code, out, err = drive()
+    assert (code, out) == (2, "")
+    assert (f"could not download {zip_url}: connection refused" in err, "no answer in time" in err, RERUN_ADVICE in err) == (
+        True, False, True,
+    )
+
+
 def test_a_download_that_fails_once_is_retried_and_installs(scene, drive):
     """SONAR-115: a failed attempt is retried while the deadline has time left"""
     zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
