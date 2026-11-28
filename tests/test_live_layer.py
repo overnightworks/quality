@@ -5,12 +5,12 @@ from quality.report import FindingEvent
 from quality.rules import Rule
 from tests.support.check import check_output as run
 from tests.support.check import check_result, refusals, rule_findings
+from tests.support.workflow_scripts import WORKFLOW, block_run
 
 pytestmark = pytest.mark.integration
 
 RULE = Rule.LIVE_LAYER
 RUNS_LIVE, INVALID = FindingEvent.RUNS_LIVE, FindingEvent.INVALID
-WORKFLOW = ".github/workflows/w.yml"
 LIVE_TEST = "tests/e2e/live/test_sign_in.py"
 LIVE = {LIVE_TEST: ""}
 SCRIPT_LINE = 10
@@ -20,15 +20,9 @@ FIX = 'add -m "not live", or "and not live" to its -m expression'
 MARKER = "# live-layer: the journeys run on the operator's machine"
 
 
-def workflow(*lines: str, trigger: str = "push") -> str:
-    """One step whose `run: |` is line 9 and whose script starts on line 10."""
-    head = f"on: {trigger}\npermissions: {{}}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n"
-    return head + "      - name: t\n        run: |\n" + "".join(f"          {line}\n" for line in lines)
-
-
 def judged(build_repo, call: str, extra: dict[str, str] | None = None):
     """The findings of live-layer over a workflow holding the call plus extra files."""
-    return rule_findings(build_repo({**LIVE, WORKFLOW: workflow(*call.split("\n")), **(extra or {})}), RULE)
+    return rule_findings(build_repo({**LIVE, WORKFLOW: block_run(*call.split("\n")), **(extra or {})}), RULE)
 
 
 CLEAN_CALLS = [
@@ -111,14 +105,14 @@ def test_a_pytest_call_built_at_run_time_is_invalid(build_repo):
 
 def test_no_marker_clears_a_finding(build_repo):
     """LIVE-7: no comment switches the rule off."""
-    repo = build_repo({**LIVE, WORKFLOW: workflow(MARKER, "pytest -n auto")})
+    repo = build_repo({**LIVE, WORKFLOW: block_run(MARKER, "pytest -n auto")})
     assert [finding.event for finding in rule_findings(repo, RULE)] == [RUNS_LIVE]
 
 
 @pytest.mark.parametrize("trigger", ["push", "{schedule: [{cron: '0 3 * * *'}]}", "pull_request", "workflow_dispatch"])
 def test_a_workflow_is_judged_whatever_triggers_it(build_repo, trigger):
     """LIVE-2: a push, scheduled or manual run is CI too."""
-    repo = build_repo({**LIVE, WORKFLOW: workflow("pytest -n auto", trigger=trigger)})
+    repo = build_repo({**LIVE, WORKFLOW: block_run("pytest -n auto", on=trigger)})
     assert [finding.event for finding in rule_findings(repo, RULE)] == [RUNS_LIVE]
 
 
@@ -130,7 +124,7 @@ def test_every_pytest_call_of_a_script_is_judged_on_its_own(build_repo):
 
 def test_the_extent_is_the_number_of_workflows_read(build_repo):
     """LIVE-2: the rule's extent counts workflows."""
-    repo = build_repo({**LIVE, WORKFLOW: workflow("pytest -m 'not live'"), ".github/workflows/x.yml": workflow("echo", trigger="{schedule: [{cron: '0 3 * * *'}]}")})
+    repo = build_repo({**LIVE, WORKFLOW: block_run("pytest -m 'not live'"), ".github/workflows/x.yml": block_run("echo", on="{schedule: [{cron: '0 3 * * *'}]}")})
     (verdict,) = (verdict for verdict in check_result(repo).verdicts if verdict.rule is RULE)
     assert (verdict.findings, verdict.extent) == ((), 2)
 
@@ -147,7 +141,7 @@ def test_the_extent_is_the_number_of_workflows_read(build_repo):
 )
 def test_a_repository_without_a_live_layer_is_clean_at_extent_zero_and_reads_no_workflow(build_repo, files):
     """LIVE-1: no tracked path under tests/e2e/live/ means no live layer; a workflow no -m guards is not read."""
-    repo = build_repo({**files, WORKFLOW: workflow("pytest -n auto")})
+    repo = build_repo({**files, WORKFLOW: block_run("pytest -n auto")})
     (verdict,) = (verdict for verdict in check_result(repo).verdicts if verdict.rule is RULE)
     assert (verdict.findings, verdict.extent) == ((), 0)
 
@@ -167,7 +161,7 @@ def test_a_workflow_the_rule_would_read_is_not_read_without_a_live_layer(build_r
 )
 def test_a_tracked_path_under_a_live_folder_makes_a_live_layer(build_repo, files):
     """LIVE-1: the root's tests/ and a judged project's tests/ each hold the live layer."""
-    repo = build_repo({**files, WORKFLOW: workflow("pytest -n auto")})
+    repo = build_repo({**files, WORKFLOW: block_run("pytest -n auto")})
     assert [finding.event for finding in rule_findings(repo, RULE)] == [RUNS_LIVE]
 
 
@@ -178,7 +172,7 @@ def test_a_workflow_the_rule_cannot_read_refuses_it_naming_the_file(build_repo):
 
 def test_a_finding_is_exit_one(build_repo, capsys):
     """LIVE-4: the door fails on a live call."""
-    assert run(capsys, build_repo({**LIVE, WORKFLOW: workflow("pytest")}))[0] == 1
+    assert run(capsys, build_repo({**LIVE, WORKFLOW: block_run("pytest")}))[0] == 1
 
 
 @pytest.mark.parametrize("option", ['-k "not live"', "--deselect tests/e2e/live", "--ignore tests/e2e/live"])

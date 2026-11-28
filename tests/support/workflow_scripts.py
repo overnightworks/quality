@@ -15,9 +15,9 @@ def steps_of(on: str = "push") -> str:
     return f"on: {on}\npermissions: {{}}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    steps:\n"
 
 
-def block_run(*lines: str, on: str = "push") -> str:
-    """One step whose `run: |` is line 9 and whose script starts on line 10."""
-    return steps_of(on) + "      - name: t\n        run: |\n" + "".join(f"          {line}\n" for line in lines)
+def block_run(*lines: str, on: str = "push", style: str = "|") -> str:
+    """One step whose `run:` block, in the scalar `style`, is line 9 and whose script starts on line 10."""
+    return steps_of(on) + f"      - name: t\n        run: {style}\n" + "".join(f"          {line}\n" for line in lines)
 
 
 def quoted_run(line: str, on: str = "push") -> str:
