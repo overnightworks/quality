@@ -81,6 +81,12 @@ _TIGHTENING_HOLDS: Mapping[Tightening, Callable[[object, object], bool]] = Mappi
 STRUCK_FIELDS = ("layers", "containers", "source_modules", "forbidden_modules", "modules", "protected_modules")
 UNCOMPARED_FIELDS = frozenset({"ignore_imports", "broken_contract_guidance"})
 SESSION_OPTIONS = ("root_packages", "include_external_packages", "exclude_type_checking_imports")
+# The (before, after) of a session option that only adds imports to the graph, so every contract judges what it judged
+# before; every other change of an option loosens.
+IMPORTS_ONLY_ADDED: Mapping[str, tuple[bool, bool]] = MappingProxyType({
+    "include_external_packages": (False, True),
+    "exclude_type_checking_imports": (True, False),
+})
 GRIMP_WARNING_PREFIX = "Warning: "
 PANIC_MODULE = "pyo3_runtime"
 MAX_ECHOED_SOURCE = 200
@@ -244,7 +250,8 @@ def contract_loosenings(base: SideContracts, head: SideContracts, tree: PullTree
         return []
     if head.config is None:
         return [f"import-linter config in {base.config} removed"]
-    lines = [f"import-linter changes {option}" for option in SESSION_OPTIONS if base.session[option] != head.session[option]]
+    lines = [session_loosening(option) for option in SESSION_OPTIONS
+             if _session_loosened(option, base.session[option], head.session[option])]
     gone = {} if tree is None else _gone(struck_modules(base, head), head, tree)
     for name, contract in base.contracts.items():
         kept = head.contracts.get(name)
@@ -253,6 +260,14 @@ def contract_loosenings(base: SideContracts, head: SideContracts, tree: PullTree
         elif tree is None or not _guards_nothing(contract, gone, head, tree):
             lines.append(f'import contract "{name}" removed')
     return sorted(lines + _adapter_id_loosenings(base, head))
+
+
+def session_loosening(option: str) -> str:
+    return f"import-linter changes {option}"
+
+
+def _session_loosened(option: str, before: object, after: object) -> bool:
+    return before != after and IMPORTS_ONLY_ADDED.get(option) != (before, after)
 
 
 def _adapter_id_loosenings(base: SideContracts, head: SideContracts) -> list[str]:
@@ -501,11 +516,15 @@ def _fields_of(contract: Contract, contract_type: str) -> ContractFields:
                           {name: getattr(contract, name) for name in names if name not in UNCOMPARED_FIELDS})
 
 
+def _include_external_packages(options: UserOptions) -> bool:
+    return bool(use_cases._get_include_external_packages(options))
+
+
 def _session_of(options: UserOptions) -> Mapping[str, object]:
     packages = options.session_options["root_packages"]
     return {
         "root_packages": frozenset([packages] if isinstance(packages, str) else packages),
-        "include_external_packages": use_cases._get_include_external_packages(options),
+        "include_external_packages": _include_external_packages(options),
         "exclude_type_checking_imports": use_cases._get_exclude_type_checking_imports(options),
     }
 
@@ -572,7 +591,7 @@ def _build_graph(repository: str, roots: Mapping[str, str], options: UserOptions
         with _grimp_reading(package_directories):
             return grimp.build_graph(
                 *roots,
-                include_external_packages=bool(use_cases._get_include_external_packages(options)),
+                include_external_packages=_include_external_packages(options),
                 exclude_type_checking_imports=use_cases._get_exclude_type_checking_imports(options),
                 cache_dir=None,
             )

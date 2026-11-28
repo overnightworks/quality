@@ -242,6 +242,20 @@ def test_a_job_limit_table_adopted_equal_lowered_or_dropped_loosens_nothing(base
 
 
 @pytest.mark.parametrize(
+    ("option", "before", "after", "expected"),
+    [
+        pytest.param("include_external_packages", "false", "true", [], id="an option that only adds imports is no loosening"),
+        pytest.param("include_external_packages", "true", "false",
+                     ["    ! import-linter changes include_external_packages"], id="the opposite direction stays a loosening"),
+    ],
+)
+def test_the_doors_read_of_a_session_option_agrees_with_its_direction(option, before, after, expected):
+    """LOOSE-12, LOOSE-37."""
+    imports = tuple(contracts_ini({"guarded": FORBIDDEN}, **{option: value}) for value in (before, after))
+    assert printed(judged(CHECKS, CHECKS, ("", ""), imports)) == expected
+
+
+@pytest.mark.parametrize(
     ("baselines", "expected"),
     [
         pytest.param(
