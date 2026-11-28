@@ -1,8 +1,0 @@
-claim_id = "3286afa4d7334cd7824b14f7a99dcbc0"
-agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
-role = "builder"
-base = "eccf1499732cf0faa929fab6e3676270bc49e72f"
-branch = "claude/issue-1120-shared-script-rule-tests"
-scope = ["tests"]
-opened_commit = "2e37bc66c8f84820e40ef8ab8b8314991aa49459"
-whole_reason = "One test-only refactor: shared builders move into tests/support/ and the shared script-rule cases into one module, which touches every module that copied them."
