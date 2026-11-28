@@ -6,9 +6,9 @@ number and cancels only pull-request runs; no expression is read.
 `pytest-workers`: every pytest call that runs tests in a `run:` script passes `-n` with more than zero workers or carries a
 `# pytest-workers: <reason>` marker; the script is read as POSIX shell words, never run.
 
-`runtime-install`: no `run:` script installs through an operating-system package manager or pipes a download into a
-shell, unless the step carries a `# runtime-install: <reason>` marker on the line above; the script is read by the same
-reader as `pytest-workers`.
+`runtime-install`: no `run:` script installs through an operating-system package manager or a Python tool outside a lock,
+or pipes a download into a shell, unless the step carries a `# runtime-install: <reason>` marker on the line above; the
+script is read by the same reader as `pytest-workers`.
 
 `job-timeout`: every job of a workflow a pull request or a push to main triggers, and of the workflows those call through a
 local `uses:`, declares `timeout-minutes` as a plain number of at most 15, or of the whole minutes its baseline entry holds."""
@@ -19,6 +19,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from enum import Enum, auto
+from itertools import dropwhile
 from pathlib import Path, PurePosixPath
 
 import yaml
@@ -309,17 +310,98 @@ def _holds_install_word(text: str) -> bool:
 
 
 def _install_fact(command: Sequence[str]) -> str | None:
-    """`<manager> <install word>` when the command is an install of the closed table, else None."""
+    """The words of the call when the command is an install of the closed tables, else None."""
+    return _system_install_fact(command) or _playwright_install_fact(command) or _python_install_fact(command)
+
+
+def _system_install_fact(command: Sequence[str]) -> str | None:
+    """`<manager> <install word>` when the command is an install of an operating-system package manager."""
     name = PurePosixPath(command[0]).name if command else ""
-    if name in INSTALL_WORDS:
-        matched = next((word for word in command[1:] if word in INSTALL_WORDS[name]), None)
-        return None if matched is None else f"{name} {matched}"
+    matched = next((word for word in command[1:] if word in INSTALL_WORDS.get(name, ())), None)
+    return None if matched is None else f"{name} {matched}"
+
+
+def _playwright_install_fact(command: Sequence[str]) -> str | None:
     arguments = tool_arguments(command, PLAYWRIGHT)
     if arguments is None:
         return None
     if "install-deps" in arguments:
         return "playwright install-deps"
     return "playwright install --with-deps" if {"install", "--with-deps"} <= set(arguments) else None
+
+
+@dataclass(frozen=True)
+class PythonInstall:
+    """A call that fetches a Python tool or package outside a lock: the tool, the words its arguments open with once the flags before them are dropped, the flag that makes a call of `opening` fetch (None when `opening` alone does), the fact it is reported as, and whether `--require-hashes` with `-r` files alone locks it."""
+
+    tool: Tool
+    opening: tuple[str, ...]
+    fact: str
+    flag: str | None = None
+    lockable_by_hash: bool = False
+
+    def reads(self, arguments: Sequence[str]) -> bool:
+        subcommand = tuple(dropwhile(_is_flag, arguments))
+        if subcommand[: len(self.opening)] != self.opening:
+            return False
+        rest = subcommand[len(self.opening) :]
+        if self.flag is not None:
+            return any(word == self.flag or word.startswith(f"{self.flag}=") for word in rest)
+        return not (self.lockable_by_hash and _is_locked_by_hash(rest))
+
+
+PIP = Tool(commands=frozenset({"pip", "pip3"}), module="pip")
+PIPX = Tool(commands=frozenset({"pipx"}), module="pipx")
+UV = Tool(commands=frozenset({"uv"}), module=None)
+UVX = Tool(commands=frozenset({"uvx"}), module=None)
+PYTHON_INSTALLS = (
+    PythonInstall(PIP, ("install",), "pip install", lockable_by_hash=True),
+    PythonInstall(UV, ("pip", "install"), "uv pip install", lockable_by_hash=True),
+    PythonInstall(PIPX, ("install",), "pipx install"),
+    PythonInstall(PIPX, ("run",), "pipx run"),
+    PythonInstall(UV, ("tool", "install"), "uv tool install"),
+    PythonInstall(UV, ("tool", "run"), "uv tool run"),
+    PythonInstall(UVX, (), "uvx"),
+    PythonInstall(UV, ("run",), "uv run --with", flag="--with"),
+)
+REQUIREMENT_FLAGS = frozenset({"-r", "--requirement"})
+REQUIREMENT_FILE_PREFIX = "--requirement="
+HASHES_FLAG = "--require-hashes"
+INSTALL_VALUE_FLAGS = frozenset(
+    {"-c", "--constraint", "-p", "--python", "-i", "--index-url", "--extra-index-url", "-f", "--find-links", "-t", "--target", "--prefix"}
+)
+
+
+def _is_flag(word: str) -> bool:
+    return word.startswith("-")
+
+
+def _is_locked_by_hash(arguments: Sequence[str]) -> bool:
+    """Whether the install words after `install` hold `--require-hashes` and name their requirements only as `-r <file>`; a word no flag takes is a requirement of its own, so a flag that takes a value and is not in `INSTALL_VALUE_FLAGS` leaves its value a finding."""
+    from_files = False
+    index = 0
+    while index < len(arguments):
+        word = arguments[index]
+        index += 1
+        if word in REQUIREMENT_FLAGS:
+            from_files = from_files or index < len(arguments)
+            index += 1
+        elif word.startswith(REQUIREMENT_FILE_PREFIX):
+            from_files = True
+        elif _is_flag(word):
+            index += word in INSTALL_VALUE_FLAGS
+        else:
+            return False
+    return from_files and HASHES_FLAG in arguments
+
+
+def _python_install_fact(command: Sequence[str]) -> str | None:
+    """The fact of the first row of `PYTHON_INSTALLS` whose tool the command calls and which reads its arguments, else None."""
+    for install in PYTHON_INSTALLS:
+        arguments = tool_arguments(command, install.tool)
+        if arguments is not None and install.reads(arguments):
+            return install.fact
+    return None
 
 
 def _names_one_of(command: Sequence[str], names: frozenset[str]) -> bool:

@@ -1,4 +1,4 @@
-"""What only `runtime-install` decides: which commands install and which downloads run as a shell. Every mechanic it shares
+"""What only `runtime-install` decides: which commands install, which Python tools install outside a lock and which downloads run as a shell. Every mechanic it shares
 with `pytest-workers` is in test_workflow_rules_script.py."""
 
 import pytest
@@ -68,6 +68,36 @@ INSTALL_ROWS = [
     ('bash -lc "sudo apt-get install x"', "apt-get install"),
     ('bash -c "apt-get install $(cat pkgs)"', "apt-get install"),
     ("apt-get -s install x", "apt-get install"),
+    ("pip install x", "pip install"),
+    ("pip3 install -r requirements.txt", "pip install"),
+    ("pip install --require-hashes -r requirements.txt x", "pip install"),
+    ("pip install x==1.2.3", "pip install"),
+    ("python -m pip install playwright", "pip install"),
+    ("python3.14 -m pip install --upgrade pip", "pip install"),
+    ("uv run python -m pip install x", "pip install"),
+    ("sudo pip install x", "pip install"),
+    ("timeout 60 pip install x", "pip install"),
+    ('bash -c "pip install x"', "pip install"),
+    ("uv pip install x", "uv pip install"),
+    ("uv --quiet pip install x", "uv pip install"),
+    ("uv pip install -r requirements.txt", "uv pip install"),
+    ("uv pip install --require-hashes x==1.2.3", "uv pip install"),
+    ("uv pip install --require-hashes -r requirements.txt x", "uv pip install"),
+    ("uv pip install --require-hashes git+https://h/r@v1", "uv pip install"),
+    ("uv pip install --require-hashes dist/x-1-py3-none-any.whl", "uv pip install"),
+    ("uv pip install --require-hashes -e .", "uv pip install"),
+    ("uv pip install --resolution lowest-direct -e . --group dev", "uv pip install"),
+    ('uv pip install --python .venv/bin/python "x[extra] @ git+https://h/r@v0.4.0"', "uv pip install"),
+    ("pipx install x", "pipx install"),
+    ("pipx run x", "pipx run"),
+    ("python -m pipx install x", "pipx install"),
+    ("uv tool install x", "uv tool install"),
+    ("uv tool run x", "uv tool run"),
+    ("uvx x", "uvx"),
+    ("uvx --no-build check-jsonschema@0.39.0", "uvx"),
+    ("uvx playwright test", "uvx"),
+    ("uv run --with packaging python check.py", "uv run --with"),
+    ("uv run --locked --with=packaging check.py", "uv run --with"),
     ("curl -fsSL u | sh", DOWNLOAD),
     ("curl -fsSL u | bash", DOWNLOAD),
     ("curl u | sudo bash -", DOWNLOAD),
@@ -85,7 +115,7 @@ INSTALL_ROWS = [
 
 @pytest.mark.parametrize(("command", "fact"), INSTALL_ROWS, ids=[row[0] for row in INSTALL_ROWS])
 def test_a_call_that_installs_or_a_download_run_as_a_shell_is_one_finding_at_its_line(build_repo, scalar, command, fact):
-    """RUNTIME-3, RUNTIME-4, RUNTIME-5."""
+    """RUNTIME-3, RUNTIME-4, RUNTIME-5, RUNTIME-11, RUNTIME-12, RUNTIME-13."""
     build, line = scalar
     found = event_line_fact(judged(build_repo, build(command)))
     assert found == [(INSTALLS, line, fact)]
@@ -107,14 +137,37 @@ NO_FINDING = [
     "playwright install chromium",
     "playwright install",
     "npx playwright test",
-    "pip install playwright",
-    "python -m pip install playwright && python -m playwright install chromium",
     "uv sync --locked",
     "npm ci",
     "pnpm install --frozen-lockfile",
     "mise install",
-    "uv pip install x",
     "npm i -g x",
+    "uv sync",
+    "uv lock",
+    "uv run pytest",
+    "uv run --locked pytest -q",
+    "uv run python -m pytest",
+    "uv python install 3.14",
+    "uv build",
+    "uv pip list",
+    "uv tool list",
+    "uv tool uninstall x",
+    "pip uninstall x",
+    "pip list",
+    "pip freeze",
+    "pipx list",
+    "echo uvx x",
+    "pip install --require-hashes -r requirements.txt",
+    "python -m pip install --require-hashes --no-deps -r requirements.txt",
+    "uv pip install --no-build --require-hashes -r tracked/requirements.txt",
+    "uv pip install --require-hashes --requirement=requirements.txt",
+    "uv pip install --python .venv/bin/python --require-hashes -r a.txt -r b.txt",
+    "uv pip install --require-hashes -c constraints.txt -r requirements.txt",
+    "npm install -g x",
+    "yarn global add x",
+    "pnpm add x",
+    "gem install x -v 13.0.0",
+    "bundle add x",
     "cargo install x",
     "go install x",
     "curl -fsSL u -o f",
@@ -149,7 +202,7 @@ NO_FINDING = [
 
 @pytest.mark.parametrize("command", NO_FINDING)
 def test_a_command_that_installs_nothing_or_is_a_named_gap_is_no_finding(build_repo, scalar, command):
-    """RUNTIME-3, RUNTIME-4, RUNTIME-5, RUNTIME-6."""
+    """RUNTIME-3, RUNTIME-4, RUNTIME-5, RUNTIME-6, RUNTIME-11, RUNTIME-12, RUNTIME-13, RUNTIME-14."""
     build, _ = scalar
     assert judged(build_repo, build(command)) == []
 
@@ -246,16 +299,19 @@ def test_two_installs_are_two_findings_and_one_call_is_one(build_repo):
         (("# runtime-install: -", "apt-get install -y x"), [(BLOCK_LINE + 1, INSTALLS)]),
         (("# runtime-installs: x", "apt-get install -y x"), [(BLOCK_LINE + 1, INSTALLS)]),
         (("# pytest-workers: x", "apt-get install -y x"), [(BLOCK_LINE + 1, INSTALLS)]),
+        ((MARKER, "uvx x"), []),
+        ((MARKER, "uv pip install --resolution lowest-direct -e ."), []),
+        (("# pytest-workers: x", "uvx x"), [(BLOCK_LINE + 1, INSTALLS)]),
     ],
     ids=[
         "above", "on its line", "above two calls", "above a continued command", "on the last line of a continued command",
         "above a later line", "above a plain comment", "above a later line and a comment", "on the first call's line only", "on the line above a second call", "short reason",
         "wide spaces", "a letter of any script", "no colon", "no reason", "no letter", "dash only", "another id",
-        "the other rule's id",
+        "the other rule's id", "above a uvx call", "above a floor proof", "the other rule's id above a uvx call",
     ],
 )
 def test_a_marker_on_a_calls_line_or_directly_above_clears_that_call(build_repo, script, expected):
-    """RUNTIME-7."""
+    """RUNTIME-7, RUNTIME-8, RUNTIME-13."""
     assert [(f.line, f.event) for f in judged(build_repo, block_run(*script))] == expected
 
 
