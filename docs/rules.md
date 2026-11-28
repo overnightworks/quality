@@ -570,12 +570,13 @@ It applies these rules:
   of a forbidden module, the `ignore_imports` of the contract (the raw graph is asked), `allow_indirect_imports = true`
   (a core module that reaches an adapter is in the reach set, so its own test is red for importing its subject), and a
   test-side fake, which is caught only through a forbidden module it imports.
-- `integration-marker`: a test module outside the core that reaches an adapter carries the `integration` mark in its
-  module `pytestmark`.
+- `integration-marker`: a test module outside the core and outside `tests/e2e/` that reaches an adapter carries the
+  `integration` mark in its module `pytestmark`.
   - INTEGRATION-1: It judges where `adapter-import` judges, from the same contract read, and without the contract that
     carries the id it judges nothing and reads no file.
-  - INTEGRATION-2: It judges the test modules of ADAPTERIMPORT-4 and 8 that are no core test (ADAPTERIMPORT-5 to 7); a
-    core test belongs to `adapter-import` alone.
+  - INTEGRATION-2: It judges the test modules (ADAPTERIMPORT-4) that are no core test (ADAPTERIMPORT-5 to 7) and those
+    under `tests/scripts/` and `tests/workflows/`, its non-core tests; `tests/e2e/`, its own layer, and every
+    `conftest.py` are not judged.
   - INTEGRATION-3: A module is adapter-bound when one of its own imports, or one in a support module it imports, is red
     as ADAPTERIMPORT-9 to 15 say, through the one reach, so a support module that imports an adapter binds every
     non-core test that uses it.
@@ -610,8 +611,9 @@ It applies these rules:
 
   Named gaps, waiting for usage evidence: fixtures a `conftest.py` injects, string imports, `allow_indirect_imports`
   (each red or outside what a static read sees); a `conftest.py` hook or plugin that adds or removes marks or builds
-  items of its own; tests in a file pytest collects only through a project's `python_files`; and a write to the
-  module's marks that no second binding shows (a star import after the binding that brings a `pytestmark`,
+  items of its own; tests in a file pytest collects only through a project's `python_files`; an adapter that only the
+  script under test reaches, which is no module of the import graph, or that a process the test starts reaches; and a
+  write to the module's marks that no second binding shows (a star import after the binding that brings a `pytestmark`,
   `globals()`, `global pytestmark` in a nested body, a write through the value), which reads clean while pytest runs
   the tests unmarked. Any other shape of the mark reads as unmarked, so the module is red.
 - `claude-md`:

@@ -221,22 +221,24 @@ def measure_adapter_imports(
     the module's `pytestmark` holds the `imports_adapter` mark its project registers; that exempts the module, which
     counts toward its directory. A mark on a module the rule would not report is an `unused` finding at its `pytestmark`
     line. One finding per other test module that reaches an adapter without the registered `integration` mark in its
-    `pytestmark`. Findings are sorted by path and line, the extents are the core tests and the other test modules judged.
-    `contents` holds the bytes of `candidates`."""
+    `pytestmark`, script and workflow tests among them, which `adapter-import` judges none of. Findings are sorted by path
+    and line, the extents are the core tests and the other test modules judged. `contents` holds the bytes of
+    `candidates`."""
     judgement = _Judgement(split, _reach(split, graph))
     imports = _Imports(layout.ImportTargets.support(modes), contents)
     projects = layout.test_project_files(modes)
     subjects = layout.test_subjects(modes, allowances)
     present = {path: subject for path, subject in subjects.items() if path in contents}
     core = {path for path, subject in present.items() if split.is_core_test(subject)}
+    outside_source = {path for path in layout.outside_source_tests(modes) if path in contents}
     findings: list[Finding] = []
     unmarked: list[Finding] = []
     counts: Counter[str] = Counter()
     refusals: dict[Rule, Unparsable] = {}
-    for path in sorted(present):
+    for path in sorted(present.keys() | outside_source):
         rule = Rule.ADAPTER_IMPORT if path in core else Rule.INTEGRATION_MARKER
         line = pytest_marks.imports_adapter_line(contents[path])
-        if path not in core:
+        if path not in core and path not in outside_source:
             findings.extend(_module_findings(path, line, []))
         try:
             reds = [(statement, found) for statement in imports.of(path) if (found := judgement.reds(statement, imports.of))]
@@ -249,7 +251,7 @@ def measure_adapter_imports(
             counts[adapter_directory(path)] += 1
         else:
             findings.extend(_module_findings(path, line, reds))
-    integration = RuleResult(_sorted(unmarked), len(present) - len(core), False)
+    integration = RuleResult(_sorted(unmarked), len(present) - len(core) + len(outside_source), False)
     return Measure(_sorted(findings), counts, len(core), integration, refusals)
 
 

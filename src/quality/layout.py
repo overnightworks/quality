@@ -49,7 +49,7 @@ SCRIPT_LANGUAGES = frozenset({ratchet.Language.TYPESCRIPT, ratchet.Language.JAVA
 SPEC_WORD = "spec"
 FRONTEND_WORD_BOUNDARY = re.compile(r"[-_]|(?<=[a-z0-9])(?=[A-Z])")
 PYTHON_WORD_BOUNDARY = re.compile(r"_")
-NOT_MIRRORED_FOLDERS = frozenset({SCRIPTS_DIRECTORY, WORKFLOWS_TESTS_DIRECTORY, END_TO_END_DIRECTORY})
+OUTSIDE_SOURCE_FOLDERS = frozenset({SCRIPTS_DIRECTORY, WORKFLOWS_TESTS_DIRECTORY})
 TEST_PREFIX = "test_"
 WRAPPED_NAME = re.compile(r"__(.+)__")
 
@@ -524,11 +524,17 @@ def test_subjects(modes: Mapping[str, str], allowances: Sequence[LayoutAllowance
     mirrors = {project.tests_directory: _ProjectMirror.of(project, tracked) for project in python_projects(modes) if project.packages}
     subjects: dict[str, str | None] = {}
     for file, tests, folders in _judged_paths(modes):
-        if not _is_test_module(file) or (folders and folders[0] in NOT_MIRRORED_FOLDERS):
+        if not _is_test_module(file) or (folders and (folders[0] in OUTSIDE_SOURCE_FOLDERS or folders[0] == END_TO_END_DIRECTORY)):
             continue
         mirror = mirrors.get(tests)
         subjects[str(file)] = None if mirror is None or str(file) in declared else mirror.subject(folders, file.stem.removeprefix(TEST_PREFIX))
     return subjects
+
+
+def outside_source_tests(modes: Mapping[str, str]) -> list[str]:
+    """The tracked `test_*.py` under the `scripts/` or `workflows/` of a Python project's `tests/`: tests whose subject
+    lies outside `src/`, so `test_subjects` names none."""
+    return [str(file) for file, _, folders in _judged_paths(modes) if _is_test_module(file) and folders and folders[0] in OUTSIDE_SOURCE_FOLDERS]
 
 
 class UnparsableTestModule(Exception):

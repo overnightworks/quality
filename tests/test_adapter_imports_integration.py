@@ -1,4 +1,4 @@
-"""The integration-marker rule: a test module outside the core that reaches an adapter carries the registered `integration` mark."""
+"""The integration-marker rule: a test module outside the core and outside `tests/e2e/` that reaches an adapter carries the registered `integration` mark."""
 
 import pytest
 
@@ -20,6 +20,8 @@ from tests.support.merge import ONE_JOB
 pytestmark = pytest.mark.integration
 
 NON_CORE = "tests/test_main.py"
+SCRIPT_TEST = "tests/scripts/test_tool.py"
+WORKFLOW_TEST = "tests/workflows/test_gate.py"
 SUPPORT = "tests/support/stores.py"
 REGISTERED = ("integration: reaches a real adapter",)
 FIX = "put pytest.mark.integration in the module's one direct pytestmark binding"
@@ -85,15 +87,35 @@ def test_a_config_without_the_contract_judges_nothing_and_reads_no_file(unmarked
         pytest.param(adapter_contract(source=("shop",)), "tests/adapters/test_db.py", True, id="a subject inside an adapter package"),
         pytest.param(adapter_contract(), CORE_TEST, False, id="a core test"),
         pytest.param(adapter_contract(source=("shop",)), "tests/api/test_db.py", False, id="a test whose folder mirrors no package"),
-        pytest.param(adapter_contract(), "tests/scripts/test_tool.py", False, id="a script test"),
-        pytest.param(adapter_contract(), "tests/workflows/test_gate.py", False, id="a workflow test"),
+        pytest.param(adapter_contract(), SCRIPT_TEST, True, id="a script test"),
+        pytest.param(adapter_contract(), WORKFLOW_TEST, True, id="a workflow test"),
         pytest.param(adapter_contract(), "tests/e2e/test_flow.py", False, id="an end-to-end test"),
         pytest.param(adapter_contract(), "tests/conftest.py", False, id="a conftest"),
+        pytest.param(adapter_contract(), "tests/scripts/conftest.py", False, id="a script folder's conftest"),
     ],
 )
-def test_the_rule_judges_the_test_modules_adapter_import_leaves_out(unmarked, contract, path, judged):
-    """INTEGRATION-2: a core test belongs to `adapter-import` alone; scripts, workflows, e2e tests and conftests are not judged."""
+def test_the_rule_judges_every_test_module_outside_the_core_but_end_to_end_tests_and_conftests(unmarked, contract, path, judged):
+    """INTEGRATION-2: a core test belongs to `adapter-import` alone; script and workflow tests are judged, e2e tests and conftests are not."""
     assert [finding.path for finding in unmarked({path: BOUND + TEST_A}, contract)] == ([path] if judged else [])
+
+
+@pytest.mark.parametrize("path", [pytest.param(SCRIPT_TEST, id="a script test"), pytest.param(WORKFLOW_TEST, id="a workflow test")])
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param(BOUND + MARK + TEST_A, id="a module marked integration is clean"),
+        pytest.param("import pytest\nimport shop.core.config\n\n\n" + TEST_A, id="a module that reaches no adapter is no finding"),
+    ],
+)
+def test_a_script_or_workflow_test_is_clean_when_marked_or_not_adapter_bound(unmarked, path, body):
+    """INTEGRATION-3, INTEGRATION-4, INTEGRATION-7: the outcomes of a non-core module hold in the folders INTEGRATION-2 adds."""
+    assert unmarked({path: body}) == []
+
+
+@pytest.mark.parametrize("path", [pytest.param(SCRIPT_TEST, id="a script test"), pytest.param(WORKFLOW_TEST, id="a workflow test")])
+def test_an_unmarked_script_or_workflow_test_is_an_unmarked_row_with_the_fix_of_every_other_module(unmarked, path):
+    """INTEGRATION-2, INTEGRATION-6: the finding words are those of any non-core module."""
+    assert read(unmarked({path: BOUND + TEST_A})) == [(f"{path}:1", UNMARKED, FIX)]
 
 
 def test_a_declared_test_module_without_a_subject_is_a_core_test_and_not_judged(unmarked):
@@ -227,6 +249,7 @@ def test_a_module_that_reaches_no_adapter_is_no_finding_marked_or_not(unmarked, 
     ("tests", "refused"),
     [
         pytest.param({NON_CORE: BROKEN}, {Rule.INTEGRATION_MARKER}, id="a non-core test"),
+        pytest.param({SCRIPT_TEST: BROKEN}, {Rule.INTEGRATION_MARKER}, id="a script test"),
         pytest.param({CORE_TEST: BROKEN}, {Rule.ADAPTER_IMPORT}, id="a core test"),
         pytest.param({CORE_TEST: "from tests.support import stores\n", SUPPORT: BROKEN}, {Rule.ADAPTER_IMPORT}, id="a support module only a core test imports"),
         pytest.param({NON_CORE: "from tests.support import stores\n", SUPPORT: BROKEN}, {Rule.INTEGRATION_MARKER}, id="a support module only a non-core test imports"),

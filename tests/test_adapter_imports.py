@@ -414,6 +414,14 @@ def test_a_marked_module_the_rule_would_not_report_is_unused_at_its_pytestmark_l
     assert (finding.location, finding.event, finding.fix) == (f"{path}:{line}", FindingEvent.UNUSED, "remove the imports_adapter mark")
 
 
+@pytest.mark.parametrize("path", [pytest.param("tests/scripts/test_tool.py", id="a script test"), pytest.param("tests/workflows/test_gate.py", id="a workflow test")])
+def test_a_script_or_workflow_test_with_the_adapter_mark_is_neither_unused_nor_reported(build_repo, path):
+    """ADAPTERIMPORT-8, ADAPTERIMPORT-25: `adapter-import` judges no module of these folders, an `imports_adapter` mark included."""
+    markers = (*REGISTERED, "integration: reaches a real adapter")
+    module = "import pytest\n\npytestmark = [pytest.mark.imports_adapter, pytest.mark.integration]\n" + ADAPTER_IMPORT
+    assert adapter_findings(build_repo(shop_with_adapters({path: module}, markers=markers))) == []
+
+
 COUNTS = [
     pytest.param({CORE_TEST: MARKED, "tests/core/test_config_stores.py": MARKED}, FEW_HELD,
                  [("tests/core", FindingEvent.GREW, "2 marked modules import an adapter · ceiling 1")], id="above the held count"),
