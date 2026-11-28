@@ -114,7 +114,7 @@ def test_only_the_run_of_a_step_is_read(build_repo, script_rule, judged):
     text = steps_of() + (
         f"      - name: {command}\n        if: contains(github.ref, '{command}')\n        env:\n          CMD: {command}\n"
         "        run: 'true'\n      - uses: a/b@0123456789012345678901234567890123456789\n        with:\n"
-        f"          command: {command}\n"
+        f"          command: {command}\n          run: {command}\n"
     )
     assert judged(build_repo, text) == []
 
