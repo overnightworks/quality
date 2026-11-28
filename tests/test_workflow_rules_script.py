@@ -147,6 +147,11 @@ def repository(build_repo, script_rule: ScriptRule, files: Mapping[str, str]) ->
     return build_repo({**script_rule.files, **files})
 
 
+def checked(repo: Path, script_rule: ScriptRule):
+    """The rule's check over the files it needs and the workflow."""
+    return script_rule.check(repo, [*script_rule.files, WORKFLOW])
+
+
 def judging(script_rule: ScriptRule) -> Callable[..., list[Finding]]:
     """A function `(build_repo, text)` that gives the findings of the rule over a repository tracking `text` as the workflow."""
 
@@ -237,7 +242,7 @@ def test_a_workflow_the_rule_cannot_read_is_cannot_judge_naming_the_file(build_r
     """PYTEST-9, RUNTIME-9, LIVE-6, NODETEST-4."""
     repo = repository(build_repo, script_rule, {WORKFLOW: build(script_rule.flagged)})
     with pytest.raises(CannotJudge, match=WORKFLOW):
-        script_rule.check(repo, [*script_rule.files, WORKFLOW])
+        checked(repo, script_rule)
 
 
 def test_a_workflow_the_rule_cannot_read_is_exit_two_while_other_rules_still_judge(build_repo, capsys, script_rule):
@@ -252,11 +257,11 @@ def test_a_workflow_the_rule_cannot_read_is_exit_two_while_other_rules_still_jud
 
 @pytest.mark.parametrize("refuse", unreadable(WORKFLOW, block_run("true")))
 def test_a_workflow_the_reader_refuses_is_cannot_judge_naming_the_file(build_repo, elsewhere, script_rule, refuse):
-    """PYTEST-9, RUNTIME-9."""
+    """PYTEST-9, RUNTIME-9, LIVE-6, NODETEST-4."""
     repo = repository(build_repo, script_rule, {WORKFLOW: block_run("true")})
     refuse(repo, elsewhere)
     with pytest.raises(CannotJudge, match=WORKFLOW):
-        script_rule.check(repo, [*script_rule.files, WORKFLOW])
+        checked(repo, script_rule)
 
 
 def test_a_tracked_workflow_gone_from_the_tree_is_skipped(build_repo, script_rule):

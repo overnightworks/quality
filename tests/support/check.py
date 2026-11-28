@@ -371,11 +371,11 @@ def rule_findings(repo: Path, rule: Rule, named: Iterable[Area] = ()) -> list[Fi
     return [finding for verdict in check_result(repo, named=named).verdicts if verdict.rule is rule for finding in verdict.findings]
 
 
-def judge_workflow(rule: Rule, path: str = WORKFLOW) -> Callable[..., list[Finding]]:
-    """A function `(build_repo, text)` that gives the findings of `rule` over a repository tracking `text` as the workflow `path`."""
+def judge_workflow(rule: Rule) -> Callable[..., list[Finding]]:
+    """A function `(build_repo, text)` that gives the findings of `rule` over a repository tracking `text` as the workflow."""
 
-    def judged(build_repo, text: str, name: str = path) -> list[Finding]:
-        return rule_findings(build_repo({name: text}), rule)
+    def judged(build_repo, text: str) -> list[Finding]:
+        return rule_findings(build_repo({WORKFLOW: text}), rule)
 
     return judged
 
