@@ -311,7 +311,7 @@ def test_two_installs_are_two_findings_and_one_call_is_one(build_repo):
     ],
 )
 def test_a_marker_on_a_calls_line_or_directly_above_clears_that_call(build_repo, script, expected):
-    """RUNTIME-7, RUNTIME-8, RUNTIME-13."""
+    """RUNTIME-7, RUNTIME-8, RUNTIME-13, RUNTIME-15, RUNTIME-16."""
     assert [(f.line, f.event) for f in judged(build_repo, block_run(*script))] == expected
 
 
@@ -400,7 +400,7 @@ def test_a_flow_step_has_no_step_form(build_repo, above, steps, line):
 
 
 def test_the_ids_of_the_two_markers_are_not_interchangeable(build_repo):
-    """RUNTIME-7: a `runtime-install` marker clears no pytest call, and a `pytest-workers` marker above a step clears no install."""
+    """RUNTIME-7, RUNTIME-16: a `runtime-install` marker clears no pytest call, and a `pytest-workers` marker above a step clears no install."""
     repo = build_repo({WORKFLOW: block_run("# runtime-install: reason", "pytest")})
     assert [finding.event for finding in rule_findings(repo, Rule.PYTEST_WORKERS)] == [FindingEvent.SERIAL]
     above_step = steps_of() + "      # pytest-workers: reason\n      - name: t\n        run: |\n          pytest\n"

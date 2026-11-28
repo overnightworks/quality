@@ -1679,13 +1679,8 @@ at its first bump to that release.
   to the step form alone, so that step takes a marker on its own line only, while a marker on the `-` line of a step
   whose `run:` stands on the next line (`- # runtime-install: reason`) clears that call; a marker between a step's
   `name:` and its `run: |` clears nothing. A marker that clears nothing is not reported.
-- RUNTIME-8: A
-  `pytest-workers` marker clears no `runtime-install` finding and a `runtime-install` marker clears no `pytest-workers`
-  finding: each rule reads only its own id, and `pytest-workers` keeps its per-line placement. The marker is for a step
-  that proves an install on a fresh system, and for nothing else: the reader cannot see a step's purpose, so the review of the dependent's diff judges it, and any other use is a deviation from
-  the fleet standard, which only the operator rules. The findings stand in the `workflows` area, their fix `take the
-  tool from the lockfile, the runner image or an image pinned by digest, or explain on the line above: #
-  runtime-install: <reason>`.
+- RUNTIME-8: The marker is for a step that proves an install on a fresh system, and for nothing else. A floor proof, an install
+  resolved to the lowest allowed versions, is an install proof.
 - RUNTIME-9: A workflow whose YAML or file cannot be read, a `run:` that is no string, a
   `jobs` or a job that is no mapping, and an alias or a merge key where it can hide `jobs`, a job, `steps`, a step or a
   `run:` are exit `2` naming the file; a step with no `run:` is skipped and a tracked name gone from the tree is skipped.
@@ -1693,16 +1688,21 @@ at its first bump to that release.
   `workflows` keeps its words, the rule's extent is the count of workflows it read.
 - RUNTIME-11: `runtime-install` also judges a Python tool install outside a lock: `pip` and `pip3` (also behind `python -m`), `uv pip` (`install`), `pipx` (`install`, `run`), `uv tool` (`install`, `run`), `uvx`, and `uv run` with `--with`.
 - RUNTIME-12: A `pip` or `uv pip` install with `--require-hashes` whose requirements all come from `-r <file>` is locked and no finding; a pinned version, a git reference, a wheel path and `-e .` are `installs`.
-- RUNTIME-13: The fact is the call's words (`uv pip install`, `uvx`, `uv run --with`); fix and marker are those of RUNTIME-7 and RUNTIME-8; `uv sync`, `uv lock` and `uv run` without `--with` are no install.
+- RUNTIME-13: The fact is the call's words (`uv pip install`, `uvx`, `uv run --with`); fix and marker are those of RUNTIME-7 and RUNTIME-17; `uv sync`, `uv lock` and `uv run` without `--with` are no install.
 - RUNTIME-14: `npm`, `yarn`, `pnpm`, `gem` and `bundle` installs by name stay with zizmor's `adhoc-packages` audit (WORKFLOW-1): `runtime-install` reports none of them, and its marker clears no zizmor finding.
-- RUNTIME-15: A floor proof, an install resolved to the lowest allowed versions, is an install proof in the sense of RUNTIME-8.
+- RUNTIME-15: The reader cannot see a step's purpose, so the review of the dependent's diff judges the marker; any other use is a
+  deviation from the fleet standard, which only the operator rules.
+- RUNTIME-16: A `pytest-workers` marker clears no `runtime-install` finding and a `runtime-install` marker clears no
+  `pytest-workers` finding: each rule reads only its own id, and `pytest-workers` keeps its per-line placement.
+- RUNTIME-17: The findings stand in the `workflows` area, their fix `take the tool from the lockfile, the runner image or an image
+  pinned by digest, or explain on the line above: # runtime-install: <reason>`.
 
 No configuration
 switches the rule off. It first ships in v0.12.0, so a dependent meets it at its first bump to that release.
 quality's own checkout needs no workflow edit. The Python rows (RUNTIME-11 to RUNTIME-13) first ship in the first release
 after v0.28.0, so a dependent meets them at its first bump past that release. They leave these gaps: `npx`, `bunx`, `pnpm
 dlx`, `cargo install`, `go install`, a `uv` flag that takes a value before its subcommand, `uv lock` before `uv sync
---frozen`, and `uv build`; zizmor reads no npm or gem install behind `sudo`, `timeout` or `-c`, and no `pnpm install x`.
+--frozen`, `uv build`, and a Python install on a line the reader cannot read to its end; zizmor reads no npm or gem install behind `sudo`, `timeout` or `-c`, and no `pnpm install x`.
 
 - LIVE-1: The `live-layer` rule keeps the live layer out of CI. A repository that tracks a path under a `tests/e2e/live/` folder,
   at its root or in a judged project's `tests/`, has a live layer; without one the rule is clean with extent `0` and reads

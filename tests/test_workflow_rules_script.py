@@ -193,7 +193,7 @@ def test_a_composite_action_is_not_read(build_repo, script_rule):
 
 
 def test_every_job_and_step_is_read_and_each_finding_names_its_file(build_repo, script_rule):
-    """PYTEST-1, PYTEST-8, RUNTIME-1, RUNTIME-8."""
+    """PYTEST-1, PYTEST-8, RUNTIME-1, RUNTIME-17."""
     (second, second_event, second_fact), (third, third_event, third_fact) = script_rule.second, script_rule.third
     text = steps_of() + f"      - run: 'true'\n      - run: {script_rule.flagged}\n  k:\n    runs-on: ubuntu-latest\n    steps:\n      - run: {second}\n"
     repo = repository(build_repo, script_rule, {WORKFLOW: text, OTHER_WORKFLOW: block_run(third)})
@@ -303,7 +303,7 @@ def test_a_marker_above_a_line_in_a_heredoc_body_clears_it(build_repo, marked_ru
 
 
 def test_a_finding_prints_its_event_fact_and_its_fix(build_repo, capsys, script_rule):
-    """PYTEST-8, RUNTIME-8."""
+    """PYTEST-8, RUNTIME-17."""
     (second, second_event, second_fact), (third, third_event, third_fact) = script_rule.second, script_rule.third
     code, output = run(capsys, repository(build_repo, script_rule, {WORKFLOW: block_run(second, third)}))
     rows = finding_rows(output, f"{WORKFLOW}:{BLOCK_LINE}") + finding_rows(output, f"{WORKFLOW}:{BLOCK_LINE + 1}")
