@@ -499,6 +499,12 @@ def _sonar(gate: dict, legacy: LegacyMode) -> bool:
     return value
 
 
+def _present(text: str | None) -> str:
+    if text is None:
+        raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} is missing", EXAMPLE)
+    return text
+
+
 @overload
 def load_gate_settings(text: str | None, *, side: Literal[ConfigSide.HEAD]) -> GateSettings: ...
 @overload
@@ -506,9 +512,7 @@ def load_gate_settings(text: str | None, *, side: ConfigSide) -> GateSettings[Ro
 def load_gate_settings(text: str | None, *, side: ConfigSide) -> GateSettings[RootEntry, LayoutEntry]:
     """mandatory_jobs is judged before legacy, so a config wrong in both is refused for mandatory_jobs. `side` says whose text it is: the base is read by
     identity only, so a caller names it and none reads a base strictly by leaving it out."""
-    if text is None:
-        raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} is missing", EXAMPLE)
-    document = _validated_document(text, side)
+    document = _validated_document(_present(text), side)
     jobs = _mandatory_jobs(document.gate)
     legacy = _legacy_mode(document.gate)
     return GateSettings(
@@ -529,6 +533,19 @@ def _read_config_text(repo: Path) -> str | None:
 
 def read_gate_settings(repo: Path) -> GateSettings:
     return load_gate_settings(_read_config_text(repo), side=ConfigSide.HEAD)
+
+
+def read_gate_table(repo: Path) -> GateSettings:
+    """The `[gate]` table alone, judged as the gate judges it; every other table belongs to the release a repository
+    pins, which may require entries a newer quality refuses or the reverse. The allow lists stay empty."""
+    text = _present(_read_config_text(repo))
+    gate = config_entries.table_named(config_entries.parse(text, EXAMPLE), "gate", EXAMPLE)
+    unknown = set(gate) - TABLE_SHAPES["gate"].keys
+    if unknown:
+        raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} has {config_entries.unknown_keys(unknown)} - {KNOWN_KEYS}")
+    jobs = _mandatory_jobs(gate)
+    legacy = _legacy_mode(gate)
+    return GateSettings(jobs, legacy, _declarations(gate), sonar=_sonar(gate, legacy))
 
 
 def runs_sonar(repo: Path) -> bool:

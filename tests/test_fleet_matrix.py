@@ -4,6 +4,7 @@ import pytest
 
 from quality import baseline_file, checkout
 from quality.checkout import GATE_REPOSITORY
+from quality.config import LegacyMode
 from quality.fleet import (
     MATRIX_COLUMNS,
     ReleaseTagsError,
@@ -14,6 +15,7 @@ from tests.support.architecture import FORBIDDEN, adapter_contract, contracts_to
 from tests.support.baselines import ceiling
 from tests.support.fleet import FIRST_RELEASE_COMMIT, FIRST_RELEASES, LITERAL_TEXT, NEWEST, OLDER, UNRELEASED, row
 from tests.support.git_repositories import git, head_commit
+from tests.support.layout import declaring, root_declaring
 
 pytestmark = pytest.mark.integration
 
@@ -474,13 +476,20 @@ def test_without_a_gate_every_cell_that_needs_one_is_a_dash_and_an_unreadable_wo
         ({CONFIG: TWO_JOBS}, NEWEST, 0, "2", "report"),
         ({CONFIG: TWO_JOBS + 'legacy = "fail"\n'}, NEWEST, 0, "2", "fail"),
         ({}, NEWEST, 0, "no config", "no config"),
+        ({CONFIG: TWO_JOBS + root_declaring("Makefile", ends=None) + declaring("tests/a.py", ends=None)}, NEWEST, 0, "2", LegacyMode.REPORT.value),
         ({CONFIG: "[gate\n"}, NEWEST, 2, "cannot read quality/config.toml", "cannot read quality/config.toml"),
+        ({CONFIG: TWO_JOBS + 'legacy = "sometimes"\n'}, NEWEST, 2, "cannot read quality/config.toml", "cannot read quality/config.toml"),
+        ({CONFIG: TWO_JOBS + 'legasy = "fail"\n'}, NEWEST, 2, "cannot read quality/config.toml", "cannot read quality/config.toml"),
+        ({CONFIG: TWO_JOBS + 'sonar = "yes"\n'}, NEWEST, 2, "cannot read quality/config.toml", "cannot read quality/config.toml"),
         ({CONFIG: "[gate\n"}, None, 0, "—", "—"),
     ],
-    ids=["jobs counted", "legacy fail", "no config", "malformed config", "malformed config, no gate"],
+    ids=[
+        "jobs counted", "legacy fail", "no config", "entries a newer release requires ends on", "malformed config",
+        "malformed legacy", "unknown gate key", "malformed sonar", "malformed config, no gate",
+    ],
 )
 def test_the_jobs_cell_counts_and_the_legacy_cell_names_the_mode(fleet_report, public, files, pin, code, jobs, legacy):
-    """FLEET-12, FLEET-21, FLEET-24, FLEET-26: an unreadable config counts only where a cell shows it."""
+    """FLEET-12, FLEET-21, FLEET-24, FLEET-26, FLEET-131: an unreadable config counts only where a cell shows it."""
     result, output = fleet_report(public("gated", {**pinned_gate(pin), **files}), tags=first_releases())
     assert result == code, output
     assert (cell(output, "o/gated", "Mandatory jobs"), cell(output, "o/gated", "Sonar legacy")) == (jobs, legacy)

@@ -572,6 +572,7 @@ Pages source (GitHub Actions) is a repository setting that no code owns.
 - FLEET-25: unreadable release tags say so in the heading and show pins as commits,
 - FLEET-26: and each makes the exit
   `2`.
+- FLEET-131: The settings cells read the `[gate]` table alone, so an entry that a newer release requires elsewhere in `quality/config.toml` leaves the row readable; a malformed `[gate]` table stays `cannot read`.
 - FLEET-27: No value, `behind`, `no gate` or `report-only` included, makes the run red.
 - FLEET-92: Found rows are named by GitHub's own `owner/name`,
 - FLEET-93: named rows by the entry as written; all are

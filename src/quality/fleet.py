@@ -421,7 +421,7 @@ def read_declared(clone: Path, tracked: list[str]) -> Declared:
     settings, has_baseline, has_clone_table, has_literal_table, has_spec_table = None, False, False, False, False
     has_import_config = has_adapter_contract = False
     try:
-        settings = config.read_gate_settings(clone) if config_entries.CONFIG_PATH in tracked else None
+        settings = config.read_gate_table(clone) if config_entries.CONFIG_PATH in tracked else None
     except config_entries.ConfigError:
         unreadable.add(config_entries.CONFIG_PATH)
     try:
