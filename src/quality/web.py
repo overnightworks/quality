@@ -119,6 +119,7 @@ def fetch_within(
     thread = threading.Thread(target=read, daemon=True)
     thread.start()
     thread.join(left)
+    alive = thread.is_alive()  # read before the answer: the thread sets its result before it ends
     if answer.done():
         try:
             return answer.result()
@@ -126,7 +127,7 @@ def fetch_within(
             if timed_out(error) and deadline.left() <= 0:  # a socket wait bounded by the time left ends at the deadline
                 raise CutAtDeadline(DEADLINE_SPENT) from error
             raise
-    if thread.is_alive():
+    if alive:
         raise CutAtDeadline(DEADLINE_SPENT)
     raise StoppedUnexpectedly("the request stopped on an unexpected error")
 
