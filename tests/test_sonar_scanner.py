@@ -358,36 +358,26 @@ def test_an_answer_that_a_retry_cannot_change_ends_the_download_at_once_naming_i
     assert not scene.tool_cache.exists()
 
 
-@pytest.mark.parametrize("code", [429, 503])
-def test_an_answer_that_may_change_is_retried_until_the_deadline(scene, drive, code):
-    """SONAR-115: a 429 or a server error is transient and keeps its retries"""
+@pytest.mark.parametrize(
+    "failure_of",
+    [
+        pytest.param(lambda url: urllib.error.HTTPError(url, 429, "busy", {}, None), id="429"),
+        pytest.param(lambda url: urllib.error.HTTPError(url, 503, "busy", {}, None), id="503"),
+        pytest.param(
+            lambda _: urllib.error.URLError(ssl.SSLCertVerificationError("certificate verify failed")),
+            id="certificate failure",
+        ),
+        pytest.param(lambda _: web.StoppedUnexpectedly("the request stopped on an unexpected error"), id="thread that died"),
+    ],
+)
+def test_an_answer_that_may_change_is_retried_until_the_deadline_and_keeps_its_line(scene, drive, failure_of):
+    """SONAR-115: only an answer a retry cannot change ends the download at once; every other failure is retried and its line kept"""
     zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
-    scene.downloads[zip_url] = urllib.error.HTTPError(zip_url, code, "busy", {}, None)
-    assert drive()[0] == 2
-    assert len(scene.requested) > 1
-    assert scene.clock.now - 1000.0 >= sonar_scanner.COMMAND_DEADLINE_SECONDS
-
-
-def test_a_certificate_failure_is_retried_until_the_deadline_and_keeps_its_line(scene, drive):
-    """SONAR-115: only an answer a retry cannot change ends the download at once; a failure of the certificate is not one"""
-    zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
-    failure = urllib.error.URLError(ssl.SSLCertVerificationError("certificate verify failed"))
+    failure = failure_of(zip_url)
     scene.downloads[zip_url] = failure
     code, out, err = drive()
     assert (code, out) == (2, "")
-    assert f"no answer in time; the failure before it: {failure}" in err
-    assert len(scene.requested) > 1
-    assert scene.clock.now - 1000.0 >= sonar_scanner.COMMAND_DEADLINE_SECONDS
-
-
-def test_a_download_whose_thread_dies_is_retried_until_the_deadline_and_keeps_its_line(scene, drive):
-    """SONAR-115: a request that stopped unexpectedly is one more failed attempt, retried every 3 seconds"""
-    zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
-    stop = web.StoppedUnexpectedly("the request stopped on an unexpected error")
-    scene.downloads[zip_url] = stop
-    code, out, err = drive()
-    assert (code, out) == (2, "")
-    assert (f"could not download {zip_url}: no answer in time; the failure before it: {stop}" in err, RERUN_ADVICE in err) == (True, True)
+    assert (f"no answer in time; the failure before it: {failure}" in err, RERUN_ADVICE in err) == (True, True)
     assert len(scene.requested) > 1
     assert scene.clock.now - 1000.0 >= sonar_scanner.COMMAND_DEADLINE_SECONDS
 
