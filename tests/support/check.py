@@ -3,7 +3,7 @@ import re
 import string
 import time
 import unicodedata
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass
 from enum import StrEnum
@@ -371,12 +371,11 @@ def rule_findings(repo: Path, rule: Rule, named: Iterable[Area] = ()) -> list[Fi
     return [finding for verdict in check_result(repo, named=named).verdicts if verdict.rule is rule for finding in verdict.findings]
 
 
-def judge_workflow(rule: Rule, path: str = WORKFLOW, files: Mapping[str, str] | None = None) -> Callable[..., list[Finding]]:
-    """A function `(build_repo, text)` that gives the findings of `rule` over a repository tracking `text` as the workflow
-    `path` beside `files`."""
+def judge_workflow(rule: Rule, path: str = WORKFLOW) -> Callable[..., list[Finding]]:
+    """A function `(build_repo, text)` that gives the findings of `rule` over a repository tracking `text` as the workflow `path`."""
 
     def judged(build_repo, text: str, name: str = path) -> list[Finding]:
-        return rule_findings(build_repo({**(files or {}), name: text}), rule)
+        return rule_findings(build_repo({name: text}), rule)
 
     return judged
 

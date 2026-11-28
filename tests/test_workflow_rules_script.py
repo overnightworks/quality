@@ -10,7 +10,7 @@ import pytest
 
 from quality.live_layer import check_live_layer
 from quality.node_test_random import check_node_test_random
-from quality.report import CannotJudge, FindingEvent, RuleResult
+from quality.report import CannotJudge, Finding, FindingEvent, RuleResult
 from quality.rules import Rule
 from quality.workflow_rules import check_pytest_workers, check_runtime_install
 from tests.support.check import check_output as run
@@ -19,7 +19,6 @@ from tests.support.check import (
     event_line_fact,
     finding_rows,
     is_clean,
-    judge_workflow,
     refusal_row,
     refusals,
     rule_findings,
@@ -140,12 +139,21 @@ def marked_rule(request) -> ScriptRule:
 
 @pytest.fixture
 def judged(script_rule: ScriptRule):
-    return judge_workflow(script_rule.rule, files=script_rule.files)
+    return judging(script_rule)
 
 
 def repository(build_repo, script_rule: ScriptRule, files: Mapping[str, str]) -> Path:
     """A repository tracking `files` beside the ones the rule needs before it reads a workflow."""
     return build_repo({**script_rule.files, **files})
+
+
+def judging(script_rule: ScriptRule) -> Callable[..., list[Finding]]:
+    """A function `(build_repo, text)` that gives the findings of the rule over a repository tracking `text` as the workflow."""
+
+    def judge(build_repo, text: str) -> list[Finding]:
+        return rule_findings(repository(build_repo, script_rule, {WORKFLOW: text}), script_rule.rule)
+
+    return judge
 
 
 @pytest.mark.parametrize("on", ["push", "schedule", "workflow_call", "pull_request"])
@@ -247,7 +255,8 @@ def test_a_workflow_the_reader_refuses_is_cannot_judge_naming_the_file(build_rep
     """PYTEST-9, RUNTIME-9."""
     repo = repository(build_repo, script_rule, {WORKFLOW: block_run("true")})
     refuse(repo, elsewhere)
-    assert WORKFLOW in refusals(repo)[script_rule.rule]
+    with pytest.raises(CannotJudge, match=WORKFLOW):
+        script_rule.check(repo, [*script_rule.files, WORKFLOW])
 
 
 def test_a_tracked_workflow_gone_from_the_tree_is_skipped(build_repo, script_rule):
@@ -284,7 +293,7 @@ def test_a_line_in_a_heredoc_body_is_read_as_a_shell_line(build_repo, script_rul
 
 def test_a_marker_above_a_line_in_a_heredoc_body_clears_it(build_repo, marked_rule):
     """PYTEST-13, RUNTIME-2."""
-    judged = judge_workflow(marked_rule.rule, files=marked_rule.files)
+    judged = judging(marked_rule)
     assert judged(build_repo, block_run("cat <<'EOF' > run.sh", marked_rule.marker, marked_rule.flagged, "EOF")) == []
 
 
