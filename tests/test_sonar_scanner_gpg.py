@@ -6,6 +6,7 @@ import tempfile
 import zipfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from email.message import Message
 from pathlib import Path
 
 import pytest
@@ -82,8 +83,8 @@ def run_command(tmp_path: Path, capsys, key_file_content: bytes, fingerprint: st
     key_file.write_bytes(key_file_content)
     answers = {ZIP_URL: payload, f"{ZIP_URL}.asc": signature}
 
-    def fetch(url, unreadable, expires_at, clock, timeout=15):
-        return answers[url]
+    def fetch(url, headers, deadline, timeout=15):
+        return answers[url], Message()
 
     environment = {
         sonar_scanner.VERSION_VARIABLE: VERSION,

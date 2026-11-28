@@ -134,7 +134,6 @@ class PublishedDatabases:
     def __init__(self, root: Path) -> None:
         self.root = root
         self.asked: list[Asked] = []
-        self.on_request: Callable[[str], None] = lambda path: None
         self.etag: Callable[[bytes], str | None] = lambda body: f'"{advisories.md5_digest(body)}"'
         self.not_modified: Callable[[str | None, str | None], bool] = lambda sent, current: sent is not None and sent == current
 
@@ -148,7 +147,6 @@ class PublishedDatabases:
 
     def respond(self, handler: BaseHTTPRequestHandler) -> None:
         path = handler.path
-        self.on_request(path)
         sent = handler.headers.get("If-None-Match")
         file = self.root / path.lstrip("/")
         body = file.read_bytes() if file.is_file() else None

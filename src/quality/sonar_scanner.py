@@ -13,11 +13,13 @@ import zipfile
 from collections import Counter
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from itertools import pairwise
+from http import HTTPStatus
+from itertools import pairwise, repeat
 from pathlib import Path
 from subprocess import CompletedProcess
 
 from quality import output, process, web
+from quality.deadline import Deadline
 from quality.report import PUSH_THE_FIX, RERUN, CannotJudge, Instruction, Reason
 from quality.sonar import EXIT_CLEAN, SonarEvent, refused
 
@@ -69,20 +71,13 @@ REFUSED_STATUSES = {
     "ERRSIG": ("the signature is by a key the file does not hold", RELEASE_OF_A_HELD_SUBKEY),
 }
 EXPIRED_SIGNING_KEY = "EXPKEYSIG"
-TOO_MANY_REQUESTS = 429
-Fetch = Callable[[str, Callable[[Exception], CannotJudge], float, Callable[[], float], float], bytes]
 
 
 @dataclass(frozen=True)
-class Budget:
-    """What is left of the command's one deadline, on the injected clock."""
+class Budget(Deadline):
+    """What is left of the command's one deadline, on the injected clock; `seconds` is what it was started with."""
 
-    expires_at: float
-    clock: Callable[[], float]
     seconds: float
-
-    def left(self) -> float:
-        return self.expires_at - self.clock()
 
     def allow(self, own_limit: float, program: str) -> float:
         """The smaller of `own_limit` and the time left; a spent deadline names `program`, which then does not start."""
@@ -156,14 +151,10 @@ def _signature_fault(status: str, fingerprint: str) -> tuple[str, Instruction] |
     return None
 
 
-class _AnswerWillNotChange(CannotJudge):
-    """A download refused in a way a retry cannot mend."""
-
-
 def _will_not_change(error: Exception) -> bool:
     """An answer the server gives again: a redirect (never followed) or a 4xx other than 429."""
     return isinstance(error, urllib.error.HTTPError) and (
-        300 <= error.code < 400 or (400 <= error.code < 500 and error.code != TOO_MANY_REQUESTS)
+        300 <= error.code < 400 or (400 <= error.code < 500 and error.code != HTTPStatus.TOO_MANY_REQUESTS)
     )
 
 
@@ -171,34 +162,36 @@ def _timed_out(error: Exception) -> bool:
     return isinstance(error, OSError) and web.timed_out(error)
 
 
+def _worth_retrying(error: Exception) -> bool:
+    return isinstance(error, web.FETCH_FAILURES) and not _will_not_change(error)
+
+
 def _download_failure(url: str, error: Exception, failure_before: str) -> CannotJudge:
-    """The refusal for one failed attempt; a timeout keeps `failure_before`, the last attempt's real cause, in its line."""
+    """The refusal for the failure a download ended in; a timeout keeps `failure_before`, the last real failure of the
+    attempts before it, in its line."""
     if _will_not_change(error):
-        return _AnswerWillNotChange(f"could not download {url}: {error}", (ANOTHER_RELEASE,))
+        return CannotJudge(f"could not download {url}: {error}", (ANOTHER_RELEASE,))
     if _timed_out(error):
         before = f"; the failure before it: {failure_before}" if failure_before else ""
         return CannotJudge(f"could not download {url}: no answer in time{before}", (RERUN,))
     return CannotJudge(f"could not download {url}: {error}", (RERUN,))
 
 
-def _download(url: str, fetch: Fetch, budget: Budget, sleep: web.Sleep) -> bytes:
+def _download(url: str, fetch: web.BoundedFetch, budget: Budget, sleep: web.Sleep) -> bytes:
     failure_before = ""
 
-    def unreadable(error: Exception) -> CannotJudge:
+    def attempt() -> bytes:
         nonlocal failure_before
-        failure = _download_failure(url, error, failure_before)
-        failure_before = failure_before if _timed_out(error) else str(error)
-        return failure
-
-    while True:
         try:
-            return fetch(url, unreadable, budget.expires_at, budget.clock, OPERATION_TIMEOUT_SECONDS)
-        except _AnswerWillNotChange:
+            return fetch(url, {}, budget, OPERATION_TIMEOUT_SECONDS)[0]
+        except web.FETCH_FAILURES as error:
+            failure_before = failure_before if _timed_out(error) else str(error)
             raise
-        except CannotJudge:
-            if budget.left() <= 0:
-                raise
-            sleep(min(RETRY_PAUSE_SECONDS, budget.left()))
+
+    try:
+        return budget.retried(attempt, _worth_retrying, repeat(RETRY_PAUSE_SECONDS), sleep)
+    except web.FETCH_FAILURES as error:
+        raise _download_failure(url, error, failure_before) from error
 
 
 def _stays_inside(name: str, folder: str) -> bool:
@@ -285,7 +278,7 @@ def _unpacked_into_place(run: process.Run, budget: Budget, archive: Path, folder
 
 
 def _install(
-    environment: Mapping[str, str], budget: Budget, fetch: Fetch, run: process.Run, sleep: web.Sleep, base_url: str, key_file: Path
+    environment: Mapping[str, str], budget: Budget, fetch: web.BoundedFetch, run: process.Run, sleep: web.Sleep, base_url: str, key_file: Path
 ) -> output.Row:
     major, minor, patch, build = _input(
         environment, VERSION_VARIABLE, VERSION_PATTERN, "four dot-separated numbers", f'the env of the job "{SCANNER_JOB}"'
@@ -326,7 +319,7 @@ def _install(
 
 def run_scanner(
     environment: Mapping[str, str], clock: Callable[[], float], channels: output.Channels, *,
-    fetch: Fetch = web.fetch_within, run: process.Run = process.run, sleep: web.Sleep = time.sleep,
+    fetch: web.BoundedFetch = web.fetch_within, run: process.Run = process.run, sleep: web.Sleep = time.sleep,
     base_url: str = BINARIES_BASE_URL, deadline_seconds: float = COMMAND_DEADLINE_SECONDS, key_file: Path = KEY_FILE,
 ) -> int:
     """Runs before the scan: the pinned scanner is verified against the key file and installed into the runner tool

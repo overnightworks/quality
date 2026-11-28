@@ -2465,6 +2465,8 @@ Ruled by the operator:
   `https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`), checks it, places it in the scan's own 0700
   scratch directory and runs osv-scanner `--offline` on it, so osv-scanner makes no network call and reads no cache of its
   own.
+- ADVISORY-47: The request follows no redirect: a `3xx` answer other than `304` is exit `2` at once, naming the database
+  and the status, so no other host and no plain-HTTP answer is trusted.
 
 A request that fails transiently (HTTP 500 to 599 or 429, a refused or reset connection, a timeout, a DNS failure, an
 unreachable network or host, a body cut short) is tried again after 3, 9 and 27 seconds, each wait cut to the time left.
