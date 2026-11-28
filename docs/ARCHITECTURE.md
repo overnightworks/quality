@@ -132,7 +132,7 @@ input: output masks them and stops workflow commands ([output](output.md#masking
 repository (`repository.py`): design's catalog functions get only text that `repository.py` has read, never a path, so no
 symlink is followed out of the repository and no untracked file is read. A scanner's stderr is shown only once gitleaks clears it. The GitHub transport follows no
 redirect. The fleet report's listing is public repositories only (a private one an operator's token can list is dropped
-before any line, so no file names one either), and its token goes to `api.github.com` only: `process.network_git` withholds it from anonymous git, which the report's clones and tag read use, and no git ever prompts. The door's fetch asks gh's helper alone, with an empty home; the pin's tag read runs in the operator's own git configuration, as uv's fetch right after it does. The weekly CI-time file is
+before any line, so no file names one either), and its token goes to `api.github.com` only: `process.network_git` withholds it from anonymous git, which the report's clones and tag read use, and no git ever prompts on the terminal. The door's fetch asks gh's helper alone, with an empty home; the pin's tag read runs in the operator's own git configuration, as uv's fetch right after it does. The weekly CI-time file is
 public by design: repository names and numbers, no commit author and no run text; the deploy job runs no repository code and holds
 the Pages permissions in its job only, and the consumer needs no token. A workflow's pin selects which code runs
 locally. The gate's tool is its own uv workspace root, so a caller's checkout above it cannot take it in or configure

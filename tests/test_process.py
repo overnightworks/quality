@@ -147,7 +147,6 @@ def test_a_network_git_asks_only_the_helper_its_access_names(tmp_path, monkeypat
     assert listed.stdout.splitlines() == helpers
 
 
-@pytest.mark.integration
 def test_git_through_a_helper_runs_with_the_variables_its_access_sets(tmp_path):
     """MERGE-95: the access's settings reach git's environment, an empty home beside them."""
     network = process.network_git(process.ThroughHelper("!helper", {"LOGIN": "/login"}), tmp_path / "scratch")

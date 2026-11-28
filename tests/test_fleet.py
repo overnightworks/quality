@@ -344,6 +344,7 @@ def planted_credentials(tmp_path, monkeypatch) -> Path:
     monkeypatch.setenv("GIT_CONFIG_KEY_0", "http.extraHeader")
     monkeypatch.setenv("GIT_CONFIG_VALUE_0", "Authorization: Basic environment")
     monkeypatch.setenv("GIT_ASKPASS", str(askpass))
+    monkeypatch.setenv("SSH_ASKPASS", str(askpass))
     return asked
 
 

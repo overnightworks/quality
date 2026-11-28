@@ -123,8 +123,8 @@ class NetworkGit:
 
 def network_git(access: GitAccess, scratch: Path) -> NetworkGit:
     """The one place a git that reaches the network gets its credentials decided, and none of the three accesses ever
-    prompts. The isolated accesses run with an empty home below `scratch`, so no `.netrc` or other file git reads there
-    exists, and git's fallback to `SSH_ASKPASS` for an http password is cut off."""
+    prompts on the terminal. The isolated accesses run with an empty home below `scratch`, so no `.netrc` or other file git
+    reads there exists, and git's fallback to `SSH_ASKPASS` for an http password is cut off."""
     match access:
         case AsOperator(environment):
             return NetworkGit({**environment, **NEVER_PROMPT}, ())

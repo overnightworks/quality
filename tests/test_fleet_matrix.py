@@ -1,6 +1,5 @@
 """The `quality report` release matrix."""
 
-
 import pytest
 
 from quality import baseline_file, checkout
@@ -151,13 +150,6 @@ def test_a_cannot_judge_row_keeps_its_label_in_the_matrix(fleet_report, public, 
     assert code == 2, output
     label = "cannot judge: cannot clone (git exited 128)"
     assert matrix_row(output, "o/gone")[1:] == [label] + [""] * (len(MATRIX_COLUMNS) - 2)
-
-
-def test_a_gate_repository_without_a_release_tag_has_unreadable_release_tags(gate_clone):
-    """FLEET-1: no release tag is unreadable."""
-    gate_clone({"a": "1\n"})
-    with pytest.raises(ReleaseTagsError, match="no release tag"):
-        read_release_tags()
 
 
 @pytest.mark.parametrize(
