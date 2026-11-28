@@ -21,7 +21,7 @@ ID = rf"{ID_PREFIX}-(?a:\d+)"
 ID_PATTERN = re.compile(ID)
 ID_HEADER = "ID"
 LIST_MARKER = r"(?:[-*+]|(?a:\d+)[.)])"
-LEADING_MARKER = re.compile(rf"{LIST_MARKER}\s+")
+LEADING_MARKER = re.compile(rf"\A{LIST_MARKER}\s+")
 DEFINING_ITEM = re.compile(rf"\s*{LIST_MARKER}\s+(?P<id>{ID})(?::|(?P<retired> \(retired\)\.))")
 
 

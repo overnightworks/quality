@@ -98,6 +98,8 @@ def test_an_edited_rule_over_the_limit_is_a_finding_and_its_untouched_neighbour_
         pytest.param([f"- X-1: **Title.** {words(OVER - 1)}"], [("X-1", OVER)], id="a bold title counts as written"),
         pytest.param([rule("X-1", 20), f"  - {words(OVER - 20)}"], [("X-1", OVER)], id="a nested item without an ID belongs to its rule"),
         pytest.param([rule("X-1", AT - 2), "  1. one", "  2) two"], [], id="a nested ordered item's marker counts for no word"),
+        pytest.param([rule("X-1", OVER - 4), "  limit is 40. here"], [("X-1", OVER)], id="a number inside a continuation line counts as a word"),
+        pytest.param([rule("X-1", 20), f"  {words(OVER - 23)} in 2026. done"], [("X-1", OVER)], id="a number inside a wrapped line counts as a word"),
         pytest.param([rule("X-1", 20), "", f"  {words(OVER - 20)}"], [("X-1", OVER)], id="a paragraph after a blank line belongs to its rule"),
         pytest.param([rule("X-1", AT), f"  - X-2: {words(OVER)}"], [("X-2", OVER)], id="a nested item with an ID is a rule of its own"),
         pytest.param([rule("X-1", AT), "  ```", f"  {words(5)}", "  ```"], [], id="a fenced block counts for no rule"),
