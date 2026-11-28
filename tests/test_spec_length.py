@@ -72,7 +72,8 @@ def test_a_rule_a_change_adds_is_too_long_over_the_limit_and_clean_at_it(branche
     repo = branched(spec_with(SHORT), spec_with(SHORT, rule("X-1", count)))
     code, printed, found = judged(repo, capsys)
     expected = (1, too_long(("X-1", count), line=2)) if red else (0, [])
-    assert (code, found) == expected
+    actual = (code, found)
+    assert actual == expected
     if red:
         finding = rule_findings(repo, Rule.SPEC_LENGTH, DEBT)[0]
         assert (finding.event, finding.fix) == (FindingEvent.TOO_LONG, spec_length.FIX)
