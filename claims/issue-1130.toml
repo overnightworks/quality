@@ -1,0 +1,8 @@
+claim_id = "a6d65a880c614c388bf79e65357bd7e6"
+agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
+role = "builder"
+base = "575c054d0ae747c87b4a5ed6549e82e8bcd79eae"
+branch = "claude/issue-1130-fleet-reads-gate-table-alone"
+scope = ["docs/commands.md", "src/quality/config.py", "src/quality/fleet.py", "tests/test_config.py", "tests/test_fleet_matrix.py"]
+opened_commit = "bb83b9dce9edfa31b0fcf7e66829b6ae09887d58"
+whole_reason = "One reader and its one caller, its sentence and its regression test."
