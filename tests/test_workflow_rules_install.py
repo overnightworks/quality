@@ -16,10 +16,6 @@ INSTALLS, INVALID = FindingEvent.INSTALLS, FindingEvent.INVALID
 DOWNLOAD = "a download runs as a shell script"
 UNREADABLE = "command cannot be read to its end"
 BUILT_AT_RUN_TIME = "command is built at run time, an install cannot be read"
-FIX = (
-    "take the tool from the lockfile, the runner image or an image pinned by digest, "
-    "or explain on the line above: # runtime-install: <reason>"
-)
 MARKER = "# runtime-install: proves the install on a fresh system"
 
 
