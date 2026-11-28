@@ -27,6 +27,7 @@ from tests.support.scanners import CLEAN_SCANS, OUTPUTS, fake_scanner, serving, 
 from tests.support.secrets import FAKE_KEY
 from tests.support.terminal import PseudoTerminal
 from tests.support.verdict import set_gate_variables
+from tests.support.workflow_scripts import BLOCK_LINE, QUOTED_LINE, block_run, quoted_run
 
 REAL_DATABASE_ROOT = advisories.DATABASE_ROOT
 MISE_DIRECTORIES = (
@@ -134,6 +135,12 @@ def isolated_git_config(monkeypatch):
     """Fixture repositories never see the developer's global git config, hooks included."""
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+
+@pytest.fixture(params=[(block_run, BLOCK_LINE), (quoted_run, QUOTED_LINE)], ids=["literal block", "quoted"])
+def scalar(request) -> tuple[Callable[[str], str], int]:
+    """How a one-line script stands in a workflow, and the line of its finding."""
+    return request.param
 
 
 @pytest.fixture(autouse=True)

@@ -59,6 +59,7 @@ def workflow(on: str, *uses: str) -> str:
 
 
 def judged(repo):
+    """The pr-workflows findings as (path, line, event) of a repository."""
     return [(finding.path, finding.line, finding.event) for finding in rule_findings(repo, Rule.PR_WORKFLOWS)]
 
 

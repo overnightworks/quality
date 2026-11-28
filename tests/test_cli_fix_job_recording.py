@@ -9,7 +9,7 @@ import pytest
 from quality.baseline_file import BASELINE_PATH, JobKey, load_baseline
 from tests.support.baselines import rendered
 from tests.support.clones import function as clone_function
-from tests.support.door import CHECK_WORD, DRY_RUN_WORDS, FIX_WORDS, fixed, restore_step, tree_of
+from tests.support.door import CHECK_WORD, DRY_RUN_WORDS, FIX_WORDS, fixed, restore_step, squashed, tree_of
 from tests.support.git_repositories import git, put, shallow_clone
 from tests.support.job_workflows import job, workflow
 from tests.support.source_code import long_function
@@ -40,10 +40,6 @@ def ceiling(entries: dict[str, dict[str, int]] | None = None, size: int | None =
     size_table = "" if size is None else f'[function_lines."{SIZE_FILE}"]\nlong_one = {size}\n\n'
     job_tables = "" if entries is None else tables(entries) or "[job_minutes]\n"
     return rendered(f"{size_table}{'[clones]' if clones else ''}\n\n{job_tables}")
-
-
-def squashed(text: str) -> str:
-    return " ".join(text.split())
 
 
 def limits(count: int) -> str:

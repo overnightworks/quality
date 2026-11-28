@@ -48,6 +48,7 @@ def linted(records: list[RuffFinding], texts: dict[str, str], test_files: frozen
 
 
 def judged(text: str, finding: RuffFinding, test_files: frozenset[str] = frozenset()) -> list[str]:
+    """The security findings of one ruff finding, as location and fact."""
     findings = python_lint.judge_security(linted([finding], {finding.path: text}, test_files)).findings
     return [f"{item.location} {item.fact}" for item in findings]
 

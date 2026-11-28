@@ -16,6 +16,11 @@ def rendered(tables: str) -> str:
     return render_baseline(load_baseline(tables))
 
 
+def rendered_with_clones(tables: str) -> str:
+    """`tables` and an empty `[clones]` table as the rendering of the ceiling they hold."""
+    return rendered(tables + "\n[clones]\n")
+
+
 def ceiling(
     size: SizeEntries,
     clones: frozenset[ClonePair] | None = None,

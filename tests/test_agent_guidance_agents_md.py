@@ -10,6 +10,7 @@ from tests.support.check import env_row_stands, is_clean, refusal_row, refusals,
 from tests.support.git_repositories import git
 from tests.support.github_remote import HTTPS, SCP, SSH_URL, with_github_remote
 from tests.support.layout import declaring
+from tests.support.unreadable_files import unreadable
 
 pytestmark = pytest.mark.integration
 
@@ -189,36 +190,7 @@ def test_no_finding_prints_the_title_or_a_heading(build_repo, capsys):
     assert [finding.fix for finding in findings if finding.event is TITLE] == ["make line 1 `# guidance`"]
 
 
-def refuse_by_mode(repo: Path, _elsewhere: Path) -> None:
-    (repo / "AGENTS.md").chmod(0)
-
-
-def refuse_by_link(repo: Path, elsewhere: Path) -> None:
-    (elsewhere / "outside.md").write_text(HEAD)
-    (repo / "AGENTS.md").unlink()
-    (repo / "AGENTS.md").symlink_to(elsewhere / "outside.md")
-
-
-def refuse_by_dangling_link(repo: Path, _elsewhere: Path) -> None:
-    (repo / "AGENTS.md").unlink()
-    (repo / "AGENTS.md").symlink_to(repo / "missing.md")
-
-
-def refuse_by_encoding(repo: Path, _elsewhere: Path) -> None:
-    (repo / "AGENTS.md").write_bytes(b"# guidance\n\xff\xfe\n")
-
-
-@pytest.mark.parametrize(
-    "refuse",
-    [
-        pytest.param(
-            refuse_by_mode, id="mode 0", marks=pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 file")
-        ),
-        pytest.param(refuse_by_link, id="link out of the repository"),
-        pytest.param(refuse_by_dangling_link, id="dangling link"),
-        pytest.param(refuse_by_encoding, id="text that is not UTF-8"),
-    ],
-)
+@pytest.mark.parametrize("refuse", unreadable("AGENTS.md", HEAD, dangling_link=True))
 def test_agents_md_the_reader_refuses_cannot_be_judged_and_other_rules_still_judge(
     build_repo, capsys, elsewhere, refuse
 ):

@@ -11,6 +11,7 @@ from tests.support.check import (
     area_finding_rows,
     assert_finding_vocabulary,
     is_clean,
+    judge_workflow,
     refusal_row,
     refusals,
     rule_findings,
@@ -18,12 +19,13 @@ from tests.support.check import (
 from tests.support.check import check_output as run
 from tests.support.door import FIX_WORDS, PinnedJudging, door_in
 from tests.support.job_workflows import ON_PULL_REQUEST, STEPS, first_job_line, job, workflow
+from tests.support.workflow_scripts import WORKFLOW
 
 pytestmark = pytest.mark.integration
 
 MISSING, INVALID, NEW_DEBT = FindingEvent.MISSING, FindingEvent.INVALID, FindingEvent.NEW_DEBT
 GREW, CAN_FALL = FindingEvent.GREW, FindingEvent.CAN_FALL
-WORKFLOW = ".github/workflows/w.yml"
+judged = judge_workflow(Rule.JOB_TIMEOUT)
 CALLED = ".github/workflows/x.yml"
 SET_FIX = "set timeout-minutes to a number of at most 15"
 LOWER_FIX = "lower timeout-minutes to 15 or less"
@@ -35,11 +37,8 @@ CONCURRENCY = (
 )
 
 
-def judged(build_repo, text: str, name: str = WORKFLOW):
-    return rule_findings(build_repo({name: text}), Rule.JOB_TIMEOUT)
-
-
 def shape(findings):
+    """A finding as (event, path, line, fact): job-timeout findings name their file."""
     return [(finding.event, finding.path, finding.line, finding.fact) for finding in findings]
 
 

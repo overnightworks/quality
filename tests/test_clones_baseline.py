@@ -64,6 +64,7 @@ THREE_PAIRS_WRITTEN = (
 
 
 def judged(pull_request, capsys, base, head, head_config=None):
+    """The verdict of a pull request whose head holds the given clones baseline."""
     repo, commit_base = pull_request
     commit_base(base, ONE_JOB)
     put(repo / BASELINE_PATH, head)
