@@ -1279,7 +1279,7 @@ It applies these rules:
     names (below));
   - LOOSE-12: `root_packages` (as a set of names) changed, `include_external_packages` turned from true to false or
     dropped while true, or `exclude_type_checking_imports` turned from false (or absent) to true:
-    `import-linter changes root_packages`;
+    `import-linter changes <option>`;
   - LOOSE-36: the contract that carries the id `core-imports-no-adapter` (the contract of both `adapter-import` and
     `integration-marker`) stays at the head under the same name without the id: `import contract id
     core-imports-no-adapter removed`, or `import contract id core-imports-no-adapter moves "a" -> "b"` when contract `b`
