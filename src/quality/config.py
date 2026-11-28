@@ -531,6 +531,16 @@ def read_gate_settings(repo: Path) -> GateSettings:
     return load_gate_settings(_read_config_text(repo), side=ConfigSide.HEAD)
 
 
+def read_gate_table(repo: Path) -> GateSettings:
+    """`[gate] mandatory_jobs` and `[gate] legacy` alone, judged as the gate judges them; every other table belongs to
+    the release a repository pins, which may require entries a newer quality refuses or the reverse."""
+    text = _read_config_text(repo)
+    if text is None:
+        raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} is missing", EXAMPLE)
+    gate = config_entries.table_named(config_entries.parse(text, EXAMPLE), "gate", EXAMPLE)
+    return GateSettings(_mandatory_jobs(gate), _legacy_mode(gate))
+
+
 def runs_sonar(repo: Path) -> bool:
     """A repository without the config scans, and the findings step refuses the missing file."""
     text = _read_config_text(repo)
