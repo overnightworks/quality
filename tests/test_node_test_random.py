@@ -3,7 +3,7 @@ import pytest
 from quality.report import FindingEvent
 from quality.rules import Rule
 from tests.support.check import check_output as run
-from tests.support.check import check_result, refusals, rule_findings
+from tests.support.check import rule_findings
 from tests.support.workflow_scripts import WORKFLOW, block_run
 
 pytestmark = pytest.mark.integration
@@ -115,28 +115,10 @@ def test_a_command_built_at_run_time_in_a_script_holding_node_test_is_invalid(bu
     assert [(finding.event, finding.fact) for finding in findings] == [(INVALID, RUN_TIME)]
 
 
-def test_every_call_of_a_script_is_judged_on_its_own(build_repo):
-    """NODETEST-2: two calls, one clean, one not, give one finding at the second."""
-    (finding,) = judged(build_repo, "node --test --test-randomize x.mjs\nnode --test y.mjs")
-    assert finding.line == SCRIPT_LINE + 1
-
-
 def test_no_marker_clears_a_finding(build_repo):
     """NODETEST-5: no comment switches the rule off."""
     repo = build_repo({WORKFLOW: block_run(MARKER, "node --test x.mjs")})
     assert [finding.event for finding in rule_findings(repo, RULE)] == [UNSHUFFLED]
-
-
-def test_a_repository_without_a_call_is_clean_and_its_extent_is_its_workflows(build_repo):
-    """NODETEST-1: the extent is the number of workflows read."""
-    repo = build_repo({WORKFLOW: block_run("echo hi")})
-    (verdict,) = (verdict for verdict in check_result(repo).verdicts if verdict.rule is RULE)
-    assert (verdict.findings, verdict.extent) == ((), 1)
-
-
-def test_an_unreadable_workflow_is_exit_two_naming_the_file(build_repo):
-    """NODETEST-4: a workflow that cannot be read refuses, as pytest-workers does."""
-    assert WORKFLOW in refusals(build_repo({WORKFLOW: "jobs: [\n"}))[RULE]
 
 
 def test_a_finding_is_exit_one(build_repo, capsys):

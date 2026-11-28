@@ -109,26 +109,6 @@ def test_no_marker_clears_a_finding(build_repo):
     assert [finding.event for finding in rule_findings(repo, RULE)] == [RUNS_LIVE]
 
 
-@pytest.mark.parametrize("trigger", ["push", "{schedule: [{cron: '0 3 * * *'}]}", "pull_request", "workflow_dispatch"])
-def test_a_workflow_is_judged_whatever_triggers_it(build_repo, trigger):
-    """LIVE-2: a push, scheduled or manual run is CI too."""
-    repo = build_repo({**LIVE, WORKFLOW: block_run("pytest -n auto", on=trigger)})
-    assert [finding.event for finding in rule_findings(repo, RULE)] == [RUNS_LIVE]
-
-
-def test_every_pytest_call_of_a_script_is_judged_on_its_own(build_repo):
-    """LIVE-4: two calls, one clean, one not, give one finding at the second."""
-    (finding,) = judged(build_repo, 'pytest -m "not live"\npytest -m e2e')
-    assert finding.line == SCRIPT_LINE + 1
-
-
-def test_the_extent_is_the_number_of_workflows_read(build_repo):
-    """LIVE-2: the rule's extent counts workflows."""
-    repo = build_repo({**LIVE, WORKFLOW: block_run("pytest -m 'not live'"), ".github/workflows/x.yml": block_run("echo", on="{schedule: [{cron: '0 3 * * *'}]}")})
-    (verdict,) = (verdict for verdict in check_result(repo).verdicts if verdict.rule is RULE)
-    assert (verdict.findings, verdict.extent) == ((), 2)
-
-
 @pytest.mark.parametrize(
     "files",
     [
@@ -163,11 +143,6 @@ def test_a_tracked_path_under_a_live_folder_makes_a_live_layer(build_repo, files
     """LIVE-1: the root's tests/ and a judged project's tests/ each hold the live layer."""
     repo = build_repo({**files, WORKFLOW: block_run("pytest -n auto")})
     assert [finding.event for finding in rule_findings(repo, RULE)] == [RUNS_LIVE]
-
-
-def test_a_workflow_the_rule_cannot_read_refuses_it_naming_the_file(build_repo):
-    """LIVE-6: the exit-2 cases are pytest-workers'."""
-    assert ".github/workflows/w.yml" in refusals(build_repo({**LIVE, WORKFLOW: "jobs: [\n"}))[RULE]
 
 
 def test_a_finding_is_exit_one(build_repo, capsys):

@@ -1,13 +1,16 @@
 """What every rule that reads a step's `run:` script shares: which workflows and steps are read, how a script's lines are
-read and what the door prints, over `pytest-workers` and `runtime-install`. Each rule's own facts stand in its module."""
+read and what the door prints, over `pytest-workers`, `runtime-install`, `live-layer` and `node-test-random`. Each rule's own
+facts stand in its module."""
 
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
 
-from quality.report import FindingEvent, RuleResult
+from quality.live_layer import check_live_layer
+from quality.node_test_random import check_node_test_random
+from quality.report import CannotJudge, FindingEvent, RuleResult
 from quality.rules import Rule
 from quality.workflow_rules import check_pytest_workers, check_runtime_install
 from tests.support.check import check_output as run
@@ -32,7 +35,8 @@ OTHER_WORKFLOW = ".github/workflows/other.yaml"
 @dataclass(frozen=True)
 class ScriptRule:
     """What one rule says about the scripts the shared cases build: the commands it flags, with the fact of each, and one
-    it leaves alone."""
+    it leaves alone; `marker` is the comment that clears a finding, None for a rule no comment switches off, and `files`
+    the tracked files the rule needs before it reads any workflow."""
 
     rule: Rule
     check: Callable[[Path, list[str]], RuleResult]
@@ -43,11 +47,15 @@ class ScriptRule:
     third: tuple[str, FindingEvent, str]
     continued: tuple[str, str]
     clean: str
-    marker: str
+    marker: str | None
     fix: str
+    files: Mapping[str, str] = field(default_factory=dict)
 
 
 SERIAL, INVALID, INSTALLS = FindingEvent.SERIAL, FindingEvent.INVALID, FindingEvent.INSTALLS
+RUNS_LIVE, UNSHUFFLED = FindingEvent.RUNS_LIVE, FindingEvent.UNSHUFFLED
+CAN_SELECT_LIVE = "pytest can select tests marked live"
+FIXED_ORDER = "node --test runs its files and tests in a fixed order"
 SCRIPT_RULES = [
     pytest.param(
         ScriptRule(
@@ -82,7 +90,42 @@ SCRIPT_RULES = [
         ),
         id="runtime-install",
     ),
+    pytest.param(
+        ScriptRule(
+            Rule.LIVE_LAYER,
+            check_live_layer,
+            "pytest -n auto",
+            RUNS_LIVE,
+            CAN_SELECT_LIVE,
+            ("pytest -n auto -m e2e", RUNS_LIVE, CAN_SELECT_LIVE),
+            ('pytest -n auto -m "not e2e"', RUNS_LIVE, CAN_SELECT_LIVE),
+            ("pytest -n auto \\", "  tests"),
+            'pytest -n auto -m "not live"',
+            None,
+            'add -m "not live", or "and not live" to its -m expression',
+            {"tests/e2e/live/test_sign_in.py": ""},
+        ),
+        id="live-layer",
+    ),
+    pytest.param(
+        ScriptRule(
+            Rule.NODE_TEST_RANDOM,
+            check_node_test_random,
+            "node --test x.mjs",
+            UNSHUFFLED,
+            FIXED_ORDER,
+            ("node --test y.mjs", UNSHUFFLED, FIXED_ORDER),
+            ("node --test --test-random-seed=7 z.mjs", UNSHUFFLED, FIXED_ORDER),
+            ("node --test \\", "  x.mjs"),
+            "node --test --test-randomize --test-reporter=spec --test-reporter-destination=stdout x.mjs",
+            None,
+            "pass --test-randomize before the test files and drop --no-test-randomize and a fixed --test-random-seed "
+            '(node 24.16 or newer); node then prints "Randomized test order seed: N"',
+        ),
+        id="node-test-random",
+    ),
 ]
+MARKED_RULES = [rule for rule in SCRIPT_RULES if rule.values[0].marker is not None]
 
 
 @pytest.fixture(params=SCRIPT_RULES)
@@ -90,14 +133,24 @@ def script_rule(request) -> ScriptRule:
     return request.param
 
 
+@pytest.fixture(params=MARKED_RULES)
+def marked_rule(request) -> ScriptRule:
+    return request.param
+
+
 @pytest.fixture
 def judged(script_rule: ScriptRule):
-    return judge_workflow(script_rule.rule)
+    return judge_workflow(script_rule.rule, files=script_rule.files)
+
+
+def repository(build_repo, script_rule: ScriptRule, files: Mapping[str, str]) -> Path:
+    """A repository tracking `files` beside the ones the rule needs before it reads a workflow."""
+    return build_repo({**script_rule.files, **files})
 
 
 @pytest.mark.parametrize("on", ["push", "schedule", "workflow_call", "pull_request"])
 def test_a_workflow_is_judged_whatever_its_trigger(build_repo, script_rule, on, judged):
-    """PYTEST-1, RUNTIME-1: no root is needed."""
+    """PYTEST-1, RUNTIME-1, LIVE-2, NODETEST-1: no root is needed."""
     found = event_line_fact(judged(build_repo, block_run(script_rule.flagged, on=on)))
     assert found == [(script_rule.event, BLOCK_LINE, script_rule.fact)]
 
@@ -122,7 +175,7 @@ def test_only_the_run_of_a_step_is_read(build_repo, script_rule, judged):
 def test_a_composite_action_is_not_read(build_repo, script_rule):
     """PYTEST-1, RUNTIME-1: the named gap."""
     action = f"name: a\nruns:\n  using: composite\n  steps:\n    - shell: bash\n      run: {script_rule.flagged}\n"
-    repo = build_repo({"action.yml": action, ".github/actions/a/action.yml": action})
+    repo = repository(build_repo, script_rule, {"action.yml": action, ".github/actions/a/action.yml": action})
     assert rule_findings(repo, script_rule.rule) == []
 
 
@@ -130,7 +183,7 @@ def test_every_job_and_step_is_read_and_each_finding_names_its_file(build_repo, 
     """PYTEST-1, PYTEST-8, RUNTIME-1, RUNTIME-8."""
     (second, second_event, second_fact), (third, third_event, third_fact) = script_rule.second, script_rule.third
     text = steps_of() + f"      - run: 'true'\n      - run: {script_rule.flagged}\n  k:\n    runs-on: ubuntu-latest\n    steps:\n      - run: {second}\n"
-    repo = build_repo({WORKFLOW: text, OTHER_WORKFLOW: block_run(third)})
+    repo = repository(build_repo, script_rule, {WORKFLOW: text, OTHER_WORKFLOW: block_run(third)})
     findings = rule_findings(repo, script_rule.rule)
     assert [(finding.path, finding.line, finding.event, finding.fact) for finding in findings] == [
         (OTHER_WORKFLOW, BLOCK_LINE, third_event, third_fact),
@@ -140,10 +193,10 @@ def test_every_job_and_step_is_read_and_each_finding_names_its_file(build_repo, 
 
 
 def test_a_step_without_a_run_a_workflow_without_jobs_and_a_name_gone_from_the_tree_are_skipped(build_repo, script_rule):
-    """PYTEST-1, PYTEST-9, PYTEST-10, RUNTIME-9, RUNTIME-10: only the workflows read count toward the extent."""
+    """PYTEST-1, PYTEST-9, PYTEST-10, RUNTIME-9, RUNTIME-10, LIVE-2, NODETEST-1: only the workflows read count toward the extent."""
     empty = ".github/workflows/empty.yml"
-    repo = build_repo({WORKFLOW: steps_of() + "      - uses: a/b@v1\n", empty: "name: e\non: push\n"})
-    result = script_rule.check(repo, [WORKFLOW, empty, ".github/workflows/gone.yml"])
+    repo = repository(build_repo, script_rule, {WORKFLOW: steps_of() + "      - uses: a/b@v1\n", empty: "name: e\non: push\n"})
+    result = script_rule.check(repo, [*script_rule.files, WORKFLOW, empty, ".github/workflows/gone.yml"])
     assert (result.findings, result.extent, script_rule.rule in refusals(repo)) == ([], 2, False)
 
 
@@ -172,11 +225,16 @@ UNREADABLE_WORKFLOWS = {
 
 
 @pytest.mark.parametrize("build", UNREADABLE_WORKFLOWS.values(), ids=UNREADABLE_WORKFLOWS.keys())
-def test_a_workflow_the_rule_cannot_read_is_cannot_judge_naming_the_file_while_other_rules_still_judge(
-    build_repo, capsys, script_rule, build
-):
-    """PYTEST-9, RUNTIME-9."""
-    repo = build_repo({WORKFLOW: build(script_rule.flagged), ".env": "A=1\n"})
+def test_a_workflow_the_rule_cannot_read_is_cannot_judge_naming_the_file(build_repo, script_rule, build):
+    """PYTEST-9, RUNTIME-9, LIVE-6, NODETEST-4."""
+    repo = repository(build_repo, script_rule, {WORKFLOW: build(script_rule.flagged)})
+    with pytest.raises(CannotJudge, match=WORKFLOW):
+        script_rule.check(repo, [*script_rule.files, WORKFLOW])
+
+
+def test_a_workflow_the_rule_cannot_read_is_exit_two_while_other_rules_still_judge(build_repo, capsys, script_rule):
+    """PYTEST-9, RUNTIME-9, LIVE-6, NODETEST-4."""
+    repo = repository(build_repo, script_rule, {WORKFLOW: UNREADABLE_WORKFLOWS["yaml error"](script_rule.flagged), ".env": "A=1\n"})
     code, output = run(capsys, repo)
     assert code == 2, output
     assert refusal_row("workflows") in output
@@ -187,14 +245,14 @@ def test_a_workflow_the_rule_cannot_read_is_cannot_judge_naming_the_file_while_o
 @pytest.mark.parametrize("refuse", unreadable(WORKFLOW, block_run("true")))
 def test_a_workflow_the_reader_refuses_is_cannot_judge_naming_the_file(build_repo, elsewhere, script_rule, refuse):
     """PYTEST-9, RUNTIME-9."""
-    repo = build_repo({WORKFLOW: block_run("true")})
+    repo = repository(build_repo, script_rule, {WORKFLOW: block_run("true")})
     refuse(repo, elsewhere)
     assert WORKFLOW in refusals(repo)[script_rule.rule]
 
 
 def test_a_tracked_workflow_gone_from_the_tree_is_skipped(build_repo, script_rule):
     """PYTEST-1, RUNTIME-1."""
-    repo = build_repo({WORKFLOW: block_run(script_rule.flagged)})
+    repo = repository(build_repo, script_rule, {WORKFLOW: block_run(script_rule.flagged)})
     (repo / WORKFLOW).unlink()
     assert (rule_findings(repo, script_rule.rule), script_rule.rule in refusals(repo)) == ([], False)
 
@@ -206,26 +264,34 @@ def test_a_command_split_over_lines_by_a_backslash_is_one_call_at_its_first_line
     assert found == [(script_rule.event, BLOCK_LINE + 1, script_rule.fact)]
 
 
+def test_every_call_of_a_script_is_judged_on_its_own(build_repo, script_rule, judged):
+    """PYTEST-2, RUNTIME-2, LIVE-4, NODETEST-2: two calls, one clean, one not, give one finding at the second."""
+    found = event_line_fact(judged(build_repo, block_run(script_rule.clean, script_rule.flagged)))
+    assert found == [(script_rule.event, BLOCK_LINE + 1, script_rule.fact)]
+
+
 @pytest.mark.parametrize(
     ("body", "expected"),
-    [("flagged", True), ("clean", False), ("marked", False)],
-    ids=["a flagged line is judged", "a clean line is not", "a marker above clears it"],
+    [("flagged", True), ("clean", False)],
+    ids=["a flagged line is judged", "a clean line is not"],
 )
 def test_a_line_in_a_heredoc_body_is_read_as_a_shell_line(build_repo, script_rule, body, expected, judged):
-    """PYTEST-13, RUNTIME-2: the reader does not parse heredocs, so a call in the text is judged; a marker above it clears it."""
-    lines = {
-        "flagged": [script_rule.flagged],
-        "clean": [script_rule.clean],
-        "marked": [script_rule.marker, script_rule.flagged],
-    }[body]
-    found = event_line_fact(judged(build_repo, block_run("cat <<'EOF' > run.sh", *lines, "EOF")))
+    """PYTEST-13, RUNTIME-2: the reader does not parse heredocs, so a call in the text is judged."""
+    line = {"flagged": script_rule.flagged, "clean": script_rule.clean}[body]
+    found = event_line_fact(judged(build_repo, block_run("cat <<'EOF' > run.sh", line, "EOF")))
     assert found == ([(script_rule.event, BLOCK_LINE + 1, script_rule.fact)] if expected else [])
+
+
+def test_a_marker_above_a_line_in_a_heredoc_body_clears_it(build_repo, marked_rule):
+    """PYTEST-13, RUNTIME-2."""
+    judged = judge_workflow(marked_rule.rule, files=marked_rule.files)
+    assert judged(build_repo, block_run("cat <<'EOF' > run.sh", marked_rule.marker, marked_rule.flagged, "EOF")) == []
 
 
 def test_a_finding_prints_its_event_fact_and_its_fix(build_repo, capsys, script_rule):
     """PYTEST-8, RUNTIME-8."""
     (second, second_event, second_fact), (third, third_event, third_fact) = script_rule.second, script_rule.third
-    code, output = run(capsys, build_repo({WORKFLOW: block_run(second, third)}))
+    code, output = run(capsys, repository(build_repo, script_rule, {WORKFLOW: block_run(second, third)}))
     rows = finding_rows(output, f"{WORKFLOW}:{BLOCK_LINE}") + finding_rows(output, f"{WORKFLOW}:{BLOCK_LINE + 1}")
     assert code == 1, output
     assert [(row.event, row.fact, row.fix) for row in rows] == [(second_event, second_fact, script_rule.fix), (third_event, third_fact, script_rule.fix)]
@@ -233,11 +299,11 @@ def test_a_finding_prints_its_event_fact_and_its_fix(build_repo, capsys, script_
 
 def test_a_conforming_repository_is_clean_under_every_rule(build_repo, capsys, script_rule):
     """PYTEST-11, RUNTIME-10."""
-    code, output = run(capsys, build_repo({WORKFLOW: block_run(script_rule.clean)}))
+    code, output = run(capsys, repository(build_repo, script_rule, {WORKFLOW: block_run(script_rule.clean)}))
     assert (code, is_clean(output)) == (0, True), output
 
 
-def test_a_marker_is_the_way_out_of_a_finding_through_the_door(build_repo, capsys, script_rule):
+def test_a_marker_is_the_way_out_of_a_finding_through_the_door(build_repo, capsys, marked_rule):
     """PYTEST-7, PYTEST-11, RUNTIME-7, RUNTIME-10."""
-    code, output = run(capsys, build_repo({WORKFLOW: block_run(script_rule.marker, script_rule.flagged)}))
+    code, output = run(capsys, repository(build_repo, marked_rule, {WORKFLOW: block_run(marked_rule.marker, marked_rule.flagged)}))
     assert (code, is_clean(output)) == (0, True), output
