@@ -129,14 +129,15 @@ class Scene:
 
 
 @pytest.fixture
-def scene(tmp_path) -> Scene:
+def zip_url() -> str:
+    return f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
+
+
+@pytest.fixture
+def scene(tmp_path, zip_url) -> Scene:
     clock = FakeClock()
     arranged = Scene(tmp_path / "tool-cache", clock)
-    base = sonar_scanner.BINARIES_BASE_URL
-    arranged.downloads = {
-        f"{base}/sonar-scanner-cli-{VERSION}-linux-x64.zip": ZIP_BYTES,
-        f"{base}/sonar-scanner-cli-{VERSION}-linux-x64.zip.asc": SIGNATURE_BYTES,
-    }
+    arranged.downloads = {zip_url: ZIP_BYTES, f"{zip_url}.asc": SIGNATURE_BYTES}
     return arranged
 
 
@@ -299,9 +300,8 @@ def test_a_missing_or_malformed_input_is_exit_2_naming_the_variable_and_the_step
     assert (variable in err, f'{setter_kind} "{setter_name}"' in err) == (True, True)
 
 
-def test_a_failed_download_is_retried_while_the_deadline_has_time_and_then_ends_naming_the_url(scene, drive):
+def test_a_failed_download_is_retried_while_the_deadline_has_time_and_then_ends_naming_the_url(scene, zip_url, drive):
     """SONAR-115: an unreachable host ends with one line naming the URL and the re-run, exit 2, installing nothing"""
-    zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
     scene.downloads[zip_url] = OSError("connection refused")
     code, out, err = drive()
     assert (code, out) == (2, "")
@@ -311,9 +311,8 @@ def test_a_failed_download_is_retried_while_the_deadline_has_time_and_then_ends_
     assert not scene.tool_cache.exists()
 
 
-def test_a_download_cut_at_the_deadline_names_the_failure_before_it(scene, drive):
+def test_a_download_cut_at_the_deadline_names_the_failure_before_it(scene, zip_url, drive):
     """SONAR-115: an attempt cut by the deadline keeps the last real failure of the attempts before it in the line"""
-    zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
     answers = iter([OSError("connection refused"), TimeoutError()])
 
     def refused_then_cut(url, headers, deadline, timeout=15):
@@ -328,9 +327,8 @@ def test_a_download_cut_at_the_deadline_names_the_failure_before_it(scene, drive
     assert (zip_url in err, "no answer in time" in err, "connection refused" in err) == (True, True, True)
 
 
-def test_a_failure_that_arrives_as_the_deadline_passes_is_named_as_it_is(scene, drive):
+def test_a_failure_that_arrives_as_the_deadline_passes_is_named_as_it_is(scene, zip_url, drive):
     """SONAR-115: an attempt that fails for its own reason, not by the cut, keeps that reason in the line"""
-    zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
 
     def refused_as_the_deadline_passes(url, headers, deadline, timeout=15):
         scene.clock.advance(sonar_scanner.COMMAND_DEADLINE_SECONDS)
@@ -344,9 +342,8 @@ def test_a_failure_that_arrives_as_the_deadline_passes_is_named_as_it_is(scene, 
     )
 
 
-def test_a_download_that_fails_once_is_retried_and_installs(scene, drive):
+def test_a_download_that_fails_once_is_retried_and_installs(scene, zip_url, drive):
     """SONAR-115: a failed attempt is retried while the deadline has time left"""
-    zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
     answers = iter([OSError("reset"), ZIP_BYTES])
     original = scene.fetch
 
@@ -363,9 +360,8 @@ def test_a_download_that_fails_once_is_retried_and_installs(scene, drive):
 
 
 @pytest.mark.parametrize("code", [301, 302, 403, 404])
-def test_an_answer_that_a_retry_cannot_change_ends_the_download_at_once_naming_its_status(scene, drive, code):
+def test_an_answer_that_a_retry_cannot_change_ends_the_download_at_once_naming_its_status(scene, zip_url, drive, code):
     """SONAR-115: a 4xx other than 429 or a redirect is named with its status and not retried until the deadline"""
-    zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
     scene.downloads[zip_url] = urllib.error.HTTPError(zip_url, code, "refused", {}, None)
     code_exit, out, err = drive()
     assert (code_exit, out) == (2, "")
@@ -386,9 +382,8 @@ def test_an_answer_that_a_retry_cannot_change_ends_the_download_at_once_naming_i
         pytest.param(lambda _: web.StoppedUnexpectedly("the request stopped on an unexpected error"), id="thread that died"),
     ],
 )
-def test_an_answer_that_may_change_is_retried_until_the_deadline_and_keeps_its_line(scene, drive, failure_of):
+def test_an_answer_that_may_change_is_retried_until_the_deadline_and_keeps_its_line(scene, zip_url, drive, failure_of):
     """SONAR-115: only an answer a retry cannot change ends the download at once; every other failure is retried and its line kept"""
-    zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
     failure = failure_of(zip_url)
     scene.downloads[zip_url] = failure
     code, out, err = drive()
@@ -464,9 +459,9 @@ def test_a_failed_unzip_leaves_neither_the_scanner_nor_the_marker(scene, drive):
     ],
     ids=["symlink out of the folder", "symlink out through a link to the parent", "symlink out through two links", "symlink under a linked folder", "links that loop", "link to itself", "chain of two links", "entry through a link to the parent", "entry with a dot component", "absolute symlink", "absolute symlink that starts with the folder name", "entry with a parent component", "absolute entry", "entry beside the folder", "entry with a backslash", "link name twice, the first target outside", "link name twice, the last target outside", "file name twice", "symlink out behind a dot component", "symlink out behind an empty component"],
 )
-def test_an_archive_with_an_entry_that_leaves_its_folder_is_refused_before_unzip_runs(scene, drive, entries, links):
+def test_an_archive_with_an_entry_that_leaves_its_folder_is_refused_before_unzip_runs(scene, zip_url, drive, entries, links):
     """SONAR-118: a signed zip may still hold a path or a symbolic link that reaches outside the scanner's folder; nothing is unpacked or installed"""
-    scene.downloads[f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"] = scanner_zip(*entries, links=links)
+    scene.downloads[zip_url] = scanner_zip(*entries, links=links)
     code, out, err = drive()
     assert (code, out) == (2, "")
     assert ("leaves" in err, len(err.strip().splitlines())) == (True, 2)
@@ -474,17 +469,17 @@ def test_an_archive_with_an_entry_that_leaves_its_folder_is_refused_before_unzip
     assert not scene.marker.exists()
 
 
-def test_an_archive_that_is_no_zip_is_refused_with_one_line(scene, drive):
+def test_an_archive_that_is_no_zip_is_refused_with_one_line(scene, zip_url, drive):
     """SONAR-118: bytes that carry a valid signature but are no zip end in a named line, not a traceback"""
-    scene.downloads[f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"] = b"not a zip"
+    scene.downloads[zip_url] = b"not a zip"
     code, out, err = drive()
     assert (code, out, len(err.strip().splitlines())) == (2, "", 2)
     assert "unzip" not in scene.programs
 
 
-def test_a_symbolic_link_that_stays_inside_the_folder_installs(scene, drive):
+def test_a_symbolic_link_that_stays_inside_the_folder_installs(scene, zip_url, drive):
     """SONAR-118: a link between two files of the scanner's own folder, also through another link, is not an escape"""
-    scene.downloads[f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"] = scanner_zip(
+    scene.downloads[zip_url] = scanner_zip(
         links=(
             (f"{FOLDER}/bin/launcher", "sonar-scanner"), (f"{FOLDER}/lib/current", "../bin/sonar-scanner"),
             (f"{FOLDER}/lib/again", "current"), (f"{FOLDER}/bin/deep/up", "../../lib/again"),
