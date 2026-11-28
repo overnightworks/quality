@@ -516,11 +516,15 @@ def _fields_of(contract: Contract, contract_type: str) -> ContractFields:
                           {name: getattr(contract, name) for name in names if name not in UNCOMPARED_FIELDS})
 
 
+def _include_external_packages(options: UserOptions) -> bool:
+    return bool(use_cases._get_include_external_packages(options))
+
+
 def _session_of(options: UserOptions) -> Mapping[str, object]:
     packages = options.session_options["root_packages"]
     return {
         "root_packages": frozenset([packages] if isinstance(packages, str) else packages),
-        "include_external_packages": bool(use_cases._get_include_external_packages(options)),
+        "include_external_packages": _include_external_packages(options),
         "exclude_type_checking_imports": use_cases._get_exclude_type_checking_imports(options),
     }
 
@@ -587,7 +591,7 @@ def _build_graph(repository: str, roots: Mapping[str, str], options: UserOptions
         with _grimp_reading(package_directories):
             return grimp.build_graph(
                 *roots,
-                include_external_packages=bool(use_cases._get_include_external_packages(options)),
+                include_external_packages=_include_external_packages(options),
                 exclude_type_checking_imports=use_cases._get_exclude_type_checking_imports(options),
                 cache_dir=None,
             )
