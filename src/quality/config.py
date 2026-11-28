@@ -499,6 +499,12 @@ def _sonar(gate: dict, legacy: LegacyMode) -> bool:
     return value
 
 
+def _present(text: str | None) -> str:
+    if text is None:
+        raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} is missing", EXAMPLE)
+    return text
+
+
 @overload
 def load_gate_settings(text: str | None, *, side: Literal[ConfigSide.HEAD]) -> GateSettings: ...
 @overload
@@ -506,9 +512,7 @@ def load_gate_settings(text: str | None, *, side: ConfigSide) -> GateSettings[Ro
 def load_gate_settings(text: str | None, *, side: ConfigSide) -> GateSettings[RootEntry, LayoutEntry]:
     """mandatory_jobs is judged before legacy, so a config wrong in both is refused for mandatory_jobs. `side` says whose text it is: the base is read by
     identity only, so a caller names it and none reads a base strictly by leaving it out."""
-    if text is None:
-        raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} is missing", EXAMPLE)
-    document = _validated_document(text, side)
+    document = _validated_document(_present(text), side)
     jobs = _mandatory_jobs(document.gate)
     legacy = _legacy_mode(document.gate)
     return GateSettings(
@@ -534,9 +538,7 @@ def read_gate_settings(repo: Path) -> GateSettings:
 def read_gate_table(repo: Path) -> GateSettings:
     """`[gate] mandatory_jobs` and `[gate] legacy` alone, judged as the gate judges them; every other table belongs to
     the release a repository pins, which may require entries a newer quality refuses or the reverse."""
-    text = _read_config_text(repo)
-    if text is None:
-        raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} is missing", EXAMPLE)
+    text = _present(_read_config_text(repo))
     gate = config_entries.table_named(config_entries.parse(text, EXAMPLE), "gate", EXAMPLE)
     return GateSettings(_mandatory_jobs(gate), _legacy_mode(gate))
 

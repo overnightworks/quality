@@ -487,7 +487,7 @@ def test_without_a_gate_every_cell_that_needs_one_is_a_dash_and_an_unreadable_wo
     ],
 )
 def test_the_jobs_cell_counts_and_the_legacy_cell_names_the_mode(fleet_report, public, files, pin, code, jobs, legacy):
-    """FLEET-12, FLEET-21, FLEET-24, FLEET-26: an unreadable config counts only where a cell shows it."""
+    """FLEET-12, FLEET-21, FLEET-24, FLEET-26, FLEET-131: an unreadable config counts only where a cell shows it."""
     result, output = fleet_report(public("gated", {**pinned_gate(pin), **files}), tags=first_releases())
     assert result == code, output
     assert (cell(output, "o/gated", "Mandatory jobs"), cell(output, "o/gated", "Sonar legacy")) == (jobs, legacy)
