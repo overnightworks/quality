@@ -91,3 +91,59 @@ def test_no_time_left_starts_nothing(tmp_path, starting):
     assert not marker.exists()
     assert refusal.value.reason.fact == f"the run's {deadline.RUN_DEADLINE_SECONDS} seconds are spent"
     assert refusal.value.reason.next_steps == ()
+
+
+class Retrying:
+    """A deadline of 5 seconds on a clock that only `sleep` moves, and an attempt that fails with `failures` in turn
+    before it returns."""
+
+    def __init__(self, *failures: Exception) -> None:
+        self.clock = Clock()
+        self.deadline = deadline.Deadline(5.0, self.clock)
+        self.failures = iter(failures)
+        self.slept: list[float] = []
+        self.attempts = 0
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.clock.now += seconds
+
+    def attempt(self) -> str:
+        self.attempts += 1
+        if failure := next(self.failures, None):
+            raise failure
+        return "done"
+
+    def retried(self, delays: tuple[float, ...], again=lambda failure: True) -> str:
+        return self.deadline.retried(self.attempt, again, iter(delays), self.sleep)
+
+
+def test_a_failure_that_is_accepted_is_tried_again_after_each_delay_cut_to_the_time_left():
+    """ADVISORY-9: each wait is the next delay or the time left, whichever is smaller."""
+    retrying = Retrying(OSError("one"), OSError("two"))
+    assert (retrying.retried((3, 9)), retrying.slept) == ("done", [3, 2])
+
+
+def test_a_failure_that_is_not_accepted_is_raised_at_once():
+    """ADVISORY-9: a failure that `again` refuses is not waited for."""
+    retrying = Retrying(OSError("permanent"))
+    with pytest.raises(OSError, match="permanent"):
+        retrying.retried((3, 9), again=lambda failure: False)
+    assert (retrying.attempts, retrying.slept) == (1, [])
+
+
+def test_the_failure_after_the_last_delay_is_raised():
+    """ADVISORY-9: the delays are the attempts that remain."""
+    retrying = Retrying(OSError("first"), OSError("last"))
+    with pytest.raises(OSError, match="last"):
+        retrying.retried((1,))
+    assert (retrying.attempts, retrying.slept) == (2, [1])
+
+
+def test_a_failure_with_no_time_left_is_raised_without_a_wait():
+    """ADVISORY-9: a spent deadline waits for nothing, not even a zero-second wait."""
+    retrying = Retrying(OSError("late"))
+    retrying.clock.now = retrying.deadline.ends_at
+    with pytest.raises(OSError, match="late"):
+        retrying.retried((3,))
+    assert (retrying.attempts, retrying.slept) == (1, [])

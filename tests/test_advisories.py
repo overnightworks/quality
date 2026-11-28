@@ -3,7 +3,6 @@ import datetime
 import socketserver
 import threading
 import time
-import urllib.request
 
 import pytest
 
@@ -341,31 +340,6 @@ def test_a_server_that_goes_silent_is_a_timeout_not_the_total_deadline(serve_sta
     code, output, elapsed = timed_gate()
     observed = (code, "timed out" in output, "after 4 attempts" in output, "exceeded" in output, elapsed < 3)
     assert observed == (2, True, True, False, True), output
-
-
-@pytest.fixture
-def failing_opener():
-    """Makes every `boom://` open raise an error the downloader does not expect, through urllib's public opener API."""
-    class Boom(urllib.request.BaseHandler):
-        def boom_open(self, request):
-            raise RuntimeError("boom")
-
-    urllib.request.install_opener(urllib.request.build_opener(Boom()))
-    yield "boom://database"
-    urllib.request.install_opener(None)
-
-
-@pytest.mark.integration
-def test_an_unexpected_download_error_is_cannot_judge_at_once(failing_opener, timed_gate, monkeypatch):
-    """An error nobody anticipated while downloading is a refusal naming its cause at once, not a wait for the total
-    deadline."""
-    monkeypatch.setattr(advisories, "DATABASE_ROOT", failing_opener)
-    monkeypatch.setattr(advisories, "DATABASE_DOWNLOAD_DEADLINE_SECONDS", 10)
-    with monkeypatch.context() as production_hook:  # pytest replaces the hook that prints the worker's traceback
-        production_hook.setattr(threading, "excepthook", threading.__excepthook__)
-        code, output, elapsed = timed_gate()
-    assert (code, "stopped on an unexpected error" in output, "RuntimeError: boom" in output, "exceeded" in output, elapsed < 3) == (
-        2, True, True, False, True), output
 
 
 @pytest.mark.integration

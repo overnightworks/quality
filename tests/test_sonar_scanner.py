@@ -1,4 +1,5 @@
 import io
+import ssl
 import stat
 import subprocess
 import threading
@@ -8,12 +9,12 @@ import warnings
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from email.message import Message
 from pathlib import Path
 
 import pytest
 
 from quality import output, process, sonar_scanner, web
-from quality.report import CannotJudge
 
 VERSION = "8.1.0.6389"
 FINGERPRINT = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
@@ -94,13 +95,13 @@ class Scene:
     unzipped_inside: Path | None = None
     unzip_leaves_the_scanner_folder_out: bool = False
 
-    def fetch(self, url, unreadable, expires_at, clock, timeout=15):
+    def fetch(self, url, headers, deadline, timeout=15):
         self.requested.append(url)
         self.clock.advance(self.seconds_taken.get("download", 0))
         answer = self.downloads.get(url, OSError("connection refused"))
         if isinstance(answer, Exception):
-            raise unreadable(answer)
-        return answer
+            raise web.CutAtDeadline(web.DEADLINE_SPENT) if deadline.left() <= 0 else answer
+        return answer, Message()
 
     def run(self, command, cwd=None, env=None, timeout=None):
         program = command[0] if command[0] != "gpg" else f"gpg {next(word for word in ('--show-keys', '--import', '--verify') if word in command)}"
@@ -315,11 +316,11 @@ def test_a_download_cut_at_the_deadline_names_the_failure_before_it(scene, drive
     zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
     answers = iter([OSError("connection refused"), TimeoutError()])
 
-    def refused_then_cut(url, unreadable, expires_at, clock, timeout=15):
+    def refused_then_cut(url, headers, deadline, timeout=15):
         answer = next(answers)
         if isinstance(answer, TimeoutError):
             scene.clock.advance(sonar_scanner.COMMAND_DEADLINE_SECONDS)
-        raise unreadable(answer)
+        raise answer
 
     scene.fetch = refused_then_cut
     code, out, err = drive()
@@ -333,13 +334,13 @@ def test_a_download_that_fails_once_is_retried_and_installs(scene, drive):
     answers = iter([OSError("reset"), ZIP_BYTES])
     original = scene.fetch
 
-    def flaky(url, unreadable, expires_at, clock, timeout=15):
+    def flaky(url, headers, deadline, timeout=15):
         if url == zip_url:
             answer = next(answers)
             if isinstance(answer, Exception):
-                raise unreadable(answer)
-            return answer
-        return original(url, unreadable, expires_at, clock, timeout)
+                raise answer
+            return answer, Message()
+        return original(url, headers, deadline, timeout)
 
     scene.fetch = flaky
     assert drive()[0] == 0
@@ -363,6 +364,30 @@ def test_an_answer_that_may_change_is_retried_until_the_deadline(scene, drive, c
     zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
     scene.downloads[zip_url] = urllib.error.HTTPError(zip_url, code, "busy", {}, None)
     assert drive()[0] == 2
+    assert len(scene.requested) > 1
+    assert scene.clock.now - 1000.0 >= sonar_scanner.COMMAND_DEADLINE_SECONDS
+
+
+def test_a_certificate_failure_is_retried_until_the_deadline_and_keeps_its_line(scene, drive):
+    """SONAR-115: only an answer a retry cannot change ends the download at once; a failure of the certificate is not one"""
+    zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
+    failure = urllib.error.URLError(ssl.SSLCertVerificationError("certificate verify failed"))
+    scene.downloads[zip_url] = failure
+    code, out, err = drive()
+    assert (code, out) == (2, "")
+    assert f"no answer in time; the failure before it: {failure}" in err
+    assert len(scene.requested) > 1
+    assert scene.clock.now - 1000.0 >= sonar_scanner.COMMAND_DEADLINE_SECONDS
+
+
+def test_a_download_whose_thread_dies_is_retried_until_the_deadline_and_keeps_its_line(scene, drive):
+    """SONAR-115: a request that stopped unexpectedly is one more failed attempt, retried every 3 seconds"""
+    zip_url = f"{sonar_scanner.BINARIES_BASE_URL}/sonar-scanner-cli-{VERSION}-linux-x64.zip"
+    stop = web.StoppedUnexpectedly("the request stopped on an unexpected error")
+    scene.downloads[zip_url] = stop
+    code, out, err = drive()
+    assert (code, out) == (2, "")
+    assert (f"could not download {zip_url}: no answer in time; the failure before it: {stop}" in err, RERUN_ADVICE in err) == (True, True)
     assert len(scene.requested) > 1
     assert scene.clock.now - 1000.0 >= sonar_scanner.COMMAND_DEADLINE_SECONDS
 
@@ -554,11 +579,3 @@ def test_a_server_that_stalls_ends_the_command_within_its_deadline_with_the_name
     err = capsys.readouterr().err
     assert (code, listener.origin in err, RERUN_ADVICE in err) == (2, True, True)
     assert elapsed < deadline_seconds + 5
-
-
-def test_a_read_that_starts_after_the_deadline_asks_nobody():
-    """SONAR-115: a spent deadline ends the read before a request goes out"""
-    refusal = CannotJudge("spent")
-    with pytest.raises(CannotJudge) as raised:
-        web.fetch_within("http://unreachable.invalid/zip", lambda error: refusal, 10.0, lambda: 10.0)
-    assert raised.value is refusal

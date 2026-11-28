@@ -1,29 +1,23 @@
-import errno
 import hashlib
-import http.client
 import io
 import json
 import os
 import re
-import socket
 import stat
 import tempfile
-import threading
 import time
 import urllib.error
-import urllib.request
 import zipfile
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from concurrent.futures import Future
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PurePosixPath
 
-from quality import pip_requirements, process, repository, scanners
+from quality import pip_requirements, process, repository, scanners, web
 from quality.config import ADVISORY_ALLOWANCE_HEADING, AdvisoryAllowance
 from quality.config_entries import CONFIG_PATH
-from quality.deadline import RunDeadline, RunDeadlineSpent
+from quality.deadline import Deadline, RunDeadline, RunDeadlineSpent
 from quality.output import SEPARATOR
 from quality.pip_requirements import Requirement
 from quality.report import Finding, FindingEvent, LockExtent, Note, NoteEvent, RuleResult, shell_word
@@ -42,13 +36,7 @@ DATABASE_DOWNLOAD_DEADLINE_SECONDS = 300
 OSV_CONFIG = Path(__file__).with_name("osv-scanner.toml")
 OSV_FINDINGS_FOUND = 1
 RANGE_TYPES_WITH_VERSIONS = ("ECOSYSTEM", "SEMVER")  # a GIT range's `fixed` is a commit, not a version
-DOWNLOAD_FAILURES = (OSError, ValueError, http.client.HTTPException)
 RETRY_DELAYS_SECONDS = (3, 9, 27)  # after each transient failure; the waits spend the download deadline and add none
-TRANSIENT_ERRNOS = frozenset({errno.ENETUNREACH, errno.EHOSTUNREACH})
-TRANSIENT_CONNECTION_ERRORS = (
-    ConnectionRefusedError, ConnectionResetError, TimeoutError, socket.gaierror, http.client.IncompleteRead,
-)
-TOO_MANY_REQUESTS = 429
 NOT_MODIFIED = 304
 MD5_ETAG = re.compile(r'"([0-9a-f]{32})"')  # what the server states for an archive; a weak or other ETag states no md5
 OSV_URL = "https://osv.dev/vulnerability/"
@@ -127,11 +115,12 @@ def is_lock(name: str) -> bool:
 def scan(
     locks: Mapping[str, Path], root: Path, allowances: Sequence[AdvisoryAllowance], today: date,
     deadline: RunDeadline, log: scanners.ScannerLog = scanners.no_log,
-    *, cache: Path | None, sleep: Callable[[float], None] = time.sleep,
+    *, cache: Path | None, sleep: Callable[[float], None] = time.sleep, fetch: web.BoundedFetch = web.fetch_within,
 ) -> RuleResult:
     """The advisories that affect the lock files `locks` (tracked name -> absolute path), with the repository's
     allowances applied; no lock needs no scanner, and leaves every allowance matching nothing. `cache` is quality's
-    user cache directory, below which a verified copy of each archive is kept; None keeps none."""
+    user cache directory, below which a verified copy of each archive is kept; None keeps none. `sleep` and `fetch` are
+    the ports a test replaces."""
     if not locks:
         return apply_allowances([], allowances, today, LockExtent(0, 0))
     names_by_path = _names_by_path(locks)
@@ -141,7 +130,7 @@ def scan(
         try:
             handovers = _handovers(root, locks, scratch, names_by_path)
             ecosystems = sorted({lock_kind(name).ecosystem for name in locks})
-            report = _scan(binary, ecosystems, handovers, scratch, cache, names_by_path, deadline, sleep, known, log)
+            report = _scan(binary, ecosystems, handovers, scratch, cache, names_by_path, deadline, sleep, fetch, known, log)
         except process.ProcessError as error:
             raise ScannerError(_without_paths(str(error), names_by_path, known)) from None
     return apply_allowances(report.affected, allowances, today, LockExtent(len(locks), report.packages))
@@ -229,10 +218,10 @@ def _read_requirements(root: Path, name: str) -> tuple[Requirement, ...]:
 
 def _scan(
     binary: Path, ecosystems: Sequence[str], handovers: Sequence[Handover], scratch: Path, cache: Path | None,
-    names_by_path: dict[str, list[str]], deadline: RunDeadline, sleep: Callable[[float], None],
+    names_by_path: dict[str, list[str]], deadline: RunDeadline, sleep: Callable[[float], None], fetch: web.BoundedFetch,
     known: list[tuple[Path, str]], log: scanners.ScannerLog,
 ) -> OsvReport:
-    _place_databases(scratch, ecosystems, cache, deadline, sleep)
+    _place_databases(scratch, ecosystems, cache, deadline, sleep, fetch)
     # cwd is the scratch directory so that nothing in the scanned repository is read by accident.
     command = [
         str(binary), "scan", "source", "--offline", f"--local-db-path={scratch}", f"--config={OSV_CONFIG}",
@@ -254,7 +243,8 @@ def _names_by_path(locks: Mapping[str, Path]) -> dict[str, list[str]]:
 
 
 def _place_databases(
-    scratch: Path, ecosystems: Sequence[str], cache: Path | None, deadline: RunDeadline, sleep: Callable[[float], None]
+    scratch: Path, ecosystems: Sequence[str], cache: Path | None, deadline: RunDeadline, sleep: Callable[[float], None],
+    fetch: web.BoundedFetch,
 ) -> None:
     """Each ecosystem's advisory database where osv-scanner looks for it with --local-db-path; one deadline spans their
     requests, and the run's end cuts it short. Reading and hashing a copy spends only the run's time, never the
@@ -265,17 +255,19 @@ def _place_databases(
         reading_started = deadline.monotonic()
         copy = None if copy_path is None else _read_copy(copy_path)
         ends_at = min(ends_at + deadline.monotonic() - reading_started, deadline.ends_at)
-        _place_database(scratch, ecosystem, copy_path, copy, ends_at, deadline, sleep)
+        _place_database(
+            scratch, ecosystem, copy_path, copy, Deadline(ends_at, deadline.monotonic), deadline, sleep, fetch
+        )
 
 
 def _place_database(
-    scratch: Path, ecosystem: str, copy_path: Path | None, copy: _Copy | None, ends_at: float, deadline: RunDeadline,
-    sleep: Callable[[float], None],
+    scratch: Path, ecosystem: str, copy_path: Path | None, copy: _Copy | None, download: Deadline, deadline: RunDeadline,
+    sleep: Callable[[float], None], fetch: web.BoundedFetch,
 ) -> None:
     """The archive is the server's, whole: either a download whose md5 is the one the server states, or the copy the
     server confirmed. Only the bytes checked here reach the scratch directory, never the cache file itself."""
     url = f"{DATABASE_ROOT}/{ecosystem}/{DATABASE_ARCHIVE}"
-    fetched = _fetch_database(url, ecosystem, copy, ends_at, deadline, sleep)
+    fetched = _fetch_database(url, ecosystem, copy, download, deadline, sleep, fetch)
     archive = fetched.archive
     try:
         with zipfile.ZipFile(io.BytesIO(archive)) as database:
@@ -359,22 +351,28 @@ def _keep_copy(path: Path, archive: bytes) -> None:
 
 
 def _fetch_database(
-    url: str, ecosystem: str, copy: _Copy | None, ends_at: float, deadline: RunDeadline,
-    sleep: Callable[[float], None],
+    url: str, ecosystem: str, copy: _Copy | None, download: Deadline, deadline: RunDeadline,
+    sleep: Callable[[float], None], fetch: web.BoundedFetch,
 ) -> _Fetched:
     """The archive at `url`, asked for with the hash of `copy` when there is one, tried again after each transient
-    failure (after `RETRY_DELAYS_SECONDS`) while `ends_at` (a `deadline.monotonic()` value) allows; a permanent failure
-    or the last transient one is the refusal. The run's end, when it is the earlier, is the refusal in the run's
-    words. A not-modified answer that names another copy than the one sent costs one attempt and is asked again without
-    the copy."""
+    failure (after `RETRY_DELAYS_SECONDS`) while `download` allows; a permanent failure or the last transient one is
+    the refusal. The run's end, when it is the earlier, is the refusal in the run's words. A not-modified answer that
+    names another copy than the one sent costs one attempt and is asked again without the copy."""
     delays = iter(RETRY_DELAYS_SECONDS)
     attempts = 0
     asking = copy
-    while True:
+
+    def attempt() -> _Answer:
+        nonlocal attempts
         attempts += 1
-        answer = _answer_or_wait(url, ecosystem, asking, attempts, ends_at, deadline, delays, sleep)
-        if answer is None:
-            continue
+        deadline.ensure_time_left()
+        return _requested(url, asking, download, fetch)
+
+    while True:
+        try:
+            answer = download.retried(attempt, web.is_transient, delays, sleep)
+        except web.FETCH_FAILURES as error:
+            raise _refusal(url, ecosystem, error, attempts, deadline) from error
         fetched = _settled(answer, ecosystem, copy, asking is not None)
         if fetched is not None:
             return fetched
@@ -384,27 +382,35 @@ def _fetch_database(
             raise _cannot_download(ecosystem, url, contradiction, f" after {attempts} attempts")
 
 
-def _answer_or_wait(
-    url: str, ecosystem: str, asking: _Copy | None, attempts: int, ends_at: float, deadline: RunDeadline,
-    delays: Iterator[float], sleep: Callable[[float], None],
-) -> _Answer | None:
-    """One request for `url`; the server's answer, or None after a transient failure and the wait that follows it. A
-    permanent failure, the last transient one and the end of the time are the refusal."""
-    deadline.ensure_time_left()
+def _requested(url: str, copy: _Copy | None, download: Deadline, fetch: web.BoundedFetch) -> _Answer:
+    """The server's answer at `url`, to a request that names `copy` by its md5 when there is one."""
+    headers = {} if copy is None else {"If-None-Match": f'"{copy.md5}"'}
     try:
-        return _download_once(url, ecosystem, ends_at, deadline.monotonic, asking)
-    except _TimeLimitReached:
-        if deadline.left() <= 0:
-            raise RunDeadlineSpent.cut(f"the {ecosystem} advisory database download") from None
-        raise _deadline_exceeded(ecosystem) from None
-    except DOWNLOAD_FAILURES as error:
-        if not _is_transient(error):
-            raise _cannot_download(ecosystem, url, error, "") from error
-        delay = next(delays, None)
-        if delay is None:
-            raise _cannot_download(ecosystem, url, error, f" after {attempts} attempts") from error
-        sleep(max(0.0, min(delay, ends_at - deadline.monotonic())))
-        return None
+        body, answered = fetch(url, headers, download, DOWNLOAD_TIMEOUT_SECONDS)
+    except urllib.error.HTTPError as error:
+        if error.code != NOT_MODIFIED:
+            raise
+        return _Answer(True, error.headers.get("ETag"), b"")
+    return _Answer(False, answered.get("ETag"), body)
+
+
+def _refusal(
+    url: str, ecosystem: str, error: Exception, attempts: int, deadline: RunDeadline
+) -> ScannerError | RunDeadlineSpent:
+    """What a download that ended in `error` is refused with; the checks run in this order, so a transient failure on
+    the last attempt names the attempts even where the time ran out with it."""
+    run_spent = deadline.left() <= 0
+    if isinstance(error, web.CutAtDeadline):
+        if run_spent:
+            return RunDeadlineSpent.cut(f"the {ecosystem} advisory database download")
+        return _deadline_exceeded(ecosystem)
+    if isinstance(error, web.StoppedUnexpectedly):
+        return ScannerError(f"the {ecosystem} advisory database download stopped on an unexpected error")
+    if not web.is_transient(error):
+        return _cannot_download(ecosystem, url, error, "")
+    if attempts > len(RETRY_DELAYS_SECONDS):
+        return _cannot_download(ecosystem, url, error, f" after {attempts} attempts")
+    return RunDeadlineSpent.not_started() if run_spent else _deadline_exceeded(ecosystem)
 
 
 def _settled(answer: _Answer, ecosystem: str, copy: _Copy | None, asked_with_copy: bool) -> _Fetched | None:
@@ -429,62 +435,8 @@ def _settled(answer: _Answer, ecosystem: str, copy: _Copy | None, asked_with_cop
     return _Fetched(answer.body, True)
 
 
-def _is_transient(error: BaseException) -> bool:
-    if isinstance(error, urllib.error.HTTPError):
-        return error.code == TOO_MANY_REQUESTS or 500 <= error.code <= 599
-    if isinstance(error, urllib.error.URLError):
-        return isinstance(error.reason, BaseException) and _is_transient(error.reason)
-    return isinstance(error, TRANSIENT_CONNECTION_ERRORS) or (
-        isinstance(error, OSError) and error.errno in TRANSIENT_ERRNOS
-    )
-
-
 def _cannot_download(ecosystem: str, url: str, error: BaseException, after: str) -> ScannerError:
     return ScannerError(f"cannot download the {ecosystem} advisory database from {url}: {error}{after}")
-
-
-class _TimeLimitReached(Exception):
-    """A download did not arrive before its end."""
-
-
-def _download_once(
-    url: str, ecosystem: str, ends_at: float, monotonic: Callable[[], float], copy: _Copy | None
-) -> _Answer:
-    """The server's answer at `url`, to a request that names `copy` by its md5 when there is one, if it arrives before
-    `ends_at` (a `monotonic()` value); a worker does the download so that the deadline holds whatever the server sends
-    or withholds.
-
-    A daemon worker, because a server that stalls in its headers cannot be interrupted and must not keep the process alive.
-    The caller judges by the worker's lifetime: still running at its end is the time limit; ended without an outcome
-    means an unexpected error (its traceback is on stderr); a download failure, a socket timeout included, is the
-    worker's outcome, raised as it is."""
-    download: Future[_Answer] = Future()
-    remaining = ends_at - monotonic()
-    if remaining <= 0:
-        raise _TimeLimitReached
-    headers = {} if copy is None else {"If-None-Match": f'"{copy.md5}"'}
-
-    def fetch() -> None:
-        try:
-            request = urllib.request.Request(url, headers=headers)  # noqa: S310 - url comes from the pinned advisory databases (https)
-            with urllib.request.urlopen(request, timeout=min(DOWNLOAD_TIMEOUT_SECONDS, remaining)) as response:  # noqa: S310 - url comes from the pinned advisory databases (https)
-                download.set_result(_Answer(False, response.headers.get("ETag"), response.read()))
-        except urllib.error.HTTPError as error:
-            if error.code == NOT_MODIFIED:
-                download.set_result(_Answer(True, error.headers.get("ETag"), b""))
-            else:
-                download.set_exception(error)
-        except DOWNLOAD_FAILURES as error:
-            download.set_exception(error)
-
-    worker = threading.Thread(target=fetch, daemon=True)
-    worker.start()
-    worker.join(remaining)
-    if worker.is_alive():
-        raise _TimeLimitReached
-    if not download.done():
-        raise ScannerError(f"the {ecosystem} advisory database download stopped on an unexpected error")
-    return download.result()
 
 
 def cached_archive(cache: Path, ecosystem: str) -> Path:

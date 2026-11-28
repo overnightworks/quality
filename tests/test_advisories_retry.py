@@ -1,16 +1,12 @@
 import datetime
-import errno
 import http.server
-import io
 import threading
-import urllib.error
-import urllib.request
-import urllib.response
+from http import HTTPStatus
 from types import SimpleNamespace
 
 import pytest
 
-from quality import advisories, deadline
+from quality import advisories, deadline, web
 from quality.scanners import ScannerError
 from tests.support.advisories import uv_lock, zipped
 
@@ -21,6 +17,7 @@ TRUNCATED = "truncated"
 NOT_MODIFIED = "not modified"  # a 304 whose ETag is not the md5 of the copy sent
 SERVED = "served"
 NOT_A_ZIP = "not a zip"
+REDIRECT = HTTPStatus.FOUND  # to `served.redirect_to`
 
 
 @pytest.fixture
@@ -28,7 +25,7 @@ def scripted_server(monkeypatch):
     """A local HTTP server that answers request n with script[n] (the last entry repeats): an HTTP status, `SERVED`
     for the database, or `TRUNCATED` for a body cut short. It refuses connections until `.open()`, and each request
     is recorded as it arrives; it is stopped at teardown."""
-    served = SimpleNamespace(script=[SERVED], requested=[], on_request=lambda: None)
+    served = SimpleNamespace(script=[SERVED], requested=[], on_request=lambda: None, redirect_to="")
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
@@ -45,6 +42,10 @@ def scripted_server(monkeypatch):
             elif step == NOT_MODIFIED:
                 self.send_response(304)
                 self.send_header("ETag", f'"{"0" * 32}"')
+                self.end_headers()
+            elif step == REDIRECT:
+                self.send_response(step)
+                self.send_header("Location", f"{served.redirect_to}/elsewhere")
                 self.end_headers()
             elif step == TRUNCATED:
                 self.send_response(200)
@@ -77,27 +78,9 @@ def scripted_server(monkeypatch):
 
 
 @pytest.fixture
-def flaky_network(monkeypatch):
-    """Makes the first `flaky://` open raise `unreachable` as urllib reports it; every later one serves the database."""
-    opened = SimpleNamespace(count=0)
-
-    class Flaky(urllib.request.BaseHandler):
-        def flaky_open(self, request):
-            opened.count += 1
-            if opened.count == 1:
-                raise urllib.error.URLError(OSError(errno.ENETUNREACH, "Network is unreachable"))
-            return urllib.response.addinfourl(io.BytesIO(DATABASE), {}, request.full_url, 200)
-
-    urllib.request.install_opener(urllib.request.build_opener(Flaky()))
-    monkeypatch.setattr(advisories, "DATABASE_ROOT", "flaky://database")
-    yield opened
-    urllib.request.install_opener(None)
-
-
-@pytest.fixture
 def scan(build_repo, tmp_path):
     """Scans a repository with a uv.lock; returns (the result or the refusal, the seconds slept) with a clock that
-    moves only by sleeping. `.copy` is where the copy of the PyPI archive lives."""
+    moves only by sleeping, and the ports (`fetch`) a test replaces. `.copy` is where the copy of the PyPI archive lives."""
     repo = build_repo({"uv.lock": uv_lock()})
     cache = tmp_path / "cache"
     state = SimpleNamespace(now=0.0, slept=[], on_sleep=lambda: None)
@@ -107,11 +90,11 @@ def scan(build_repo, tmp_path):
         state.slept.append(seconds)
         state.now += seconds
 
-    def run():
+    def run(**ports):
         try:
             return advisories.scan(
                 {"uv.lock": repo / "uv.lock"}, repo, [], TODAY, deadline.RunDeadline.starting(lambda: state.now),
-                sleep=sleep, cache=cache,
+                sleep=sleep, cache=cache, **ports,
             )
         except (ScannerError, deadline.RunDeadlineSpent) as refusal:
             return refusal
@@ -149,6 +132,20 @@ def test_a_database_that_never_arrives_is_refused_after_four_attempts_with_growi
 
 
 @pytest.mark.integration
+def test_a_redirect_is_refused_at_once_and_its_target_hears_nothing(scan, scripted_server, stub_server):
+    """ADVISORY-47: a 3xx answer is exit 2 naming the database and the status, and no other host is asked."""
+    target, target_heard = stub_server(lambda handler: (handler.send_response(HTTPStatus.OK), handler.end_headers()))
+    scripted_server.script = [REDIRECT]
+    scripted_server.redirect_to = target
+    scripted_server.open()
+    refusal = scan()
+    message = str(refusal)
+    observed = (isinstance(refusal, ScannerError), "the PyPI advisory database" in message, str(int(REDIRECT)) in message)
+    assert (*observed, "attempts" in message) == (True, True, True, False)
+    assert (len(scripted_server.requested), target_heard, scan.state.slept) == (1, [], [])
+
+
+@pytest.mark.integration
 def test_a_missing_database_is_not_tried_again(scan, scripted_server):
     """ADVISORY-42: another 4xx is permanent."""
     scripted_server.script = [404]
@@ -177,13 +174,6 @@ def test_a_refused_connection_is_tried_again_until_the_server_listens(scan, scri
     result = scan()
     observed = (isinstance(result, ScannerError), scripted_server.requested, scan.state.slept)
     assert observed == (False, ["/PyPI/all.zip"], [3])
-
-
-@pytest.mark.integration
-def test_an_unreachable_network_is_tried_again_and_then_used(scan, flaky_network):
-    """ADVISORY-9: ENETUNREACH is transient."""
-    result = scan()
-    assert (isinstance(result, ScannerError), flaky_network.count, scan.state.slept) == (False, 2, [3])
 
 
 @pytest.mark.integration
@@ -238,7 +228,49 @@ def test_a_run_that_ends_during_a_failed_attempt_cuts_the_wait_and_sends_no_furt
     refusal = scan()
     assert isinstance(refusal, deadline.RunDeadlineSpent)
     assert (str(refusal), scan.state.slept, len(scripted_server.requested)) == (
-        "the run's 100 seconds are spent", [0], 1)
+        "the run's 100 seconds are spent", [], 1)
+
+
+@pytest.mark.integration
+def test_a_wait_cut_to_the_end_of_the_run_sends_no_further_request(scan, scripted_server, monkeypatch):
+    """SCANNER-20, REFUSAL-22, ADVISORY-9: the wait after a failure is cut to the run's end, and the attempt after it
+    sends no request and cannot judge in the run's words."""
+    monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 100)
+    scripted_server.script = [GATEWAY_TIMEOUT]
+    scripted_server.on_request = lambda: setattr(scan.state, "now", deadline.RUN_DEADLINE_SECONDS - 1)
+    scripted_server.open()
+    refusal = scan()
+    assert isinstance(refusal, deadline.RunDeadlineSpent)
+    assert (str(refusal), scan.state.slept, len(scripted_server.requested)) == (
+        "the run's 100 seconds are spent", [1], 1)
+
+
+@pytest.mark.integration
+def test_a_failure_that_arrives_at_the_end_of_the_download_deadline_waits_for_nothing(scan, scripted_server):
+    """ADVISORY-9: a transient failure with no time left is refused in the deadline's words, not as a failed
+    download and not after attempts."""
+    scripted_server.script = [GATEWAY_TIMEOUT]
+    scripted_server.on_request = lambda: setattr(scan.state, "now", advisories.DATABASE_DOWNLOAD_DEADLINE_SECONDS)
+    scripted_server.open()
+    refusal = scan()
+    assert isinstance(refusal, ScannerError)
+    assert (str(refusal), scan.state.slept, len(scripted_server.requested)) == (
+        "the PyPI advisory database download exceeded 300 seconds", [], 1)
+
+
+@pytest.mark.integration
+def test_a_download_whose_thread_dies_is_refused_at_once_in_its_own_words(scan):
+    """ADVISORY-9: a request that stopped unexpectedly is not a failure to try again."""
+    asked = []
+
+    def dies(url, headers, deadline, timeout):
+        asked.append(url)
+        raise web.StoppedUnexpectedly("the request stopped on an unexpected error")
+
+    refusal = scan(fetch=dies)
+    assert isinstance(refusal, ScannerError)
+    assert (str(refusal), len(asked), scan.state.slept) == (
+        "the PyPI advisory database download stopped on an unexpected error", 1, [])
 
 
 @pytest.mark.integration

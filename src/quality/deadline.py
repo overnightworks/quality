@@ -1,5 +1,5 @@
 import subprocess
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,18 +23,41 @@ class RunDeadlineSpent(CannotJudge):
 
 
 @dataclass(frozen=True)
-class RunDeadline:
-    """The one time budget of a `check` run or of a fleet report, counted on the clock the door injected."""
+class Deadline:
+    """A time budget counted on an injected clock, and the one loop that retries inside it."""
 
     ends_at: float
     monotonic: Callable[[], float]
 
+    def left(self) -> float:
+        return self.ends_at - self.monotonic()
+
+    def retried[T](
+        self, attempt: Callable[[], T], again: Callable[[Exception], bool], delays: Iterator[float],
+        sleep: Callable[[float], None],
+    ) -> T:
+        """The result of `attempt`, run again after the next of `delays` (cut to the time left) for each failure
+        `again` accepts. Any other failure, the failure after the last delay and a failure with no time left are
+        raised as they are."""
+        while True:
+            try:
+                return attempt()
+            except Exception as failure:
+                if not again(failure) or self.left() <= 0:
+                    raise
+                delay = next(delays, None)
+                if delay is None:
+                    raise
+                sleep(min(delay, self.left()))
+
+
+@dataclass(frozen=True)
+class RunDeadline(Deadline):
+    """The one time budget of a `check` run or of a fleet report, counted on the clock the door injected."""
+
     @classmethod
     def starting(cls, monotonic: Callable[[], float]) -> RunDeadline:
         return cls(monotonic() + RUN_DEADLINE_SECONDS, monotonic)
-
-    def left(self) -> float:
-        return self.ends_at - self.monotonic()
 
     def ensure_time_left(self) -> None:
         if self.left() <= 0:
