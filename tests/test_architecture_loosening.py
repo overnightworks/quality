@@ -48,7 +48,7 @@ def session_change(option: str, before: str | None, after: str | None, *, loosen
     """A pair of INI files whose `option` goes from `before` to `after` (None leaves it out), and the lines its change reads as."""
     sides = [{} if value is None else {option: value} for value in (before, after)]
     pair = tuple({".importlinter": contracts_ini(one(FORBIDDEN), **session)} for session in sides)
-    return (*pair, [architecture.session_loosening(option)] if loosens else [])
+    return (*pair, [f"import-linter changes {option}"] if loosens else [])
 
 
 @pytest.mark.parametrize(
