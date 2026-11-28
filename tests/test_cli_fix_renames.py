@@ -10,6 +10,7 @@ from tests.support.clones import function as clone_function
 from tests.support.door import CHECK_WORD, DRY_RUN_WORDS, FIX_WORDS, digest, door_in, fixed, restore_step
 from tests.support.git_repositories import git, head_commit, put, shallow_clone
 from tests.support.source_code import long_function
+from tests.support.terminal import squashed
 from tests.support.verdict import verdict_streams
 from tests.support.verdict_renames import commit_all
 
@@ -518,9 +519,6 @@ def workflow_moved_without_a_committed_job_table(pull_request) -> Path:
 def job_moved_note(job: str, minutes: int) -> str:
     return f"{NEW_WORKFLOW} moved job {job} {minutes} minutes from {OLD_WORKFLOW}"
 
-
-def squashed(text: str) -> str:
-    return " ".join(text.split())
 
 
 @pytest.mark.parametrize(

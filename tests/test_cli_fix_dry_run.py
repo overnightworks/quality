@@ -8,7 +8,7 @@ import pytest
 
 from quality.baseline_file import BASELINE_HEADER, BASELINE_PATH, load_baseline, render_baseline
 from quality.config_entries import CONFIG_PATH
-from tests.support.baselines import rendered
+from tests.support.baselines import rendered_with_clones
 from tests.support.clones import function as clone_function
 from tests.support.door import DRY_RUN_WORDS, FIX_WORDS, door_in, fixed, judging_at_the_pin, restore_step, tree_of
 from tests.support.generated_files import gate_declaring
@@ -17,10 +17,6 @@ from tests.support.source_code import branchy_function, long_file, long_function
 from tests.support.terminal import Terminal, by_role, without_sgr
 
 pytestmark = pytest.mark.integration
-
-
-def ceiling(table: str) -> str:
-    return rendered(table + "\n[clones]\n")
 
 
 def untouched(repo: Path) -> tuple[dict[str, bytes | str | None], list[tuple[int, int] | None]]:
@@ -36,18 +32,18 @@ def holding(files: dict[str, str]):
 
 
 def held_above(build_repo) -> Path:
-    return build_repo({"src/a.py": long_function(62), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 80\n')})
+    return build_repo({"src/a.py": long_function(62), BASELINE_PATH: rendered_with_clones('[function_lines."src/a.py"]\nlong_one = 80\n')})
 
 
 def moved_with_git(build_repo) -> Path:
-    held = ceiling('[function_lines."src/old.py"]\nlong_one = 70\n')
+    held = rendered_with_clones('[function_lines."src/old.py"]\nlong_one = 70\n')
     repo = build_repo({"src/old.py": long_function(70), BASELINE_PATH: held})
     git(repo, "mv", "src/old.py", "src/new.py")
     return repo
 
 
 def a_fall_beside_a_move(build_repo) -> Path:
-    held = ceiling('[function_lines."src/old.py"]\nlong_one = 70\n\n[file_lines]\n"src/big.py" = 850\n')
+    held = rendered_with_clones('[function_lines."src/old.py"]\nlong_one = 70\n\n[file_lines]\n"src/big.py" = 850\n')
     repo = build_repo({"src/old.py": long_function(70), "src/big.py": long_file(850), BASELINE_PATH: held})
     git(repo, "mv", "src/old.py", "src/new.py")
     put(repo / "src/big.py", long_file(830))
@@ -55,7 +51,7 @@ def a_fall_beside_a_move(build_repo) -> Path:
 
 
 def a_stale_target(build_repo) -> Path:
-    held = ceiling('[function_lines."src/old.py"]\nlong_one = 100\n\n[function_lines."src/new.py"]\nlong_one = 200\n')
+    held = rendered_with_clones('[function_lines."src/old.py"]\nlong_one = 100\n\n[function_lines."src/new.py"]\nlong_one = 200\n')
     repo = build_repo({"src/old.py": long_function(100), BASELINE_PATH: held})
     git(repo, "mv", "src/old.py", "src/new.py")
     put(repo / "src/new.py", long_function(150))
@@ -63,14 +59,14 @@ def a_stale_target(build_repo) -> Path:
 
 
 def a_rename_over_a_stale_target_that_is_generated(build_repo) -> Path:
-    held = ceiling('[function_lines."src/old.py"]\nlong_one = 100\n\n[function_lines."src/new.py"]\nlong_one = 200\n')
+    held = rendered_with_clones('[function_lines."src/old.py"]\nlong_one = 100\n\n[function_lines."src/new.py"]\nlong_one = 200\n')
     repo = build_repo({"src/old.py": long_function(100), CONFIG_PATH: gate_declaring("src/new.py"), BASELINE_PATH: held})
     git(repo, "mv", "src/old.py", "src/new.py")
     return repo
 
 
 def a_move_beside_a_grown_entry(build_repo) -> Path:
-    held = ceiling('[function_lines."src/old.py"]\nlong_one = 70\n\n[file_lines]\n"src/other.py" = 810\n')
+    held = rendered_with_clones('[function_lines."src/old.py"]\nlong_one = 70\n\n[file_lines]\n"src/other.py" = 810\n')
     repo = build_repo({"src/old.py": long_function(70), "src/other.py": long_file(850), BASELINE_PATH: held})
     git(repo, "mv", "src/old.py", "src/new.py")
     return repo
@@ -87,21 +83,21 @@ def a_move_beside_a_grown_entry(build_repo) -> Path:
             id="lowered",
         ),
         pytest.param(
-            holding({"src/a.py": long_file(790), BASELINE_PATH: ceiling('[file_lines]\n"src/a.py" = 805\n')}),
+            holding({"src/a.py": long_file(790), BASELINE_PATH: rendered_with_clones('[file_lines]\n"src/a.py" = 805\n')}),
             "  ~ debt          1 to lower     quality/baseline.toml\n"
             "    ~ src/a.py  drop  file 805 → 790 lines · debt from 800 lines\n"
             "~ dry run · 1 ceiling entry would fall · nothing written · <1s\n",
             id="below the threshold",
         ),
         pytest.param(
-            holding({"src/a.py": "x = 1\n", BASELINE_PATH: ceiling('[file_lines]\n"src/legacy.py" = 802\n')}),
+            holding({"src/a.py": "x = 1\n", BASELINE_PATH: rendered_with_clones('[file_lines]\n"src/legacy.py" = 802\n')}),
             "  ~ debt          1 to lower     quality/baseline.toml\n"
             "    ~ src/legacy.py  drop  file is gone · was 802 lines\n"
             "~ dry run · 1 ceiling entry would fall · nothing written · <1s\n",
             id="a gone file",
         ),
         pytest.param(
-            holding({"src/a.py": "x = 1\n", BASELINE_PATH: ceiling('[ccn."src/legacy.py"]\nbranchy = 19\n')}),
+            holding({"src/a.py": "x = 1\n", BASELINE_PATH: rendered_with_clones('[ccn."src/legacy.py"]\nbranchy = 19\n')}),
             "  ~ debt          1 to lower     quality/baseline.toml\n"
             "    ~ src/legacy.py  drop  function branchy is gone · was CCN 19\n"
             "~ dry run · 1 ceiling entry would fall · nothing written · <1s\n",
@@ -110,7 +106,7 @@ def a_move_beside_a_grown_entry(build_repo) -> Path:
         pytest.param(
             holding({
                 "gen/api.py": long_function(70), CONFIG_PATH: gate_declaring("gen/api.py"),
-                BASELINE_PATH: ceiling('[function_lines."gen/api.py"]\nlong_one = 70\n'),
+                BASELINE_PATH: rendered_with_clones('[function_lines."gen/api.py"]\nlong_one = 70\n'),
             }),
             "  ~ debt          1 to lower     quality/baseline.toml\n"
             "    ~ gen/api.py  drop  function long_one is left out as generated · was 70 lines\n"
@@ -204,7 +200,7 @@ def test_a_dry_run_names_each_change_and_writes_nothing(build_repo, capsys, arra
 
 def three_entries_that_can_fall(build_repo) -> Path:
     """A function that shrank, a file that shrank and a file that is gone."""
-    held = ceiling('[ccn."src/cart.py"]\nbranchy = 19\n\n[file_lines]\n"src/orders.py" = 826\n"src/legacy.py" = 802\n')
+    held = rendered_with_clones('[ccn."src/cart.py"]\nbranchy = 19\n\n[file_lines]\n"src/orders.py" = 826\n"src/legacy.py" = 802\n')
     return build_repo({"src/cart.py": branchy_function(17), "src/orders.py": long_file(812), BASELINE_PATH: held})
 
 
@@ -233,7 +229,7 @@ def test_a_dry_run_plans_the_entries_the_fix_then_lowers(build_repo, capsys):
 def test_a_dry_run_with_nothing_to_change_is_clean(build_repo, capsys, words):
     """FIX-18, FIX-23: with nothing to change a dry run and the fix end clean with exit 0, and the verdict says there is
     nothing to lower."""
-    repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 62\n')})
+    repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: rendered_with_clones('[function_lines."src/a.py"]\nlong_one = 62\n')})
     before = untouched(repo)
     clean = "  ✓ debt          clean          ceiling held · 1 entry, 0 clone pairs\n✓ clean · nothing to lower · 1 area · <1s\n"
     assert (*fixed(capsys, repo, *words), untouched(repo)) == (0, clean, "", before)
@@ -261,11 +257,11 @@ def a_ceiling_that_is_no_toml(build_repo, elsewhere) -> Path:
 
 
 def a_file_that_does_not_parse(build_repo, elsewhere) -> Path:
-    return build_repo({"src/a.py": long_function(62), "src/broken.py": "def broken(:\n", BASELINE_PATH: ceiling("[file_lines]\n")})
+    return build_repo({"src/a.py": long_function(62), "src/broken.py": "def broken(:\n", BASELINE_PATH: rendered_with_clones("[file_lines]\n")})
 
 
 def a_clones_table_git_holds(build_repo, elsewhere) -> Path:
-    repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: ceiling("[file_lines]\n")})
+    repo = build_repo({"src/a.py": "x = 1\n", BASELINE_PATH: rendered_with_clones("[file_lines]\n")})
     put(repo / BASELINE_PATH, "[file_lines]\n")
     return repo
 
@@ -286,12 +282,12 @@ def a_path_no_ceiling_can_hold_beside_a_held_ceiling(build_repo, elsewhere) -> P
 
 
 def a_config_refusal(build_repo, elsewhere) -> Path:
-    return build_repo({"src/a.py": long_function(62), CONFIG_PATH: "nope = 1\n", BASELINE_PATH: ceiling("[file_lines]\n")})
+    return build_repo({"src/a.py": long_function(62), CONFIG_PATH: "nope = 1\n", BASELINE_PATH: rendered_with_clones("[file_lines]\n")})
 
 
 def a_committed_ceiling_that_does_not_parse_repaired_in_the_tree(build_repo, elsewhere) -> Path:
     repo = build_repo({"src/a.py": long_function(62), BASELINE_PATH: "[file_lines\n"})
-    put(repo / BASELINE_PATH, ceiling("[file_lines]\n"))
+    put(repo / BASELINE_PATH, rendered_with_clones("[file_lines]\n"))
     return repo
 
 
@@ -335,7 +331,7 @@ def shallow_new_row() -> str:
         ),
         pytest.param(shallow_clone_holding({"src/a.py": "x = 1\n", BASELINE_PATH: "[file_lines]\n"}), shallow_new_row(), unshallow_error(), id="shallow, a ceiling without a table"),
         pytest.param(
-            shallow_clone_holding({"src/a.py": "x = 1\n", BASELINE_PATH: ceiling("[file_lines]\n")}),
+            shallow_clone_holding({"src/a.py": "x = 1\n", BASELINE_PATH: rendered_with_clones("[file_lines]\n")}),
             "  ✗ debt          not fixed      this clone is shallow, so git cannot show where quality/baseline.toml last changed\n",
             unshallow_error(),
             id="shallow, the lineage",
@@ -469,7 +465,7 @@ def test_at_a_terminal_a_dry_run_keeps_the_plain_words(build_repo, capsys):
 def test_a_dry_run_beside_a_grown_entry_with_nothing_to_change_says_so_and_writes_nothing(build_repo, capsys):
     """FIX-5, FIX-19, CEILING-5: an entry that grew stays a finding in a dry run, its fix saying that a raise is a hand
     edit, and nothing is written."""
-    repo = build_repo({"src/a.py": long_function(150), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 100\n')})
+    repo = build_repo({"src/a.py": long_function(150), BASELINE_PATH: rendered_with_clones('[function_lines."src/a.py"]\nlong_one = 100\n')})
     before = untouched(repo)
     printed = (
         "  ! debt          1 finding      nothing to lower\n"
@@ -566,7 +562,7 @@ def test_a_ceiling_whose_text_is_not_its_rendering_is_rewritten_by_the_fix_and_p
 @pytest.mark.parametrize("words", [DRY_RUN_WORDS, FIX_WORDS], ids=["dry run", "fix"])
 def test_a_ceiling_that_renders_byte_for_byte_is_left_alone(build_repo, capsys, words):
     """FIX-31: a ceiling that renders byte for byte is not written by the dry run or the fix, and the run is clean."""
-    repo = stale_ceiling(build_repo, rendered(ENTRIES + "\n[clones]\n"))
+    repo = stale_ceiling(build_repo, rendered_with_clones(ENTRIES))
     before = untouched(repo)
     code, out, err = fixed(capsys, repo, *words)
     assert (code, out.splitlines()[-1], err, untouched(repo)) == (0, "✓ clean · nothing to lower · 1 area · <1s", "", before)

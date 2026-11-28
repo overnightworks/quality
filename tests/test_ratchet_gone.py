@@ -9,7 +9,7 @@ from quality.baseline_file import BASELINE_PATH, Key, Metric, load_baseline
 from quality.config import GeneratedFile
 from quality.config_entries import CONFIG_PATH
 from quality.ratchet import Measured, gone_entries
-from tests.support.baselines import rendered
+from tests.support.baselines import rendered_with_clones
 from tests.support.door import CHECK_WORD, FIX_WORDS, digest, fixed
 from tests.support.generated_files import MANDATORY_JOB, gate_declaring, generated_config
 from tests.support.git_repositories import git, put
@@ -25,10 +25,6 @@ def entry(metric: Metric, path: str, symbol: str = "") -> Key:
 
 def declared(*paths: str) -> list[GeneratedFile]:
     return [GeneratedFile(path, MANDATORY_JOB, "#1", datetime.date(2026, 1, 1), "written by a generator") for path in paths]
-
-
-def ceiling(table: str) -> str:
-    return rendered(table + "\n[clones]\n")
 
 
 def checked(capsys, repo: Path) -> tuple[int, str, str]:
@@ -179,7 +175,7 @@ def test_a_gone_entry_can_fall_and_the_fix_drops_it(build_repo, capsys, files, h
     """FIX-8, CEILING-7, GENERATED-10, ROW-18: the entry of a gone path or of a declared file is a `can fall` row with
     no line and the fix `quality check --fix`; once the fix drops it, counted among the lowered, the clean row counts no
     entry."""
-    repo = build_repo({**files, BASELINE_PATH: ceiling(held)})
+    repo = build_repo({**files, BASELINE_PATH: rendered_with_clones(held)})
     assert checked(capsys, repo) == (1, checking, "")
     assert fixed(capsys, repo, *FIX_WORDS) == (0, fixing, "")
     assert (repo / BASELINE_PATH).read_text() == "# Measured by `quality check --fix`. Entries only ever go down.\n\n[clones]\n"
@@ -191,7 +187,7 @@ def test_a_gone_entry_row_follows_the_measured_can_fall_rows(build_repo, capsys)
     """FIX-3, FIX-8, CEILING-6, CEILING-7: the rows of entries the tree measures lower stand first, the row of a gone
     entry after them with no line; the fix lowers the first and drops the second, counted among the lowered."""
     held = '[ccn."src/cart.py"]\nbranchy = 19\n\n[file_lines]\n"src/orders.py" = 826\n"src/legacy.py" = 802\n'
-    repo = build_repo({"src/cart.py": branchy_function(17), "src/orders.py": long_file(812), BASELINE_PATH: ceiling(held)})
+    repo = build_repo({"src/cart.py": branchy_function(17), "src/orders.py": long_file(812), BASELINE_PATH: rendered_with_clones(held)})
     checking = (
         "  ! debt          3 findings\n"
         "    ! src/cart.py:1  can fall  function branchy has CCN 17 · ceiling 19\n"
@@ -214,7 +210,7 @@ def test_a_gone_entry_row_follows_the_measured_can_fall_rows(build_repo, capsys)
 def moved_with_git(pull_request) -> Path:
     repo, commit_base = pull_request
     put(repo / "src/old.py", long_function(70))
-    commit_base(ceiling('[function_lines."src/old.py"]\nlong_one = 70\n'))
+    commit_base(rendered_with_clones('[function_lines."src/old.py"]\nlong_one = 70\n'))
     return repo
 
 
@@ -278,7 +274,7 @@ def test_a_staged_deletion_with_an_untracked_destination_drops_the_entry_until_t
 @pytest.mark.integration
 def test_a_sparse_checkout_keeps_the_entries_it_does_not_hold(build_repo, capsys):
     """CEILING-1: a sparse checkout leaves the entries of the files it does not hold standing, unchanged by the fix."""
-    held = ceiling('[function_lines."src/out/b.py"]\nlong_one = 70\n')
+    held = rendered_with_clones('[function_lines."src/out/b.py"]\nlong_one = 70\n')
     repo = build_repo({"src/in/a.py": "x = 1\n", "src/out/b.py": long_function(70), BASELINE_PATH: held})
     git(repo, "sparse-checkout", "set", "src/in", "quality")
     before = digest(repo)
@@ -292,7 +288,7 @@ def test_a_sparse_checkout_keeps_the_entries_it_does_not_hold(build_repo, capsys
 def test_a_deletion_on_disk_only_stands_until_it_is_staged(build_repo, capsys):
     """FIX-8, CEILING-1, CEILING-7: a file deleted on disk only stands, its entry kept by the fix, until the deletion is
     staged; then its entry is gone and the fix drops it."""
-    repo = build_repo({"src/a.py": long_function(70), BASELINE_PATH: ceiling('[function_lines."src/a.py"]\nlong_one = 70\n')})
+    repo = build_repo({"src/a.py": long_function(70), BASELINE_PATH: rendered_with_clones('[function_lines."src/a.py"]\nlong_one = 70\n')})
     (repo / "src/a.py").unlink()
     before = digest(repo)
     assert checked(capsys, repo)[0] == 0
@@ -308,7 +304,7 @@ def test_a_deletion_on_disk_only_stands_until_it_is_staged(build_repo, capsys):
 def test_an_unparsable_file_refuses_before_anything_is_gone(build_repo, capsys):
     """SIZE-10, SIZE-11: a file Python cannot parse refuses the check and the fix before any entry is judged gone, and
     the fix writes nothing."""
-    held = ceiling('[file_lines]\n"src/legacy.py" = 802\n')
+    held = rendered_with_clones('[file_lines]\n"src/legacy.py" = 802\n')
     repo = build_repo({"src/bad.py": "def broken(:\n", BASELINE_PATH: held})
     before = digest(repo)
     for words in ((CHECK_WORD, "debt"), FIX_WORDS):
@@ -322,7 +318,7 @@ def test_a_dropped_generated_entry_beside_its_new_declaration_prints_only_the_de
     declaration under the verdict; the dropped entry loosens nothing."""
     repo, commit_base = pull_request
     put(repo / "gen/api.py", long_function(70))
-    commit_base(ceiling('[function_lines."gen/api.py"]\nlong_one = 70\n'))
+    commit_base(rendered_with_clones('[function_lines."gen/api.py"]\nlong_one = 70\n'))
     put(repo / CONFIG_PATH, gate_config(MANDATORY_JOB) + generated_config(path="gen/api.py"))
     assert fixed(capsys, repo, *FIX_WORDS)[0] == 0
     assert "gen/api.py" not in (repo / BASELINE_PATH).read_text()

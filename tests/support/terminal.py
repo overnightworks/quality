@@ -29,6 +29,11 @@ def without_sgr(text: str) -> str:
     return re.sub(SGR, "", text)
 
 
+def squashed(text: str) -> str:
+    """`text` with every run of whitespace, line breaks included, as one space."""
+    return " ".join(text.split())
+
+
 def screen(text: str) -> str:
     """What a terminal shows of `text` once its escape sequences have acted: a carriage return goes back to the first
     column, erasing to the row's end clears it and a character overwrites the one under it."""

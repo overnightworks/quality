@@ -13,6 +13,7 @@ from tests.support.door import CHECK_WORD, DRY_RUN_WORDS, FIX_WORDS, fixed, tree
 from tests.support.git_repositories import git, put
 from tests.support.job_workflows import job, workflow
 from tests.support.source_code import long_function
+from tests.support.terminal import squashed
 from tests.support.verdict import verdict_streams
 from tests.support.verdict_renames import commit_all
 
@@ -40,10 +41,6 @@ def ceiling(entries: dict[str, int] | None = None, size: int | None = None, path
     else:
         job_tables = f'[job_minutes."{path}"]\n' + "".join(f"{name} = {minutes}\n" for name, minutes in entries.items())
     return rendered(f"{size_table}[clones]\n{job_tables}")
-
-
-def squashed(text: str) -> str:
-    return " ".join(text.split())
 
 
 def change_rows(out: str) -> list[tuple[str, str, str]]:
