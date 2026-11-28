@@ -9,11 +9,10 @@ import pytest
 from quality.baseline_file import BASELINE_PATH, JobKey, load_baseline
 from tests.support.baselines import rendered
 from tests.support.clones import function as clone_function
-from tests.support.door import CHECK_WORD, DRY_RUN_WORDS, FIX_WORDS, fixed, restore_step, tree_of
+from tests.support.door import CHECK_WORD, DRY_RUN_WORDS, FIX_WORDS, fixed, restore_step, squashed, tree_of
 from tests.support.git_repositories import git, put, shallow_clone
 from tests.support.job_workflows import job, workflow
 from tests.support.source_code import long_function
-from tests.support.terminal import squashed
 from tests.support.verdict import verdict_streams
 from tests.support.verdict_renames import commit_all
 

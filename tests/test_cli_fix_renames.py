@@ -7,10 +7,9 @@ import pytest
 from quality.baseline_file import BASELINE_PATH
 from tests.support.baselines import rendered
 from tests.support.clones import function as clone_function
-from tests.support.door import CHECK_WORD, DRY_RUN_WORDS, FIX_WORDS, digest, door_in, fixed, restore_step
+from tests.support.door import CHECK_WORD, DRY_RUN_WORDS, FIX_WORDS, digest, door_in, fixed, restore_step, squashed
 from tests.support.git_repositories import git, head_commit, put, shallow_clone
 from tests.support.source_code import long_function
-from tests.support.terminal import squashed
 from tests.support.verdict import verdict_streams
 from tests.support.verdict_renames import commit_all
 
