@@ -6,7 +6,6 @@ import subprocess
 import sys
 import tempfile
 import threading
-import urllib.request
 from collections.abc import Callable, Iterator
 from pathlib import Path, PosixPath, PurePosixPath
 
@@ -329,7 +328,7 @@ def stub_server():
                 pass
 
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
+        threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()  # a short poll keeps `shutdown` from waiting half a second
         servers.append(server)
         return f"http://127.0.0.1:{server.server_address[1]}", heard
 
@@ -396,14 +395,14 @@ def missing(public) -> str:
 
 
 @pytest.fixture
-def published_databases(tmp_path_factory, monkeypatch) -> PublishedDatabases:
-    """The advisory database root the gate reads instead of the live one, served in process on the `published` scheme;
-    nothing is published in it."""
+def published_databases(request, tmp_path_factory, monkeypatch, stub_server) -> PublishedDatabases:
+    """The advisory database root the gate reads instead of the live one; nothing is published in it. A test with the
+    integration mark gets a loopback server for it, every other test a root no opener serves, whose download is
+    refused at once."""
     databases = PublishedDatabases(tmp_path_factory.mktemp("osv-database"))
-    urllib.request.install_opener(urllib.request.build_opener(databases))
-    monkeypatch.setattr(advisories, "DATABASE_ROOT", f"{databases.scheme}://database")
-    yield databases
-    urllib.request.install_opener(None)
+    origin = stub_server(databases.respond)[0] if request.node.get_closest_marker("integration") else databases.unserved_origin
+    monkeypatch.setattr(advisories, "DATABASE_ROOT", origin)
+    return databases
 
 
 @pytest.fixture

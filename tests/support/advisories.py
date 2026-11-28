@@ -3,15 +3,12 @@ import io
 import json
 import shlex
 import subprocess
-import urllib.error
-import urllib.request
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
-from email.message import Message
 from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
-from urllib.response import addinfourl
 
 from quality import advisories, scanners
 
@@ -125,13 +122,14 @@ class Asked:
     status: int
 
 
-class PublishedDatabases(urllib.request.BaseHandler):
-    """The advisory bucket as urllib sees it, in process: the files below `root` served on the `published` scheme with
-    their md5 as `ETag`, a 304 for an `If-None-Match` that names the file's ETag, a 404 for a missing file.
+class PublishedDatabases:
+    """The advisory bucket: the files below `root` with their md5 as `ETag`, a 304 for an `If-None-Match` that names the
+    file's ETag, a 404 for a missing file. `respond` answers a request of a loopback server; a test with no server
+    gets `unserved_origin`, which no opener serves.
 
     `etag` and `not_modified` are what a test changes to play a server that contradicts itself."""
 
-    scheme = "published"
+    unserved_origin = "unserved://database"
 
     def __init__(self, root: Path) -> None:
         self.root = root
@@ -148,24 +146,24 @@ class PublishedDatabases(urllib.request.BaseHandler):
     def bodies_served(self) -> int:
         return sum(asked.status == HTTPStatus.OK for asked in self.asked)
 
-    def published_open(self, request: urllib.request.Request) -> addinfourl:
-        path = request.selector
+    def respond(self, handler: BaseHTTPRequestHandler) -> None:
+        path = handler.path
         self.on_request(path)
-        sent = request.get_header("If-none-match")
+        sent = handler.headers.get("If-None-Match")
         file = self.root / path.lstrip("/")
-        if not file.is_file():
-            self._answer(path, sent, HTTPStatus.NOT_FOUND)
-            raise urllib.error.HTTPError(request.full_url, HTTPStatus.NOT_FOUND, "Not Found", Message(), None)
-        body = file.read_bytes()
-        etag = self.etag(body)
-        headers = Message()
-        if etag is not None:
-            headers["ETag"] = etag
-        if self.not_modified(sent, etag):
-            self._answer(path, sent, HTTPStatus.NOT_MODIFIED)
-            raise urllib.error.HTTPError(request.full_url, HTTPStatus.NOT_MODIFIED, "Not Modified", headers, None)
-        self._answer(path, sent, HTTPStatus.OK)
-        return addinfourl(io.BytesIO(body), headers, request.full_url, HTTPStatus.OK)
-
-    def _answer(self, path: str, sent: str | None, status: int) -> None:
+        body = file.read_bytes() if file.is_file() else None
+        etag = None if body is None else self.etag(body)
+        if body is None:
+            status = HTTPStatus.NOT_FOUND
+        elif self.not_modified(sent, etag):
+            status = HTTPStatus.NOT_MODIFIED
+        else:
+            status = HTTPStatus.OK
         self.asked.append(Asked(path, sent, status))
+        handler.send_response(status)
+        if etag is not None:
+            handler.send_header("ETag", etag)
+        payload = body if status == HTTPStatus.OK else b""
+        handler.send_header("Content-Length", str(len(payload)))
+        handler.end_headers()
+        handler.wfile.write(payload)
