@@ -44,6 +44,39 @@ ALLOWING_INDIRECT = {**FORBIDDEN, "allow_indirect_imports": True}
 PLAIN_FILE = "[metadata]\nname = shop\n"
 
 
+def session_change(option: str, before: str | None, after: str | None, *, loosens: bool):
+    """A pair of INI files whose `option` goes from `before` to `after` (None leaves it out), and the lines its change reads as."""
+    sides = [{} if value is None else {option: value} for value in (before, after)]
+    pair = tuple({".importlinter": contracts_ini(one(FORBIDDEN), **session)} for session in sides)
+    return (*pair, [architecture.session_loosening(option)] if loosens else [])
+
+
+@pytest.mark.parametrize(
+    ("base", "head", "expected"),
+    [
+        pytest.param(*session_change("include_external_packages", None, "true", loosens=False), id="include_external_packages added as true"),
+        pytest.param(*session_change("include_external_packages", "false", "true", loosens=False),
+                     id="include_external_packages turned on"),
+        pytest.param(*session_change("include_external_packages", "true", "false", loosens=True),
+                     id="include_external_packages turned off"),
+        pytest.param(*session_change("include_external_packages", "true", None, loosens=True), id="include_external_packages dropped while on"),
+        pytest.param(*session_change("include_external_packages", None, "false", loosens=False),
+                     id="include_external_packages made false, its default"),
+        pytest.param(*session_change("exclude_type_checking_imports", "true", "false", loosens=False),
+                     id="exclude_type_checking_imports turned off"),
+        pytest.param(*session_change("exclude_type_checking_imports", "true", None, loosens=False),
+                     id="exclude_type_checking_imports dropped while on"),
+        pytest.param(*session_change("exclude_type_checking_imports", "false", "true", loosens=True),
+                     id="exclude_type_checking_imports turned on"),
+        pytest.param(*session_change("exclude_type_checking_imports", None, "true", loosens=True),
+                     id="exclude_type_checking_imports added as true"),
+    ],
+)
+def test_a_session_option_loosens_only_in_the_direction_that_removes_imports_from_the_graph(base, head, expected):
+    """LOOSE-12, LOOSE-25, LOOSE-34, LOOSE-37."""
+    assert loosened(base, head) == expected
+
+
 @pytest.mark.parametrize(
     ("base", "head", "expected"),
     [
@@ -84,12 +117,6 @@ PLAIN_FILE = "[metadata]\nname = shop\n"
          [GUARDED_CHANGES + "layers"]),
         ({".importlinter": contracts_ini(one(FORBIDDEN))}, {".importlinter": contracts_ini(one(FORBIDDEN), roots=("shop", "other"))},
          ["import-linter changes root_packages"]),
-        ({".importlinter": contracts_ini(one(FORBIDDEN), include_external_packages="False")},
-         {".importlinter": contracts_ini(one(FORBIDDEN), include_external_packages="True")},
-         ["import-linter changes include_external_packages"]),
-        ({".importlinter": contracts_ini(one(FORBIDDEN))},
-         {".importlinter": contracts_ini(one(FORBIDDEN), exclude_type_checking_imports="True")},
-         ["import-linter changes exclude_type_checking_imports"]),
         ({".importlinter": contracts_ini(one(FORBIDDEN), roots=("shop", "other"))},
          {".importlinter": contracts_ini(one(FORBIDDEN), roots=("other", "shop", "shop"))}, []),
         ({".importlinter": contracts_ini(one(IGNORING))},
@@ -115,7 +142,7 @@ PLAIN_FILE = "[metadata]\nname = shop\n"
         "a new ignore", "two new ignores", "a wildcard is a new expression",
         "other spacing around the arrow", "a removed ignore", "allow_indirect_imports",
         "alerting", "type", "a module off source_modules", "layers in another order",
-        "root_packages", "include_external_packages", "exclude_type_checking_imports",
+        "root_packages",
         "root order and duplicates", "a new contract and a removed ignore", "reworded guidance",
         "INI to TOML", "setup.cfg to .importlinter", "a rename", "adoption",
         "no config at either side", "several changes, one line each, sorted",

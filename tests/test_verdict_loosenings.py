@@ -6,7 +6,7 @@ import datetime
 import pytest
 
 from quality import output, verdict
-from quality.architecture import ADAPTER_CONTRACT_ID
+from quality.architecture import ADAPTER_CONTRACT_ID, session_loosening
 from quality.baseline_file import BASELINE_PATH
 from quality.config_allowances import ConfigSide
 from quality.ratchet import NO_RENAMES
@@ -239,6 +239,20 @@ def test_an_allowance_or_generated_text_copied_into_a_declaration_matches_nothin
 def test_a_job_limit_table_adopted_equal_lowered_or_dropped_loosens_nothing(baselines, expected):
     """TIMEOUT-18, BASELINE-9, BASELINE-10."""
     assert printed(judged(CHECKS, CHECKS, baselines, (None, None))) == expected
+
+
+@pytest.mark.parametrize(
+    ("option", "before", "after", "expected"),
+    [
+        pytest.param("include_external_packages", "false", "true", [], id="an option that only adds imports is no loosening"),
+        pytest.param("include_external_packages", "true", "false",
+                     [f"    ! {session_loosening('include_external_packages')}"], id="the opposite direction stays a loosening"),
+    ],
+)
+def test_the_doors_read_of_a_session_option_agrees_with_its_direction(option, before, after, expected):
+    """LOOSE-12, LOOSE-37."""
+    imports = tuple(contracts_ini({"guarded": FORBIDDEN}, **{option: value}) for value in (before, after))
+    assert printed(judged(CHECKS, CHECKS, ("", ""), imports)) == expected
 
 
 @pytest.mark.parametrize(

@@ -1277,8 +1277,9 @@ It applies these rules:
   - LOOSE-11: (a changed `type` reads `changes type`; a module dropped from a list reads as that list's field, unless
     the head no longer has it and git does not read it as renamed, or git reads it as renamed to a module the same list
     names (below));
-  - LOOSE-12: `root_packages` (as a set of names), `include_external_packages` or `exclude_type_checking_imports`
-    changed: `import-linter changes root_packages`;
+  - LOOSE-12: `root_packages` (as a set of names) changed, `include_external_packages` turned from true to false or
+    dropped while true, or `exclude_type_checking_imports` turned from false (or absent) to true:
+    `import-linter changes root_packages`;
   - LOOSE-36: the contract that carries the id `core-imports-no-adapter` (the contract of both `adapter-import` and
     `integration-marker`) stays at the head under the same name without the id: `import contract id
     core-imports-no-adapter removed`, or `import contract id core-imports-no-adapter moves "a" -> "b"` when contract `b`
@@ -1302,6 +1303,8 @@ It applies these rules:
   - LOOSE-27: and a module added to `source_modules` or `forbidden_modules` of a `forbidden` contract, the base's
     expressions all kept;
   - LOOSE-28: a module added to the `modules` of an `independence` contract, the base's all kept;
+  - LOOSE-37: `include_external_packages` turned from false (or absent) to true, and `exclude_type_checking_imports`
+    turned from true to false (or dropped), are no loosening, because each only adds imports to the graph.
   - LOOSE-35: a base expression that is a plain module name counts as kept when a wildcard expression of the head's same
     list matches it by import-linter's own matcher, so base `a.x`, `a.y` against head `a.*` is green and base `a.*`
     against head `a.x` is red;
@@ -1317,8 +1320,8 @@ It applies these rules:
   - LOOSE-32: `allow_indirect_imports` turned from false to true,
   - LOOSE-33: `as_packages`, `unmatched_ignore_imports_alerting`, `containers`, `exhaustive`, `exhaustive_ignores`
   - LOOSE-34: and every `protected` or `acyclic_siblings` field in either direction, a reorder, a merge into `a | b`, a
-    module moved to another layer, `a | b` turned into `a : b`, a required `a` made optional `(a)`, and the session
-    options (LOOSE-12).
+    module moved to another layer, `a | b` turned into `a : b`, a required `a` made optional `(a)`, and session
+    options in LOOSE-12's directions.
 
   No import graph of the repository is built.
 
