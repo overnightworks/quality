@@ -133,6 +133,15 @@ def test_a_rule_with_the_base_text_under_its_id_is_untouched_wherever_it_stands(
 
 
 @pytest.mark.integration
+def test_a_base_file_that_is_not_utf8_defines_no_rule_so_a_long_rule_in_its_place_is_new(branched, capsys):
+    """SPECLENGTH-3: a base file that is not text holds no rule of the base's, so the head's long rule is added."""
+    repo = branched({"README.md": "x\n"}, {"docs/a.md": b"\xff\xfe\n"})
+    git(repo, "update-ref", ORIGIN_MAIN, "HEAD")
+    change(repo, {"docs/a.md": f"{LONG}\n"})
+    assert judged(repo, capsys)[2] == [("docs/a.md", 1, spec_length.too_long_fact("X-1", OVER))]
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("changes", "committed", "base", "expected"),
     [
