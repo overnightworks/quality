@@ -124,6 +124,7 @@ LONG = rule("X-1", OVER)
         pytest.param(spec_with(LONG), spec_with(f"- X-1: {words(10)}", f"  {words(OVER - 10)}"), [], id="re-wrapped"),
         pytest.param({"docs/a.md": f"{LONG}\n"}, {"docs/a.md": "", "docs/b.md": f"{LONG}\n"}, [], id="moved to another file"),
         pytest.param({"docs/a.md": f"{LONG}\n"}, {"docs/a.md": None, "docs/b.md": f"{LONG}\n"}, [], id="moved by deleting the old file"),
+        pytest.param({"docs/a.md": f"{LONG}\n", "docs/b.md": "# B\n"}, {"docs/b.md": f"# B\n\n{LONG}\n"}, [], id="copied from a file the change leaves alone"),
         pytest.param(spec_with(LONG), spec_with(rule("X-2", OVER)), [("X-2", OVER)], id="renumbered"),
         pytest.param(spec_with(LONG), spec_with("- X-1 (retired)."), [], id="retired"),
     ],
