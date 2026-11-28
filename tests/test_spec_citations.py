@@ -262,9 +262,8 @@ def test_without_the_table_the_note_stands_at_the_repository_as_an_open_row_and_
     assert (found.path, found.line, found.event) == (".", None, NoteEvent.OPEN)
     assert [(row.event, row.fact) for row in note_rows(output, ".") if "spec ID" in row.fact] == [("open", UNCITED)]
     debt = next(area for area in check_result(repo).areas if area.area is Area.DEBT)
-    verdict = debt.verdicts[-1]
-    assert (code, verdict.rule, verdict.findings, verdict.measured_only, verdict.extent) == (0, Rule.SPEC_CITATION, (), False, 0)
-    assert [verdict.rule for verdict in debt.verdicts] == [Rule.SIZE, Rule.CLONE, Rule.JOB_TIMEOUT, Rule.TEST_TWIN, Rule.SPEC_CITATION]
+    verdict = next(verdict for verdict in debt.verdicts if verdict.rule is Rule.SPEC_CITATION)
+    assert (code, verdict.findings, verdict.measured_only, verdict.extent) == (0, (), False, 0)
 
 
 @pytest.mark.integration
@@ -424,7 +423,8 @@ def test_with_the_table_the_debt_row_counts_the_held_ids_and_no_note_stands(buil
     """CITE-8: the rule's extent is the held IDs, it is not measured only, and the note is gone."""
     repo = build_repo({**spec_with("- X-1: a.", "- X-2: b.", "- X-3: c."), **cited_by_python("X-3: it."), **held("X-1", "X-2")})
     code, out = check_output(capsys, repo)
-    verdict = next(area for area in check_result(repo).areas if area.area is Area.DEBT).verdicts[-1]
+    debt = next(area for area in check_result(repo).areas if area.area is Area.DEBT)
+    verdict = next(verdict for verdict in debt.verdicts if verdict.rule is Rule.SPEC_CITATION)
     assert (code, rule_notes(repo, Rule.SPEC_CITATION), verdict.measured_only, verdict.extent) == (0, [], False, 2)
     assert area_fact(out, "debt").endswith(", 2 uncited spec IDs")
 

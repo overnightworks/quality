@@ -1879,11 +1879,11 @@ listed as `caller / job`; pointing `render_pass` at any other mandatory job pass
 v0.17.0 on, and on main, the cell reads `enforced` where the clone declares the catalogs and `no catalogs declaration` where it does not (FLEET-99).
 
 - LITERAL-15: The `literal-text` rule, in the `files` area, turns every literal text of a covered repository's pages into a finding: the
-  texts a person reads that the markup holds itself instead of taking them from a catalog. A repository is covered as for
-  `catalog-check` (the same read of the root `pyproject.toml`, CATALOG-1), so a repository that is not covered sees no row
-  and no new verdict, and its `debt` area holds exactly the verdicts of `size`, `clone`, `job-timeout`, `test-twin` and `spec-citation`; the root
-  `pyproject.toml` is read once for the area, and one that cannot be read refuses the rule with the reason `python-floor` gives,
-  `pyproject.toml is not UTF-8 TOML that Python reads (<error>)`, which `catalog-check` and `render-pass` give too.
+  texts a person reads that the markup holds itself instead of taking them from a catalog.
+- LITERAL-17: A repository is covered as for `catalog-check` (the same read of the root `pyproject.toml`, CATALOG-1), so a repository
+  that is not covered sees no row and no new verdict.
+- LITERAL-18: The root `pyproject.toml` is read once for the area, and one that cannot be read refuses the rule with the reason
+  `python-floor` gives, `pyproject.toml is not UTF-8 TOML that Python reads (<error>)`, which `catalog-check` and `render-pass` give too.
 - LITERAL-1: The rule reads every tracked `*.svelte` file the tree holds, with the standard library's `html.parser` and a fold of the
   `{...}` holes; a `.vue`, `.jsx`, `.tsx` or `.html` file is not read.
 
@@ -2326,6 +2326,30 @@ no spec defines or one that is retired, and a duplicate definition are red, and 
   docs/spec.md:3`), fix `delete its [[spec_citations.foreign]] entry from quality/config.toml, or give the local IDs a prefix of
   their own`. Without it a repository could silence every undefined citation of its own prefix through a declaration that is
   no loosening.
+
+The `spec-length` rule, in the `debt` area, bounds each spec rule that a change adds or edits. It is always enforced and reads no
+table and no configuration; the rules it counts are the ones CITE-1 defines.
+
+- SPECLENGTH-1: **The limit.** A live spec rule that a change adds or edits and that has more than 40 words is a `too long`
+  finding at its definition, and the run is red. A rule of exactly 40 words is clean.
+- SPECLENGTH-2: **A change.** A change is what the work tree holds beyond the merge base of `HEAD` and `origin/main`, uncommitted
+  edits included. What main changed after that base counts for nothing, and on main's own commit nothing is a change.
+- SPECLENGTH-3: **Added or edited.** A rule is untouched when the base defines its ID with the same words in any file. A re-wrap
+  or a move touches nothing, a renumbered rule is added, and a retired rule is not counted.
+- SPECLENGTH-4: **A list item's text.** It is what follows `ID:` and each later line indented deeper than the item's marker, a
+  blank line included, until a line at that indent or less. A nested item without an ID belongs to it.
+- SPECLENGTH-5: **Other rules.** A nested item or table row that defines an ID is its own rule; a row's text is its cells after
+  the first. A fenced block, other table lines and retired text count for no rule.
+- SPECLENGTH-6: **A word.** A word is a whitespace-separated token with a letter or a digit: inline code counts by its tokens, a
+  link by its visible words, a bold title as written. The ID, list markers, pipes and `·` count none.
+- SPECLENGTH-7: **No merge base.** A tree with a live rule over 40 words, where `HEAD` has no merge base with `origin/main`, is exit
+  `2`: `spec rule length cannot be judged, HEAD has no merge base with origin/main`.
+- SPECLENGTH-8: **The next step.** It is `git fetch origin main`, or `git fetch --unshallow` where `origin/main` is here and the
+  clone is shallow.
+- SPECLENGTH-9: **Git is asked only where needed.** A tree with no live rule over 40 words is clean without `origin/main`, and a
+  depth-1 clone on main's own commit has `HEAD` as its base.
+- SPECLENGTH-10: **No switch.** The rule is red without a `[spec_citations]` table and without `quality/baseline.toml`, and it
+  adds no table, no configuration key and no loosening.
 
 - ADVISORY-30: The `advisory` rule judges every tracked `uv.lock`, `pnpm-lock.yaml` and `requirements*.txt` (a name that
   starts with `requirements` and ends in `.txt`; `requirements.in` and `dev-requirements.txt` are not),

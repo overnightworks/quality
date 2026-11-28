@@ -3,9 +3,8 @@
 ID, an undefined or retired citation and a duplicate definition are findings, and the table holds the uncited IDs of the day
 it was recorded.
 
-A Markdown list item that opens with `ID:` defines a live ID and `ID (retired).` a retired one; the first cell of a table row
-under such an item, or of a table whose header's first cell is `ID`, defines one too. A test cites the IDs at the head of its
-Python docstring or of its `it(` and `test(` title.
+`quality.spec_definitions` reads the IDs the Markdown defines. A test cites the IDs at the head of its Python docstring or of
+its `it(` and `test(` title.
 
 Two declarations of `quality/config.toml` leave IDs to another repository's judgement: a foreign prefix exempts the citations of
 IDs the tree defines nowhere, and an implemented document exempts its own IDs from needing a citation here.
@@ -15,45 +14,17 @@ import ast
 import re
 from collections.abc import Collection, Iterator
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
-from typing import NamedTuple
 
-from quality import baseline_file, clones, repository, suites
-from quality.config import (
-    FOREIGN_PREFIX_HEADING,
-    ID_PREFIX,
-    IMPLEMENTED_DOCUMENT_HEADING,
-    MARKDOWN_SUFFIX,
-    AllowLists,
-)
+from quality import baseline_file, clones, suites
+from quality.config import FOREIGN_PREFIX_HEADING, IMPLEMENTED_DOCUMENT_HEADING, AllowLists
 from quality.config_entries import CONFIG_PATH, delete_entry_fix
-from quality.markdown_fences import live_line_indexes
 from quality.output import SEPARATOR, counted
 from quality.report import CannotJudge, Finding, FindingEvent, Note, NoteEvent, RuleResult
 from quality.rules import Rule
+from quality.spec_definitions import ID, ID_PATTERN, Definition, Markdown, Site
 
 NOTE_PATH = "."
-BYTE_ORDER_MARK = "\ufeff"
-ID = rf"{ID_PREFIX}-(?a:\d+)"
-ID_PATTERN = re.compile(ID)
-ID_HEADER = "ID"
-DEFINING_ITEM = re.compile(rf"\s*(?:[-*+]|(?a:\d+)[.)])\s+(?P<id>{ID})(?::|(?P<retired> \(retired\)\.))")
 HEAD = re.compile(rf"\s*(?:Spec:\s*)?{ID}(?:\s*(?:,(?:\s*and\b)?|\band\b)\s*{ID})*")
-
-
-class Site(NamedTuple):
-    """A line of a file: where an ID is defined or a test cites it."""
-
-    path: str
-    line: int
-
-    def __str__(self) -> str:
-        return f"{self.path}:{self.line}"
-
-
-class Definition(NamedTuple):
-    site: Site
-    live: bool
 
 
 def prefix_of(identifier: str) -> str:
@@ -149,44 +120,6 @@ class Tree:
         return f"spec ID {identifier} is no longer defined"
 
 
-def _first_cell(line: str) -> str:
-    return line.strip().removeprefix("|").split("|", 1)[0].strip()
-
-
-def _definitions_of(text: str) -> Iterator[tuple[str, int, bool]]:
-    """Each (ID, line, live) a Markdown text defines: a list item as the rules say, a table row while a rule's table is open
-    and in every table whose header's first cell is exactly `ID`."""
-    under_rule = False
-    id_table = False
-    last_row = -2
-    lines = text.removeprefix(BYTE_ORDER_MARK).splitlines()
-    for index in live_line_indexes(lines):
-        line = lines[index]
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if item := DEFINING_ITEM.match(line):
-            under_rule = True
-            yield item["id"], index + 1, item["retired"] is None
-        elif stripped.startswith("|"):
-            cell = _first_cell(line)
-            if index != last_row + 1:
-                id_table = cell == ID_HEADER
-            last_row = index
-            if (under_rule or id_table) and ID_PATTERN.fullmatch(cell):
-                yield cell, index + 1, True
-        elif not line[0].isspace():
-            under_rule = False
-
-
-def _define(texts: dict[str, str]) -> dict[str, list[Definition]]:
-    definitions: dict[str, list[Definition]] = {}
-    for path, text in texts.items():
-        for identifier, line, is_live in _definitions_of(text):
-            definitions.setdefault(identifier, []).append(Definition(Site(path, line), is_live))
-    return definitions
-
-
 def _head_ids(text: str) -> list[str]:
     """The IDs at the start of a docstring or a title, after an optional `Spec:`."""
     head = HEAD.match(text)
@@ -208,32 +141,15 @@ def _script_citations(tracked: list[str], sources: dict[str, bytes]) -> tuple[li
     return cited, unread
 
 
-def _read_markdown(root: Path, tracked: list[str]) -> tuple[dict[str, str], list[str]]:
-    """The tracked Markdown files the tree holds as text, and those that are absent from it, cannot be read or are not UTF-8."""
-    texts: dict[str, str] = {}
-    unread: list[str] = []
-    for name in (name for name in tracked if PurePosixPath(name).suffix == MARKDOWN_SUFFIX):
-        try:
-            content = repository.read_bytes(root, name) if repository.is_on_disk(root, name) else None
-            if content is None:
-                unread.append(name)
-            else:
-                texts[name] = content.decode("utf-8")
-        except (repository.RepositoryFileError, UnicodeDecodeError):
-            unread.append(name)
-    return texts, unread
-
-
-def read_tree(root: Path, tracked: list[str], sources: dict[str, bytes], declared: AllowLists) -> Tree:
+def read_tree(markdown: Markdown, tracked: list[str], sources: dict[str, bytes], declared: AllowLists) -> Tree:
     """The definitions and citations of the tree under the config's declarations; a file that cannot be read is named,
     never guessed."""
-    texts, unread = _read_markdown(root, tracked)
     script_cited, unread_scripts = _script_citations(tracked, sources)
     citations: dict[str, list[Site]] = {}
     for identifier, site in sorted({*_python_citations(sources), *script_cited}, key=lambda each: (each[1], each[0])):
         citations.setdefault(identifier, []).append(site)
     return Tree(
-        _define(texts), citations, [*unread, *unread_scripts],
+        markdown.definitions, citations, [*markdown.unread, *unread_scripts],
         frozenset(foreign.prefix for foreign in declared.foreign_prefixes),
         frozenset(document.path for document in declared.implemented_documents),
     )
@@ -322,7 +238,7 @@ def _findings(tree: Tree, held: frozenset[str]) -> list[Finding]:
 
 
 def check_spec_citations(
-    root: Path, tracked: list[str], sources: dict[str, bytes], baseline: baseline_file.Baseline | None, declared: AllowLists
+    markdown: Markdown, tracked: list[str], sources: dict[str, bytes], baseline: baseline_file.Baseline | None, declared: AllowLists
 ) -> RuleResult:
     """Without a `[spec_citations]` table the note with the counts, a count of zero left out and no note when all are zero;
     no finding, no extent. With it the findings, an extent of the held IDs and no note.
@@ -330,7 +246,7 @@ def check_spec_citations(
     A tracked Markdown file that cannot be read or is not UTF-8 and a script test file the lexer refuses are named in the note,
     so the report-only rule never changes an exit code; with the table they make the rule cannot judge. `sources` that cannot
     be read refuse the area before this rule runs."""
-    tree = read_tree(root, tracked, sources, declared)
+    tree = read_tree(markdown, tracked, sources, declared)
     held = None if baseline is None else baseline.spec_citations
     if held is None:
         return RuleResult([], 0, False, _note(tree))

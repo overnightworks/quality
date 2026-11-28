@@ -79,12 +79,12 @@ def test_a_covered_repository_whose_pages_read_every_word_through_a_catalog_is_c
     ids=["no extra", "no pyproject", "a nested project", "a catalogs table without the dependency"],
 )
 def test_a_repository_that_is_not_covered_sees_no_literal_row_and_its_debt_area_is_unchanged(build_repo, capsys, files):
-    """LITERAL-15, CATALOG-6: no declaration, no literal verdict, and `debt` judges exactly `size`, `clone`, `job-timeout`, `test-twin` and `spec-citation`."""
+    """LITERAL-17, CATALOG-6: no declaration, no literal verdict, and `debt` judges exactly the rules it owns."""
     repo = build_repo({**files, **PAGES})
     code = door_in(repo, CHECK_WORD, Area.DEBT.value)
     out = capsys.readouterr().out
     areas = {area.area: [verdict.rule for verdict in area.verdicts] for area in check_result(repo).areas}
-    assert (code, Rule.LITERAL_TEXT in areas[Area.FILES], areas[Area.DEBT]) == (0, False, [Rule.SIZE, Rule.CLONE, Rule.JOB_TIMEOUT, Rule.TEST_TWIN, Rule.SPEC_CITATION])
+    assert (code, Rule.LITERAL_TEXT in areas[Area.FILES], areas[Area.DEBT]) == (0, False, [rule for rule in Rule if rule.area is Area.DEBT])
     assert "literal" not in out
 
 
@@ -182,7 +182,7 @@ def test_a_bad_catalogs_declaration_leaves_the_literal_texts_of_a_covered_reposi
 @pytest.mark.parametrize("with_pages", [True, False], ids=["with pages", "without pages"])
 @pytest.mark.parametrize("body", [b"[project\n", b'[project]\nname = "\xff"\n'], ids=["invalid TOML", "not UTF-8"])
 def test_a_broken_root_pyproject_gives_the_files_area_one_reason_through_every_rule_that_reads_it(build_repo, capsys, body, with_pages):
-    """LITERAL-15, REFUSAL-4: `python-floor` and `literal-text` refuse with one wording, which the row stands once."""
+    """LITERAL-18, REFUSAL-4: `python-floor` and `literal-text` refuse with one wording, which the row stands once."""
     repo = build_repo({**COVERED, **(PAGES if with_pages else {})})
     (repo / "pyproject.toml").write_bytes(body)
     code, out = files_run(capsys, repo)
@@ -194,7 +194,7 @@ def test_a_broken_root_pyproject_gives_the_files_area_one_reason_through_every_r
 
 
 def test_a_root_pyproject_the_filesystem_refuses_gives_the_files_area_one_reason(build_repo, capsys, elsewhere):
-    """LITERAL-15, REFUSAL-4: a read error is worded as the shared reader words it, for both rules."""
+    """LITERAL-18, REFUSAL-4: a read error is worded as the shared reader words it, for both rules."""
     repo = build_repo(COVERED)
     outside = elsewhere / "outside.toml"
     outside.write_text("[project]\n")
@@ -207,7 +207,7 @@ def test_a_root_pyproject_the_filesystem_refuses_gives_the_files_area_one_reason
 
 
 def test_a_broken_root_pyproject_is_exit_two_in_a_full_run_for_the_files_and_workflows_areas(build_repo, capsys):
-    """LITERAL-15: `files` and `workflows` both refuse it, and `debt` no longer does."""
+    """LITERAL-18: `files` and `workflows` both refuse it, and `debt` no longer does."""
     repo = build_repo({"pyproject.toml": "[project\n"})
     debt_code = door_in(repo, CHECK_WORD, Area.DEBT.value)
     capsys.readouterr()

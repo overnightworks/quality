@@ -38,6 +38,8 @@ from quality import (
     root_layout,
     scanners,
     spec_citations,
+    spec_definitions,
+    spec_length,
     twins,
     vitest_random,
     workflow_rules,
@@ -514,6 +516,11 @@ class RunInputs:
         return _attempt(lambda: ratchet.read_sources(self.root, self.tracked))
 
     @cached_property
+    def markdown(self) -> spec_definitions.Markdown:
+        """The spec rules the tracked Markdown files define, which `spec-citation` and `spec-length` both judge, read once."""
+        return spec_definitions.read_markdown(self.root, self.tracked)
+
+    @cached_property
     def baseline(self) -> baseline_file.Baseline | None | CannotJudge:
         """The baseline on disk, which the debt rules and the adapter-import rule hold the tree to."""
         return _attempt(lambda: judged_baseline(self.root))
@@ -638,10 +645,11 @@ def _judge_debt(inputs: RunInputs) -> AreaVerdict:
     if fixed:
         held = made.ceiling
     citations = sources if isinstance(sources, CannotJudge) else _attempt(
-        lambda: spec_citations.check_spec_citations(inputs.root, inputs.tracked, sources, held, _required(inputs.allow_lists))
+        lambda: spec_citations.check_spec_citations(inputs.markdown, inputs.tracked, sources, held, _required(inputs.allow_lists))
     )
     judged: dict[Rule, Judged] = {
-        Rule.SIZE: size, Rule.CLONE: clone, Rule.JOB_TIMEOUT: timeouts, Rule.TEST_TWIN: twin, Rule.SPEC_CITATION: citations
+        Rule.SIZE: size, Rule.CLONE: clone, Rule.JOB_TIMEOUT: timeouts, Rule.TEST_TWIN: twin, Rule.SPEC_CITATION: citations,
+        Rule.SPEC_LENGTH: _attempt(lambda: spec_length.check_spec_length(inputs.root, inputs.markdown)),
     }
     return _area_verdict(Area.DEBT, judged, ceiling=ceiling)
 

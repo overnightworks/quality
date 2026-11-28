@@ -365,9 +365,9 @@ def rows_of(printed: str, finding: Finding) -> list[FindingRow]:
     return [row for row in finding_rows(printed, finding.location) if row.event is finding.event]
 
 
-def rule_findings(repo: Path, rule: Rule) -> list[Finding]:
-    """The findings `rule` returns over `repo` before the door prints them."""
-    return [finding for verdict in check_result(repo).verdicts if verdict.rule is rule for finding in verdict.findings]
+def rule_findings(repo: Path, rule: Rule, named: Iterable[Area] = ()) -> list[Finding]:
+    """The findings `rule` returns over `repo` (over the areas `named`, every one without) before the door prints them."""
+    return [finding for verdict in check_result(repo, named=named).verdicts if verdict.rule is rule for finding in verdict.findings]
 
 
 def fix_label_and_lines(finding: Finding) -> tuple[str, tuple[str, ...]]:

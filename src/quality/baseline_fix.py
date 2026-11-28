@@ -12,6 +12,7 @@ from quality import (
     ratchet,
     repository,
     spec_citations,
+    spec_definitions,
     workflow_rules,
 )
 from quality.config import AllowLists
@@ -139,7 +140,7 @@ def _with_spec_citations(
     """The fix with the spec table made: a held table keeps only the IDs that are still defined and uncited, and never
     gains one; a ceiling without it records the table where the tree is clean and git never held one, which a first
     recording carries in the ceiling alone, as its row counts."""
-    tree = spec_citations.read_tree(root, tracked, sources, allow_lists)
+    tree = spec_citations.read_tree(spec_definitions.read_markdown(root, tracked), tracked, sources, allow_lists)
     held = made.ceiling.spec_citations
     if held is not None:
         spec_citations.require_read(tree)

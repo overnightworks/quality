@@ -177,7 +177,12 @@ rows, by area:
   citing test, `ST-03 is cited and defined nowhere`, `ST-03 is cited and retired`), `duplicate` (at the later definition,
   `spec ID ST-01 is defined again, first at docs/spec.md:12`) and `can fall` (at `quality/baseline.toml`, `spec ID ST-01 is
   cited`, fix `quality check --fix`) (CITE-8); a declaration of `quality/config.toml` that conflicts with the tree or matches
-  nothing is `conflict` or `unused` at the config or the declared path, its fix deleting the entry (CITE-17, CITE-19).
+  nothing is `conflict` or `unused` at the config or the declared path, its fix deleting the entry (CITE-17, CITE-19). A
+  `spec-length` finding is `too long` at the rule's definition, one row per rule, as in
+  `! docs/spec.md:12  too long  spec rule ST-02 has 57 words · limit 40` over the fix `shorten it, or split it into rules that
+  each have an ID and a citing test` (SPECLENGTH-1). Where `HEAD` has no merge base with `origin/main` the rule refuses, `spec rule
+  length cannot be judged, HEAD has no merge base with origin/main`, with the next step `git fetch origin main` or, in a shallow
+  clone, `git fetch --unshallow` ([refusals](#refusals), SPECLENGTH-7, SPECLENGTH-8).
 
 The `env-file` fix's own wording stands in [rules](rules.md).
 
