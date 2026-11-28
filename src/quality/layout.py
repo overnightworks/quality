@@ -531,10 +531,10 @@ def test_subjects(modes: Mapping[str, str], allowances: Sequence[LayoutAllowance
     return subjects
 
 
-def outside_source_tests(modes: Mapping[str, str]) -> list[str]:
+def outside_source_tests(modes: Mapping[str, str]) -> set[str]:
     """The tracked `test_*.py` under the `scripts/` or `workflows/` of a Python project's `tests/`: tests whose subject
     lies outside `src/`, so `test_subjects` names none."""
-    return [str(file) for file, _, folders in _judged_paths(modes) if _is_test_module(file) and folders and folders[0] in OUTSIDE_SOURCE_FOLDERS]
+    return {str(file) for file, _, folders in _judged_paths(modes) if _is_test_module(file) and folders and folders[0] in OUTSIDE_SOURCE_FOLDERS}
 
 
 class UnparsableTestModule(Exception):
