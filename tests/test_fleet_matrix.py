@@ -479,11 +479,13 @@ def test_without_a_gate_every_cell_that_needs_one_is_a_dash_and_an_unreadable_wo
         ({CONFIG: TWO_JOBS + root_declaring("Makefile", ends=None) + declaring("tests/a.py", ends=None)}, NEWEST, 0, "2", LegacyMode.REPORT.value),
         ({CONFIG: "[gate\n"}, NEWEST, 2, "cannot read quality/config.toml", "cannot read quality/config.toml"),
         ({CONFIG: TWO_JOBS + 'legacy = "sometimes"\n'}, NEWEST, 2, "cannot read quality/config.toml", "cannot read quality/config.toml"),
+        ({CONFIG: TWO_JOBS + 'legasy = "fail"\n'}, NEWEST, 2, "cannot read quality/config.toml", "cannot read quality/config.toml"),
+        ({CONFIG: TWO_JOBS + 'sonar = "yes"\n'}, NEWEST, 2, "cannot read quality/config.toml", "cannot read quality/config.toml"),
         ({CONFIG: "[gate\n"}, None, 0, "—", "—"),
     ],
     ids=[
         "jobs counted", "legacy fail", "no config", "entries a newer release requires ends on", "malformed config",
-        "malformed legacy", "malformed config, no gate",
+        "malformed legacy", "unknown gate key", "malformed sonar", "malformed config, no gate",
     ],
 )
 def test_the_jobs_cell_counts_and_the_legacy_cell_names_the_mode(fleet_report, public, files, pin, code, jobs, legacy):

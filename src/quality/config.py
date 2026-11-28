@@ -536,11 +536,16 @@ def read_gate_settings(repo: Path) -> GateSettings:
 
 
 def read_gate_table(repo: Path) -> GateSettings:
-    """`[gate] mandatory_jobs` and `[gate] legacy` alone, judged as the gate judges them; every other table belongs to
-    the release a repository pins, which may require entries a newer quality refuses or the reverse."""
+    """The `[gate]` table alone, judged as the gate judges it; every other table belongs to the release a repository
+    pins, which may require entries a newer quality refuses or the reverse. The allow lists stay empty."""
     text = _present(_read_config_text(repo))
     gate = config_entries.table_named(config_entries.parse(text, EXAMPLE), "gate", EXAMPLE)
-    return GateSettings(_mandatory_jobs(gate), _legacy_mode(gate))
+    unknown = set(gate) - TABLE_SHAPES["gate"].keys
+    if unknown:
+        raise config_entries.ConfigError(f"{config_entries.CONFIG_PATH} has {config_entries.unknown_keys(unknown)} - {KNOWN_KEYS}")
+    jobs = _mandatory_jobs(gate)
+    legacy = _legacy_mode(gate)
+    return GateSettings(jobs, legacy, _declarations(gate), sonar=_sonar(gate, legacy))
 
 
 def runs_sonar(repo: Path) -> bool:
