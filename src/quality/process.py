@@ -131,9 +131,9 @@ def network_git(access: GitAccess, scratch: Path) -> NetworkGit:
         case Anonymous():
             helpers: tuple[str, ...] = ()
             withheld, settings = {"SSH_ASKPASS", JOB_TOKEN_VARIABLE}, {}
-        case ThroughHelper(helper, settings):
-            helpers = ("-c", f"credential.helper={helper}")
-            withheld = {"SSH_ASKPASS"}
+        case _:
+            helpers = ("-c", f"credential.helper={access.helper}")
+            withheld, settings = {"SSH_ASKPASS"}, access.settings
     isolated = {name: value for name, value in attribute_free_git_environment(scratch / "home").items() if name not in withheld}
     return NetworkGit({**isolated, **settings, **NEVER_PROMPT}, ("-c", "credential.helper=", *helpers, "-c", "core.askPass="))
 
