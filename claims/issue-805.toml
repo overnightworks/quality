@@ -1,0 +1,8 @@
+claim_id = "cbf6d13b08954c13bb7b54b762387498"
+agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
+role = "builder"
+base = "575c054d0ae747c87b4a5ed6549e82e8bcd79eae"
+branch = "claude/issue-805-python-tool-installs-runtime-install"
+scope = ["docs/rules.md", "src/quality/run_script.py", "src/quality/workflow_rules.py", "tests/test_run_script.py", "tests/test_scanners.py", "tests/test_workflow_rules_install.py"]
+opened_commit = "679bb3e6b444fe78e2331b7d82481df8873031f0"
+whole_reason = "One rule widening: its spec sentences, its table in the rule's owner, the shared shell reader it reads through, and the three test modules that prove them."
