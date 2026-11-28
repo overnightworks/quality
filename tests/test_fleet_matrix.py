@@ -168,18 +168,25 @@ def test_release_tags_are_the_peeled_commits_of_annotated_and_lightweight_tags(g
 
 
 @pytest.mark.parametrize(
-    "git_preamble",
+    ("git_preamble", "words"),
     [
-        pytest.param('case " $* " in *" ls-remote "*) exit 3;; esac', id="a listing git refuses"),
-        pytest.param('case " $* " in *" ls-remote "*) sleep 30;; esac', id="a listing git does not finish"),
+        pytest.param('case " $* " in *" ls-remote "*) exit 3;; esac', "git exited 3", id="a listing git refuses"),
+        pytest.param('case " $* " in *" ls-remote "*) sleep 30;; esac', "git did not finish within 1 seconds", id="a listing git does not finish"),
+        pytest.param(
+            "case \" $* \" in *\" ls-remote \"*) printf '\\377'; exit 0;; esac", "git printed output that is not UTF-8",
+            id="a listing that is not text",
+        ),
+        pytest.param('case " $* " in *" ls-remote "*) exit 0;; esac', "no release tag", id="a listing that holds no tag"),
     ],
 )
-def test_release_tags_git_cannot_list_are_unreadable(fake_git, monkeypatch, git_preamble):
-    """FLEET-1, FLEET-25: a listing that fails or does not finish in its bound is no release tags."""
+def test_release_tags_git_cannot_list_are_unreadable_in_their_words(fake_git, monkeypatch, git_preamble, words):
+    """FLEET-1, FLEET-25: a listing that fails, does not finish in its bound, is no text or holds no release tag is
+    unreadable, each in its own words."""
     monkeypatch.setattr(fleet, "LS_REMOTE_TIMEOUT_SECONDS", 1)
     fake_git(git_preamble)
-    with pytest.raises(ReleaseTagsError):
+    with pytest.raises(ReleaseTagsError) as unreadable:
         read_release_tags()
+    assert str(unreadable.value) == words
 
 
 @pytest.mark.parametrize(

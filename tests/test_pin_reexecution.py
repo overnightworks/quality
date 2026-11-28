@@ -341,14 +341,26 @@ def test_an_unreachable_github_is_the_offline_pair(scene, cached):
     assert (done.returncode, done.stdout, done.stderr.splitlines(), scene.uv_calls()) == (2, "", OFFLINE_PAIR, [])
 
 
-def test_a_comment_that_misnames_its_commit_runs_nothing(scene):
-    """PIN-10, PIN-20, PIN-22: a comment that misnames its commit on quality's remote is the pair, with no uv call and
-    no record."""
+def move_the_tag(scene: Scene) -> str:
     git(scene.tags, "commit", "-q", "--allow-empty", "-m", "later")
     git(scene.tags, "tag", "-f", RELEASE)
-    other = head_commit(scene.tags)
+    return f"quality's {RELEASE} is {head_commit(scene.tags)[:7]}"
+
+
+def delete_every_tag(scene: Scene) -> str:
+    git(scene.tags, "tag", "-d", RELEASE)
+    return f"quality has no release {RELEASE}"
+
+
+@pytest.mark.parametrize(
+    "unpin", [pytest.param(move_the_tag, id="the tag at another commit"), pytest.param(delete_every_tag, id="no release tag at all")]
+)
+def test_a_comment_that_misnames_its_commit_runs_nothing(scene, unpin):
+    """PIN-10, PIN-20, PIN-22: a comment that misnames its commit on quality's remote, or names a release it lacks, is the
+    pair, with no uv call and no record."""
+    others = unpin(scene)
     done = scene.run("check", "files")
-    error = f"error: the gate pins {scene.commit[:7]} as {RELEASE}, but quality's {RELEASE} is {other[:7]}"
+    error = f"error: the gate pins {scene.commit[:7]} as {RELEASE}, but {others}"
     assert (done.returncode, done.stderr.splitlines()[0], scene.uv_calls(), pin.is_recorded(scene.records, scene.commit, RELEASE)) == (
         2, error, [], False,
     )
