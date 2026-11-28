@@ -136,7 +136,7 @@ def test_no_network_git_ever_prompts_and_only_anonymous_git_drops_the_job_token(
         pytest.param(process.ThroughHelper("!helper", {}), ["", "!helper"], id="git through a helper has only that one"),
     ],
 )
-def test_the_credential_helpers_a_network_git_may_ask(tmp_path, monkeypatch, access, helpers):
+def test_a_network_git_asks_only_the_helper_its_access_names(tmp_path, monkeypatch, access, helpers):
     """FLEET-76, MERGE-92, MERGE-96: configured helpers are reset, and a helper the access names is the only one left."""
     home = tmp_path / "configured"
     home.mkdir()
