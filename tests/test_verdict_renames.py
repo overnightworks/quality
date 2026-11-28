@@ -9,7 +9,6 @@ import time
 
 import pytest
 
-from quality import sides
 from quality.baseline_file import BASELINE_PATH, Key, Metric, render_baseline
 from quality.config_entries import CONFIG_PATH
 from quality.ratchet import Renames, renames_of
@@ -469,21 +468,6 @@ def test_inherited_git_routing_and_configuration_do_not_reach_the_diff(capsys, t
     assert closing_line() in capsys.readouterr().out
 
 
-@pytest.mark.parametrize(
-    ("environment", "expected"),
-    [
-        ({"GH_CONFIG_DIR": "/g", "XDG_CONFIG_HOME": "/x", "HOME": "/h"}, "/g"),
-        ({"XDG_CONFIG_HOME": "/x", "HOME": "/h"}, "/x/gh"),
-        ({"HOME": "/h"}, "/h/.config/gh"),
-    ],
-    ids=["GH_CONFIG_DIR", "XDG_CONFIG_HOME", "home"],
-)
-def test_gh_keeps_the_login_it_would_use_without_the_changed_home(environment, expected):
-    """MERGE-95: gh keeps the login it would use without the changed home: GH_CONFIG_DIR, else XDG_CONFIG_HOME/gh, else
-    the home's."""
-    assert sides.gh_configuration_directory(environment) == expected
-
-
 def unauthorized(handler):
     handler.send_response(401)
     handler.send_header("WWW-Authenticate", 'Basic realm="x"')
@@ -520,13 +504,13 @@ def test_a_netrc_in_the_home_is_never_sent_and_gh_finds_its_login_from_the_empty
 
 SIGTERM_SCRIPT = """
 import os, socket
-from quality import sides
+from quality import gh, sides
 server = socket.socket()
 server.bind(("127.0.0.1", 0))
 server.listen(5)
 print(server.getsockname()[1], flush=True)
 sides.read_renames_of_pull(
-    f"http://127.0.0.1:{server.getsockname()[1]}/x.git", "a" * 40, "b" * 40, {"PATH": os.environ["PATH"]}
+    f"http://127.0.0.1:{server.getsockname()[1]}/x.git", "a" * 40, "b" * 40, gh.git_access({"PATH": os.environ["PATH"]})
 )
 """
 

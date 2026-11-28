@@ -113,6 +113,48 @@ def test_the_git_environment_cuts_off_every_attributes_source(tmp_path, monkeypa
 
 
 @pytest.mark.parametrize(
+    ("access", "keeps_token"),
+    [
+        pytest.param(process.Anonymous(), False, id="anonymous git never holds the job token"),
+        pytest.param(process.ThroughHelper("!helper", {"LOGIN": "/login"}), True, id="git through a helper keeps the token gh may log in with"),
+        pytest.param(process.AsOperator({process.JOB_TOKEN_VARIABLE: "operator", "GIT_TERMINAL_PROMPT": "1"}), True, id="the operator's git keeps its own"),
+    ],
+)
+def test_no_network_git_ever_prompts_and_only_anonymous_git_drops_the_job_token(tmp_path, monkeypatch, access, keeps_token):
+    """FLEET-50, MERGE-97: the job's token is for GitHub's API alone, so only anonymous git is without it, and none of the
+    three accesses can ask for a password."""
+    monkeypatch.setenv(process.JOB_TOKEN_VARIABLE, "job")
+    network = process.network_git(access, tmp_path)
+    assert (process.JOB_TOKEN_VARIABLE in network.environment, network.environment["GIT_TERMINAL_PROMPT"]) == (keeps_token, "0")
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("access", "helpers"),
+    [
+        pytest.param(process.Anonymous(), [""], id="anonymous git has no helper"),
+        pytest.param(process.ThroughHelper("!helper", {}), ["", "!helper"], id="git through a helper has only that one"),
+    ],
+)
+def test_the_credential_helpers_a_network_git_may_ask(tmp_path, monkeypatch, access, helpers):
+    """FLEET-76, MERGE-92, MERGE-96: configured helpers are reset, and a helper the access names is the only one left."""
+    home = tmp_path / "configured"
+    home.mkdir()
+    (home / ".gitconfig").write_text("[credential]\n\thelper = configured\n")
+    monkeypatch.setenv("HOME", str(home))
+    network = process.network_git(access, tmp_path / "scratch")
+    listed = process.run(network.command("config", "--get-all", "credential.helper"), env=network.environment)
+    assert listed.stdout.splitlines() == helpers
+
+
+@pytest.mark.integration
+def test_git_through_a_helper_runs_with_the_variables_its_access_sets(tmp_path):
+    """MERGE-95: the access's settings reach git's environment, an empty home beside them."""
+    network = process.network_git(process.ThroughHelper("!helper", {"LOGIN": "/login"}), tmp_path / "scratch")
+    assert (network.environment["LOGIN"], network.environment["HOME"]) == ("/login", str(tmp_path / "scratch" / "home"))
+
+
+@pytest.mark.parametrize(
     ("version_output", "expected"),
     [
         ("git version 2.39.3 (Apple Git-146)", "2.39.3"),

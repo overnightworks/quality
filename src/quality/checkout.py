@@ -29,6 +29,7 @@ NO_REPOSITORY_SENTENCE = b"fatal: not a git repository (or any"
 GITHUB = "https://github.com/"
 GATE_REPOSITORY = "overnightworks/quality"
 GATE_URL = f"{GITHUB}{GATE_REPOSITORY}"
+RELEASE_TAGS_SECONDS = 60
 GATE_FILE = "gate.yml"
 CODEQL_FILE = "codeql.yml"
 LOCAL_PREFIXES = ("./", "$/")
@@ -240,6 +241,21 @@ def release_tags_listed(listing: str) -> ReleaseTags:
         target = peeled if tag.endswith("^{}") else tags
         target[tag.removesuffix("^{}")] = commit
     return {tag: commit for tag, commit in {**tags, **peeled}.items() if RELEASE_TAG.fullmatch(tag)}
+
+
+def read_release_tags(access: process.GitAccess, every_second: Callable[[int], None] | None = None) -> ReleaseTags:
+    """The release tags of the gate repository's remote, read by `git ls-remote` in `access`. A git that does not run, does
+    not finish within `RELEASE_TAGS_SECONDS` or prints no text is a `ProcessError` in process's words, a git that
+    exits non-zero one of `git exited N`; a remote without a release tag is `{}`."""
+    with process.scratch_directory() as scratch:
+        network = process.network_git(access, scratch)
+        listed = process.run_bounded_in_own_group(
+            network.command("ls-remote", "--tags", "--", GATE_URL), RELEASE_TAGS_SECONDS, network.environment, cwd=scratch,
+            every_second=every_second,
+        )
+    if listed.returncode != 0:
+        raise process.ProcessError(f"git exited {listed.returncode}")
+    return release_tags_listed(listed.stdout)
 
 
 def release_order(tag: str) -> tuple[int, ...]:

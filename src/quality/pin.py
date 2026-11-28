@@ -21,7 +21,6 @@ from quality.report import CannotJudge, Command, Instruction, Release, Step
 FIRST_RELEASE_WITH_CHECK = "v0.10.0"
 RUN_AT_PIN_VARIABLE = "QUALITY_RUN_AT_PIN"
 PREPARE_TIMEOUT_SECONDS = 600
-TAGS_TIMEOUT_SECONDS = 60
 SCRIPTS_QUESTION = ("python", "-I", "-c", 'import sysconfig; print(sysconfig.get_path("scripts"))')
 # git's repository-local variables, which steer uv's git toward the judged repository when a commit hook exports them;
 # the three configuration variables stay out because they carry the operator's own configuration.
@@ -370,18 +369,10 @@ def _prepare(command: list[str], environment: Mapping[str, str], every_second: C
 
 def _check_release(pin: ReleaseAtPin, environment: Mapping[str, str], records: Path | None, every_second: Callable[[int], None]) -> None:
     """quality's remote must show the comment's tag at the pinned commit before uv builds or runs any of it."""
-    query = ["git", "ls-remote", "--tags", "--", checkout.GATE_URL]
-    with process.scratch_directory() as scratch:
-        try:
-            listed = process.run_bounded_in_own_group(
-                query, TAGS_TIMEOUT_SECONDS, {**_preparation_environment(environment), "GIT_TERMINAL_PROMPT": "0"}, cwd=scratch,
-                every_second=every_second,
-            )
-        except process.ProcessError:
-            raise Failed(Failure.UNREACHABLE) from None
-    if listed.returncode != 0:
-        raise Failed(Failure.UNREACHABLE)
-    tagged = checkout.release_tags_listed(listed.stdout).get(pin.release.tag)
+    try:
+        tagged = checkout.read_release_tags(process.AsOperator(_preparation_environment(environment)), every_second).get(pin.release.tag)
+    except process.ProcessError:
+        raise Failed(Failure.UNREACHABLE) from None
     if tagged != pin.commit:
         raise Failed(Failure.TAG_ELSEWHERE, tagged or "")
     keep_record(records, pin.commit, pin.release.tag)

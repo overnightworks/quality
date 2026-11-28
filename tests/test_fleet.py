@@ -21,7 +21,6 @@ from quality import __version__, cli, fleet, fleet_ci_time, web
 from quality.fleet import (
     REPORT_DEADLINE_SECONDS,
     ReleaseTagsError,
-    anonymous_environment,
     parse_fleet,
     read_fleet,
     read_release_tags,
@@ -373,12 +372,6 @@ def test_the_release_tags_are_read_without_any_configured_credential(public, pri
         read_release_tags()
     assert AskingForCredentials.paths
     assert no_credential_was_used(planted_credentials)
-
-
-def test_the_git_environment_never_holds_the_listing_token(tmp_path, monkeypatch):
-    """FLEET-50: the job's token is for GitHub's API alone: clone and ls-remote run in an environment without it."""
-    monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
-    assert "GITHUB_TOKEN" not in anonymous_environment(tmp_path)
 
 
 @pytest.mark.integration

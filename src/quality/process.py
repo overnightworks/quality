@@ -6,7 +6,9 @@ import tempfile
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
+from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import NoReturn, Protocol, overload
 
 from quality import DISTRIBUTION
@@ -15,6 +17,9 @@ VERSION_TIMEOUT_SECONDS = 30
 STDERR_TAIL_LINES = 5
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 EXIT_INTERRUPTED = 128 + signal.SIGINT
+# The token GitHub's API gets from the job; git that reaches the network anonymously never holds it.
+JOB_TOKEN_VARIABLE = "GITHUB_TOKEN"
+NEVER_PROMPT = MappingProxyType({"GIT_TERMINAL_PROMPT": "0"})
 
 
 class ProcessError(Exception):
@@ -80,6 +85,57 @@ def attribute_free_git_environment(empty_home: Path) -> dict[str, str]:
         "HOME": str(empty_home),
         "XDG_CONFIG_HOME": str(empty_home),
     }
+
+
+@dataclass(frozen=True)
+class Anonymous:
+    """git with no configuration it could authenticate from, and none of the job's token."""
+
+
+@dataclass(frozen=True)
+class ThroughHelper:
+    """git whose only source of credentials is `helper`, with `settings` as the variables the helper needs set."""
+
+    helper: str
+    settings: Mapping[str, str]
+
+
+@dataclass(frozen=True)
+class AsOperator:
+    """git in `environment`, the operator's own configuration included."""
+
+    environment: Mapping[str, str]
+
+
+type GitAccess = Anonymous | ThroughHelper | AsOperator
+
+
+@dataclass(frozen=True)
+class NetworkGit:
+    """The environment git that reaches the network runs in, and the configuration its commands start with."""
+
+    environment: dict[str, str]
+    configuration: tuple[str, ...]
+
+    def command(self, *arguments: str) -> list[str]:
+        return ["git", *self.configuration, *arguments]
+
+
+def network_git(access: GitAccess, scratch: Path) -> NetworkGit:
+    """The one place a git that reaches the network gets its credentials decided, and none of the three accesses ever
+    prompts. The isolated accesses run with an empty home below `scratch`, so no `.netrc` or other file git reads there
+    exists, and git's fallback to `SSH_ASKPASS` for an http password is cut off."""
+    match access:
+        case AsOperator(environment):
+            return NetworkGit({**environment, **NEVER_PROMPT}, ())
+        case Anonymous():
+            helpers: tuple[str, ...] = ()
+            withheld, settings = {"SSH_ASKPASS", JOB_TOKEN_VARIABLE}, {}
+        case ThroughHelper(helper, settings):
+            helpers = ("-c", f"credential.helper={helper}")
+            withheld = {"SSH_ASKPASS"}
+    isolated = {name: value for name, value in attribute_free_git_environment(scratch / "home").items() if name not in withheld}
+    return NetworkGit({**isolated, **settings, **NEVER_PROMPT}, ("-c", "credential.helper=", *helpers, "-c", "core.askPass="))
 
 
 def parse_git_version(version_output: str) -> str | None:

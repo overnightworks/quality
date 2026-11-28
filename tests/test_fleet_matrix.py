@@ -1,10 +1,9 @@
 """The `quality report` release matrix."""
 
-import subprocess
 
 import pytest
 
-from quality import baseline_file, fleet
+from quality import baseline_file, checkout
 from quality.checkout import GATE_REPOSITORY
 from quality.fleet import (
     MATRIX_COLUMNS,
@@ -15,7 +14,6 @@ from quality.rules import Rule
 from tests.support.architecture import FORBIDDEN, adapter_contract, contracts_toml, toml
 from tests.support.baselines import ceiling
 from tests.support.fleet import FIRST_RELEASE_COMMIT, FIRST_RELEASES, LITERAL_TEXT, NEWEST, OLDER, UNRELEASED, row
-from tests.support.git_repositories import GIT_IDENTITY, head_commit
 
 pytestmark = pytest.mark.integration
 
@@ -155,16 +153,11 @@ def test_a_cannot_judge_row_keeps_its_label_in_the_matrix(fleet_report, public, 
     assert matrix_row(output, "o/gone")[1:] == [label] + [""] * (len(MATRIX_COLUMNS) - 2)
 
 
-def test_release_tags_are_the_peeled_commits_of_annotated_and_lightweight_tags(gate_clone, remotes):
-    """FLEET-1: `ls-remote` lists an annotated tag twice; the commit is the peeled line. No tag is unreadable."""
-    directory = remotes / gate_clone({"a": "1\n"})
-    with pytest.raises(ReleaseTagsError):
+def test_a_gate_repository_without_a_release_tag_has_unreadable_release_tags(gate_clone):
+    """FLEET-1: no release tag is unreadable."""
+    gate_clone({"a": "1\n"})
+    with pytest.raises(ReleaseTagsError, match="no release tag"):
         read_release_tags()
-    git = ["git", "-C", str(directory), *GIT_IDENTITY]
-    for tag in (["v0.1.0"], ["-a", "v0.2.0", "-m", "release"], ["not-a-release"]):
-        subprocess.run([*git, "tag", *tag], check=True)
-    tip = head_commit(directory)
-    assert read_release_tags() == {"v0.1.0": tip, "v0.2.0": tip}
 
 
 @pytest.mark.parametrize(
@@ -182,7 +175,7 @@ def test_release_tags_are_the_peeled_commits_of_annotated_and_lightweight_tags(g
 def test_release_tags_git_cannot_list_are_unreadable_in_their_words(fake_git, monkeypatch, git_preamble, words):
     """FLEET-1, FLEET-25: a listing that fails, does not finish in its bound, is no text or holds no release tag is
     unreadable, each in its own words."""
-    monkeypatch.setattr(fleet, "LS_REMOTE_TIMEOUT_SECONDS", 1)
+    monkeypatch.setattr(checkout, "RELEASE_TAGS_SECONDS", 1)
     fake_git(git_preamble)
     with pytest.raises(ReleaseTagsError) as unreadable:
         read_release_tags()

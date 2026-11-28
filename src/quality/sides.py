@@ -18,7 +18,6 @@ from quality.config_entries import CONFIG_PATH, ConfigError
 from quality.ratchet import NO_RENAMES, Renames, head_step, renames_of
 from quality.report import CannotJudge, Step
 
-CREDENTIAL_HELPER = "!gh auth git-credential"
 FETCH_TIMEOUT_SECONDS = 120
 NO_BASE_SETTINGS = GateSettings((), LegacyMode.REPORT, sonar=False)
 HEAD = "the head"
@@ -236,55 +235,34 @@ def _run_git(command: list[str], env: dict[str, str] | None, bound: float | None
     return done
 
 
-def gh_configuration_directory(environment: Mapping[str, str]) -> str:
-    """Where gh looks for its login: `GH_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gh`, else `~/.config/gh`."""
-    if environment.get("GH_CONFIG_DIR"):
-        return environment["GH_CONFIG_DIR"]
-    if environment.get("XDG_CONFIG_HOME"):
-        return str(Path(environment["XDG_CONFIG_HOME"]) / "gh")
-    return str(Path(environment.get("HOME", "~")).expanduser() / ".config" / "gh")
-
-
-def fetch_environment(environment: Mapping[str, str], empty_home: Path) -> dict[str, str]:
-    """The environment of git around the fetch: no inherited git routing or configuration, an empty home so that
-    `.netrc` and every other file git reads there is absent, and no way to prompt for a password. gh is the only source
-    of credentials, and it keeps its login by being told where the real configuration directory is."""
-    isolated = process.attribute_free_git_environment(empty_home)
-    kept = {name: value for name, value in isolated.items() if name != "SSH_ASKPASS"}
-    return kept | {"GIT_TERMINAL_PROMPT": "0", "GH_CONFIG_DIR": gh_configuration_directory(environment)}
-
-
 @contextmanager
-def _fetched_pull(remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str]) -> Iterator[tuple[Path, dict[str, str]]]:
+def _fetched_pull(remote: str, base_sha: str, merge_sha: str, access: process.ThroughHelper) -> Iterator[tuple[Path, dict[str, str]]]:
     """A bare repository holding the pull request's two commits, and the isolated environment git runs in, removed
-    afterwards. Credentials stay in gh's credential protocol; git's own words never reach the operator."""
+    afterwards. Credentials stay in the helper's credential protocol; git's own words never reach the operator."""
     with process.scratch_directory() as scratch:
-        isolated = fetch_environment(environment, scratch / "home")
+        network = process.network_git(access, scratch)
         repository = scratch / "repository"
         commands = (
             ["git", "init", "--bare", "--quiet", str(repository)],
-            [
-                "git", "-c", "credential.helper=", "-c", f"credential.helper={CREDENTIAL_HELPER}", "-c", "core.askPass=",
-                "-C", str(repository), "fetch", "--quiet", "--depth=1", "--no-tags", "--", remote, base_sha, merge_sha,
-            ],
+            network.command("-C", str(repository), "fetch", "--quiet", "--depth=1", "--no-tags", "--", remote, base_sha, merge_sha),
         )
         for command in commands:
             try:
-                done = process.run_bounded_in_own_group(command, FETCH_TIMEOUT_SECONDS, isolated)
+                done = process.run_bounded_in_own_group(command, FETCH_TIMEOUT_SECONDS, network.environment)
             except process.ProcessError as error:
                 raise CannotJudge(f"cannot fetch the pull request's commits to compare renamed files ({error})") from None
             if done.returncode != 0:
                 raise CannotJudge(
                     f"cannot fetch the pull request's commits to compare renamed files (git exited {done.returncode})"
                 )
-        yield repository, isolated
+        yield repository, network.environment
 
 
 def read_renames_of_pull(
-    remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str], marks: bool = False
+    remote: str, base_sha: str, merge_sha: str, access: process.ThroughHelper, marks: bool = False
 ) -> Renames:
     """The renames the verdict reads at the checkout, from the pull request's two commits fetched into a bare repository."""
-    with _fetched_pull(remote, base_sha, merge_sha, environment) as (repository, isolated):
+    with _fetched_pull(remote, base_sha, merge_sha, access) as (repository, isolated):
         try:
             return read_renames(repository, base_sha, merge_sha, isolated, bound=FETCH_TIMEOUT_SECONDS, marks=marks, words=DOOR_WORDS)
         except CannotJudge:
@@ -292,10 +270,10 @@ def read_renames_of_pull(
 
 
 def read_pull_tree_of_pull(
-    remote: str, base_sha: str, merge_sha: str, environment: Mapping[str, str], marks: bool = False
+    remote: str, base_sha: str, merge_sha: str, access: process.ThroughHelper, marks: bool = False
 ) -> architecture.PullTree:
     """The tree the verdict reads at the checkout, from the same fetched commits, in the door's words."""
-    with _fetched_pull(remote, base_sha, merge_sha, environment) as (repository, isolated):
+    with _fetched_pull(remote, base_sha, merge_sha, access) as (repository, isolated):
         return read_pull_tree(repository, base_sha, merge_sha, isolated, FETCH_TIMEOUT_SECONDS, DOOR_WORDS, marks)
 
 
