@@ -364,6 +364,7 @@ def runs_on(label: str) -> str:
 
 
 INVALID_RUNS_ON = runs_on("${{ foo( }}")
+NPM_INSTALL_BY_NAME = runs_on("ubuntu-latest").replace("run: 'true'", "run: npm install -g x")
 
 
 def workflow_rows(capsys) -> list[tuple[str, FindingEvent, str]]:
@@ -378,11 +379,15 @@ def workflow_rows(capsys) -> list[tuple[str, FindingEvent, str]]:
         (UNPINNED_WITHOUT_PERMISSIONS, ".github/workflows/w.yml:6", "INSECURE"),
         (INVALID_RUNS_ON, ".github/workflows/w.yml:5", "INVALID"),
         (local_reusable_call("."), ".github/workflows/w.yml:7", "INSECURE"),
+        (NPM_INSTALL_BY_NAME, ".github/workflows/w.yml:8", "INSECURE"),
     ],
-    ids=["unpinned-action-without-permissions", "invalid-runs-on-expression", "local-reusable-call-with-dot-slash"],
+    ids=[
+        "unpinned-action-without-permissions", "invalid-runs-on-expression", "local-reusable-call-with-dot-slash",
+        "npm-install-by-name",
+    ],
 )
 def test_a_known_bad_workflow_fails(workflow_repo, installed_scanners, capsys, workflow, location, event):
-    """WORKFLOW-1: the real scanners fail a known bad workflow at file:line, as a row of its kind."""
+    """WORKFLOW-1, RUNTIME-14: the real scanners fail a known bad workflow at file:line, as a row of its kind."""
     assert scan(workflow_repo(workflow)) == 1
     assert (location, FindingEvent[event]) in [(found, kind) for found, kind, _ in workflow_rows(capsys)]
 
