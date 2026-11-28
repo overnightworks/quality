@@ -1,8 +1,0 @@
-claim_id = "4c9754431be94a75ab9c2d699e616b1d"
-agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
-role = "builder"
-base = "acaaff345d39dace55787a417925be1bca229d59"
-branch = "claude/issue-1124-one-bounded-fetch"
-scope = ["docs/ARCHITECTURE.md", "docs/rules.md", "src/quality/advisories.py", "src/quality/deadline.py", "src/quality/sonar_scanner.py", "src/quality/web.py", "tests/support/advisories.py", "tests/test_advisories.py", "tests/test_advisories_locks.py", "tests/test_advisories_retry.py", "tests/test_deadline.py", "tests/test_sonar_scanner.py", "tests/test_sonar_scanner_gpg.py", "tests/test_web.py"]
-opened_commit = "6c873c3f8d1aa315f245c10f22e4032adee34801"
-whole_reason = "One transport owner: both downloads and their tests move together, or a second transport stays."
