@@ -1,13 +1,10 @@
 """Workflow text whose `run:` script stands at a known line, for the rules that read a step's script."""
 
 import json
-from collections.abc import Callable
 
 WORKFLOW = ".github/workflows/w.yml"
 BLOCK_LINE = 10
 QUOTED_LINE = 8
-
-type ScriptBuilder = Callable[..., str]
 
 
 def steps_of(on: str = "push") -> str:

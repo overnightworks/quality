@@ -10,11 +10,11 @@ from quality.rules import Rule
 from tests.support.check import check_output as run
 from tests.support.check import check_result, judge_workflow, refusals, rule_findings
 from tests.support.git_repositories import git
-from tests.support.workflow_scripts import block_run, steps_of
+from tests.support.workflow_scripts import WORKFLOW, block_run, steps_of
 
 RULE = Rule.PYTEST_RANDOM
 UNSHUFFLED, UNSEEDED, MISSING = FindingEvent.UNSHUFFLED, FindingEvent.UNSEEDED, FindingEvent.MISSING
-WORKFLOW = ".github/workflows/w.yml"
+JUDGED = judge_workflow(RULE)
 MARKER = "# pytest-random: browser tests keep one stack"
 SCRIPT_LINE = 10
 ADDOPTS_LINE = 5
@@ -215,7 +215,7 @@ def test_a_nested_project_is_judged_and_a_fixture_project_below_tests_is_not(bui
 @pytest.mark.parametrize("command", ["pytest {}", "uv run pytest {}", "python -m pytest {}", "uv run --locked python3.14 -m pytest {}"])
 def test_a_workflow_call_is_judged_at_its_line_through_any_runner(build_repo, command):
     """RANDOM-9: the call of the pytest-workers reader, through `uv run` or `python -m`, is judged at its line."""
-    findings = judge_workflow(RULE)(build_repo, block_run(command.format("-n auto -p no:randomly")))
+    findings = JUDGED(build_repo, block_run(command.format("-n auto -p no:randomly")))
     assert shape(findings) == [(UNSHUFFLED, WORKFLOW, SCRIPT_LINE)]
 
 
@@ -223,7 +223,7 @@ def test_a_workflow_call_is_judged_at_its_line_through_any_runner(build_repo, co
 @pytest.mark.parametrize(("flags", "event"), FLAG_CASES)
 def test_a_workflow_call_is_judged_by_its_flags(build_repo, flags, event):
     """RANDOM-4, RANDOM-5, RANDOM-6, RANDOM-9: the same reading of a flag list holds for a pytest call."""
-    findings = judge_workflow(RULE)(build_repo, block_run("echo start", f"pytest {flags}"))
+    findings = JUDGED(build_repo, block_run("echo start", f"pytest {flags}"))
     assert shape(findings) == expected(event, WORKFLOW, SCRIPT_LINE + 1)
 
 
@@ -234,7 +234,7 @@ def test_a_workflow_call_is_judged_by_its_flags(build_repo, flags, event):
 )
 def test_a_line_that_is_no_pytest_call_is_clean(build_repo, line):
     """RANDOM-9: a pip install, an echo, a comment and a script that starts pytest are no call the rule reads."""
-    assert judge_workflow(RULE)(build_repo, block_run(line)) == []
+    assert JUDGED(build_repo, block_run(line)) == []
 
 
 @pytest.mark.integration
@@ -250,13 +250,13 @@ def test_a_line_that_is_no_pytest_call_is_clean(build_repo, line):
 )
 def test_a_marker_with_a_reason_clears_a_workflow_call(build_repo, lines):
     """RANDOM-8: `# pytest-random: <reason>` on the call's line or in the unbroken comment run directly above it clears it."""
-    assert judge_workflow(RULE)(build_repo, block_run(*lines)) == []
+    assert JUDGED(build_repo, block_run(*lines)) == []
 
 
 @pytest.mark.integration
 def test_a_marker_trailing_another_commands_line_clears_that_command_only(build_repo):
     """RANDOM-8: the marker clears the line it trails, not the call on the next line."""
-    assert [finding.line for finding in judge_workflow(RULE)(build_repo, block_run(f"pytest -q {MARKER}", "pytest -q"))] == [11]
+    assert [finding.line for finding in JUDGED(build_repo, block_run(f"pytest -q {MARKER}", "pytest -q"))] == [11]
 
 
 @pytest.mark.integration
@@ -267,7 +267,7 @@ def test_a_marker_trailing_another_commands_line_clears_that_command_only(build_
 )
 def test_a_listing_only_call_is_not_judged(build_repo, line, event):
     """RANDOM-9: a call that only lists tests runs none, so its quiet flag hides no seed."""
-    assert shape(judge_workflow(RULE)(build_repo, block_run(line))) == expected(event, WORKFLOW, 10)
+    assert shape(JUDGED(build_repo, block_run(line))) == expected(event, WORKFLOW, 10)
 
 
 @pytest.mark.integration
@@ -284,13 +284,13 @@ def test_a_listing_only_call_is_not_judged(build_repo, line, event):
 )
 def test_a_marker_without_a_reason_or_too_far_clears_nothing(build_repo, lines):
     """RANDOM-8: the marker needs its own id, a reason with a letter and a place on the call's line or in the unbroken comment run above it."""
-    assert [finding.event for finding in judge_workflow(RULE)(build_repo, block_run(*lines))] == [UNSEEDED]
+    assert [finding.event for finding in JUDGED(build_repo, block_run(*lines))] == [UNSEEDED]
 
 
 @pytest.mark.integration
 def test_a_call_with_both_a_switch_and_a_quiet_flag_is_one_finding_of_the_switch(build_repo):
     """RANDOM-9: a call is one finding, its no-shuffle problem first; the fix names the switch's fix."""
-    (finding,) = judge_workflow(RULE)(build_repo, block_run("pytest -q -p no:randomly"))
+    (finding,) = JUDGED(build_repo, block_run("pytest -q -p no:randomly"))
     assert finding.event is UNSHUFFLED
     assert "# pytest-random: <reason>" in str(finding.fix)
 
@@ -332,7 +332,7 @@ LEVELS = ["workflow", "job", "step"]
 def test_pytest_addopts_in_an_env_is_judged_at_its_value(build_repo, level, flags, event):
     """RANDOM-4, RANDOM-5, RANDOM-6, RANDOM-11: PYTEST_ADDOPTS in a workflow, job or step `env:` is judged like addopts."""
     text, line = env_workflow(level, "PYTEST_ADDOPTS", json.dumps(flags))
-    assert shape(judge_workflow(RULE)(build_repo, text)) == expected(event, WORKFLOW, line)
+    assert shape(JUDGED(build_repo, text)) == expected(event, WORKFLOW, line)
 
 
 @pytest.mark.integration
@@ -341,7 +341,7 @@ def test_pytest_addopts_in_an_env_is_judged_at_its_value(build_repo, level, flag
 def test_disabled_plugin_autoload_in_an_env_is_no_random_order_unless_empty(build_repo, level, value, event):
     """RANDOM-6, RANDOM-11: PYTEST_DISABLE_PLUGIN_AUTOLOAD with any value pytest reads as set is `unshuffled`."""
     text, line = env_workflow(level, "PYTEST_DISABLE_PLUGIN_AUTOLOAD", value)
-    assert shape(judge_workflow(RULE)(build_repo, text)) == expected(event, WORKFLOW, line)
+    assert shape(JUDGED(build_repo, text)) == expected(event, WORKFLOW, line)
 
 
 @pytest.mark.integration
@@ -354,7 +354,7 @@ def test_a_marker_clears_an_env_value_on_its_line_or_directly_above(build_repo, 
     lines = text.split("\n")
     above = "\n".join([*lines[: line - 1], MARKER, *lines[line - 1 :]])
     beside = "\n".join([*lines[: line - 1], f"{lines[line - 1]}  {MARKER}", *lines[line:]])
-    assert judge_workflow(RULE)(build_repo, above) == [] == judge_workflow(RULE)(build_repo, beside)
+    assert JUDGED(build_repo, above) == [] == JUDGED(build_repo, beside)
 
 
 @pytest.mark.integration
@@ -364,7 +364,7 @@ def test_two_comment_lines_above_an_env_value_clear_it(build_repo, level):
     text, line = env_workflow(level, "PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
     lines = text.split("\n")
     above = "\n".join([*lines[: line - 1], MARKER, "# a plain comment", *lines[line - 1 :]])
-    assert judge_workflow(RULE)(build_repo, above) == []
+    assert JUDGED(build_repo, above) == []
 
 
 @pytest.mark.integration
@@ -384,14 +384,14 @@ def test_a_marker_trailing_the_previous_env_value_does_not_clear_the_next(build_
     lines = text.split("\n")
     indent = lines[line - 1][: len(lines[line - 1]) - len(lines[line - 1].lstrip())]
     marked = "\n".join([*lines[: line - 1], f"{indent}OTHER: x  {MARKER}", *lines[line - 1 :]])
-    assert shape(judge_workflow(RULE)(build_repo, marked)) == expected(UNSHUFFLED, WORKFLOW, line + 1)
+    assert shape(JUDGED(build_repo, marked)) == expected(UNSHUFFLED, WORKFLOW, line + 1)
 
 
 @pytest.mark.integration
 def test_an_env_value_built_at_run_time_is_not_read(build_repo):
     """RANDOM-11: a `${{ }}` value is chosen at run time and judged clean."""
     text, _ = env_workflow("step", "PYTEST_ADDOPTS", "${{ matrix.opts }}")
-    assert judge_workflow(RULE)(build_repo, text) == []
+    assert JUDGED(build_repo, text) == []
 
 
 @pytest.mark.integration
@@ -418,7 +418,7 @@ def test_a_workflow_the_env_reader_cannot_read_refuses_the_rule_naming_the_file(
 @pytest.mark.parametrize("form", ['PYTEST_ADDOPTS={} pytest tests', 'export PYTEST_ADDOPTS={}', 'env PYTEST_ADDOPTS={} uv run pytest'])
 def test_a_script_assignment_of_pytest_addopts_is_judged_at_its_line(build_repo, form, flags, event):
     """RANDOM-11: PYTEST_ADDOPTS as an assignment word, with a command or exported, is judged like the env."""
-    findings = judge_workflow(RULE)(build_repo, block_run(form.format(shlex.quote(flags))))
+    findings = JUDGED(build_repo, block_run(form.format(shlex.quote(flags))))
     assert shape(findings) == [(event, WORKFLOW, SCRIPT_LINE)]
 
 
@@ -438,7 +438,7 @@ def test_a_script_assignment_of_pytest_addopts_is_judged_at_its_line(build_repo,
 )
 def test_a_script_assignment_is_read_only_as_an_assignment(build_repo, line, event):
     """RANDOM-11: only an assignment word is read, and an empty autoload value is not set."""
-    assert shape(judge_workflow(RULE)(build_repo, block_run(line))) == expected(event, WORKFLOW, SCRIPT_LINE)
+    assert shape(JUDGED(build_repo, block_run(line))) == expected(event, WORKFLOW, SCRIPT_LINE)
 
 
 @pytest.mark.integration
@@ -453,8 +453,8 @@ def test_a_script_assignment_of_pytest_addopts_that_is_no_shell_words_refuses_th
 @pytest.mark.parametrize("flags", ["-p no:randomly", "--randomly-seed=1234", "--randomly-seed=last", "-q"])
 def test_the_marker_clears_a_workflow_source_that_a_flow_layer_needs(build_repo, flags):
     """RANDOM-8: a marker clears a call and a PYTEST_ADDOPTS assignment, never the same flags in addopts."""
-    assert judge_workflow(RULE)(build_repo, block_run(MARKER, f"pytest {flags}")) == []
-    assert judge_workflow(RULE)(build_repo, block_run(MARKER, f"PYTEST_ADDOPTS={shlex.quote(flags)} pytest")) == []
+    assert JUDGED(build_repo, block_run(MARKER, f"pytest {flags}")) == []
+    assert JUDGED(build_repo, block_run(MARKER, f"PYTEST_ADDOPTS={shlex.quote(flags)} pytest")) == []
     assert len(judged(build_repo, {"pyproject.toml": pyproject(json.dumps(flags))})) == 1
 
 

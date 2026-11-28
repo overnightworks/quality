@@ -520,7 +520,6 @@ def job_moved_note(job: str, minutes: int) -> str:
     return f"{NEW_WORKFLOW} moved job {job} {minutes} minutes from {OLD_WORKFLOW}"
 
 
-
 @pytest.mark.parametrize(
     ("arrange", "held_jobs", "notes"),
     [
