@@ -245,7 +245,8 @@ def test_a_wait_is_cut_to_the_time_left_and_no_request_follows_the_end_of_its_de
     scripted_server.open()
     refusal = scan()
     assert isinstance(refusal, refusal_type)
-    assert (str(refusal), scan.state.slept, len(scripted_server.requested)) == expected
+    actual = (str(refusal), scan.state.slept, len(scripted_server.requested))
+    assert actual == expected
 
 
 @pytest.mark.integration

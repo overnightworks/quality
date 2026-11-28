@@ -83,9 +83,10 @@ def test_a_server_that_drips_ends_at_the_deadline_though_every_socket_operation_
     release = threading.Event()
     origin, _ = stub_server(lambda handler: respond(handler, release))
     started = time.monotonic()
+    deadline = Deadline(started + DEADLINE_SECONDS, time.monotonic)
     try:
         with pytest.raises(web.CutAtDeadline):
-            web.fetch_within(f"{origin}/zip", {}, Deadline(started + DEADLINE_SECONDS, time.monotonic), timeout=15)
+            web.fetch_within(f"{origin}/zip", {}, deadline, timeout=15)
     finally:
         release.set()
     assert time.monotonic() - started < DEADLINE_SECONDS + MARGIN_SECONDS
@@ -110,8 +111,9 @@ def test_a_body_that_arrives_whole_within_the_deadline_is_returned_as_sent(stub_
 def test_an_error_answer_is_raised_as_its_status(stub_server):
     """SONAR-115: a failure of the request is raised to the caller, not an error of the thread that made it"""
     origin, _ = stub_server(lambda handler: (handler.send_response(HTTPStatus.NOT_FOUND), handler.end_headers()))
+    deadline = within(30)
     with pytest.raises(urllib.error.HTTPError) as raised:
-        web.fetch_within(f"{origin}/zip", {}, within(30))
+        web.fetch_within(f"{origin}/zip", {}, deadline)
     assert raised.value.code == HTTPStatus.NOT_FOUND
 
 
@@ -146,9 +148,10 @@ def test_the_thread_of_a_read_that_ran_past_the_deadline_closes_its_connection_b
     """SONAR-115: every read of the thread is bounded by the time left, so the abandoned thread ends without the caller's help"""
     release, client_gone = threading.Event(), threading.Event()
     origin, _ = stub_server(lambda handler: respond(handler, release, client_gone))
+    deadline = within(DEADLINE_SECONDS)
     try:
         with pytest.raises(web.CutAtDeadline):
-            web.fetch_within(f"{origin}/zip", {}, within(DEADLINE_SECONDS), timeout=15)
+            web.fetch_within(f"{origin}/zip", {}, deadline, timeout=15)
         ended_by_itself = client_gone.wait(MARGIN_SECONDS)
     finally:
         release.set()
@@ -166,8 +169,9 @@ def test_a_body_that_ends_short_of_its_length_is_refused(stub_server):
         handler.wfile.write(b"x" * 10)
 
     origin, _ = stub_server(answer)
+    deadline = within(30)
     with pytest.raises(http.client.IncompleteRead):
-        web.fetch_within(f"{origin}/zip", {}, within(30))
+        web.fetch_within(f"{origin}/zip", {}, deadline)
 
 
 def test_a_read_that_starts_after_the_deadline_asks_nobody():
@@ -181,8 +185,9 @@ def test_a_thread_that_dies_without_an_outcome_is_stopped_unexpectedly_at_once(m
     reported = []
     monkeypatch.setattr(threading, "excepthook", lambda arguments: reported.append(arguments.exc_type))
     started = time.monotonic()
+    deadline = within(30)
     with pytest.raises(web.StoppedUnexpectedly):
-        web.fetch_within("no-scheme", {}, within(30))
+        web.fetch_within("no-scheme", {}, deadline)
     assert (reported, time.monotonic() - started < MARGIN_SECONDS) == ([ValueError], True)
 
 
