@@ -1,8 +1,0 @@
-claim_id = "1633704b8ce64e03b40214101f7f9758"
-agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
-role = "builder"
-base = "457f207ba87d7c73a0f86fb77a50be6e6035220a"
-branch = "claude/issue-1111-spec-length"
-scope = ["docs/output.md", "docs/rules.md", "pyproject.toml", "src/quality/baseline_fix.py", "src/quality/check.py", "src/quality/checkout.py", "src/quality/rules.py", "src/quality/spec_citations.py", "src/quality/spec_definitions.py", "src/quality/spec_length.py", "tests"]
-opened_commit = "46106bc2c7522b3b2b25931422b213c843903d13"
-whole_reason = "One new rule and the parser it shares with spec-citation: the rule, its base reading in checkout, its wiring in check and rules, its documents and its tests; split, the parser move would land without a caller."
