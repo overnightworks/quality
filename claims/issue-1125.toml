@@ -1,0 +1,7 @@
+claim_id = "3a3ca1219fdb4d39a9f45c1e1dd7f076"
+agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
+role = "builder"
+base = "b571b0f2fe3e32fd520928fa9349aa808f94a209"
+branch = "claude/issue-1125-advisory-test-seam-loopback"
+scope = ["tests/conftest.py", "tests/support/advisories.py"]
+opened_commit = "21532cb61fc70bca540e46abd76243921f49d0ac"
