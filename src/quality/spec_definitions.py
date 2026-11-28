@@ -76,42 +76,57 @@ def _cells_after_the_first(line: str) -> str:
     return line.strip().removeprefix("|").partition("|")[2]
 
 
+@dataclass
+class _Scan:
+    """What reading a Markdown text line by line has found so far, and the state its next line is read in."""
+
+    rules: list[_OpenRule] = field(default_factory=list)
+    standing: list[_OpenRule] = field(default_factory=list)
+    under_rule: bool = False
+    id_table: bool = False
+    last_row: int = -2
+
+    def item(self, match: re.Match[str], line: str, index: int) -> None:
+        self.under_rule = True
+        rule = _OpenRule(match["id"], index + 1, match["retired"] is None, _indent(line))
+        if rule.live:
+            rule.words.extend(_words(line[match.end():]))
+        self.rules.append(rule)
+        self.standing.append(rule)
+
+    def row(self, line: str, index: int) -> None:
+        cell = _first_cell(line)
+        if index != self.last_row + 1:
+            self.id_table = cell == ID_HEADER
+        self.last_row = index
+        if (self.under_rule or self.id_table) and ID_PATTERN.fullmatch(cell):
+            self.rules.append(_OpenRule(cell, index + 1, True, _indent(line), _words(_cells_after_the_first(line))))
+
+    def other(self, line: str) -> None:
+        if not self.standing:
+            self.under_rule = self.under_rule and line[0].isspace()
+        elif self.standing[-1].live:
+            self.standing[-1].words.extend(_words(LEADING_MARKER.sub("", line.strip(), count=1)))
+
+
 def _rules_of(text: str) -> list[_OpenRule]:
     """Each rule a Markdown text defines: a list item as the rules say, a table row while a rule's table is open and in every
     table whose header's first cell is exactly `ID`."""
-    under_rule = False
-    id_table = False
-    last_row = -2
-    rules: list[_OpenRule] = []
-    standing: list[_OpenRule] = []
+    scan = _Scan()
     lines = text.removeprefix(BYTE_ORDER_MARK).splitlines()
     for index in live_line_indexes(lines):
         line = lines[index]
-        stripped = line.strip()
-        if not stripped:
+        if not line.strip():
             continue
-        indent = _indent(line)
-        while standing and standing[-1].indent >= indent:
-            standing.pop()
+        while scan.standing and scan.standing[-1].indent >= _indent(line):
+            scan.standing.pop()
         if item := DEFINING_ITEM.match(line):
-            under_rule = True
-            rules.append(_OpenRule(item["id"], index + 1, item["retired"] is None, indent))
-            if rules[-1].live:
-                rules[-1].words.extend(_words(line[item.end():]))
-            standing.append(rules[-1])
-        elif stripped.startswith("|"):
-            cell = _first_cell(line)
-            if index != last_row + 1:
-                id_table = cell == ID_HEADER
-            last_row = index
-            if (under_rule or id_table) and ID_PATTERN.fullmatch(cell):
-                rules.append(_OpenRule(cell, index + 1, True, indent, _words(_cells_after_the_first(line))))
-        elif standing:
-            if standing[-1].live:
-                standing[-1].words.extend(_words(LEADING_MARKER.sub("", stripped, count=1)))
-        elif not line[0].isspace():
-            under_rule = False
-    return rules
+            scan.item(item, line, index)
+        elif line.strip().startswith("|"):
+            scan.row(line, index)
+        else:
+            scan.other(line)
+    return scan.rules
 
 
 def define(texts: dict[str, str]) -> dict[str, list[Definition]]:
