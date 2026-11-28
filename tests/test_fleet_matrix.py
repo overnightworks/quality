@@ -13,6 +13,7 @@ from quality.rules import Rule
 from tests.support.architecture import FORBIDDEN, adapter_contract, contracts_toml, toml
 from tests.support.baselines import ceiling
 from tests.support.fleet import FIRST_RELEASE_COMMIT, FIRST_RELEASES, LITERAL_TEXT, NEWEST, OLDER, UNRELEASED, row
+from tests.support.git_repositories import git, head_commit
 
 pytestmark = pytest.mark.integration
 
@@ -150,6 +151,13 @@ def test_a_cannot_judge_row_keeps_its_label_in_the_matrix(fleet_report, public, 
     assert code == 2, output
     label = "cannot judge: cannot clone (git exited 128)"
     assert matrix_row(output, "o/gone")[1:] == [label] + [""] * (len(MATRIX_COLUMNS) - 2)
+
+
+def test_the_report_reads_the_commit_of_each_release_tag_of_the_gate_repository(gate_clone, remotes):
+    """FLEET-1: a gate repository with a release tag is read as that tag's commit."""
+    directory = remotes / gate_clone({"a": "1\n"})
+    git(directory, "tag", "v0.1.0")
+    assert read_release_tags() == {"v0.1.0": head_commit(directory)}
 
 
 @pytest.mark.parametrize(
