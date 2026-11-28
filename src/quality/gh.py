@@ -1,16 +1,18 @@
-"""The door's `gh` boundary: every `gh` command the door sends, and the reads of a repository's files at a commit."""
+"""The door's `gh` boundary: every `gh` command the door sends, gh's login for the door's git, and the reads of a repository's files at a commit."""
 
 import json
 import subprocess
 import unicodedata
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from urllib.parse import quote
 
-from quality import checkout
+from quality import checkout, process
 from quality.checkout import Unread
 from quality.report import CannotJudge
 
 NOT_FOUND = "HTTP 404"
+GIT_CREDENTIAL_HELPER = "!gh auth git-credential"
 # A character that could change the path or the query of the next request, beside every control character.
 REQUEST_CHARACTERS = frozenset("/\\%?#")
 
@@ -31,6 +33,20 @@ def run_gh(arguments: Sequence[str], stdin: str | None = None) -> str:
     if done.returncode != 0:
         raise GhFailed(f"gh {' '.join(arguments[:3])} failed: {done.stderr.strip()}", not_found=NOT_FOUND in done.stderr)
     return done.stdout
+
+
+def configuration_directory(environment: Mapping[str, str]) -> str:
+    """Where gh looks for its login: `GH_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gh`, else `~/.config/gh`."""
+    if environment.get("GH_CONFIG_DIR"):
+        return environment["GH_CONFIG_DIR"]
+    if environment.get("XDG_CONFIG_HOME"):
+        return str(Path(environment["XDG_CONFIG_HOME"]) / "gh")
+    return str(Path(environment.get("HOME", "~")).expanduser() / ".config" / "gh")
+
+
+def git_access(environment: Mapping[str, str]) -> process.ThroughHelper:
+    """git whose only credentials come from gh's helper, told where the login of `environment` is kept."""
+    return process.ThroughHelper(GIT_CREDENTIAL_HELPER, {"GH_CONFIG_DIR": configuration_directory(environment)})
 
 
 def file_at(gh: GhRunner, repository: str, path: str, sha: str) -> str | None:

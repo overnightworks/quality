@@ -68,7 +68,7 @@ flowchart TB
 ```
 
 Rules return findings and never print; `output.py` owns every printed line. `checkout.py` and `repository.py` are the
-only readers of the checked-out files (`architecture.py` opens the sources itself, for grimp), `web.py` the only HTTP transport that sends a credential, and `gh.py` runs every `gh` command the door sends. `python_imports.py` is the one reader of a module's import statements: from them `external_imports.py` keeps the submodules of an external package that a forbidden contract names (`agents.calling`), which grimp would squash, so nothing of the package is read or installed.
+only readers of the checked-out files (`architecture.py` opens the sources itself, for grimp), `web.py` the only HTTP transport that sends a credential, `gh.py` runs every `gh` command the door sends and names gh's login for the door's git, and `process.py` builds the environment of every git that reaches the network, in one of three accesses: anonymous, through one credential helper, or as the operator. `python_imports.py` is the one reader of a module's import statements: from them `external_imports.py` keeps the submodules of an external package that a forbidden contract names (`agents.calling`), which grimp would squash, so nothing of the package is read or installed.
 
 `config.py` reads `quality/config.toml` into the settings record and the allow lists; `config_allowances.py` owns the readers of the root, layout, python, compose and workflow allow tables, those of root and layout in two readings chosen by the side of the pull request (the head strictly, the base by each entry's identity), and `config_entries.py` the entry reading they share. `loosenings.py` judges an added root or layout entry through the one path every self-declaring entry takes, so the verdict and the door share it.
 
@@ -132,7 +132,7 @@ input: output masks them and stops workflow commands ([output](output.md#masking
 repository (`repository.py`): design's catalog functions get only text that `repository.py` has read, never a path, so no
 symlink is followed out of the repository and no untracked file is read. A scanner's stderr is shown only once gitleaks clears it. The GitHub transport follows no
 redirect. The fleet report's listing is public repositories only (a private one an operator's token can list is dropped
-before any line, so no file names one either), and its token goes to `api.github.com` only, never to git. The weekly CI-time file is
+before any line, so no file names one either), and its token goes to `api.github.com` only: `process.network_git` withholds it from anonymous git, which the report's clones and tag read use, and no git ever prompts on the terminal. The door's fetch asks gh's helper alone, with an empty home; the pin's tag read runs in the operator's own git configuration, as uv's fetch right after it does. The weekly CI-time file is
 public by design: repository names and numbers, no commit author and no run text; the deploy job runs no repository code and holds
 the Pages permissions in its job only, and the consumer needs no token. A workflow's pin selects which code runs
 locally. The gate's tool is its own uv workspace root, so a caller's checkout above it cannot take it in or configure

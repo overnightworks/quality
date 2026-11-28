@@ -73,16 +73,13 @@ FLEET_KEYS = (
 )
 LISTING_URL = "https://api.github.com/orgs/{organization}/repos?type=public&per_page=100"
 NEXT_PAGE = re.compile(r'rel="next"')
-LISTING_CREDENTIAL_VARIABLE = "GITHUB_TOKEN"
 NOTHING_MEASURED = "nothing measured"
 CLONE_TIMEOUT_SECONDS = 300
 REPORT_DEADLINE_SECONDS = 720
-LS_REMOTE_TIMEOUT_SECONDS = 60
 SHORT_COMMIT = 7
 DASH = "—"
 SELF = "self"
 CALLER_SEPARATOR = " · "
-ANONYMOUS_GIT = ("git", "-c", "credential.helper=", "-c", "core.askPass=")
 COLUMNS = (
     "Repo",
     "Commit",
@@ -365,30 +362,16 @@ def select_repositories(fleet: Fleet, token: str, fetch_listing: ListingFetch) -
     return tuple(selected[key] for key in sorted(selected))
 
 
-def anonymous_environment(scratch: Path) -> dict[str, str]:
-    """No configuration git could authenticate from: the process boundary's isolation drops every GIT_* variable and the system
-    and global config, and points HOME at an empty directory, so no ~/.netrc either."""
-    isolated = process.attribute_free_git_environment(scratch / "home")
-    # git falls back to SSH_ASKPASS for an http password too.
-    # The job's token is for GitHub's API alone; no git that reaches the network may inherit it.
-    return {**{name: value for name, value in isolated.items() if name not in {"SSH_ASKPASS", LISTING_CREDENTIAL_VARIABLE}}, "GIT_TERMINAL_PROMPT": "0"}
-
-
 def release_tags_or_none(tags: checkout.ReleaseTags | ReleaseTagsError) -> checkout.ReleaseTags | None:
     return None if isinstance(tags, ReleaseTagsError) else tags
 
 
 def read_release_tags() -> checkout.ReleaseTags:
-    """Release tag -> commit of the gate repository, the annotated ones peeled, by one anonymous `git ls-remote`."""
-    with process.scratch_directory() as scratch:
-        try:
-            listed = git(["ls-remote", "--tags", "--", checkout.GATE_URL], scratch, anonymous_environment(scratch),
-                         LS_REMOTE_TIMEOUT_SECONDS)
-        except process.ProcessError as error:
-            raise ReleaseTagsError(str(error)) from error
-    if listed.returncode != 0:
-        raise ReleaseTagsError(f"git exited {listed.returncode}")
-    tags = checkout.release_tags_listed(listed.stdout)
+    """Release tag -> commit of the gate repository, the annotated ones peeled, read anonymously; no tag is unreadable."""
+    try:
+        tags = checkout.read_release_tags(process.Anonymous())
+    except process.ProcessError as error:
+        raise ReleaseTagsError(str(error)) from error
     if not tags:
         raise ReleaseTagsError("no release tag")
     return tags
@@ -399,10 +382,10 @@ def measure_repository(name: str, time_left: float) -> Row:
     if time_left <= 0:
         return Unjudged(name, f"the report's {REPORT_DEADLINE_SECONDS} seconds are spent")
     with process.scratch_directory() as scratch:
-        environment = anonymous_environment(scratch)
+        network = process.network_git(process.Anonymous(), scratch)
         clone = scratch / "clone"
         try:
-            cloned = git(["clone", "--depth", "1", "--no-tags", "--quiet", "--", repository_url(name), str(clone)], scratch, environment,
+            cloned = git(["clone", "--depth", "1", "--no-tags", "--quiet", "--", repository_url(name), str(clone)], scratch, network,
                          min(CLONE_TIMEOUT_SECONDS, time_left))
             # git's own words name the local clone directory, so only its exit code is reported.
             if cloned.returncode != 0:
@@ -410,7 +393,7 @@ def measure_repository(name: str, time_left: float) -> Row:
         except process.ProcessError as error:
             return Unjudged(name, f"cannot clone ({error})")
         try:
-            head = process.unborn_aware_head_commit(clone, environment)
+            head = process.unborn_aware_head_commit(clone, network.environment)
         except process.ProcessError:
             # The error names the local clone directory, which a published reason never carries.
             return Unjudged(name, "cannot read the cloned commit")
@@ -476,9 +459,9 @@ def find_import_config(clone: Path, tracked: list[str]) -> tuple[bool, bool]:
 
 
 def git(
-    arguments: list[str], scratch: Path, environment: dict[str, str], timeout: float
+    arguments: list[str], scratch: Path, network: process.NetworkGit, timeout: float
 ) -> subprocess.CompletedProcess[str]:
-    return process.run([*ANONYMOUS_GIT, *arguments], cwd=scratch, env=environment, timeout=timeout)
+    return process.run(network.command(*arguments), cwd=scratch, env=network.environment, timeout=timeout)
 
 
 def render(
@@ -512,7 +495,7 @@ def run_report(
     today = now.date()
     try:
         fleet = read_fleet(Path("."))
-        names = select_repositories(fleet, environment.get(LISTING_CREDENTIAL_VARIABLE, ""), fetch_listing)
+        names = select_repositories(fleet, environment.get(process.JOB_TOKEN_VARIABLE, ""), fetch_listing)
     except CannotJudge as refusal:
         output.write_pair(refusal.reason.fact, refusal.reason.next_steps, channels.err)
         return EXIT_NOT_MEASURED
@@ -526,7 +509,7 @@ def run_report(
     # One worker, so the requests stay serial; it reads beside the clones, which wait on git alone.
     with ThreadPoolExecutor(max_workers=1) as worker:
         reading = worker.submit(
-            fleet_ci_time.read_fleet_ci_time, names, today, environment.get(LISTING_CREDENTIAL_VARIABLE, ""), fetch_listing,
+            fleet_ci_time.read_fleet_ci_time, names, today, environment.get(process.JOB_TOKEN_VARIABLE, ""), fetch_listing,
             checkout.DEFAULT_BRANCH, run_deadline,
         )
         rows = _measure_rows(names, pins, show, run_deadline)

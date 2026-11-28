@@ -15,7 +15,7 @@ from quality.baseline_file import BASELINE_PATH
 from quality.config import Declaration, GateSettings, LegacyMode
 from quality.config_allowances import ConfigSide
 from quality.config_entries import CONFIG_PATH
-from quality.gh import GhFailed, GhRunner, file_at, workflow_texts_at
+from quality.gh import GhFailed, GhRunner, file_at, git_access, workflow_texts_at
 from quality.landing import Landing, LandingKind, LandingRefused, landing_of
 from quality.loosenings import renames_can_change
 from quality.merge_consent import Review, consent_lines, read_consent
@@ -540,10 +540,11 @@ def read_pull_files(
     remote_for: RemoteFor, repository: str, base: BaseSide, head: Side, commits: tuple[str, str], environment: Mapping[str, str],
 ) -> tuple[architecture.PullTree | None, Renames]:
     """`sides.pull_files` with the readers that fetch the pull request's two commits from its repository's remote."""
+    access = git_access(environment)
     return pull_files(
         base, head,
-        lambda marks: read_pull_tree_of_pull(remote_for(repository), *commits, environment, marks),
-        lambda marks: read_renames_of_pull(remote_for(repository), *commits, environment, marks),
+        lambda marks: read_pull_tree_of_pull(remote_for(repository), *commits, access, marks),
+        lambda marks: read_renames_of_pull(remote_for(repository), *commits, access, marks),
         renames_can_change(base, head),
     )
 

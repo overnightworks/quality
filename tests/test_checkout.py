@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from quality import checkout, cli
+from quality import checkout, cli, process
 from quality.report import Instruction, Reason
 from tests.support.door import CHECK_WORD, FIX_WORDS, check_door, door_in
 from tests.support.git_repositories import git, head_commit, make_repo
@@ -760,3 +760,15 @@ def test_a_called_workflow_gone_from_the_tree_is_refused():
     with pytest.raises(checkout.UnfollowableCall) as refusal:
         reached(files, [A])
     assert (refusal.value.caller, refusal.value.uses) == (A, f"./{B}")
+
+
+@pytest.mark.integration
+def test_release_tags_are_the_peeled_commits_of_annotated_and_lightweight_tags(gate_clone, remotes):
+    """FLEET-1: `ls-remote` lists an annotated tag twice; the commit is the peeled line. A remote with no release tag
+    has none."""
+    directory = remotes / gate_clone({"a": "1\n"})
+    assert checkout.read_release_tags(process.Anonymous()) == {}
+    for tag in (["v0.1.0"], ["-a", "v0.2.0", "-m", "release"], ["not-a-release"]):
+        git(directory, "tag", *tag)
+    tip = head_commit(directory)
+    assert checkout.read_release_tags(process.Anonymous()) == {"v0.1.0": tip, "v0.2.0": tip}

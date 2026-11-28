@@ -18,7 +18,13 @@ import pytest
 import yaml
 
 from quality import __version__, cli, fleet, fleet_ci_time, web
-from quality.fleet import REPORT_DEADLINE_SECONDS, anonymous_environment, parse_fleet, read_fleet
+from quality.fleet import (
+    REPORT_DEADLINE_SECONDS,
+    ReleaseTagsError,
+    parse_fleet,
+    read_fleet,
+    read_release_tags,
+)
 from quality.output import SEPARATOR
 from quality.report import CannotJudge
 from tests.support.clones import function as clone_function
@@ -315,11 +321,10 @@ def private_host(monkeypatch) -> Iterator[None]:
         thread.join()
 
 
-@pytest.mark.integration
-def test_no_configured_credential_reaches_a_host_that_asks_for_one(fleet_report, public, private_host, tmp_path, monkeypatch):
-    """FLEET-73, FLEET-76, FLEET-94, FLEET-95: a helper, an askpass, a `~/.netrc` login and an Authorization header in
-    system, global or environment config are never used, the host sees only the repository's paths, and the repository
-    named in the file stays a `cannot judge` row."""
+@pytest.fixture
+def planted_credentials(tmp_path, monkeypatch) -> Path:
+    """Every place git could take a credential from, set up to send one: a helper, an askpass, a `~/.netrc` login and an
+    Authorization header in system, global and environment config. Returns the prefix of the files that show one ran."""
     home = tmp_path / "home"
     home.mkdir()
     asked = tmp_path / "asked"
@@ -339,19 +344,35 @@ def test_no_configured_credential_reaches_a_host_that_asks_for_one(fleet_report,
     monkeypatch.setenv("GIT_CONFIG_KEY_0", "http.extraHeader")
     monkeypatch.setenv("GIT_CONFIG_VALUE_0", "Authorization: Basic environment")
     monkeypatch.setenv("GIT_ASKPASS", str(askpass))
+    monkeypatch.setenv("SSH_ASKPASS", str(askpass))
+    return asked
+
+
+def no_credential_was_used(asked: Path) -> bool:
+    return AskingForCredentials.authorizations == [] and not list(asked.parent.glob(f"{asked.name}*"))
+
+
+@pytest.mark.integration
+def test_no_configured_credential_reaches_a_host_that_asks_for_one(fleet_report, public, private_host, planted_credentials):
+    """FLEET-73, FLEET-76, FLEET-94, FLEET-95: a helper, an askpass, a `~/.netrc` login and an Authorization header in
+    system, global or environment config are never used, the host sees only the repository's paths, and the repository
+    named in the file stays a `cannot judge` row."""
     code, output = fleet_report("overnightworks/edge")
     assert code == 2, output
     assert row(output, "overnightworks/edge")[1:3] == ["—", "cannot judge: cannot clone (git exited 128)"]
     assert AskingForCredentials.paths
     assert all(path.startswith("/overnightworks/edge/") for path in AskingForCredentials.paths)
-    assert AskingForCredentials.authorizations == []
-    assert sorted(path.name for path in tmp_path.iterdir() if path.name.startswith("asked")) == []
+    assert no_credential_was_used(planted_credentials)
 
 
-def test_the_git_environment_never_holds_the_listing_token(tmp_path, monkeypatch):
-    """FLEET-50: the job's token is for GitHub's API alone: clone and ls-remote run in an environment without it."""
-    monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
-    assert "GITHUB_TOKEN" not in anonymous_environment(tmp_path)
+@pytest.mark.integration
+def test_the_release_tags_are_read_without_any_configured_credential(public, private_host, planted_credentials):
+    """FLEET-1, FLEET-50, FLEET-76: the tag read at a host that asks for credentials sends none, runs no helper or askpass,
+    and is unreadable."""
+    with pytest.raises(ReleaseTagsError, match="git exited 128"):
+        read_release_tags()
+    assert AskingForCredentials.paths
+    assert no_credential_was_used(planted_credentials)
 
 
 @pytest.mark.integration
