@@ -1,8 +1,0 @@
-claim_id = "5220f09d368d438fbfbfc6d33e5fb7d1"
-agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
-role = "builder"
-base = "1e95e2b26ffc1d1c441fc364b1295b3665baedc7"
-branch = "claude/issue-1122-one-tag-reader-typed-git-access"
-scope = ["docs/ARCHITECTURE.md", "src/quality/checkout.py", "src/quality/fleet.py", "src/quality/gh.py", "src/quality/merge.py", "src/quality/pin.py", "src/quality/process.py", "src/quality/sides.py", "tests/test_checkout.py", "tests/test_fleet.py", "tests/test_fleet_matrix.py", "tests/test_gh.py", "tests/test_pin_reexecution.py", "tests/test_process.py", "tests/test_verdict_renames.py"]
-opened_commit = "214eb2dac380d8362cf746b8eb952527abb1b26b"
-whole_reason = "One credential decision gets one owner: the builder, the reader and its three callers move together, or a caller keeps its own builder."
