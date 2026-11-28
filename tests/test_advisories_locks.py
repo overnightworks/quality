@@ -1,8 +1,9 @@
 import datetime
+from collections.abc import Callable
 
 import pytest
 
-from quality import advisories, deadline
+from quality import advisories, deadline, web
 from quality.config_entries import CONFIG_PATH
 from quality.report import FindingEvent, NoteEvent
 from quality.rules import Area
@@ -248,6 +249,17 @@ def test_a_repository_with_both_kinds_downloads_each_database_once_and_judges_bo
     )
 
 
+def fetch_then(spend: Callable[[], None]) -> web.BoundedFetch:
+    """The real transport, then `spend`: the injected clock moves by the request alone, once its body is read."""
+
+    def fetch(url, headers, limit, timeout):
+        answer = web.fetch_within(url, headers, limit, timeout)
+        spend()
+        return answer
+
+    return fetch
+
+
 def test_one_deadline_spans_every_database_download(build_repo, publish_database, published_databases):
     """ADVISORY-9, ADVISORY-31: the first download (PyPI) spends the whole budget, so the second (npm) is not even
     requested and the run is `cannot judge`, not a hung job. The clock is injected and moves by the PyPI request
@@ -256,17 +268,16 @@ def test_one_deadline_spans_every_database_download(build_repo, publish_database
     publish_database()
     now = 0.0
 
-    def spend_budget_on_the_first_download(path: str) -> None:
+    def spend_budget() -> None:
         nonlocal now
         now = advisories.DATABASE_DOWNLOAD_DEADLINE_SECONDS
 
-    published_databases.on_request = spend_budget_on_the_first_download
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "uv.lock": uv_lock()})
     locks = {name: repo / name for name in (FRONTEND_LOCK, "uv.lock")}
     today = datetime.date(2026, 10, 21)
     run_deadline = deadline.RunDeadline.starting(lambda: now)
     with pytest.raises(ScannerError, match="the npm advisory database download exceeded 300 seconds"):
-        advisories.scan(locks, repo, [], today, run_deadline, cache=None)
+        advisories.scan(locks, repo, [], today, run_deadline, cache=None, fetch=fetch_then(spend_budget))
     assert published_databases.requested == ["/PyPI/all.zip"]
 
 
@@ -280,17 +291,16 @@ def test_the_run_ending_during_the_first_download_leaves_the_second_unrequested(
     monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 100)
     now = 0.0
 
-    def spend_the_run_on_the_first_download(path: str) -> None:
+    def spend_the_run() -> None:
         nonlocal now
         now = deadline.RUN_DEADLINE_SECONDS
 
-    published_databases.on_request = spend_the_run_on_the_first_download
     repo = build_repo({FRONTEND_LOCK: pnpm_lock(), "uv.lock": uv_lock()})
     locks = {name: repo / name for name in (FRONTEND_LOCK, "uv.lock")}
     today = datetime.date(2026, 10, 21)
     run_deadline = deadline.RunDeadline.starting(lambda: now)
     with pytest.raises(deadline.RunDeadlineSpent, match="^the run's 100 seconds are spent$"):
-        advisories.scan(locks, repo, [], today, run_deadline, cache=None)
+        advisories.scan(locks, repo, [], today, run_deadline, cache=None, fetch=fetch_then(spend_the_run))
     assert published_databases.requested == ["/PyPI/all.zip"]
 
 
