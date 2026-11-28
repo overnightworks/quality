@@ -140,7 +140,7 @@ def test_a_redirect_is_refused_at_once_and_its_target_hears_nothing(scan, script
     scripted_server.open()
     refusal = scan()
     message = str(refusal)
-    observed = (isinstance(refusal, ScannerError), "the PyPI advisory database" in message, str(int(REDIRECT)) in message)
+    observed = (isinstance(refusal, ScannerError), "the PyPI advisory database" in message, "HTTP Error 302" in message)
     assert (*observed, "attempts" in message) == (True, True, True, False)
     assert (len(scripted_server.requested), target_heard, scan.state.slept) == (1, [], [])
 
@@ -195,18 +195,6 @@ def test_a_body_that_arrived_whole_but_is_not_a_zip_is_not_tried_again(scan, scr
     assert (len(scripted_server.requested), scan.state.slept) == (1, [])
 
 
-@pytest.mark.integration
-def test_the_last_wait_is_cut_to_the_time_left_and_the_deadline_is_the_refusal(scan, scripted_server):
-    """ADVISORY-9, ADVISORY-34: the retries spend the existing deadline and add none."""
-    scripted_server.script = [GATEWAY_TIMEOUT]
-    scripted_server.on_request = lambda: setattr(scan.state, "now", advisories.DATABASE_DOWNLOAD_DEADLINE_SECONDS - 1)
-    scripted_server.open()
-    refusal = scan()
-    assert isinstance(refusal, ScannerError)
-    assert (str(refusal), scan.state.slept, len(scripted_server.requested)) == (
-        "the PyPI advisory database download exceeded 300 seconds", [1], 1)
-
-
 def test_the_attempts_of_one_database_and_their_waits_fit_the_download_deadline():
     """ADVISORY-9, ADVISORY-42: a download that stalls on every attempt is retried until its last attempt, because
     the attempts and the waits between them add up to no more than the downloads' deadline."""
@@ -215,47 +203,49 @@ def test_the_attempts_of_one_database_and_their_waits_fit_the_download_deadline(
     assert spent <= advisories.DATABASE_DOWNLOAD_DEADLINE_SECONDS
 
 
+DOWNLOAD_REFUSAL = "the PyPI advisory database download exceeded 300 seconds"
+RUN_REFUSAL = "the run's 100 seconds are spent"
+
+
 @pytest.mark.integration
-def test_a_run_that_ends_during_a_failed_attempt_cuts_the_wait_and_sends_no_further_request(
-    scan, scripted_server, monkeypatch
+@pytest.mark.parametrize(
+    ("run_seconds", "failure_arrives_at", "refusal_type", "expected"),
+    [
+        pytest.param(
+            None,
+            advisories.DATABASE_DOWNLOAD_DEADLINE_SECONDS - 1,
+            ScannerError,
+            (DOWNLOAD_REFUSAL, [1], 1),
+            id="the last wait is cut to the download deadline",
+        ),
+        pytest.param(
+            None,
+            advisories.DATABASE_DOWNLOAD_DEADLINE_SECONDS,
+            ScannerError,
+            (DOWNLOAD_REFUSAL, [], 1),
+            id="a failure at the download deadline waits for nothing",
+        ),
+        pytest.param(
+            100, 100, deadline.RunDeadlineSpent, (RUN_REFUSAL, [], 1), id="a run that ends during the attempt waits for nothing"
+        ),
+        pytest.param(
+            100, 99, deadline.RunDeadlineSpent, (RUN_REFUSAL, [1], 1), id="the wait is cut to the end of the run"
+        ),
+    ],
+)
+def test_a_wait_is_cut_to_the_time_left_and_no_request_follows_the_end_of_its_deadline(
+    scan, scripted_server, monkeypatch, run_seconds, failure_arrives_at, refusal_type, expected
 ):
-    """SCANNER-20, ADVISORY-9: the retry wait is cut to the time left, and an attempt that would start after the run's
-    end sends no request and cannot judge in the run's words."""
-    monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 100)
+    """ADVISORY-9, ADVISORY-34, SCANNER-20, REFUSAL-22: the retries spend the existing deadlines and add none; an
+    attempt after the end of the download deadline or of the run sends no request and judges in that deadline's words."""
+    if run_seconds is not None:
+        monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", run_seconds)
     scripted_server.script = [GATEWAY_TIMEOUT]
-    scripted_server.on_request = lambda: setattr(scan.state, "now", deadline.RUN_DEADLINE_SECONDS)
+    scripted_server.on_request = lambda: setattr(scan.state, "now", failure_arrives_at)
     scripted_server.open()
     refusal = scan()
-    assert isinstance(refusal, deadline.RunDeadlineSpent)
-    assert (str(refusal), scan.state.slept, len(scripted_server.requested)) == (
-        "the run's 100 seconds are spent", [], 1)
-
-
-@pytest.mark.integration
-def test_a_wait_cut_to_the_end_of_the_run_sends_no_further_request(scan, scripted_server, monkeypatch):
-    """SCANNER-20, REFUSAL-22, ADVISORY-9: the wait after a failure is cut to the run's end, and the attempt after it
-    sends no request and cannot judge in the run's words."""
-    monkeypatch.setattr(deadline, "RUN_DEADLINE_SECONDS", 100)
-    scripted_server.script = [GATEWAY_TIMEOUT]
-    scripted_server.on_request = lambda: setattr(scan.state, "now", deadline.RUN_DEADLINE_SECONDS - 1)
-    scripted_server.open()
-    refusal = scan()
-    assert isinstance(refusal, deadline.RunDeadlineSpent)
-    assert (str(refusal), scan.state.slept, len(scripted_server.requested)) == (
-        "the run's 100 seconds are spent", [1], 1)
-
-
-@pytest.mark.integration
-def test_a_failure_that_arrives_at_the_end_of_the_download_deadline_waits_for_nothing(scan, scripted_server):
-    """ADVISORY-9: a transient failure with no time left is refused in the deadline's words, not as a failed
-    download and not after attempts."""
-    scripted_server.script = [GATEWAY_TIMEOUT]
-    scripted_server.on_request = lambda: setattr(scan.state, "now", advisories.DATABASE_DOWNLOAD_DEADLINE_SECONDS)
-    scripted_server.open()
-    refusal = scan()
-    assert isinstance(refusal, ScannerError)
-    assert (str(refusal), scan.state.slept, len(scripted_server.requested)) == (
-        "the PyPI advisory database download exceeded 300 seconds", [], 1)
+    assert isinstance(refusal, refusal_type)
+    assert (str(refusal), scan.state.slept, len(scripted_server.requested)) == expected
 
 
 @pytest.mark.integration
