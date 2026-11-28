@@ -42,6 +42,7 @@ def old_file_held(pull_request) -> Path:
 
 
 def moved_with_git(pull_request) -> Path:
+    """A pull request whose base holds the old file and whose index then moves it with git mv."""
     repo = old_file_held(pull_request)
     git(repo, "mv", "src/old.py", "src/new.py")
     return repo

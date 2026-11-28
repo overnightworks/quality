@@ -36,6 +36,7 @@ def held_above(build_repo) -> Path:
 
 
 def moved_with_git(build_repo) -> Path:
+    """A repository built through build_repo whose function entry's file is then moved with git mv."""
     held = rendered_with_clones('[function_lines."src/old.py"]\nlong_one = 70\n')
     repo = build_repo({"src/old.py": long_function(70), BASELINE_PATH: held})
     git(repo, "mv", "src/old.py", "src/new.py")

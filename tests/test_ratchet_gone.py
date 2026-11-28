@@ -208,6 +208,7 @@ def test_a_gone_entry_row_follows_the_measured_can_fall_rows(build_repo, capsys)
 
 
 def moved_with_git(pull_request) -> Path:
+    """A pull request whose base holds the old file and its entry, before any move."""
     repo, commit_base = pull_request
     put(repo / "src/old.py", long_function(70))
     commit_base(rendered_with_clones('[function_lines."src/old.py"]\nlong_one = 70\n'))

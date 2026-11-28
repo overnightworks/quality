@@ -302,32 +302,40 @@ def test_a_line_break_kept_in_a_folded_or_quoted_value_ends_the_command(build_re
     assert [(finding.event, finding.fact) for finding in findings] == [(SERIAL, WITHOUT_N)]
 
 
-def test_the_workers_flag_on_the_continued_line_counts(build_repo):
-    """PYTEST-2."""
-    assert judged(build_repo, block_run("pytest -q \\", "  -n auto \\", "  tests")) == []
+@pytest.mark.parametrize(
+    "script",
+    [
+        pytest.param(("pytest -q \\", "  -n auto \\", "  tests"), id="the workers flag on the continued line counts"),
+        pytest.param(("pytest -k ${{ github.ref }} -n auto",), id="an expression with spaces is one dynamic word"),
+        pytest.param(("# pytest", "$TOOL -n auto"), id="pytest only in a comment leaves a run-time command alone"),
+        pytest.param(("pytest -n 2 --a=$(x) $(y)",), id="a second substitution on a passing call's line"),
+    ],
+)
+def test_a_script_the_reader_follows_to_a_passing_call_is_no_finding(build_repo, script):
+    """PYTEST-2, PYTEST-6: the word `pytest` counts outside comments only."""
+    assert judged(build_repo, block_run(*script)) == []
 
 
-def test_a_call_after_a_separator_is_found_at_its_physical_line(build_repo):
-    """PYTEST-2, PYTEST-3."""
-    findings = judged(build_repo, block_run("echo a", "", "make lint && pytest -n 0 | tee out", "echo b"))
-    assert event_line_fact(findings) == [(SERIAL, BLOCK_LINE + 2, WITH_ZERO)]
-
-
-def test_two_calls_are_two_findings(build_repo):
-    """PYTEST-8."""
-    findings = judged(build_repo, block_run("pytest -n 0 && pytest tests"))
-    assert event_line_fact(findings) == [(SERIAL, BLOCK_LINE, WITH_ZERO), (SERIAL, BLOCK_LINE, WITHOUT_N)]
-
-
-def test_a_hash_inside_quotes_or_a_word_is_no_comment(build_repo):
-    """PYTEST-2: only a `#` that starts a word outside quotes ends the command."""
-    findings = judged(build_repo, block_run('pytest -k "a #b" tests # -n auto', "pytest tests/a#b.py -n 0 # x"))
-    assert event_line_fact(findings) == [(SERIAL, BLOCK_LINE, WITHOUT_N), (SERIAL, BLOCK_LINE + 1, WITH_ZERO)]
-
-
-def test_an_expression_becomes_one_dynamic_word(build_repo):
-    """PYTEST-2: `${{ }}` with spaces is one word, so the words after it keep their place."""
-    assert judged(build_repo, block_run("pytest -k ${{ github.ref }} -n auto")) == []
+@pytest.mark.parametrize(
+    ("script", "expected"),
+    [
+        pytest.param(
+            ("echo a", "", "make lint && pytest -n 0 | tee out", "echo b"), [(SERIAL, BLOCK_LINE + 2, WITH_ZERO)],
+            id="a call after a separator at its physical line",
+        ),
+        pytest.param(
+            ("pytest -n 0 && pytest tests",), [(SERIAL, BLOCK_LINE, WITH_ZERO), (SERIAL, BLOCK_LINE, WITHOUT_N)], id="two calls are two findings",
+        ),
+        pytest.param(
+            ('pytest -k "a #b" tests # -n auto', "pytest tests/a#b.py -n 0 # x"),
+            [(SERIAL, BLOCK_LINE, WITHOUT_N), (SERIAL, BLOCK_LINE + 1, WITH_ZERO)],
+            id="a hash inside quotes or a word is no comment",
+        ),
+    ],
+)
+def test_each_call_of_a_script_is_judged_at_its_own_line(build_repo, script, expected):
+    """PYTEST-2, PYTEST-3, PYTEST-8: only a `#` that starts a word outside quotes ends the command."""
+    assert event_line_fact(judged(build_repo, block_run(*script))) == expected
 
 
 @pytest.mark.parametrize(
@@ -398,11 +406,6 @@ def test_a_command_built_at_run_time_in_a_run_holding_pytest_is_invalid(build_re
     assert findings[-1].line == BLOCK_LINE + 1
 
 
-def test_a_command_built_at_run_time_with_pytest_only_in_a_comment_is_no_finding(build_repo):
-    """PYTEST-6: the word counts outside comments only."""
-    assert judged(build_repo, block_run("# pytest", "$TOOL -n auto")) == []
-
-
 @pytest.mark.parametrize("script", [("$TOOL -n auto",), ('eval "$CMD"',), ("$(date) -q",)])
 def test_a_command_built_at_run_time_in_a_run_without_pytest_is_no_finding(build_repo, script):
     """PYTEST-6: the named gap."""
@@ -430,11 +433,6 @@ def test_a_command_built_at_run_time_in_a_run_without_pytest_is_no_finding(build
 def test_a_second_substitution_on_a_command_line_is_no_command_word_in_a_run_holding_pytest(build_repo, command):
     """PYTEST-6: `echo $(which pytest)` is no command word and no finding."""
     assert judged(build_repo, block_run(command, "pytest -n auto")) == []
-
-
-def test_a_second_substitution_on_a_passing_calls_line_leaves_the_call_green(build_repo):
-    """PYTEST-6."""
-    assert judged(build_repo, block_run("pytest -n 2 --a=$(x) $(y)")) == []
 
 
 @pytest.mark.parametrize(

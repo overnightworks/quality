@@ -30,10 +30,12 @@ def config(sequence: str, *, wrapper: str = "defineConfig({{{body}}})") -> str:
 
 
 def judged(build_repo, files: dict[str, str]):
+    """The findings of vitest-random over the given files."""
     return rule_findings(build_repo(files), RULE)
 
 
 def shape(findings):
+    """A finding as (event, path): this rule has no line."""
     return [(finding.event, finding.path) for finding in findings]
 
 

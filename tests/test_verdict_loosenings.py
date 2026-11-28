@@ -52,6 +52,7 @@ def secret_blocks(*allowances: tuple[str, str, str, str]) -> str:
 
 
 def judged(base_config, head_config, baselines, imports):
+    """The verdict over a base and head config with their baselines and imports."""
     base = side_of(base_config, baselines[0], "the base", {".importlinter": imports[0]}, side=ConfigSide.BASE)
     head = side_of(head_config, baselines[1], "the head", {".importlinter": imports[1]}, side=ConfigSide.HEAD)
     return judge(head, base, [job(), job("B")], {}, 1, NO_RENAMES)

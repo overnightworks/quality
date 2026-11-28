@@ -36,10 +36,12 @@ CONCURRENCY = (
 
 
 def judged(build_repo, text: str, name: str = WORKFLOW):
+    """The job-timeout findings over one workflow, named so a test can hold two."""
     return rule_findings(build_repo({name: text}), Rule.JOB_TIMEOUT)
 
 
 def shape(findings):
+    """A finding as (event, path, line, fact): job-timeout findings name their file."""
     return [(finding.event, finding.path, finding.line, finding.fact) for finding in findings]
 
 

@@ -91,6 +91,7 @@ def script(*lines: str) -> str:
 
 
 def judged(build_repo, files: dict[str, str]):
+    """The findings of pytest-random over the given files, not one workflow text."""
     return rule_findings(build_repo(files), RULE)
 
 
@@ -99,6 +100,7 @@ def workflow_judged(build_repo, text: str):
 
 
 def shape(findings):
+    """A finding as (event, path, line): this rule is judged by place, not by fact."""
     return [(finding.event, finding.path, finding.line) for finding in findings]
 
 

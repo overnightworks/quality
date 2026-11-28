@@ -27,6 +27,7 @@ def workflow(*lines: str, trigger: str = "push") -> str:
 
 
 def judged(build_repo, call: str, extra: dict[str, str] | None = None):
+    """The findings of live-layer over a workflow holding the call plus extra files."""
     return rule_findings(build_repo({**LIVE, WORKFLOW: workflow(*call.split("\n")), **(extra or {})}), RULE)
 
 

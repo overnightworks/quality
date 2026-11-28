@@ -30,6 +30,7 @@ def workflow(*lines: str, style: str = "|") -> str:
 
 
 def judged(build_repo, call: str, style: str = "|"):
+    """The findings of node-test-random over a workflow holding the call in a script style."""
     return rule_findings(build_repo({WORKFLOW: workflow(*call.split("\n"), style=style)}), RULE)
 
 

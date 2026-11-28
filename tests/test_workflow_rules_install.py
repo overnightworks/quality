@@ -263,78 +263,72 @@ def test_a_marker_on_a_calls_line_or_directly_above_clears_that_call(build_repo,
     assert [(f.line, f.event) for f in judged(build_repo, block_run(*script))] == expected
 
 
-def test_a_marker_and_a_comment_above_a_one_line_step_belong_to_the_step_form_alone(build_repo):
-    """RUNTIME-7: the step form wants the marker directly above the `-`, so a comment between them leaves the call reported."""
-    text = steps_of() + f"      {MARKER}\n      # a plain comment\n      - run: apt-get install -y x\n"
-    assert event_line_fact(judged(build_repo, text)) == [(INSTALLS, QUOTED_LINE + 2, "apt-get install")]
+def marked_step(*lines: str) -> str:
+    return steps_of() + "".join(f"      {line}\n" for line in lines)
 
 
-def test_a_marker_on_the_run_line_of_a_block_covers_its_first_line_only(build_repo):
-    """RUNTIME-7."""
-    text = steps_of() + f"      - name: t\n        run: | {MARKER}\n          apt-get install -y x\n          apt-get install -y y\n"
-    assert event_line_fact(judged(build_repo, text)) == [(INSTALLS, BLOCK_LINE + 1, "apt-get install")]
+CALL = "apt-get install"
+STEP_MARKERS = [
+    pytest.param(
+        marked_step(MARKER, "# a plain comment", "- run: apt-get install -y x"), [QUOTED_LINE + 2],
+        id="a comment between the marker and a one-line step",
+    ),
+    pytest.param(
+        marked_step("- name: t", f"  run: | {MARKER}", "    apt-get install -y x", "    apt-get install -y y"), [BLOCK_LINE + 1],
+        id="on the run line of a block, covering its first line only",
+    ),
+    pytest.param(marked_step(f"- {MARKER}", "  run: apt-get install -y x"), [], id="on the dash line, clearing the plain run below"),
+    pytest.param(
+        marked_step("- name: t", f"  {MARKER}", "  run: |", "    apt-get install -y x"), [BLOCK_LINE + 1],
+        id="between the name and the run",
+    ),
+    pytest.param(marked_step(f"- run: apt-get install -y x  {MARKER}"), [], id="on the line of a one-line step"),
+    pytest.param(
+        marked_step(MARKER, "- name: t", "  run: |", "    apt-get install -y x", "- name: u", "  run: |", "    apt-get install -y y"),
+        [14],
+        id="above the first of two steps, clearing that step only",
+    ),
+    pytest.param(
+        marked_step(MARKER, "- name: t", "  run: |", "    apt-get update", "    apt-get install -y x"), [], id="dash column, a block of two calls",
+    ),
+    pytest.param(marked_step(MARKER, "- name: t", "  run: apt-get install -y x"), [], id="dash column, a plain value behind a name"),
+    pytest.param(marked_step(MARKER, "- run: apt-get install -y x"), [], id="dash column, a plain value on the step line"),
+    pytest.param(
+        marked_step("- run: 'true'", MARKER, "- name: t", "  run: |", "    apt-get install -y x"), [], id="dash column, after the previous step",
+    ),
+    pytest.param(
+        marked_step("- name: a", "  run: |", "    echo a", MARKER, "- name: t", "  run: curl u | sh"), [],
+        id="dash column, after a block scalar",
+    ),
+    pytest.param(
+        marked_step("- name: a", "  run: |", "    echo a", f"    {MARKER}", "- name: t", "  run: |", "    apt-get install -y x"), [14],
+        id="a deeper column",
+    ),
+    pytest.param(
+        marked_step("- name: a", "  run: |", "    echo a", f"  {MARKER}", "- name: t", "  run: |", "    apt-get install -y x"), [14],
+        id="the run column",
+    ),
+    pytest.param(marked_step(MARKER, "-", "  name: t", "  run: apt-get install -y x"), [11], id="a dash that stands alone"),
+    pytest.param(
+        marked_step("- name: a", "  run: |", "    echo a", f"    {MARKER}", "- run: apt-get install -y x"), [12],
+        id="a one-line step under a deeper column",
+    ),
+    pytest.param(
+        marked_step("- name: a", "  run: |", "    echo a", f"  {MARKER}", "- run: 'apt-get install -y x'"), [12],
+        id="a quoted one-line step under the run column",
+    ),
+    pytest.param(marked_step(f"- run: echo a  {MARKER}", "- run: apt-get install -y x"), [9], id="a marker on the previous one-line step"),
+    pytest.param(
+        marked_step("- name: a", "  run: |", f"    echo a  {MARKER}", "- run: apt-get install -y x"), [11],
+        id="a marker trailing the last line of the previous block",
+    ),
+]
 
 
-def test_a_marker_on_the_dash_line_clears_the_plain_run_on_the_next_line(build_repo):
-    """RUNTIME-7."""
-    assert judged(build_repo, steps_of() + f"      - {MARKER}\n        run: apt-get install -y x\n") == []
-
-
-def test_a_marker_between_the_name_and_the_run_clears_nothing(build_repo):
-    """RUNTIME-7."""
-    text = steps_of() + f"      - name: t\n        {MARKER}\n        run: |\n          apt-get install -y x\n"
-    assert event_line_fact(judged(build_repo, text)) == [(INSTALLS, BLOCK_LINE + 1, "apt-get install")]
-
-
-@pytest.mark.parametrize(
-    "step",
-    [
-        f"      {MARKER}\n      - name: t\n        run: |\n          apt-get update\n          apt-get install -y x\n",
-        f"      {MARKER}\n      - name: t\n        run: apt-get install -y x\n",
-        f"      {MARKER}\n      - run: apt-get install -y x\n",
-        f"      - run: 'true'\n      {MARKER}\n      - name: t\n        run: |\n          apt-get install -y x\n",
-        f"      - name: a\n        run: |\n          echo a\n      {MARKER}\n      - name: t\n        run: curl u | sh\n",
-    ],
-    ids=[
-        "a block of two calls", "a plain value behind a name", "a plain value on the step line", "after the previous step",
-        "after a block scalar",
-    ],
-)
-def test_a_marker_in_the_dash_column_above_a_step_clears_every_call_of_the_step(build_repo, step):
-    """RUNTIME-7."""
-    assert judged(build_repo, steps_of() + step) == []
-
-
-@pytest.mark.parametrize(
-    ("step", "line"),
-    [
-        (f"      - name: a\n        run: |\n          echo a\n          {MARKER}\n      - name: t\n        run: |\n          apt-get install -y x\n", 14),
-        (f"      - name: a\n        run: |\n          echo a\n        {MARKER}\n      - name: t\n        run: |\n          apt-get install -y x\n", 14),
-        (f"      {MARKER}\n      -\n        name: t\n        run: apt-get install -y x\n", 11),
-        (f"      - name: a\n        run: |\n          echo a\n          {MARKER}\n      - run: apt-get install -y x\n", 12),
-        (f"      - name: a\n        run: |\n          echo a\n        {MARKER}\n      - run: 'apt-get install -y x'\n", 12),
-        (f"      - run: echo a  {MARKER}\n      - run: apt-get install -y x\n", 9),
-        (f"      - name: a\n        run: |\n          echo a  {MARKER}\n      - run: apt-get install -y x\n", 11),
-    ],
-    ids=[
-        "deeper column", "run column", "a dash that stands alone", "a one-line step under a deeper column", "a quoted one-line step under the run column",
-        "a marker on the previous one-line step", "a marker trailing the last line of the previous block",
-    ],
-)
-def test_a_marker_in_another_column_or_above_a_dash_that_stands_alone_clears_nothing(build_repo, step, line):
-    """RUNTIME-7."""
-    assert event_line_fact(judged(build_repo, steps_of() + step)) == [(INSTALLS, line, "apt-get install")]
-
-
-def test_a_marker_on_the_line_of_a_one_line_step_clears_it(build_repo):
-    """RUNTIME-7."""
-    assert judged(build_repo, steps_of() + f"      - run: apt-get install -y x  {MARKER}\n") == []
-
-
-def test_a_marker_above_the_first_step_of_two_clears_that_step_only(build_repo):
-    """RUNTIME-7."""
-    text = steps_of() + f"      {MARKER}\n      - name: t\n        run: |\n          apt-get install -y x\n      - name: u\n        run: |\n          apt-get install -y y\n"
-    assert event_line_fact(judged(build_repo, text)) == [(INSTALLS, 14, "apt-get install")]
+@pytest.mark.parametrize(("text", "lines"), STEP_MARKERS)
+def test_a_marker_clears_the_calls_of_the_step_it_stands_beside_or_above_and_no_other(build_repo, text, lines):
+    """RUNTIME-7: the step form wants the marker directly above the `-` or on its line; no other position clears a call."""
+    assert event_line_fact(judged(build_repo, text)) == [(INSTALLS, line, CALL) for line in lines]
 
 
 @pytest.mark.parametrize(
