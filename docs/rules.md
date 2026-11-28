@@ -1303,8 +1303,6 @@ It applies these rules:
   - LOOSE-27: and a module added to `source_modules` or `forbidden_modules` of a `forbidden` contract, the base's
     expressions all kept;
   - LOOSE-28: a module added to the `modules` of an `independence` contract, the base's all kept;
-  - LOOSE-37: `include_external_packages` turned from false (or absent) to true, and `exclude_type_checking_imports`
-    turned from true to false (or dropped), are no loosening, because each only adds imports to the graph.
   - LOOSE-35: a base expression that is a plain module name counts as kept when a wildcard expression of the head's same
     list matches it by import-linter's own matcher, so base `a.x`, `a.y` against head `a.*` is green and base `a.*`
     against head `a.x` is red;
@@ -1313,6 +1311,8 @@ It applies these rules:
     `new`, `b` is green.
   - LOOSE-30: A layer left with one module has no sibling, so its independence says nothing: base `(game)` against head
     `(game) : (agent)` is green, and base `a | b` against head `a : b : new` stays a loosening.
+  - LOOSE-37: `include_external_packages` turned from false (or absent) to true, and `exclude_type_checking_imports`
+    turned from true to false (or dropped), are no loosening, because each only adds imports to the graph.
   - LOOSE-31: Everything else stays a loosening, except a struck module the head no longer has and git does not read as
     renamed (LOOSE-19), or git reads as renamed to a module the same list names (below) (LOOSE-22): a removed, renamed
     or replaced expression (a wildcard narrowed or replaced by names included), an expression added and another removed
