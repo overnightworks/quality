@@ -18,7 +18,7 @@ STDERR_TAIL_LINES = 5
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 EXIT_INTERRUPTED = 128 + signal.SIGINT
 # The token GitHub's API gets from the job; git that reaches the network anonymously never holds it.
-JOB_TOKEN_VARIABLE = "GITHUB_TOKEN"
+JOB_TOKEN_VARIABLE = "GITHUB_TOKEN"  # noqa: S105 - names an environment variable and holds no secret
 NEVER_PROMPT = MappingProxyType({"GIT_TERMINAL_PROMPT": "0"})
 
 
