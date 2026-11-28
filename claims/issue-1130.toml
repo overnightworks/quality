@@ -1,5 +1,5 @@
 claim_id = "a6d65a880c614c388bf79e65357bd7e6"
-agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
+agent = "Claude 8aac325a-d3b1-4573-9a6f-efcaa79d4c33"
 role = "builder"
 base = "575c054d0ae747c87b4a5ed6549e82e8bcd79eae"
 branch = "claude/issue-1130-fleet-reads-gate-table-alone"
