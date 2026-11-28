@@ -1,0 +1,8 @@
+claim_id = "fcfa20f5faf74623b076267c3644d7c7"
+agent = "Claude a9ac4e86-bf17-4e44-afa6-72564f0e79fd"
+role = "builder"
+base = "82328fadb3199c25edad5a91eea86e0abbfbf3c3"
+branch = "claude/issue-1118-integration-marker-folders"
+scope = ["docs/rules.md", "src/quality/adapter_imports.py", "src/quality/layout.py", "tests/test_adapter_imports.py", "tests/test_adapter_imports_integration.py"]
+opened_commit = "21f4c674b0c393891169f6482d845968e50ed855"
+whole_reason = "One rule widening: the folder owner in layout.py, the pass in adapter_imports.py, the sentence in rules.md and the two test modules that prove it; split, the rule would judge folders its sentence does not name."
